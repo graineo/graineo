@@ -1,0 +1,443 @@
+[
+  {
+    "action": "About",
+    "text_id": "menu-about",
+    "de": "Über graineo",
+    "shortcut": null,
+    "symbol": "info.circle"
+  },
+  {
+    "action": "Quit",
+    "text_id": "native-quit",
+    "de": "graineo beenden",
+    "shortcut": "quit",
+    "symbol": "power"
+  },
+  {
+    "action": "CheckUpdates",
+    "text_id": "menu-check-updates",
+    "de": "Nach Updates suchen …",
+    "shortcut": null,
+    "symbol": "arrow.down.circle"
+  },
+  {
+    "action": "Settings",
+    "text_id": "menu-settings",
+    "de": "Einstellungen …",
+    "shortcut": "settings",
+    "symbol": "gearshape"
+  },
+  {
+    "action": "OpenFolder",
+    "text_id": "menu-open-folder",
+    "de": "Ordner ansehen …",
+    "shortcut": "open_folder",
+    "symbol": "folder"
+  },
+  {
+    "action": "Import",
+    "text_id": "menu-import",
+    "de": "Fotos importieren …",
+    "shortcut": "import",
+    "symbol": "square.and.arrow.down"
+  },
+  {
+    "action": "Lightroom",
+    "text_id": "menu-lightroom",
+    "de": "Aus Lightroom übernehmen …",
+    "shortcut": null,
+    "symbol": "arrow.down.doc"
+  },
+  {
+    "action": "Export",
+    "text_id": "menu-export",
+    "de": "Exportieren …",
+    "shortcut": "export",
+    "symbol": "square.and.arrow.up"
+  },
+  {
+    "action": "ContactPrint",
+    "text_id": "menu-contact-print",
+    "de": "Kontaktabzug erstellen …",
+    "shortcut": null,
+    "symbol": "film"
+  },
+  {
+    "action": "LensRoom",
+    "text_id": "menu-lens-room",
+    "de": "Objektive …",
+    "shortcut": null,
+    "symbol": "camera.aperture"
+  },
+  {
+    "action": "ShowInFinder",
+    "text_id": "menu-show-in-finder",
+    "de": "Im Finder zeigen",
+    "shortcut": "show_in_finder",
+    "symbol": "magnifyingglass"
+  },
+  {
+    "action": "ShowInLibrary",
+    "text_id": "menu-show-in-library",
+    "de": "Im Bibliotheksordner zeigen",
+    "shortcut": "show_in_library_folder",
+    "symbol": "folder.badge.gearshape"
+  },
+  {
+    "action": "Offload",
+    "text_id": "menu-offload",
+    "de": "Ausgelagerte Fotos übernehmen …",
+    "shortcut": null,
+    "symbol": "arrow.triangle.merge"
+  },
+  {
+    "action": "RemoveFromCollection",
+    "text_id": "menu-remove-from-collection",
+    "de": "Aus Sammlung entfernen",
+    "shortcut": null,
+    "symbol": "rectangle.stack.badge.minus"
+  },
+  {
+    "action": "TrashSelected",
+    "text_id": "menu-trash-selected",
+    "de": "In den Papierkorb …",
+    "shortcut": "trash_selected",
+    "symbol": "trash"
+  },
+  {
+    "action": "DeleteRejected",
+    "text_id": "menu-delete-rejected",
+    "de": "Abgelehnte Fotos löschen …",
+    "shortcut": "trash_rejected",
+    "symbol": "trash"
+  },
+  {
+    "action": "Undo",
+    "text_id": "menu-undo",
+    "de": "Rückgängig",
+    "shortcut": "undo",
+    "symbol": "arrow.uturn.backward"
+  },
+  {
+    "action": "Redo",
+    "text_id": "menu-redo",
+    "de": "Wiederholen",
+    "shortcut": "redo",
+    "symbol": "arrow.uturn.forward"
+  },
+  {
+    "action": "SelectAll",
+    "text_id": "native-select-all",
+    "de": "Alles auswählen",
+    "shortcut": "select_all",
+    "symbol": "checkmark.circle"
+  },
+  {
+    "action": "SelectNone",
+    "text_id": "menu-select-none",
+    "de": "Auswahl aufheben",
+    "shortcut": "select_none",
+    "symbol": "circle.dashed"
+  },
+  {
+    "action": "CopyPhoto",
+    "text_id": "menu-copy-photo",
+    "de": "Foto kopieren",
+    "shortcut": "copy_photo",
+    "symbol": "doc.on.doc"
+  },
+  {
+    "action": "CopySettings",
+    "text_id": "menu-copy-settings",
+    "de": "Entwicklungseinstellungen kopieren …",
+    "shortcut": "copy_settings",
+    "symbol": "slider.horizontal.3"
+  },
+  {
+    "action": "PasteSettings",
+    "text_id": "menu-paste-settings",
+    "de": "Entwicklungseinstellungen einfügen",
+    "shortcut": "paste_settings",
+    "symbol": "slider.horizontal.below.rectangle"
+  },
+  {
+    "action": "TransferSettings",
+    "text_id": "menu-transfer-settings",
+    "de": "Einstellungen vom Haupt-Foto übertragen",
+    "shortcut": "sync_settings",
+    "symbol": "square.on.square"
+  },
+  {
+    "action": "ApplyToAll",
+    "text_id": "menu-apply-to-all",
+    "de": "Auf alle Fotos im Filmstreifen anwenden",
+    "shortcut": null,
+    "symbol": "square.stack.3d.up"
+  },
+  {
+    "action": "ResetSettings",
+    "text_id": "menu-reset-settings",
+    "de": "Alle Einstellungen zurücksetzen",
+    "shortcut": "reset_all",
+    "symbol": "arrow.counterclockwise"
+  },
+  {
+    "action": "AutoTone",
+    "text_id": "menu-auto-tone",
+    "de": "Automatisch (Tonwert)",
+    "shortcut": "auto_tone",
+    "symbol": "wand.and.stars"
+  },
+  {
+    "action": "Crop",
+    "text_id": "menu-crop",
+    "de": "Freistellen & Ausrichten",
+    "shortcut": "crop",
+    "symbol": "crop"
+  },
+  {
+    "action": "RotateLeft",
+    "text_id": "menu-rotate-left",
+    "de": "Nach links drehen",
+    "shortcut": "rotate_left",
+    "symbol": "rotate.left"
+  },
+  {
+    "action": "RotateRight",
+    "text_id": "menu-rotate-right",
+    "de": "Nach rechts drehen",
+    "shortcut": "rotate_right",
+    "symbol": "rotate.right"
+  },
+  {
+    "action": "VirtualCopy",
+    "text_id": "menu-virtual-copy",
+    "de": "Virtuelle Kopie anlegen",
+    "shortcut": "virtual_copy",
+    "symbol": "plus.square.on.square"
+  },
+  {
+    "action": "Pick",
+    "text_id": "menu-pick",
+    "de": "Markieren",
+    "shortcut": "pick",
+    "symbol": "checkmark.circle.fill"
+  },
+  {
+    "action": "Reject",
+    "text_id": "menu-reject",
+    "de": "Ablehnen",
+    "shortcut": "reject",
+    "symbol": "xmark.circle.fill"
+  },
+  {
+    "action": "Unflag",
+    "text_id": "menu-unflag",
+    "de": "Markierung aufheben",
+    "shortcut": "unflag",
+    "symbol": "circle.dashed"
+  },
+  {
+    "action": "Grid",
+    "text_id": "menu-grid",
+    "de": "Raster",
+    "shortcut": "grid",
+    "symbol": "square.grid.3x3"
+  },
+  {
+    "action": "Develop",
+    "text_id": "menu-develop",
+    "de": "Einzelbild",
+    "shortcut": "single_photo",
+    "symbol": "photo"
+  },
+  {
+    "action": "Sensor",
+    "text_id": "menu-sensor",
+    "de": "Sensor",
+    "shortcut": null,
+    "symbol": "camera.aperture"
+  },
+  {
+    "action": "TabInfo",
+    "text_id": "menu-tab-info",
+    "de": "Reiter „Info“",
+    "shortcut": "tab_info",
+    "symbol": "info.square"
+  },
+  {
+    "action": "TabEdit",
+    "text_id": "menu-tab-edit",
+    "de": "Reiter „Bearbeiten“",
+    "shortcut": "tab_edit",
+    "symbol": "slider.horizontal.3"
+  },
+  {
+    "action": "Compare",
+    "text_id": "menu-compare",
+    "de": "Vorher | Nachher",
+    "shortcut": "compare",
+    "symbol": "rectangle.split.2x1"
+  },
+  {
+    "action": "Before",
+    "text_id": "menu-before",
+    "de": "Vorher",
+    "shortcut": "before",
+    "symbol": "clock.arrow.circlepath"
+  },
+  {
+    "action": "CameraJpeg",
+    "text_id": "menu-camera-jpeg",
+    "de": "Kamera-JPEG",
+    "shortcut": "camera_jpeg",
+    "symbol": "camera"
+  },
+  {
+    "action": "Clipping",
+    "text_id": "menu-clipping",
+    "de": "Clipping anzeigen",
+    "shortcut": "clipping",
+    "symbol": "exclamationmark.triangle"
+  },
+  {
+    "action": "Info",
+    "text_id": "menu-info",
+    "de": "Info-Einblendung",
+    "shortcut": "info_overlay",
+    "symbol": "text.below.photo"
+  },
+  {
+    "action": "Loupe100",
+    "text_id": "menu-loupe100",
+    "de": "Lupe",
+    "shortcut": "loupe",
+    "symbol": "magnifyingglass.circle"
+  },
+  {
+    "action": "Panels",
+    "text_id": "menu-panels",
+    "de": "Seitenleisten ein/aus",
+    "shortcut": "side_panels",
+    "symbol": "sidebar.left"
+  },
+  {
+    "action": "Lights",
+    "text_id": "menu-lights",
+    "de": "Licht aus",
+    "shortcut": "lights_out",
+    "symbol": "lightbulb"
+  },
+  {
+    "action": "FullPreview",
+    "text_id": "menu-full-preview",
+    "de": "Vollbild-Vorschau",
+    "shortcut": "full_screen",
+    "symbol": "arrow.up.left.and.arrow.down.right"
+  },
+  {
+    "action": "Shortcuts",
+    "text_id": "menu-shortcuts",
+    "de": "Tastenkürzel",
+    "shortcut": "overview",
+    "symbol": "keyboard"
+  },
+  {
+    "action": "ShowLogs",
+    "text_id": "menu-show-logs",
+    "de": "Protokolle anzeigen",
+    "shortcut": null,
+    "symbol": "doc.text.magnifyingglass"
+  },
+  {
+    "action": "ReportBug",
+    "text_id": "menu-report-bug",
+    "de": "Fehler melden …",
+    "shortcut": null,
+    "symbol": "exclamationmark.bubble"
+  },
+  {
+    "action": "NewCollection",
+    "text_id": "menu-new-collection",
+    "de": "Neue Sammlung …",
+    "shortcut": "new_collection",
+    "symbol": "rectangle.stack.badge.plus"
+  },
+  {
+    "action": "NewSmartCollection",
+    "text_id": "menu-new-smart-collection",
+    "de": "Neue Smart-Sammlung …",
+    "shortcut": null,
+    "symbol": "gearshape.2"
+  },
+  {
+    "action": "NewCollectionSet",
+    "text_id": "menu-new-collection-set",
+    "de": "Neuer Sammlungssatz …",
+    "shortcut": null,
+    "symbol": "folder.badge.plus"
+  },
+  {
+    "action": "ManageImports",
+    "text_id": "menu-manage-imports",
+    "de": "Importe verwalten …",
+    "shortcut": null,
+    "symbol": "tray.full"
+  },
+  {
+    "action": "ProofFull",
+    "text_id": "menu-proof-full",
+    "de": "Voller Umfang",
+    "shortcut": null,
+    "symbol": null
+  },
+  {
+    "action": "ProofSrgb",
+    "text_id": "menu-proof-srgb",
+    "de": "sRGB",
+    "shortcut": null,
+    "symbol": null
+  },
+  {
+    "action": "ProofP3",
+    "text_id": "menu-proof-p3",
+    "de": "Display P3",
+    "shortcut": null,
+    "symbol": null
+  },
+  {
+    "action": "ProofAdobe",
+    "text_id": "menu-proof-adobe",
+    "de": "Adobe RGB",
+    "shortcut": null,
+    "symbol": null
+  },
+  {
+    "action": "ProofProPhoto",
+    "text_id": "menu-proof-prophoto",
+    "de": "ProPhoto",
+    "shortcut": null,
+    "symbol": null
+  },
+  {
+    "action": "ProofToggle",
+    "text_id": "menu-proof-toggle",
+    "de": "Proof ein/aus",
+    "shortcut": "soft_proof",
+    "symbol": "circle.lefthalf.filled"
+  },
+  {
+    "action": "GamutWarning",
+    "text_id": "menu-gamut-warning",
+    "de": "Farbumfang-Warnung",
+    "shortcut": "gamut_warning",
+    "symbol": "exclamationmark.triangle.fill"
+  },
+  {
+    "action": "JumpToSelection",
+    "text_id": "menu-jump-to-selection",
+    "de": "Zur Auswahl springen",
+    "shortcut": "jump_to_selection",
+    "symbol": "scope"
+  }
+]

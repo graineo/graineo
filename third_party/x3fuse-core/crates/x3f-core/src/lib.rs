@@ -1,0 +1,1066 @@
+//! Safe Rust API for reading and converting Sigma Foveon X3F raw images.
+//!
+//! The decoding and processing pipeline is native Rust over the low-level
+//! [`x3f_sys`] layer; the only non-Rust code is two tiny C log/version shims.
+//!
+//! The headline type is [`Reader`], which owns the C `x3f_t` and the input
+//! `FILE*`. Open a file, optionally load extra sections (CAMF/property
+//! list/JPEG thumbnail/RAW), and then dispatch to one of the `dump_*` methods
+//! to produce an output file.
+//!
+//! # Example
+//!
+//! ```no_run
+//! use x3f_core::{Reader, ProcessOptions};
+//! let mut r = Reader::open("input.X3F").unwrap();
+//! r.load_camf().unwrap();
+//! r.load_raw().unwrap();
+//! r.dump_dng("out.dng", &ProcessOptions::default()).unwrap();
+//! ```
+
+#![deny(unsafe_op_in_unsafe_fn)]
+#![warn(missing_docs)]
+
+use std::ffi::CString;
+// `OsStrExt::as_bytes` lives in different platform modules — `std::os::unix`
+// on Unix-likes, `std::os::wasi` on WASI. There is no Windows form, but
+// the Windows port is gated separately upstream (legacy build). We only
+// need it for `path_to_cstring`.
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
+#[cfg(target_os = "wasi")]
+use std::os::wasi::ffi::OsStrExt;
+use std::path::Path;
+use std::ptr::NonNull;
+
+use thiserror::Error;
+use x3f_sys as sys;
+pub use x3f_sys::MergeFrame;
+/// graineo addition: test switch for the alternative Merrill parts.
+pub use x3f_sys::merrill_new;
+/// graineo addition: diagnostics of the SPP GPU noise reduction.
+pub use x3f_sys::{
+    spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, SppCaCorrection, SppNoiseSliders, SppPrepared, SppWorking,
+};
+// graineo addition: BM3D only on the colour
+pub use x3f_sys::{chroma_bm3d_rgb, ChromaBm3dInfo, Control};
+pub use x3f_sys::{ColorMode, DenoiseAlgorithm, DenoiseBackend, DenoiseOptions, NlmOptions};
+// Shadow the external libc crate with x3f-sys's compat shim. On every
+// target except wasm32-unknown-unknown this is `pub use libc::*;`; on
+// wasm32 it provides Rust-native equivalents for the few libc symbols
+// we touch here (FILE / fopen / fclose / free).
+use x3f_sys::sysabi as libc;
+
+mod conversion;
+mod frame_export;
+mod globals;
+mod icc;
+mod image;
+pub mod output;
+mod scene;
+mod x3i;
+pub mod x3i_align;
+pub mod x3i_merge;
+mod x3i_output;
+
+pub use conversion::{convert_file, ConversionReport, ConversionStage, OutputFormat};
+pub use globals::{
+    set_log_callback, set_max_printed_matrix_elements, set_offset_legacy, set_verbosity,
+    LogCallback, Verbosity,
+};
+pub use icc::{color_icc_profile, srgb_icc_profile};
+pub use image::{Image, ImageLevels, Preview};
+pub use scene::{
+    prepare_scene_linear, read_as_shot_crop, SceneLinearImage, SceneLinearOptions,
+    WhiteBalanceCalibration,
+};
+pub use x3i::{frame_ev, is_x3i, FrameEntry, X3iContainer};
+
+/// Color space the processed RGB output is converted to.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ColorEncoding {
+    /// Pass-through; no scaling, no gamma, no color-space conversion.
+    None,
+    /// sRGB (default for processed output).
+    #[default]
+    Srgb,
+    /// Adobe RGB (1998).
+    AdobeRgb,
+    /// ProPhoto RGB.
+    ProPhotoRgb,
+    /// Raw/unprocessed (for `-unprocessed`).
+    Unprocessed,
+    /// Quattro top-layer dump (for `-qtop`).
+    Qtop,
+}
+
+impl ColorEncoding {
+    fn to_raw(self) -> sys::x3f_color_encoding_t {
+        match self {
+            ColorEncoding::None => sys::x3f_color_encoding_e_NONE,
+            ColorEncoding::Srgb => sys::x3f_color_encoding_e_SRGB,
+            ColorEncoding::AdobeRgb => sys::x3f_color_encoding_e_ARGB,
+            ColorEncoding::ProPhotoRgb => sys::x3f_color_encoding_e_PPRGB,
+            ColorEncoding::Unprocessed => sys::x3f_color_encoding_e_UNPROCESSED,
+            ColorEncoding::Qtop => sys::x3f_color_encoding_e_QTOP,
+        }
+    }
+}
+
+/// How recovered DNG highlights are fitted into the stored sample range.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum DngHighlightMapping {
+    /// Preserve linear highlight headroom with one image-wide exposure scale.
+    /// The DNG records the corresponding brightness compensation in
+    /// `BaselineExposure`; readers that ignore that tag show a darker image.
+    #[default]
+    Linear,
+    /// Bake the legacy soft highlight shoulder into the raw samples.
+    /// `X3F_DNG_SHOULDER_KNEE` controls where the shoulder starts.
+    Shoulder,
+}
+
+impl DngHighlightMapping {
+    fn to_raw(self) -> libc::c_int {
+        match self {
+            Self::Linear => 0,
+            Self::Shoulder => 1,
+        }
+    }
+}
+
+/// Which X3I data a conversion uses. X3F input ignores this choice.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "snake_case")
+)]
+pub enum X3iSource {
+    /// Merge all frames into one extended-range image.
+    #[default]
+    Merge,
+    /// Process only the middle exposure frame, as `-x3i-frame <n>` does.
+    /// See [`X3iContainer::middle_exposure_frame`].
+    MiddleExposure,
+}
+
+/// Per-conversion processing options. Mirrors the parameters of the legacy
+/// `x3f_dump_*` C entry points.
+#[derive(Debug, Clone)]
+pub struct ProcessOptions {
+    /// Target color space / processing mode for the output.
+    pub color_encoding: ColorEncoding,
+    /// Camera color mode for this conversion. None preserves the existing output.
+    /// TIFF and get_image apply the mode to RGB pixels. DNG embeds selectable
+    /// profiles and uses this mode as the default without changing raw samples.
+    /// DNG looks approximate native rendering at the export white balance.
+    /// Later white-balance edits can differ from SPP.
+    /// PPM, histogram and embedded JPEG exports do not accept this option.
+    /// AsShot uses the recorded camera mode at normal strength.
+    pub color_mode: Option<ColorMode>,
+    /// Crop to the active sensor area (default: true).
+    pub crop: bool,
+    /// Run bad-pixel interpolation (default: true).
+    pub fix_bad: bool,
+    /// Apply spatial-gain (lens shading) correction. `None` defers to the
+    /// per-camera default (off for Quattro, on for older sensors).
+    pub apply_sgain: Option<bool>,
+    /// White-balance preset name (e.g. "Daylight"). `None` uses the file's
+    /// recorded WB.
+    pub wb: Option<String>,
+    /// ZIP-compress DNG/TIFF output.
+    pub compress: bool,
+    /// Strength of sensor denoising before color conversion, on a
+    /// 0..=10 scale: `0` disables denoise entirely (equivalent to the legacy
+    /// `-no-denoise`), `10` is full strength (the legacy default), and
+    /// intermediate values linearly attenuate filter strength
+    /// (`scale = intensity / 10`). Values above 10 are clamped. Backed by the
+    /// selected NLM/BM3D algorithm with portable Rust and optional GPU backends.
+    /// X3I denoise also requires a positive `X3F_X3I_DENOISE_SCALE`.
+    pub denoise_intensity: u8,
+    /// Select GPU acceleration or portable CPU execution (default: Auto).
+    /// Enable the `gpu` Cargo feature for native acceleration. Auto falls back
+    /// to CPU when unavailable; Gpu fails instead. WASM always uses CPU in Auto.
+    pub denoise_backend: DenoiseBackend,
+    /// Use the Merrill SPP float pipeline for full-resolution color TIFF, PPM or histogram output.
+    /// This CPU path uses neutral SPP noise sliders. The default is false.
+    /// Requires default `denoise_options` because SPP uses its own denoiser.
+    /// Requires full denoise intensity; other sensor and output modes return an error.
+    /// Uses sharpness 0, fill light 0, saturation 0 and Highlight Control 1.
+    /// `fix_bad=false` skips listed and detected repairs; `crop=false` returns
+    /// the full Keep area. These modifiers extend the native export behavior.
+    pub spp_denoise: bool,
+    /// Use scene-derived chroma-LUT recovery for sRGB, Adobe RGB or ProPhoto RGB.
+    /// `None` (default) enables it unless `X3F_NO_CHROMA_LUT` is present;
+    /// `Some(true)` or `Some(false)` overrides that environment setting for
+    /// this conversion. Disabling the LUT retains the prior-based recovery
+    /// and matrix-pathology gate; it does not select Sigma's native recovery.
+    /// `Some(true)` cannot combine with `spp_denoise=true`: select one pipeline.
+    /// SPP uses its own highlight recovery with `None` or `Some(false)`.
+    /// Ignored by DNG, scene-linear, `ColorEncoding::None`, unprocessed and
+    /// Cineon output. `X3F_NO_CHROMA_LUT` still controls the separate DNG
+    /// recovery LUT, including camera-space (`None`) output.
+    pub rgb_chroma_lut: Option<bool>,
+    /// Algorithm and advanced sensor-space denoising controls.
+    pub denoise_options: DenoiseOptions,
+    /// graineo addition: XMP packet (Lightroom settings) embedded as XMLPacket
+    /// (tag 700) in IFD0 of the DNG.
+    pub xmp_packet: Option<String>,
+    /// Directory of pre-rendered DNG `OpcodeList3` blobs (Sigma's per-
+    /// model / per-aperture flat-fielding gain maps). When set, the DNG
+    /// writer looks up the blob matching the camera's model and aperture
+    /// and embeds it into the raw IFD's `OpcodeList3` tag. Files are
+    /// expected in the x3fuse layout: `<MODEL>[_<LENSID>]_FF_DNG_Opcodelist3_<APERTURE>`.
+    /// `None` (default) skips opcode embedding.
+    pub opcodes_dir: Option<std::path::PathBuf>,
+    /// Enable the DNG-path Foveon highlight-recovery pipeline. Recovered
+    /// headroom is preserved linearly by default; `dng_highlight_mapping`
+    /// can select the legacy baked shoulder. This also applies after
+    /// Quattro expansion.
+    ///
+    /// Default is `false`. Enable this for clipped Foveon highlights:
+    /// without recovery, unequal channel saturation can produce a
+    /// lime/yellow cast even with correct white balance and matrices.
+    pub dng_highlight_recovery: bool,
+    /// Mapping applied to recovered DNG highlights (default: `Linear`).
+    /// Ignored unless `dng_highlight_recovery` is enabled.
+    pub dng_highlight_mapping: DngHighlightMapping,
+    /// Cineon-style log TIFF mode. When `true`, the conversion pipeline:
+    ///
+    ///   - replaces the encoding-specific gamma LUT with a Cineon-style log
+    ///     curve `y = log(scale·x + 1) / log(scale + 1)` so shadows are
+    ///     lifted, highlights are softly compressed, and midtones sit on a
+    ///     gentle slope — the "flat for grading" look;
+    ///   - bypasses the chroma-LUT and PixelRepair highlight-recovery passes
+    ///     (which bake creative interpretation into the pixels);
+    ///   - keeps the matrix-pathology gate (it's a sanity rail against
+    ///     truly broken Foveon highlights, not a creative pass);
+    ///   - keeps WB, demosaic, denoise, spatial gain, EV scaling, and the
+    ///     RGB matrix multiply.
+    ///
+    /// Only honoured by the TIFF writer; the writer embeds an ICC profile
+    /// declaring the chosen primaries with a *linear* TRC so colour-
+    /// managed readers (Lightroom, Capture One, DaVinci, Preview) leave
+    /// the log encoding intact — the file looks flat in viewers, and the
+    /// colourist applies their own log→linear input transform in the
+    /// grading app. `scale` defaults to 100 (the empirical sweet spot
+    /// between "flat for grading" and "shadow noise dominating"); set
+    /// the `X3F_CINEON_SCALE` environment variable to override (12 ≈
+    /// Cineon film-print, 50 ≈ moderate log; larger is flatter still at
+    /// the cost of shadow noise).
+    pub cineon: bool,
+    /// X3I input: merge all frames (default) or use only the middle exposure.
+    /// The middle exposure follows the single-frame rules for color modes,
+    /// the Merrill pipeline, highlight recovery and embedded JPEG output. No effect on X3F input.
+    pub x3i_source: X3iSource,
+    /// Return research X3I ghost maps in ConversionReport. The default is false.
+    pub x3i_ghost_maps: bool,
+}
+
+impl Default for ProcessOptions {
+    fn default() -> Self {
+        Self {
+            color_encoding: ColorEncoding::default(),
+            color_mode: None,
+            crop: true,
+            fix_bad: true,
+            apply_sgain: None,
+            wb: None,
+            compress: false,
+            denoise_intensity: 10,
+            denoise_backend: DenoiseBackend::Auto,
+            spp_denoise: false,
+            rgb_chroma_lut: None,
+            denoise_options: DenoiseOptions::default(),
+            opcodes_dir: None,
+            dng_highlight_recovery: false,
+            dng_highlight_mapping: DngHighlightMapping::default(),
+            cineon: false,
+            x3i_source: X3iSource::default(),
+            x3i_ghost_maps: false,
+            xmp_packet: None,
+        }
+    }
+}
+
+/// Errors returned by this crate.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The caller requested cancellation; no final output should be published.
+    #[error("conversion cancelled")]
+    Cancelled,
+    /// GPU denoising was explicitly requested but could not complete.
+    #[error("GPU denoising unavailable: {0}")]
+    Gpu(String),
+    /// The input or requested conversion is invalid.
+    #[error("invalid X3F data: {0}")]
+    InvalidData(String),
+    /// The input file could not be opened.
+    #[error("could not open input file `{path}`: {source}")]
+    OpenInput {
+        /// Path that failed to open.
+        path: String,
+        /// Underlying OS error.
+        source: std::io::Error,
+    },
+    /// A path contains an interior NUL byte and cannot be passed to C.
+    #[error("path contains a NUL byte and cannot be passed to C")]
+    PathNul,
+    /// The white-balance preset name contains an interior NUL byte.
+    #[error("white-balance preset contains a NUL byte")]
+    WbNul,
+    /// The file could not be parsed as an X3F container.
+    #[error("could not parse X3F file (x3f_new_from_file returned NULL)")]
+    Parse,
+    /// The underlying library returned a non-OK status.
+    #[error("x3f returned {0:?}")]
+    Library(LibraryError),
+    /// An I/O error occurred while writing the output file.
+    #[error("IO error writing `{path}`: {source}")]
+    Io {
+        /// Output path being written.
+        path: String,
+        /// Underlying OS error.
+        source: std::io::Error,
+    },
+}
+
+/// Subset of `x3f_return_t` that maps to errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LibraryError {
+    /// Invalid argument (`X3F_ARGUMENT_ERROR`).
+    Argument,
+    /// Input-file error (`X3F_INFILE_ERROR`).
+    Infile,
+    /// Output-file error (`X3F_OUTFILE_ERROR`).
+    Outfile,
+    /// Internal library error (`X3F_INTERNAL_ERROR`).
+    Internal,
+    /// An unrecognized non-OK status code. Held as `i64` because bindgen
+    /// maps the C `x3f_return_t` enum to `u32` on most targets but to `i32`
+    /// under MSVC (C enums default to `int`); `i64` losslessly holds either.
+    Unknown(i64),
+}
+
+impl LibraryError {
+    fn from_raw(r: sys::x3f_return_t) -> Result<(), Self> {
+        if r == sys::x3f_return_e_X3F_OK {
+            return Ok(());
+        }
+        Err(match r {
+            sys::x3f_return_e_X3F_ARGUMENT_ERROR => LibraryError::Argument,
+            sys::x3f_return_e_X3F_INFILE_ERROR => LibraryError::Infile,
+            sys::x3f_return_e_X3F_OUTFILE_ERROR => LibraryError::Outfile,
+            sys::x3f_return_e_X3F_INTERNAL_ERROR => LibraryError::Internal,
+            other => LibraryError::Unknown(other.into()),
+        })
+    }
+}
+
+impl From<sys::Error> for Error {
+    fn from(error: sys::Error) -> Self {
+        match error {
+            sys::Error::Cancelled => Self::Cancelled,
+            sys::Error::Gpu(message) => Self::Gpu(message),
+            sys::Error::InvalidData(message) => Self::InvalidData(message.to_string()),
+            other => Self::InvalidData(other.to_string()),
+        }
+    }
+}
+
+fn check(r: sys::x3f_return_t) -> Result<(), Error> {
+    LibraryError::from_raw(r).map_err(Error::Library)
+}
+
+fn path_to_cstring(path: &Path) -> Result<CString, Error> {
+    // On Unix and WASI, `OsStrExt::as_bytes()` returns the platform's
+    // raw bytes. On `wasm32-unknown-unknown` neither cfg fires; we fall
+    // back to `as_encoded_bytes()`, which is stable since 1.74 and
+    // returns a UTF-8-ish byte representation suitable for `CString`.
+    // The wasm32-unknown-unknown path can't actually open files at
+    // runtime (the `fopen` shim returns NULL — see `sysabi.rs`), so
+    // this is essentially documentation that the API surface compiles.
+    #[cfg(any(unix, target_os = "wasi"))]
+    let bytes = path.as_os_str().as_bytes();
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let bytes = path.as_os_str().as_encoded_bytes();
+    CString::new(bytes).map_err(|_| Error::PathNul)
+}
+
+/// Owns a parsed X3F file and the underlying C `FILE*`.
+pub struct Reader {
+    file: NonNull<libc::FILE>,
+    x3f: NonNull<sys::x3f_t>,
+    window: Option<(u64, u64)>,
+    /// When constructed via [`Reader::from_bytes`], holds the heap
+    /// copy of the input buffer that the FILE* reads through. The
+    /// field is dropped after `x3f_delete` + `fclose` in [`Drop`],
+    /// so freeing order is FILE* first, then backing bytes. None
+    /// for the path-based [`Reader::open`].
+    _backing: Option<Vec<u8>>,
+}
+
+// The C library does not document thread-safety guarantees, but a Reader is
+// effectively a unique handle: there is no shared interior state once a file
+// is opened. We allow Send but not Sync.
+unsafe impl Send for Reader {}
+
+impl Reader {
+    /// Parse an X3F file from an in-memory byte buffer. Available on
+    /// every Unix-like host (via libc's `fmemopen`) and on `wasm32-*`
+    /// (via x3f-sys's MemFile shim). Not available on Windows because
+    /// MSVC's CRT has no `fmemopen` equivalent — `Reader::open` is
+    /// the right path there.
+    ///
+    /// The buffer is *copied* into a heap-side cursor that the
+    /// underlying parser reads through, so the input slice does not
+    /// need to outlive the returned `Reader`. Use this entry point
+    /// from environments without a host filesystem (browser WASM,
+    /// JNI, Swift bindings receiving a `Data`).
+    #[cfg(any(unix, target_arch = "wasm32"))]
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        let mode = c"rb";
+        // SAFETY: `bytes` is valid for `bytes.len()` bytes; mode is a
+        // valid NUL-terminated string. On host, `fmemopen` is libc's
+        // (it borrows `bytes`); on wasm32 our sysabi shim copies the
+        // buffer into a heap-owned MemFile so the FILE* outlives this
+        // call. We mirror that behaviour on host by stashing a pinned
+        // copy in `Reader._backing` below — that way both paths have
+        // the same lifetime semantics, and callers don't have to
+        // think about which target they're on.
+        let owned: Vec<u8> = bytes.to_vec();
+        // libc's `fmemopen` and our wasm shim's both take `size_t` (=
+        // `usize` on every target we support); pass `owned.len()`
+        // directly without a cast so the call typechecks under both.
+        let file_ptr = unsafe {
+            libc::fmemopen(
+                owned.as_ptr() as *mut libc::c_void,
+                owned.len(),
+                mode.as_ptr(),
+            )
+        };
+        let Some(file) = NonNull::new(file_ptr) else {
+            return Err(Error::OpenInput {
+                path: "<bytes>".to_string(),
+                source: std::io::Error::other("fmemopen returned NULL"),
+            });
+        };
+        // SAFETY: file is a valid FILE*; sys::FILE is layout-equivalent
+        // to libc::FILE.
+        let x3f_ptr = match unsafe {
+            sys::new_from_file(file.as_ptr() as *mut sys::FILE, sys::Control::none())
+        } {
+            Ok(pointer) => pointer,
+            Err(error) => {
+                unsafe {
+                    libc::fclose(file.as_ptr());
+                }
+                return Err(error.into());
+            }
+        };
+        let Some(x3f) = NonNull::new(x3f_ptr) else {
+            // SAFETY: file is the FILE* we just opened.
+            unsafe { libc::fclose(file.as_ptr()) };
+            return Err(Error::Parse);
+        };
+        Ok(Reader {
+            file,
+            x3f,
+            window: None,
+            _backing: Some(owned),
+        })
+    }
+
+    /// Open and parse an X3F file's directory.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, Error> {
+        Self::open_with_control(path.as_ref(), sys::Control::none())
+    }
+
+    fn open_with_control(path: &Path, control: sys::Control<'_>) -> Result<Self, Error> {
+        Self::open_window(path, None, control)
+    }
+
+    pub(crate) fn with_control<'a>(&self, control: sys::Control<'a>) -> sys::Control<'a> {
+        match self.window {
+            Some((base, length)) => control.with_window(base, length),
+            None => control,
+        }
+    }
+
+    pub(crate) fn open_window(
+        path: &Path,
+        window: Option<(u64, u64)>,
+        control: sys::Control<'_>,
+    ) -> Result<Self, Error> {
+        let control = match window {
+            Some((base, length)) => control.with_window(base, length),
+            None => control,
+        };
+        control.check()?;
+        #[cfg(not(windows))]
+        let file_ptr = {
+            let cpath = path_to_cstring(path)?;
+            // SAFETY: both strings are terminated and outlive fopen.
+            unsafe { libc::fopen(cpath.as_ptr(), c"rb".as_ptr()) }
+        };
+        #[cfg(windows)]
+        let file_ptr = {
+            use std::os::windows::ffi::OsStrExt;
+            let mut wide: Vec<u16> = path.as_os_str().encode_wide().collect();
+            if wide.contains(&0) {
+                return Err(Error::PathNul);
+            }
+            wide.push(0);
+            unsafe extern "C" {
+                fn _wfopen(path: *const u16, mode: *const u16) -> *mut libc::FILE;
+            }
+            // SAFETY: native Windows UTF-16 paths avoid the narrow CRT code page.
+            unsafe { _wfopen(wide.as_ptr(), [b'r' as u16, b'b' as u16, 0].as_ptr()) }
+        };
+        let Some(file) = NonNull::new(file_ptr) else {
+            return Err(Error::OpenInput {
+                path: path.display().to_string(),
+                source: std::io::Error::last_os_error(),
+            });
+        };
+        if window.is_none() {
+            let mut magic = [0u8; 4];
+            // SAFETY: file is open and magic has space for four bytes.
+            let count = unsafe { libc::fread(magic.as_mut_ptr().cast(), 1, 4, file.as_ptr()) };
+            if count == 4 && &magic == b"FOVi" {
+                unsafe { libc::fclose(file.as_ptr()) };
+                return Err(Error::InvalidData(
+                    "X3I input requires X3iContainer::open_frame".into(),
+                ));
+            }
+        }
+        // SAFETY: file is a valid open FILE* that x3f_new_from_file may read
+        // from. The library does not take ownership; we keep the FILE* alive
+        // for the lifetime of Reader. libc::FILE and bindgen's FILE are both
+        // opaque aliases of the same platform stdio struct; the cast is a
+        // pointer reinterpretation only.
+        let x3f_ptr = match unsafe { sys::new_from_file(file.as_ptr() as *mut sys::FILE, control) }
+        {
+            Ok(pointer) => pointer,
+            Err(error) => {
+                unsafe {
+                    libc::fclose(file.as_ptr());
+                }
+                return Err(error.into());
+            }
+        };
+        let Some(x3f) = NonNull::new(x3f_ptr) else {
+            // SAFETY: file is the FILE* we just opened.
+            unsafe { libc::fclose(file.as_ptr()) };
+            return Err(Error::Parse);
+        };
+        Ok(Reader {
+            file,
+            x3f,
+            window,
+            _backing: None,
+        })
+    }
+
+    /// X3F format version recorded in the file header.
+    pub fn header_version(&self) -> u32 {
+        // SAFETY: x3f points to a valid x3f_t for the lifetime of self.
+        unsafe { (*self.x3f.as_ptr()).header.version }
+    }
+
+    fn load_directory_entry(&mut self, de: *mut sys::x3f_directory_entry_t) -> Result<(), Error> {
+        if de.is_null() {
+            return Err(Error::Library(LibraryError::Argument));
+        }
+        // SAFETY: x3f and de are non-null and valid.
+        unsafe {
+            sys::load_data(
+                self.x3f.as_ptr(),
+                de,
+                self.with_control(sys::Control::none()),
+            )
+        }
+        .map_err(Into::into)
+    }
+
+    /// Decode the embedded JPEG thumbnail into memory.
+    pub fn load_thumbnail_jpeg(&mut self) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid for the lifetime of self.
+        let de = unsafe { sys::x3f_get_thumb_jpeg(self.x3f.as_ptr()) };
+        self.load_directory_entry(de)
+    }
+
+    /// Load the CAMF (camera firmware) metadata block.
+    pub fn load_camf(&mut self) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid.
+        let de = unsafe { sys::x3f_get_camf(self.x3f.as_ptr()) };
+        self.load_directory_entry(de)
+    }
+
+    /// Load the property list. Some files (Quattro) do not have one; this
+    /// returns Ok(()) silently in that case.
+    pub fn load_property_list(&mut self) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid.
+        let de = unsafe { sys::x3f_get_prop(self.x3f.as_ptr()) };
+        if de.is_null() {
+            return Ok(());
+        }
+        self.load_directory_entry(de)
+    }
+
+    /// Load camera metadata and return the valid named color modes for this file.
+    /// This does not decode raw pixels or include AsShot as a separate mode.
+    pub fn available_color_modes(&mut self) -> Result<Vec<ColorMode>, Error> {
+        self.load_camf()?;
+        self.load_property_list()?;
+        // SAFETY: this reader owns the loaded metadata for the whole call.
+        unsafe { sys::available_color_modes(self.x3f.as_ptr()) }.map_err(Into::into)
+    }
+
+    /// Load and decode the RAW image data.
+    pub fn load_raw(&mut self) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid.
+        let de = unsafe { sys::x3f_get_raw(self.x3f.as_ptr()) };
+        if de.is_null() {
+            return Err(Error::Library(LibraryError::Argument));
+        }
+        // SAFETY: de is non-null.
+        unsafe {
+            sys::load_data(
+                self.x3f.as_ptr(),
+                de,
+                self.with_control(sys::Control::none()),
+            )
+        }
+        .map_err(Into::into)
+    }
+
+    /// Load the RAW image block without decoding (used for `-raw` dump).
+    pub fn load_unconverted_raw(&mut self) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid.
+        let de = unsafe { sys::x3f_get_raw(self.x3f.as_ptr()) };
+        if de.is_null() {
+            return Err(Error::Library(LibraryError::Argument));
+        }
+        // SAFETY: de is non-null.
+        unsafe {
+            sys::load_image_block(
+                self.x3f.as_ptr(),
+                de,
+                self.with_control(sys::Control::none()),
+            )
+        }
+        .map_err(Into::into)
+    }
+
+    /// Dump the metadata to a file (textual format matching the legacy CLI).
+    pub fn dump_meta(&self, out: impl AsRef<Path>) -> Result<(), Error> {
+        let cpath = path_to_cstring(out.as_ref())?;
+        // SAFETY: x3f is valid and cpath outlives the call.
+        let r = unsafe { sys::x3f_dump_meta_data(self.x3f.as_ptr(), cpath.as_ptr() as *mut _) };
+        check(r)
+    }
+
+    /// Dump the embedded JPEG thumbnail (a byte-blob copy of the embedded
+    /// JFIF stream — the original `x3f_dump.c` did the same).
+    pub fn dump_jpeg(&self, out: impl AsRef<Path>) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid for the lifetime of self.
+        let de = unsafe { sys::x3f_get_thumb_jpeg(self.x3f.as_ptr()) };
+        self.write_blob(out.as_ref(), de)
+    }
+
+    /// Dump the raw, undecoded image block (Huffman/TRUE-coded bytes — the
+    /// caller is expected to have already loaded it via [`load_unconverted_raw`]
+    /// so `data`/`data_size` are populated).
+    ///
+    /// [`load_unconverted_raw`]: Self::load_unconverted_raw
+    pub fn dump_raw_block(&self, out: impl AsRef<Path>) -> Result<(), Error> {
+        // SAFETY: self.x3f is valid.
+        let de = unsafe { sys::x3f_get_raw(self.x3f.as_ptr()) };
+        self.write_blob(out.as_ref(), de)
+    }
+
+    fn write_blob(&self, out: &Path, de: *mut sys::x3f_directory_entry_t) -> Result<(), Error> {
+        if de.is_null() {
+            return Err(Error::Library(LibraryError::Argument));
+        }
+        // SAFETY: de is non-null; image_data is the populated union arm for
+        // both the embedded JPEG and the raw image directory entries (the
+        // legacy x3f_dump.c assumed the same).
+        let (data, size) = unsafe {
+            let img = (*de).header.data_subsection.image_data;
+            (img.data, img.data_size)
+        };
+        if data.is_null() {
+            return Err(Error::Library(LibraryError::Internal));
+        }
+        // SAFETY: data points to size bytes inside an mmap or owned buffer
+        // managed by the parent x3f_t and outlives this call.
+        let bytes = unsafe { std::slice::from_raw_parts(data as *const u8, size as usize) };
+        std::fs::write(out, bytes).map_err(|source| Error::Io {
+            path: out.display().to_string(),
+            source,
+        })
+    }
+
+    /// graineo addition (not part of x3fuse-core): Merrill SPP working image after
+    /// preprocessing, noise reduction, colour matrix and ColorDQ, before tone curve and
+    /// output matrix. RGB counts (f32, interleaved), width and height of the active area.
+    /// Requires loaded CAMF, RAW, property and thumbnail sections.
+    /// `cancel` aborts the computation cooperatively (result is then `Err`).
+    pub fn spp_working_image(
+        &self,
+        color_mode: Option<ColorMode>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<(Vec<f32>, usize, usize), Error> {
+        // SAFETY: the reader owns the parsed data set exclusively for this call.
+        Ok(unsafe {
+            sys::spp_working_image(self.x3f.as_ptr(), color_mode, sys::Control::new(cancel))
+        }?)
+    }
+
+    /// graineo addition: like [`Self::spp_working_image`], but the noise reduction
+    /// runs on the GPU (wgpu) if the feature `spp-gpu` is enabled and a GPU is
+    /// available; otherwise automatically on the CPU. The result deviates slightly
+    /// (f32 rounding, PSNR ≫ 55 dB) from the bit-exact CPU version.
+    /// Whether the GPU was actually used is reported by [`spp_last_used_gpu`].
+    pub fn spp_working_image_gpu(
+        &self,
+        color_mode: Option<ColorMode>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<(Vec<f32>, usize, usize), Error> {
+        // SAFETY: as above.
+        Ok(unsafe {
+            sys::spp_working_image_with(
+                self.x3f.as_ptr(),
+                color_mode,
+                sys::Control::new(cancel),
+                true,
+            )
+        }?)
+    }
+
+    /// graineo addition: like [`Self::spp_working_image_gpu`] (`gpu = true`) or
+    /// [`Self::spp_working_image`] (`gpu = false`, bit-exact CPU), plus the position of the
+    /// SPP noise sliders luminance and colour (0…1 in quarter steps, 0.5 = middle position).
+    pub fn spp_working_image_sliders(
+        &self,
+        color_mode: Option<ColorMode>,
+        gpu: bool,
+        sliders: SppNoiseSliders,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<(Vec<f32>, usize, usize), Error> {
+        // SAFETY: as above.
+        Ok(unsafe {
+            sys::spp_working_image_sliders(
+                self.x3f.as_ptr(),
+                color_mode,
+                sys::Control::new(cancel),
+                gpu,
+                sliders,
+            )
+        }?)
+    }
+
+    /// graineo addition: like [`Self::spp_working_image_sliders`], additionally with the
+    /// detail image "L" of the sharpening and the sharpening base (SPP sharpness slider).
+    pub fn spp_working_image_detail(
+        &self,
+        color_mode: Option<ColorMode>,
+        gpu: bool,
+        sliders: SppNoiseSliders,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<SppWorking, Error> {
+        // SAFETY: as above.
+        Ok(unsafe {
+            sys::spp_working_image_detail(
+                self.x3f.as_ptr(),
+                color_mode,
+                sys::Control::new(cancel),
+                gpu,
+                sliders,
+            )
+        }?)
+    }
+
+    /// graineo addition: like [`Self::spp_working_image_detail`], plus an optional
+    /// correction of chromatic aberration as in SPP (`None` = bit-identical without).
+    pub fn spp_working_image_ca(
+        &self,
+        color_mode: Option<ColorMode>,
+        gpu: bool,
+        sliders: SppNoiseSliders,
+        ca: Option<&SppCaCorrection>,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<SppWorking, Error> {
+        // SAFETY: as above.
+        Ok(unsafe {
+            sys::spp_working_image_ca(
+                self.x3f.as_ptr(),
+                color_mode,
+                sys::Control::new(cancel),
+                gpu,
+                sliders,
+                ca,
+            )
+        }?)
+    }
+
+    /// graineo addition: preprocessed SPP image before the noise reduction (camera-space
+    /// counts of the active area), input of the monochrome path.
+    pub fn spp_prepared_image(
+        &self,
+        sliders: SppNoiseSliders,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<SppPrepared, Error> {
+        // SAFETY: as above.
+        Ok(unsafe { sys::spp_prepared_image(self.x3f.as_ptr(), sys::Control::new(cancel), sliders) }?)
+    }
+
+    /// graineo addition: monochrome working image (grey counts in all three channels after
+    /// Sigma's monochrome noise reduction and base sharpening, before the tone curve) with
+    /// the B/W mixer `mix`; detail image for the sharpness slider in `sharp_l`.
+    pub fn spp_mono_working_image(
+        &self,
+        sliders: SppNoiseSliders,
+        mix: [f64; 3],
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<SppWorking, Error> {
+        // SAFETY: as above.
+        Ok(unsafe { sys::spp_mono_working_image(self.x3f.as_ptr(), sys::Control::new(cancel), sliders, mix) }?)
+    }
+
+    /// Dump as DNG (LinearRaw with DNG-specific tags).
+    pub fn dump_dng(&self, out: impl AsRef<Path>, opts: &ProcessOptions) -> Result<(), Error> {
+        output::dng::write(self, out.as_ref(), opts)
+    }
+
+    /// Dump as TIFF (3×16-bit RGB).
+    pub fn dump_tiff(&self, out: impl AsRef<Path>, opts: &ProcessOptions) -> Result<(), Error> {
+        let out = out.as_ref();
+        let image = self.get_image(opts)?;
+        let icc = icc::processed_profile(opts.color_encoding, opts.cineon);
+        let orientation = output::dng::exif::CaptureMetadata::from_reader(self)
+            .orientation
+            .unwrap_or(1);
+        output::tiff::write_controlled(
+            &image,
+            out,
+            opts.compress,
+            icc.as_deref(),
+            orientation,
+            sys::Control::none(),
+        )
+        .map_err(|source| Error::Io {
+            path: out.display().to_string(),
+            source,
+        })
+    }
+
+    /// Dump as PPM. `binary` selects P6 (true) vs P3 (false).
+    pub fn dump_ppm(
+        &self,
+        out: impl AsRef<Path>,
+        opts: &ProcessOptions,
+        binary: bool,
+    ) -> Result<(), Error> {
+        if opts.color_mode.is_some() {
+            return Err(Error::InvalidData(
+                "camera color modes require color TIFF or DNG output".into(),
+            ));
+        }
+        let out = out.as_ref();
+        let image = self.get_image(opts)?;
+        output::ppm::write(&image, out, binary).map_err(|source| Error::Io {
+            path: out.display().to_string(),
+            source,
+        })
+    }
+
+    /// Dump per-channel histogram as CSV. `log_exposure` selects logarithmic
+    /// binning (matches `-loghist`).
+    pub fn dump_histogram(
+        &self,
+        out: impl AsRef<Path>,
+        opts: &ProcessOptions,
+        log_exposure: bool,
+    ) -> Result<(), Error> {
+        if opts.color_mode.is_some() {
+            return Err(Error::InvalidData(
+                "camera color modes require color TIFF or DNG output".into(),
+            ));
+        }
+        if opts.spp_denoise && opts.cineon {
+            return Err(Error::InvalidData(
+                "SPP denoise requires color output without Cineon".into(),
+            ));
+        }
+        #[cfg(target_arch = "wasm32")]
+        if opts.spp_denoise {
+            return Err(Error::InvalidData(
+                "SPP histogram output requires a native build".into(),
+            ));
+        }
+        let cpath = path_to_cstring(out.as_ref())?;
+        let cwb = wb_cstring(opts.wb.as_deref())?;
+        let sgain = self.resolve_sgain(opts.apply_sgain);
+        // SAFETY: see dump_dng.
+        #[cfg(not(target_arch = "wasm32"))]
+        let r = unsafe {
+            sys::dump_histogram_controlled(
+                self.x3f.as_ptr(),
+                cpath.as_ptr() as *mut _,
+                opts.color_encoding.to_raw(),
+                opts.crop as i32,
+                opts.fix_bad as i32,
+                opts.denoise_intensity.min(10) as i32,
+                sgain,
+                cwb_ptr(&cwb),
+                log_exposure as i32,
+                // DNG highlight and TIFF Cineon options do not apply to histograms.
+                sys::ProcessingOptions {
+                    spp_denoise: opts.spp_denoise,
+                    rgb_chroma_lut: opts.rgb_chroma_lut,
+                    ..sys::ProcessingOptions::default()
+                },
+                self.with_control(sys::Control::none())
+                    .with_denoise_backend(opts.denoise_backend)
+                    .with_denoise_options(opts.denoise_options)?,
+            )
+        }?;
+        #[cfg(target_arch = "wasm32")]
+        let r = unsafe {
+            sys::x3f_dump_raw_data_as_histogram(
+                self.x3f.as_ptr(),
+                cpath.as_ptr() as *mut _,
+                opts.color_encoding.to_raw(),
+                opts.crop as i32,
+                opts.fix_bad as i32,
+                opts.denoise_intensity.min(10) as i32,
+                sgain,
+                cwb_ptr(&cwb),
+                log_exposure as i32,
+            )
+        };
+        check(r)
+    }
+
+    /// Sigma's heuristic from the legacy CLI: pre-Quattro files default
+    /// `apply_sgain=on`, Quattro defaults `off`. Caller can override.
+    fn resolve_sgain(&self, override_: Option<bool>) -> i32 {
+        if let Some(v) = override_ {
+            return v as i32;
+        }
+        // X3F_VERSION_4_0 = 0x00040000 in the C header. Files older than 4.0
+        // (i.e. pre-Quattro) get sgain on.
+        const X3F_VERSION_4_0: u32 = 0x0004_0000;
+        (self.header_version() < X3F_VERSION_4_0) as i32
+    }
+}
+
+impl Drop for Reader {
+    fn drop(&mut self) {
+        // SAFETY: x3f and file are valid. x3f_delete frees the structure;
+        // fclose closes the FILE* afterwards. Both are infallible from our
+        // perspective (we ignore their return values).
+        unsafe {
+            sys::x3f_delete(self.x3f.as_ptr());
+            libc::fclose(self.file.as_ptr());
+        }
+    }
+}
+
+pub(crate) fn wb_cstring(wb: Option<&str>) -> Result<Option<CString>, Error> {
+    match wb {
+        None => Ok(None),
+        Some(s) => CString::new(s).map(Some).map_err(|_| Error::WbNul),
+    }
+}
+
+pub(crate) fn cwb_ptr(cwb: &Option<CString>) -> *mut std::os::raw::c_char {
+    match cwb {
+        Some(s) => s.as_ptr() as *mut _,
+        None => std::ptr::null_mut(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gpu_errors_remain_distinct_from_invalid_raw_data() {
+        let error = Error::from(sys::Error::Gpu("device lost".into()));
+        assert!(matches!(&error, Error::Gpu(message) if message == "device lost"));
+        assert_eq!(error.to_string(), "GPU denoising unavailable: device lost");
+    }
+
+    #[test]
+    fn dng_highlight_mapping_defaults_to_linear_without_enabling_recovery() {
+        let opts = ProcessOptions::default();
+        assert!(!opts.dng_highlight_recovery);
+        assert_eq!(opts.dng_highlight_mapping, DngHighlightMapping::Linear);
+        assert_eq!(DngHighlightMapping::Linear.to_raw(), 0);
+        assert_eq!(DngHighlightMapping::Shoulder.to_raw(), 1);
+    }
+
+    #[test]
+    fn library_error_ok_maps_to_ok() {
+        assert!(LibraryError::from_raw(sys::x3f_return_e_X3F_OK).is_ok());
+    }
+
+    #[test]
+    fn library_error_known_codes_map_to_named_variants() {
+        let cases = [
+            (sys::x3f_return_e_X3F_ARGUMENT_ERROR, LibraryError::Argument),
+            (sys::x3f_return_e_X3F_INFILE_ERROR, LibraryError::Infile),
+            (sys::x3f_return_e_X3F_OUTFILE_ERROR, LibraryError::Outfile),
+            (sys::x3f_return_e_X3F_INTERNAL_ERROR, LibraryError::Internal),
+        ];
+        for (raw, expected) in cases {
+            assert_eq!(LibraryError::from_raw(raw).unwrap_err(), expected);
+        }
+    }
+
+    #[test]
+    fn library_error_unknown_code_is_preserved() {
+        let unknown: sys::x3f_return_t = 0x1234_5678;
+        assert_eq!(
+            LibraryError::from_raw(unknown).unwrap_err(),
+            LibraryError::Unknown(unknown.into()),
+        );
+    }
+
+    #[test]
+    fn color_encoding_round_trips_through_raw() {
+        // The mapping is the only place a typo in either enum would land us
+        // silently producing wrong output (e.g. Adobe RGB vs ProPhoto RGB).
+        let pairs = [
+            (ColorEncoding::None, sys::x3f_color_encoding_e_NONE),
+            (ColorEncoding::Srgb, sys::x3f_color_encoding_e_SRGB),
+            (ColorEncoding::AdobeRgb, sys::x3f_color_encoding_e_ARGB),
+            (ColorEncoding::ProPhotoRgb, sys::x3f_color_encoding_e_PPRGB),
+            (
+                ColorEncoding::Unprocessed,
+                sys::x3f_color_encoding_e_UNPROCESSED,
+            ),
+            (ColorEncoding::Qtop, sys::x3f_color_encoding_e_QTOP),
+        ];
+        for (enc, raw) in pairs {
+            assert_eq!(enc.to_raw(), raw, "{enc:?}");
+        }
+    }
+
+    #[test]
+    fn wb_cstring_handles_none_and_string_inputs() {
+        assert!(matches!(wb_cstring(None), Ok(None)));
+        let cs = wb_cstring(Some("Daylight")).unwrap().unwrap();
+        assert_eq!(cs.to_bytes(), b"Daylight");
+    }
+
+    #[test]
+    fn wb_cstring_rejects_interior_nul() {
+        assert!(matches!(wb_cstring(Some("Day\0light")), Err(Error::WbNul)));
+    }
+}

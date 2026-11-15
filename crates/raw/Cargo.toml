@@ -1,0 +1,24 @@
+[package]
+name = "raw"
+description = "Thin layer over rawler: open non-Sigma RAWs (CR2/CR3/RAF/DNG/ARW) – test bench"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+sysdirs = { path = "../sysdirs" }
+# own lens profiles: format, storage, versions, flat-field measurement
+lensprof = { path = "../lensprof" }
+graineo-color = { path = "../color" }
+# rawler (dnglab), LGPL-2.1 – pinned exactly, the author says the API is not stable yet
+rawler = "=0.8.0"
+image = { version = "0.25", default-features = false }
+rayon = "1"
+# read the lensfun extract (XML)
+roxmltree = "0.21"
+# local backup of the lens profiles in use (JSON, stored only on the local machine)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+legacy_names = { path = "../legacy_names" }
+# color tables of the film profiles (zlib)
+flate2 = "1"

@@ -1,0 +1,16 @@
+[package]
+name = "pools"
+description = "Thread pools of graineo: which pool a thread belongs to, shared computations and gates that never wait inside a pool that is needed"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+rayon = "1"
+
+# physical memory (GPU only when a job fits a share of it, see gpu::gpu_fits_memory)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_SystemInformation"] }

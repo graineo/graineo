@@ -1,0 +1,14 @@
+[package]
+name = "faces"
+description = "Faces in photos: detect (Apple Vision), recognize (SFace, computed in-house), assign and group, without database or UI"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+rayon = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSData", "NSDictionary", "NSString", "NSValue", "NSError"] }

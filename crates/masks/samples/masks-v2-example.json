@@ -1,0 +1,61 @@
+{
+  "version": 2,
+  "layers": [
+    {
+      "mask": {
+        "type": "combine",
+        "operation": "intersect",
+        "left": {
+          "type": "radial",
+          "center": [
+            0.5,
+            0.5
+          ],
+          "radii": [
+            0.6,
+            0.45
+          ],
+          "angle": 0.2,
+          "feather": 0.7
+        },
+        "right": {
+          "type": "luminance",
+          "low": 0.0,
+          "high": 0.5,
+          "feather": 0.2
+        }
+      },
+      "adjustments": {
+        "exposure": 0.7,
+        "shadows": 0.3,
+        "temperature": 0.1
+      }
+    },
+    {
+      "mask": {
+        "type": "brush",
+        "points": [
+          [
+            0.2,
+            0.7
+          ],
+          [
+            0.5,
+            0.6
+          ],
+          [
+            0.8,
+            0.7
+          ]
+        ],
+        "radius": 0.06,
+        "hardness": 0.5,
+        "flow": 0.15
+      },
+      "adjustments": {
+        "exposure": 0.3,
+        "saturation": 0.2
+      }
+    }
+  ]
+}

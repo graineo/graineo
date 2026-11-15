@@ -1,0 +1,8 @@
+[package]
+name = "sysdirs"
+description = "System folders for graineo: home, application data, cache, logs (macOS and Windows)"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]

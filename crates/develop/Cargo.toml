@@ -1,0 +1,52 @@
+[package]
+name = "develop"
+description = "Development of X3F raw data into output images"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+sysdirs = { path = "../sysdirs" }
+graineo-color = { path = "../color" }
+masks = { path = "../masks" }
+retouch = { path = "../retouch" }
+x3f = { path = "../x3f" }
+rayon = "1"
+pools = { path = "../pools" }
+serde = { version = "1", features = ["derive"] }
+# Downscaling on export (size limit), without image formats
+image = { version = "0.25", default-features = false }
+jpeg-encoder = "0.6"
+# Disk cache of the SPP base (diskcache.rs): lossless packing, checksums, free space measurement
+flate2 = "1"
+crc32fast = "1"
+libc = "0.2"
+# SPP-accurate Merrill pipeline and DNG with Sigma profiles (Apache-2.0, see third_party/x3fuse-core/NOTICE)
+x3f-core = { path = "../../third_party/x3fuse-core/crates/x3f-core", default-features = false }
+# Physical film simulation (GPL-3.0, see third_party/spektrafilm-rs/MODIFICATIONS.md)
+spektrafilm-core = { path = "../../third_party/spektrafilm-rs/crates/spektrafilm-core" }
+spektrafilm-gpu = { path = "../../third_party/spektrafilm-rs/crates/spektrafilm-gpu" }
+spektrafilm-math = { path = "../../third_party/spektrafilm-rs/crates/spektrafilm-math" }
+# Film simulation: parameter override for testing (GRAINEO_FILM_PARAMS), in the tree via spektrafilm anyway
+serde_json = "1"
+legacy_names = { path = "../legacy_names" }
+# export scaling (resize_gpu.rs) and Quattro preparation (window filters) on the GPU; same wgpu as film simulation, masks and rawdev
+wgpu = { version = "30", features = ["wgsl"] }
+pollster = "0.4"
+bytemuck = "1.25"
+
+[features]
+default = []
+# Make SPP noise reduction on the GPU (wgpu) available; without the feature
+# `spp::working_gpu_cancellable` falls back to the CPU automatically.
+spp-gpu = ["x3f-core/spp-gpu"]
+# Film simulation at reference precision (f64, CPU only) instead of f32 (GPU + CPU fallback).
+# Applies to the whole program (Cargo feature of spektrafilm), so only for measurements/export tools.
+film-f64 = ["spektrafilm-core/precision-f64"]
+
+[dev-dependencies]
+serde_json = "1"
+tiff = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }

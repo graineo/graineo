@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["crates/color", "crates/x3f", "crates/develop", "crates/graineo-dev", "crates/app", "crates/raw", "crates/library", "crates/rawdev", "crates/sensor_view", "crates/retouch", "crates/masks", "crates/faces", "crates/sysdirs", "crates/pools", "crates/lensprof", "crates/legacy_names"]
+exclude = ["third_party"]
+
+[workspace.package]
+edition = "2021"
+version = "1.0.1"
+license = "GPL-3.0-only"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+debug = 1
+
+# egui-wgpu with a float (wide-gamut) window surface and the photo shader of the display, see
+# third_party/egui-wgpu/MODIFICATIONS.md
+[patch.crates-io]
+egui-wgpu = { path = "third_party/egui-wgpu" }

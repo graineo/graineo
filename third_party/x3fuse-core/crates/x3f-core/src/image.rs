@@ -1,0 +1,317 @@
+//! Processed-image extraction wrapper around the C `x3f_get_image`.
+//!
+//! The C API populates an `x3f_area16_t` whose `buf` is malloc'd. We copy
+//! the pixels into a Rust-owned `Vec<u16>` and free the C buffer immediately,
+//! so callers don't have to think about cross-boundary lifetimes.
+
+use std::ptr;
+
+use x3f_sys as sys;
+// libc compat — see `x3f-sys/src/sysabi.rs`. Used here for `libc::free`
+// on the C-allocated `x3f_area16_t.buf` / preview pixel buffer.
+use x3f_sys::sysabi as libc;
+
+use crate::{cwb_ptr, wb_cstring, Error, LibraryError, ProcessOptions, Reader};
+
+/// Per-channel black point and saturation level returned alongside a
+/// processed image. Matches the C `x3f_image_levels_t`. DNG output uses
+/// these for the `BlackLevel` / `WhiteLevel` tags.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImageLevels {
+    /// Per-channel black point (DNG `BlackLevel`).
+    pub black: [f64; 3],
+    /// Per-channel saturation level (DNG `WhiteLevel`).
+    pub white: [u32; 3],
+}
+
+/// A processed image: `channels` 16-bit samples per pixel, interleaved.
+///
+/// Pixel `(row, col)` channel `c` lives at
+/// `data[row * row_stride + col * channels + c]`.
+///
+/// `row_stride` is in `u16` elements (not bytes) and may exceed
+/// `columns * channels` when the C-side allocator pads rows.
+pub struct Image {
+    /// Interleaved 16-bit samples, `rows * row_stride` elements long.
+    pub data: Vec<u16>,
+    /// Image height in pixels.
+    pub rows: u32,
+    /// Image width in pixels.
+    pub columns: u32,
+    /// Samples per pixel (3 for RGB).
+    pub channels: u32,
+    /// Row pitch in `u16` elements (may exceed `columns * channels`).
+    pub row_stride: u32,
+    /// Per-channel black/white levels for this image.
+    pub levels: ImageLevels,
+    /// Per-image highlight scale returned directly by processing. The DNG
+    /// writer adds `log2(scale)` to `BaselineExposure` so consumers restore
+    /// brightness on import. It remains isolated across concurrent readers.
+    pub dng_highlight_scale: f64,
+    /// Per-image shoulder ceiling returned alongside `dng_highlight_scale`.
+    /// This is the pre-shoulder maximum
+    /// sat_ratio: `> 1.0` means highlight recovery overshot WhiteLevel
+    /// and Pass 3 baked the soft shoulder into the raster, so the DNG
+    /// writer publishes `LinearResponseLimit = knee`; `1.0` means the
+    /// raster is scene-linear up to white and the writer keeps
+    /// `LinearResponseLimit = 1.0` even with recovery enabled.
+    pub dng_shoulder_ceiling: f64,
+}
+
+/// 8-bit preview image (3-channel interleaved). Produced by
+/// [`Reader::get_preview`] for use as the IFD0 thumbnail in DNG output.
+pub struct Preview {
+    /// Interleaved 8-bit samples, `rows * row_stride` elements long.
+    pub data: Vec<u8>,
+    /// Preview height in pixels.
+    pub rows: u32,
+    /// Preview width in pixels.
+    pub columns: u32,
+    /// Samples per pixel (3 for RGB).
+    pub channels: u32,
+    /// Row pitch in bytes (may exceed `columns * channels`).
+    pub row_stride: u32,
+}
+
+impl Image {
+    /// Sample at `(row, col, channel)`. Bounds-checked via `Vec` indexing.
+    #[inline]
+    pub fn sample(&self, row: u32, col: u32, channel: u32) -> u16 {
+        let idx = (row as usize) * (self.row_stride as usize)
+            + (col as usize) * (self.channels as usize)
+            + (channel as usize);
+        self.data[idx]
+    }
+
+    /// Slice covering one full row, including any stride padding.
+    #[inline]
+    pub fn row(&self, row: u32) -> &[u16] {
+        let start = (row as usize) * (self.row_stride as usize);
+        let end = start + (self.row_stride as usize);
+        &self.data[start..end]
+    }
+}
+
+impl Reader {
+    /// Run the full processing pipeline (white-balance, color-matrix, gamma,
+    /// highlight-recovery, optional crop) and return the result as a Rust-owned
+    /// 16-bit RGB image.
+    pub fn get_image(&self, opts: &ProcessOptions) -> Result<Image, Error> {
+        self.get_image_with_control(opts, sys::Control::none())
+    }
+
+    pub(crate) fn get_image_with_control(
+        &self,
+        opts: &ProcessOptions,
+        control: sys::Control<'_>,
+    ) -> Result<Image, Error> {
+        let control = self.with_control(control);
+        let control = control
+            .with_denoise_backend(opts.denoise_backend)
+            .with_denoise_options(opts.denoise_options)?;
+        control.check()?;
+        let cwb = wb_cstring(opts.wb.as_deref())?;
+        let sgain = self.resolve_sgain(opts.apply_sgain);
+        // SAFETY: zero-init is a valid x3f_area16_t (all-NULL pointers, all-0
+        // dimensions). x3f_get_image overwrites every field on success.
+        let mut area: sys::x3f_area16_t = unsafe { std::mem::zeroed() };
+        let mut ilevels: sys::x3f_image_levels_t = unsafe { std::mem::zeroed() };
+
+        // x3f_get_image early-returns for UNPROCESSED encoding with the
+        // condition `return ilevels == NULL` — i.e. it requires a NULL
+        // levels pointer in that mode and otherwise reports failure. We
+        // mirror that contract here.
+        // graineo: the Quattro top layer (QTOP) is unprocessed as well and has the same contract.
+        let ilevels_ptr = if matches!(opts.color_encoding, crate::ColorEncoding::Unprocessed | crate::ColorEncoding::Qtop) {
+            ptr::null_mut()
+        } else {
+            &mut ilevels
+        };
+
+        // SAFETY: x3f is valid; area is a stack sink x3f_get_image populates;
+        // wb pointer (if any) outlives the call.
+        let info = unsafe {
+            sys::get_image_controlled(
+                self.x3f.as_ptr(),
+                &mut area,
+                ilevels_ptr,
+                opts.color_encoding.to_raw(),
+                opts.crop as i32,
+                opts.fix_bad as i32,
+                opts.denoise_intensity.min(10) as i32,
+                sgain,
+                cwb_ptr(&cwb),
+                sys::ProcessingOptions {
+                    spp_denoise: opts.spp_denoise,
+                    dng_highlight_recovery: opts.dng_highlight_recovery,
+                    dng_shoulder: opts.dng_highlight_mapping.to_raw() == 1,
+                    cineon: opts.cineon,
+                    rgb_chroma_lut: opts.rgb_chroma_lut,
+                    color_mode: opts.color_mode,
+                },
+                control,
+            )
+        }?;
+
+        let dng_highlight_scale = info.highlight_scale;
+        let dng_shoulder_ceiling = info.shoulder_ceiling;
+
+        // SAFETY: each logical row returned by x3f_get_image is valid. A
+        // cropped view may start inside its backing allocation, so the
+        // final row's trailing stride padding need not be readable.
+        let data = unsafe { copy_image_rows_controlled(&area, control) };
+
+        // SAFETY: area.buf was malloc'd by the C library and is non-null on
+        // a successful return; we are the unique owner now.
+        unsafe { libc::free(area.buf) };
+        let data = data?;
+
+        Ok(Image {
+            data,
+            rows: area.rows,
+            columns: area.columns,
+            channels: area.channels,
+            row_stride: area.row_stride,
+            levels: ImageLevels {
+                black: ilevels.black,
+                white: ilevels.white,
+            },
+            dng_highlight_scale,
+            dng_shoulder_ceiling,
+        })
+    }
+
+    /// Render an 8-bit downsampled preview of `image`. `max_width` caps the
+    /// output dimensions (the legacy DNG writer uses 300). `image` must have
+    /// been produced by [`Self::get_image`] so its `levels` are populated.
+    /// This legacy camera-space preview does not apply `color_mode`.
+    /// DNG export creates its selected-mode preview separately.
+    pub fn get_preview(
+        &self,
+        image: &Image,
+        opts: &ProcessOptions,
+        max_width: u32,
+    ) -> Result<Preview, Error> {
+        self.get_preview_with_control(image, opts, max_width, sys::Control::none())
+    }
+
+    pub(crate) fn get_preview_with_control(
+        &self,
+        image: &Image,
+        opts: &ProcessOptions,
+        max_width: u32,
+        control: sys::Control<'_>,
+    ) -> Result<Preview, Error> {
+        let control = self.with_control(control);
+        control.check()?;
+        let cwb = wb_cstring(opts.wb.as_deref())?;
+        let sgain = self.resolve_sgain(opts.apply_sgain);
+
+        // x3f_get_preview reads from `image` (data + dims) and writes to a
+        // freshly-allocated preview struct. We synthesise a transient
+        // x3f_area16_t whose `data` aliases our owned Vec — the C function
+        // never frees `buf`, so leaving it null is safe.
+        let mut area = sys::x3f_area16_t {
+            data: image.data.as_ptr() as *mut u16,
+            buf: ptr::null_mut(),
+            rows: image.rows,
+            columns: image.columns,
+            channels: image.channels,
+            row_stride: image.row_stride,
+        };
+        let mut ilevels = sys::x3f_image_levels_t {
+            black: image.levels.black,
+            white: image.levels.white,
+        };
+        let mut preview: sys::x3f_area8_t = unsafe { std::mem::zeroed() };
+
+        // SAFETY: every pointer is non-null and outlives the call. The C
+        // function reads from area+ilevels and populates preview.
+        let ok = unsafe {
+            sys::get_preview_controlled(
+                self.x3f.as_ptr(),
+                &mut area,
+                &mut ilevels,
+                sys::x3f_color_encoding_e_SRGB,
+                sgain,
+                cwb_ptr(&cwb),
+                max_width,
+                &mut preview,
+                image.dng_highlight_scale,
+                control,
+            )
+        };
+        if ok == 0 {
+            control.check()?;
+            return Err(Error::Library(LibraryError::Argument));
+        }
+
+        let len = (preview.rows as usize) * (preview.row_stride as usize);
+        // SAFETY: preview.data points to len bytes the C function just wrote.
+        let data = unsafe { std::slice::from_raw_parts(preview.data, len).to_vec() };
+        // SAFETY: preview.buf was malloc'd by the C library; we own it now.
+        unsafe { libc::free(preview.buf as *mut _) };
+
+        Ok(Preview {
+            data,
+            rows: preview.rows,
+            columns: preview.columns,
+            channels: preview.channels,
+            row_stride: preview.row_stride,
+        })
+    }
+}
+
+/// Copy the logical samples of a possibly cropped view without reading
+/// source padding. The owned result retains the original row stride.
+///
+/// # Safety
+///
+/// Each row must contain `columns * channels` readable samples starting
+/// at `data + row * row_stride`, with that width no larger than the stride.
+#[cfg(test)]
+unsafe fn copy_image_rows(area: &sys::x3f_area16_t) -> Vec<u16> {
+    unsafe { copy_image_rows_controlled(area, sys::Control::none()) }.unwrap()
+}
+
+unsafe fn copy_image_rows_controlled(
+    area: &sys::x3f_area16_t,
+    control: sys::Control<'_>,
+) -> Result<Vec<u16>, Error> {
+    let stride = area.row_stride as usize;
+    let width = area.columns as usize * area.channels as usize;
+    let mut data = vec![0; area.rows as usize * stride];
+    for row in 0..area.rows as usize {
+        control.check()?;
+        let start = row * stride;
+        // SAFETY: the caller guarantees the logical row is readable.
+        let source = unsafe { std::slice::from_raw_parts(area.data.add(start), width) };
+        data[start..start + width].copy_from_slice(source);
+    }
+    Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cropped_view_copies_last_row_without_reading_trailing_padding() {
+        let mut backing: Vec<u16> = (0..24).collect();
+        let area = sys::x3f_area16_t {
+            // The second logical row ends exactly at backing.len().
+            data: unsafe { backing.as_mut_ptr().add(3) },
+            buf: ptr::null_mut(),
+            rows: 2,
+            columns: 3,
+            channels: 3,
+            row_stride: 12,
+        };
+        let data = unsafe { copy_image_rows(&area) };
+        assert_eq!(data.len(), 24);
+        assert_eq!(&data[..9], &backing[3..12]);
+        assert_eq!(&data[12..21], &backing[15..24]);
+        assert_eq!(&data[9..12], &[0; 3]);
+        assert_eq!(&data[21..], &[0; 3]);
+    }
+}

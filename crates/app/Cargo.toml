@@ -1,0 +1,61 @@
+[package]
+name = "graineo"
+description = "graineo – RAW & Film, with Foveon support"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "graineo"
+path = "src/main.rs"
+
+[dependencies]
+sysdirs = { path = "../sysdirs" }
+# old (German) names of stored files and values: translated once at the first start
+legacy_names = { path = "../legacy_names" }
+# RGB color spaces and profiles for export (Display P3, Adobe RGB, ProPhoto)
+graineo-color = { path = "../color" }
+masks = { path = "../masks" }
+x3f = { path = "../x3f" }
+# SPP noise reduction on the GPU (falls back to the CPU automatically without a GPU)
+develop = { path = "../develop", features = ["spp-gpu"] }
+# Library: own database, Lightroom import, preview cache
+library = { path = "../library" }
+# Develop non-Sigma RAWs (CR2/CR3/RAF/DNG/ARW)
+raw = { path = "../raw" }
+rawdev = { path = "../rawdev" }
+# own lens profiles: storage, assignment rules, exchange
+lensprof = { path = "../lensprof" }
+# sensor view for Bayer/X-Trans (analyses on the mosaic)
+sensor_view = { path = "../sensor_view" }
+rayon = "1"
+pools = { path = "../pools" }
+# photo textures in floating point (photo_display.rs)
+bytemuck = "1.25"
+half = { version = "2", features = ["bytemuck"] }
+eframe = "0.37"
+egui = "0.37"
+rfd = "0.17"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+trash = "5"
+muda = "0.17"
+# Embedded, purely local UI language catalogs (MIT/Apache-2.0).
+fluent-bundle = "0.16"
+unic-langid = "0.9"
+
+# display color management: tag the CAMetalLayer as sRGB (display_color.rs)
+[target.'cfg(target_os = "macos")'.dependencies]
+raw-window-handle = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSString", "NSError", "NSURL", "NSData", "NSDate", "NSDictionary", "NSProgress", "NSValue"] }
+# Apple Photos (PhotoKit): completion blocks
+block2 = "0.6"
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-graphics", "objc2-core-foundation"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGImage"] }
+
+# Windows: menu bar on the window (HWND)
+[target.'cfg(windows)'.dependencies]
+raw-window-handle = "0.6"

@@ -1,0 +1,54 @@
+[package]
+name = "library"
+description = "graineo's library: own SQLite database, Lightroom catalog import (read-only), disk sync, preview cache"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+sysdirs = { path = "../sysdirs" }
+# names of graineo 1.0 (German) and their translation: library migration, old files and settings
+legacy_names = { path = "../legacy_names" }
+# bundled SQLite (the one shipped with macOS is too old for rusqlite 0.41)
+rusqlite = { version = "0.41.0", features = ["bundled", "backup"] }
+serde_json = "1"
+# embedded previews of non-Sigma RAWs (same pinned version as crates/raw)
+rawler = "=0.8.0"
+# decode embedded JPEG previews directly at reduced size (DCT scaling 1/2 … 1/8)
+jpeg-decoder = "0.3"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+x3f = { path = "../x3f" }
+faces = { path = "../faces" }
+rayon = "1"
+pools = { path = "../pools" }
+unicode-normalization = "0.1"
+# M-CLIP text model: weights stored as F16 (MIT/Apache-2.0); grapheme clusters for the
+# SentencePiece normalizer (MIT/Apache-2.0)
+half = "2"
+unicode-segmentation = "1"
+libc = "0.2"
+# checksum when moving across drives (copy → verify → delete)
+sha2 = "0.11"
+# packed library backups (`library-YYYY-MM-DD.sqlite.zst`), single-threaded (MIT/Apache-2.0, zstd itself BSD)
+zstd = { version = "0.13", default-features = false }
+# update check: Ed25519 signature of latest.json (BSD-3-Clause) and its base64 encoding
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "fast", "zeroize"] }
+base64 = "0.23"
+
+# cameras by USB without a drive (import, camera_mac.rs): ImageCaptureCore
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+dispatch2 = "0.3"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSString", "NSError", "NSURL", "NSData", "NSDate", "NSDictionary", "NSProgress", "NSValue", "NSEnumerator"] }
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage"] }
+objc2-image-capture-core = { version = "0.3", default-features = false, features = ["std", "block2", "libc", "objc2-core-graphics", "ICCameraDevice", "ICCameraFile", "ICCameraFolder", "ICCameraItem", "ICDevice", "ICDeviceBrowser", "ImageCaptureConstants"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+# outside macOS the library reads PNG/TIFF itself (on the Mac via ImageIO)
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
+
+[dev-dependencies]
+# tests write PNG files with transparency (imageio alpha test)
+image = { version = "0.25", default-features = false, features = ["png"] }

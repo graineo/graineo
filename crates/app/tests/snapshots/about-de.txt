@@ -1,0 +1,8 @@
+Version 0.25.0 · GPL-3.0
+Basis: x3fuse-core (Apache 2.0)
+Film: spektrafilm, A. Volpato (GPL-3.0)
+Werkzeugideen: Körnungs-Lupe, Vorbelichtung,
+Weichzeichner und Lichtpunkte nach spektrafilm
+Filmdaten: CC BY-SA 4.0
+IBM Plex Mono, Syne (OFL) · Phosphor (MIT)
+Foveon ist eine Marke der Sigma Corporation

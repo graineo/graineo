@@ -1,0 +1,36 @@
+[package]
+name = "graineo-dev"
+description = "Developer tool: inspect X3F files and export RAW layers"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+graineo-color = { path = "../color" }
+x3f = { path = "../x3f" }
+# Test bench for non-Sigma RAWs (`graineo-dev raw <CR3|RAF|DNG …>`)
+raw = { path = "../raw" }
+# Developing as in the app (`graineo-dev rawapp`): preview, sliders, Lightroom starting values
+rawdev = { path = "../rawdev" }
+lensprof = { path = "../lensprof" }
+library = { path = "../library" }
+sysdirs = { path = "../sysdirs" }
+# switch „Grafikkarte verwenden“ for GPU/processor comparisons (`graineo-dev gpu-compare`)
+pools = { path = "../pools" }
+tiff = "0.9"
+anyhow = "1"
+# processor time of measurements (`graineo-dev sync`)
+libc = "0.2"
+develop = { path = "../develop", features = ["spp-gpu"] }
+# Quality check (`qa`): decode the camera JPEG, result as JSON
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+serde_json = "1"
+rayon = "1"
+# Sensor analyses (`graineo-dev sensor`)
+sensor_view = { path = "../sensor_view" }
+
+retouch = { path = "../retouch" }
+
+masks = { path = "../masks" }
+# Test bench `graineo-dev x3fuse`: X3Fuse's own path (noise reduction on the sensor data, NLM/BM3D)
+x3f-core = { path = "../../third_party/x3fuse-core/crates/x3f-core", default-features = false }

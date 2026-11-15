@@ -1,0 +1,28 @@
+# Literals that look German but are not UI text (logs, SQL, test data, search tokens). One per line: file.rs:text
+# Checked by the test every_german_literal_is_translated_or_listed (i18n/ui.rs) and scripts/i18n-static.py
+activity.rs: 0 fehler
+library_load.rs:SELECT image, keyword FROM image_keyword
+library_ui.rs:SELECT image, keyword FROM image_keyword
+library_ui.rs:Stufen geändert
+library_ui.rs:SELECT label_lr FROM image WHERE id=?1
+library_ui.rs:ODER
+library_ui.rs:39 165 Bilder übernehmen …
+library_ui.rs:Lightroom-Bearbeitungen übernehmen … 1 600 von 39 165
+rating.rs:SELECT flag FROM image WHERE id=?1
+test_image.rs:test native key: egui gets {key:?} cmd={} shift={} alt={}
+search_suggest.rs:SELECT s.name, (SELECT count(*) FROM (SELECT image FROM image_keyword WHERE keyword = s.id UNION SELECT image FROM face WHERE person = s.id AND status = 'confirmed')) FROM keyword s WHERE s.person = 1
+search_suggest.rs:SELECT s.name, count(sb.image) FROM collection s LEFT JOIN collection_image sb ON sb.collection = s.id WHERE s.kind IN (0, 2, 3) GROUP BY s.id
+search_suggest.rs:SELECT camera, count(*) FROM file WHERE camera IS NOT NULL AND status <> 4 GROUP BY camera
+search_suggest.rs:SELECT lens, count(*) FROM file WHERE lens IS NOT NULL AND status <> 4 GROUP BY lens
+search_suggest.rs:SELECT keyword, count(*) FROM image_keyword GROUP BY keyword
+search_suggest.rs:SELECT o.path, st.name, count(d.id) FROM folder o JOIN root_folder st ON st.id = o.root JOIN file d ON d.folder = o.id AND d.status <> 4 GROUP BY o.id
+crash_log.rs:(keine Meldung)
+crash_log.rs: (Hauptthread – beendet die App)
+import_ui.rs:import-kamera
+import_camera.rs:ersatz-kamera
+import_camera.rs:Ersatz-Kamera
+brand.rs:Phosphor (MIT)
+bug_report.rs:SELECT name FROM collection
+bug_report.rs:SELECT path FROM folder
+bug_report.rs:…/Datei.{ext}
+bug_report.rs:Datei.{ext}

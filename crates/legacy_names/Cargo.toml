@@ -1,0 +1,12 @@
+[package]
+name = "legacy_names"
+description = "Names that graineo 1.0 stored (German database, file and setting names) and their translation to the current ones; the only place where the old names appear"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+# same bundled SQLite as crates/library (one build, features unified)
+rusqlite = { version = "0.41.0", features = ["bundled", "backup"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

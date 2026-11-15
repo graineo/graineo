@@ -1,0 +1,40 @@
+# Reference checksums of the Sigma development (scripts/check.sh). Columns: kind, file name, checksum.
+# spphash = Sigma base (`graineo-dev spphash`); color/mono = image data from `graineo-dev develop … --spp --baseline [--mono]`.
+# Own shots and free files (raw.pixls.us, CC0). As of 0.107 (one development path, 2026-11-13; new Classic path D for all Classic cameras, 2026-11-14).
+# 1.0.1: Quattro changed (highlights keep their hue: neutralised by the lowest layer); Merrill and Classic unchanged.
+# Disk cache: when checksums change, the base changes – increase COMPUTE_PATH_VERSION (crates/develop/src/diskcache.rs) and
+# write its value and the digest the test `reference_values_carry_the_compute_path_version` names here.
+# compute-path-version: 9 digest: 7a79c2b93294833e
+
+# Merrill
+spphash DP2M5418.X3F eec84657f928a2db
+spphash DP2M5412.X3F e082cfa9fd4fea0d
+color DP2M5418.X3F 0019ffd565f74191
+mono DP2M5418.X3F 5384d6fd357ae6a6
+color DP2M5412.X3F e40c4d81c364dbbb
+mono DP2M5412.X3F b5c5d7542e447f34
+# Quattro
+spphash archiv_sdQ_SDIM0260.X3F ba78baf5ec5bb5f7
+spphash archiv_sdQ_SDIM0461.X3F a3d7dcc99946b645
+spphash archiv_sdQ_SDQ_0604.X3F e1ae68e3835ef21c
+spphash dp0q_pixls__SDI0263.X3F 862f6e41e59d51af
+spphash dp2q_SDIM4388.X3F 5de24251736f7fe1
+color archiv_sdQ_SDIM0260.X3F 024e26c914a70453
+color archiv_sdQ_SDIM0461.X3F 30de196485277135
+color archiv_sdQ_SDQ_0604.X3F 5c48431cc8b28416
+color dp0q_pixls__SDI0263.X3F cb475ab05e307eda
+color dp2q_SDIM4388.X3F 0ed2805ee7bd0daa
+# older Foveon cameras (Classic)
+color archiv_DP1s_SDIM2033.X3F da4b7934b99e7ee6
+color archiv_DP1s_SDIM2036.X3F adcf8a5c3c3daef7
+color archiv_DP1s_SDIM2037.X3F 59b909a3faabc7bc
+color archiv_DP1s_SDIM2038.X3F e7ed0a5f4a0277f9
+color archiv_DP1s_SDIM2039.X3F d026971522454aa6
+color archiv_DP1s_SDIM2041.X3F 6e3a230ff8cc8e75
+color archiv_DP1s_SDIM2042.X3F 3bf5daa94f9f251e
+color dp1_pixls_RAW_SIGMA_DP1.X3F b92c18fb0f4e451b
+color pixls_RAW_SIGMA_DP1S.X3F b1efc44821be0dc7
+color sd10_pixls_RAW_SIGMA_SD10.X3F 386377d6caa8c6b0
+color sd14_pixls_20120818-SDIM4579.X3F f126b70b7af8fb2d
+color sd15_pixls__SDI5651.X3F 464dec303daa0a14
+color sd9_pixls_RAW_SIGMA_SD9_SRGB.X3F ce245ecfc1c9268d

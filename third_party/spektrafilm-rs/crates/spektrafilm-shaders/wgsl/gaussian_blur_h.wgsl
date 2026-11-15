@@ -1,0 +1,57 @@
+// Separable Gaussian blur — horizontal pass.
+//
+// Each thread reads `2*radius+1` samples from a row of the input image and
+// writes the convolved value to the output. Boundary handling mirrors (scipy reflect).
+//
+// Pair this with `gaussian_blur_v.wgsl` for the full 2D blur. Kernel weights
+// are pre-computed on CPU (see `gaussian_kernel` in spektrafilm-math).
+
+struct Params {
+    width: u32,
+    height: u32,
+    radius: u32,
+    _pad: u32,
+}
+
+@group(0) @binding(0) var<uniform> params: Params;
+@group(0) @binding(1) var<storage, read> input: array<f32>;   // [H*W*3]
+@group(0) @binding(2) var<storage, read> kernel_buf: array<f32>;  // [2*radius+1]
+@group(0) @binding(3) var<storage, read_write> output: array<f32>; // [H*W*3]
+
+// graineo: scipy.ndimage mode='reflect' (d c b a | a b c d | d c b a) as in the original's
+// fast_gaussian_filter; the port clamped to the edge pixel.
+fn reflect_index(i: i32, n: i32) -> u32 {
+    let period = 2i * n;
+    var j = i % period;
+    if j < 0i { j += period; }
+    if j >= n { j = period - 1i - j; }
+    return u32(j);
+}
+
+@compute @workgroup_size(16, 16)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let x = gid.x;
+    let y = gid.y;
+    if x >= params.width || y >= params.height {
+        return;
+    }
+
+    var sum = vec3<f32>(0.0, 0.0, 0.0);
+    let kernel_size = 2u * params.radius + 1u;
+    let w_i32 = i32(params.width);
+    for (var k = 0u; k < kernel_size; k++) {
+        let dx = i32(k) - i32(params.radius);
+        let sx_signed = i32(x) + dx;
+        let sx = reflect_index(sx_signed, w_i32);
+        let idx = (y * params.width + sx) * 3u;
+        let w = kernel_buf[k];
+        sum.x += w * input[idx];
+        sum.y += w * input[idx + 1u];
+        sum.z += w * input[idx + 2u];
+    }
+
+    let out_idx = (y * params.width + x) * 3u;
+    output[out_idx] = sum.x;
+    output[out_idx + 1u] = sum.y;
+    output[out_idx + 2u] = sum.z;
+}

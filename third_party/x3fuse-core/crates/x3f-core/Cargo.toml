@@ -1,0 +1,36 @@
+[package]
+name = "x3f-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories = ["multimedia::images"]
+description = "Safe Rust API for reading and converting Sigma Foveon X3F raw images."
+
+[features]
+gpu = ["x3f-sys/gpu"]
+# graineo addition: SPP noise reduction on the GPU.
+spp-gpu = ["x3f-sys/spp-gpu"]
+serde = ["x3f-sys/serde", "dep:serde"]
+
+[dependencies]
+x3f-sys.workspace = true
+thiserror.workspace = true
+libc = "0.2"
+serde = { version = "1", features = ["derive"], optional = true }
+tiff = "0.10"
+# M7d: rayon par_iter over DNG strips, plus the equalize_levels row
+# pass. Strip parallelism only helps the uncompressed 32-row layout;
+# `-compress` emits ONE full-height lossless-JPEG strip (the layout
+# every DNG reader decodes — see output/dng/mod.rs), so its encode is
+# a single serial task.
+rayon = "1.10"
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true

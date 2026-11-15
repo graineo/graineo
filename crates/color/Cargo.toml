@@ -1,0 +1,11 @@
+[package]
+name = "graineo-color"
+description = "ICC profiles and extended linear RGB color management for graineo"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+moxcms = { version = "=0.8.1", features = ["extended_range"] }
+rayon = "1"
+serde = { version = "1", features = ["derive"] }

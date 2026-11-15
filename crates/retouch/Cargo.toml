@@ -1,0 +1,12 @@
+[package]
+name = "retouch"
+description = "Retouching on linear RGB: cloning, Poisson healing and source search"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+rayon = "1"
+
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }

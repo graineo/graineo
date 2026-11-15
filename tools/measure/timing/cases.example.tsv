@@ -1,0 +1,10 @@
+# name<TAB>path (adjust paths; never check in test images)
+merrill-dp2m	/path/DP2M5418.X3F
+sdquattro	/path/sdQuattro.X3F
+dp2quattro	/path/dp2Quattro.X3F
+classic-dp1s	/path/dp1s.x3f
+classic-sd15	/path/sd15.X3F
+xtrans-xt30	/path/X-T30.RAF
+bayer-eosr	/path/EOS-R.CR3
+bayer-sony	/path/Sony.ARW
+large-gfx100ii	/path/GFX100II.RAF
