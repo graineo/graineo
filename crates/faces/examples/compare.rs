@@ -1,5 +1,6 @@
 //! Test helper: compare two models on the same faces (time, vector length, similarities).
 //!  vergleich MODEL IMAGE
+#[cfg(target_os = "macos")]
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let m = faces::sface::Sface::load(std::path::Path::new(&a[1])).unwrap();
@@ -15,4 +16,9 @@ fn main() {
         v.push(e);
     }
     for i in 0..v.len() { for j in i + 1..v.len() { println!("  {i}–{j}: {:.3}", faces::sface::similarity(&v[i], &v[j])); } }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("This helper needs Apple Vision and is only available on macOS.");
 }

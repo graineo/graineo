@@ -1,7 +1,9 @@
 //! Test helper: detect faces in an image, draw boxes/points, save aligned crops,
 //! compare feature vectors.  erkennen IMAGE [MODEL] [OUTPUT_DIR]
+#[cfg(target_os = "macos")]
 use image::{Rgb, RgbImage};
 
+#[cfg(target_os = "macos")]
 fn line(b: &mut RgbImage, x0: f32, y0: f32, x1: f32, y1: f32, f: Rgb<u8>) {
     let n = ((x1 - x0).abs().max((y1 - y0).abs()) as usize).max(1);
     for i in 0..=n {
@@ -14,6 +16,7 @@ fn line(b: &mut RgbImage, x0: f32, y0: f32, x1: f32, y1: f32, f: Rgb<u8>) {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let mut img = image::open(&a[1]).unwrap().to_rgb8();
@@ -57,4 +60,9 @@ fn main() {
         }
     }
     canvas.save(format!("{out_dir}/zeichnung.png")).unwrap();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("This helper needs Apple Vision and is only available on macOS.");
 }

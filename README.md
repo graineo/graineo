@@ -6,7 +6,7 @@
 
 <p align="center"><b>RAW &amp; Film, with Foveon support.</b><br>
 <a href="https://graineo.github.io">graineo.github.io</a><br>
-A photo app written in Rust for macOS and Windows (Linux experimental), with GPU-accelerated processing: Sigma Foveon, Fujifilm X-Trans and other RAW formats,<br>
+A Mac photo app written in Rust, with GPU-accelerated processing: Sigma Foveon, Fujifilm X-Trans and other RAW formats,<br>
 a photo library and a darkroom with film and paper simulation.</p>
 
 <p align="center"><img src="https://graineo.github.io/img/library.jpg" alt="graineo library" width="900"></p>
