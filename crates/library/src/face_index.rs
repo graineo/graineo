@@ -471,7 +471,8 @@ fn tidy_folder(folder: &std::path::Path, c: &Connection, cancel: &std::sync::ato
 pub struct Snapshot {
     faces: Vec<(i64, Option<i64>, String, i64, i64, Option<i64>, Option<f64>, Option<f64>, Option<f64>, Option<i64>)>,
     never: Vec<(i64, i64)>,
-    keywords: Vec<(i64, Vec<String>)>,
+    /// keyword ids per photo before the change (by id: names are never split into paths)
+    keywords: Vec<(i64, Vec<i64>)>,
     /// names of people (a rename changes them)
     names: Vec<(i64, String)>,
     pub face_ids: Vec<i64>,
@@ -507,7 +508,7 @@ pub fn snapshot(db: &crate::db::Db, faces: &[i64], person: Option<i64>) -> Resul
     images.sort_unstable();
     images.dedup();
     for image in images {
-        s.keywords.push((image, crate::sync::keyword_paths(db, image)?));
+        s.keywords.push((image, crate::keywords::ids_of(&db.conn, image)?));
     }
     s.face_ids = ids;
     Ok(s)
@@ -532,9 +533,9 @@ pub fn restore(db: &crate::db::Db, s: &Snapshot) -> Result<(), String> {
         tx.execute("INSERT OR IGNORE INTO face_never(face, person) VALUES(?1, ?2)", params![g, p]).map_err(fe)?;
     }
     tx.commit().map_err(fe)?;
-    for (image, paths) in &s.keywords {
-        if crate::sync::keyword_paths(db, *image)? != *paths {
-            crate::sync::set_keywords(db, *image, paths, crate::now(), true)?;
+    for (image, ids) in &s.keywords {
+        if crate::keywords::ids_of(&db.conn, *image)? != *ids {
+            crate::keywords::set_ids(db, *image, ids, crate::now(), true)?;
             if let Ok(file) = db.conn.query_row("SELECT file FROM image WHERE id=?1", [image], |r| r.get::<_, i64>(0)) {
                 let _ = crate::sync::write_sidecar(db, file);
             }

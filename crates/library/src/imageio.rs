@@ -330,6 +330,7 @@ extern "C" {
     fn CGImageMetadataCreateMutable() -> CFTypeRef;
     fn CGImageMetadataCreateMutableCopy(m: CFTypeRef) -> CFTypeRef;
     fn CGImageMetadataSetValueWithPath(m: CFTypeRef, parent: CFTypeRef, path: CFTypeRef, value: CFTypeRef) -> u8;
+    fn CGImageMetadataRegisterNamespaceForPrefix(m: CFTypeRef, xmlns: CFTypeRef, prefix: CFTypeRef, err: *mut CFTypeRef) -> u8;
     fn CGImageMetadataSetValueMatchingImageProperty(m: CFTypeRef, dict: CFTypeRef, prop: CFTypeRef, value: CFTypeRef) -> u8;
     fn CGImageMetadataCopyStringValueWithPath(m: CFTypeRef, parent: CFTypeRef, path: CFTypeRef) -> CFTypeRef;
     fn CGImageDestinationCreateWithURL(url: CFTypeRef, type_id: CFTypeRef, count: usize, options: CFTypeRef) -> CFTypeRef;
@@ -501,6 +502,16 @@ pub fn write_metadata(target: &Path, original: &Path, width: u32, height: u32, f
             let arr = Cf(unsafe { CFArrayCreate(std::ptr::null(), raw_refs.as_ptr(), raw_refs.len() as isize, &kCFTypeArrayCallBacks as *const c_void) });
             set_md("dc:subject", arr.0);
             written.push(format!("{} keywords", fields.keywords.len()));
+        }
+        if !fields.hierarchy.is_empty() {
+            // the Lightroom namespace is not known to ImageIO: registered first
+            let registered = unsafe { CGImageMetadataRegisterNamespaceForPrefix(m.0, cf_text("http://ns.adobe.com/lightroom/1.0/").0, cf_text("lr").0, std::ptr::null_mut()) != 0 };
+            let values: Vec<Cf> = fields.hierarchy.iter().map(|s| cf_text(s)).collect();
+            let raw_refs: Vec<CFTypeRef> = values.iter().map(|c| c.0).collect();
+            let arr = Cf(unsafe { CFArrayCreate(std::ptr::null(), raw_refs.as_ptr(), raw_refs.len() as isize, &kCFTypeArrayCallBacks as *const c_void) });
+            if registered && set_md("lr:hierarchicalSubject", arr.0) {
+                written.push("keyword hierarchy".into());
+            }
         }
         if let Some(t) = &fields.title {
             set_md("dc:title", cf_text(t).0);

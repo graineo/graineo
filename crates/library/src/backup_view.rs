@@ -201,12 +201,13 @@ fn put_develop_row(c: &Connection, file: i64, copy: &str, row: &DevelopRow) -> r
     }
 }
 
-/// Stars, flag, label and the keyword paths ("Eltern/Kind") of the image (`kopie IS copy`), without person keywords.
-type Meta = Option<(i64, i64, i64, Vec<String>)>;
+/// Stars, flag, label and the keyword paths (segments from the top, `["Eltern", "Kind"]`) of the image
+/// (`copy IS copy`), without person keywords. Paths are lists, never joined text: a name like "AC/DC" stays whole.
+type Meta = Option<(i64, i64, i64, Vec<Vec<String>>)>;
 
 fn keyword_path(c: &Connection, mut id: i64) -> rusqlite::Result<Vec<String>> {
     let mut p = Vec::new();
-    for _ in 0..64 {
+    for _ in 0..crate::keywords::MAX_DEPTH {
         let (name, parent): (String, Option<i64>) = c.query_row("SELECT name, parent FROM keyword WHERE id=?1", [id], |r| Ok((r.get(0)?, r.get(1)?)))?;
         p.push(name);
         match parent {
@@ -226,15 +227,15 @@ fn meta(c: &Connection, file: i64, copy: Option<&str>) -> rusqlite::Result<Meta>
     let Some(image) = image_id(c, file, copy)? else { return Ok(None) };
     let (s, m, e): (i64, i64, i64) = c.query_row("SELECT stars, flag, label FROM image WHERE id=?1", [image], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
     let ids: Vec<i64> = c.prepare("SELECT k.id FROM image_keyword b JOIN keyword k ON k.id=b.keyword WHERE b.image=?1 AND k.person=0")?.query_map([image], |r| r.get(0))?.collect::<Result<_, _>>()?;
-    let mut paths = ids.into_iter().map(|i| keyword_path(c, i).map(|p| p.join("/"))).collect::<Result<Vec<_>, _>>()?;
+    let mut paths = ids.into_iter().map(|i| keyword_path(c, i)).collect::<Result<Vec<_>, _>>()?;
     paths.sort();
     Ok(Some((s, m, e, paths)))
 }
 
-/// Keyword "A/B/C" in the real library, created if missing.
-fn ensure_keyword(c: &Connection, path: &str) -> rusqlite::Result<i64> {
+/// Keyword with the path `["A", "B", "C"]` in the real library, created if missing.
+fn ensure_keyword(c: &Connection, path: &[String]) -> rusqlite::Result<i64> {
     let mut parent: Option<i64> = None;
-    for name in path.split('/') {
+    for name in path {
         let found: Option<i64> = c.query_row("SELECT id FROM keyword WHERE name=?1 AND parent IS ?2 AND person=0", params![name, parent], |r| r.get(0)).optional()?;
         parent = Some(match found {
             Some(i) => i,
@@ -247,7 +248,7 @@ fn ensure_keyword(c: &Connection, path: &str) -> rusqlite::Result<i64> {
     Ok(parent.unwrap_or(0))
 }
 
-fn put_meta(c: &Connection, image: i64, m: &(i64, i64, i64, Vec<String>)) -> rusqlite::Result<()> {
+fn put_meta(c: &Connection, image: i64, m: &(i64, i64, i64, Vec<Vec<String>>)) -> rusqlite::Result<()> {
     c.execute("UPDATE image SET stars=?2, flag=?3, label=?4, changed=?5 WHERE id=?1", params![image, m.0, m.1, m.2, crate::now()])?;
     c.execute("DELETE FROM image_keyword WHERE image=?1 AND keyword IN (SELECT id FROM keyword WHERE person=0)", [image])?;
     for p in &m.3 {
@@ -378,7 +379,7 @@ mod tests {
         d
     }
 
-    /// A library with two photos: a.jpg (4 stars, keyword "Reise/Rom", develop settings) and b.jpg.
+    /// A library with two photos: a.jpg (4 stars, keywords "Reise › Rom" and "AC/DC", develop settings) and b.jpg.
     fn library(d: &Path) -> (PathBuf, i64, i64) {
         let lib = d.join("library.sqlite");
         let db = Db::open(&lib).unwrap();
@@ -392,8 +393,10 @@ mod tests {
             files.push(f);
         }
         let image: i64 = db.conn.query_row("SELECT id FROM image WHERE file=?1", [files[0]], |r| r.get(0)).unwrap();
-        let k = ensure_keyword(&db.conn, "Reise/Rom").unwrap();
-        db.conn.execute("INSERT INTO image_keyword VALUES(?1, ?2)", [image, k]).unwrap();
+        for path in [vec!["Reise".to_string(), "Rom".to_string()], vec!["AC/DC".to_string()]] {
+            let k = ensure_keyword(&db.conn, &path).unwrap();
+            db.conn.execute("INSERT INTO image_keyword VALUES(?1, ?2)", [image, k]).unwrap();
+        }
         crate::store::put_settings(&db.conn, files[0], None, Some(r#"{"exposure":1.5}"#), 100).unwrap();
         drop(db);
         (lib, files[0], files[1])
@@ -462,7 +465,9 @@ mod tests {
         // with stars, label and keywords
         let u = take_over(&copy, &lib, photo, None, true).unwrap();
         assert_eq!(c.query_row("SELECT stars FROM image WHERE file=?1", [a], |r| r.get::<_, i64>(0)).unwrap(), 4);
-        assert_eq!(meta(&c, a, None).unwrap().unwrap().3, vec!["Reise/Rom".to_string()]);
+        // (a) a name with "/" comes back whole, not as the chain "AC › DC"
+        assert_eq!(meta(&c, a, None).unwrap().unwrap().3, vec![vec!["AC/DC".to_string()], vec!["Reise".to_string(), "Rom".to_string()]]);
+        assert_eq!(c.query_row("SELECT count(*) FROM keyword WHERE name IN ('AC', 'DC')", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
         assert!(!difference(&copy, &lib, photo, None).unwrap().develop);
         undo_take_over(&lib, &u).unwrap();
         assert_eq!(c.query_row("SELECT stars FROM image WHERE file=?1", [a], |r| r.get::<_, i64>(0)).unwrap(), 1);

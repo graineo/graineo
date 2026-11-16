@@ -365,7 +365,7 @@ impl LibraryView {
         self.visible_before = Some(before);
         self.roots = l.roots;
         self.folder = l.folder;
-        self.collections = l.collections;
+        self.set_collections(l.collections);
         self.keywords = l.keywords;
         self.last_run = l.last_run;
         // quick collection: only if nothing of it was written in the meantime (the display is ahead then)

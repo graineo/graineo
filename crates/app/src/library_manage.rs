@@ -9,6 +9,13 @@
 use super::*;
 use library::manage::{self, Loss, Snapshot};
 
+#[path = "keyword_arrange.rs"]
+mod keyword_arrange;
+
+/// Limits of the ⌘Z stack of the management: at most this many steps and rows (older steps drop out).
+const UNDO_STEPS: usize = 50;
+const UNDO_ROWS: usize = 200_000;
+
 /// Photos dragged from the grid or the filmstrip (egui drag and drop payload).
 #[derive(Clone, Debug)]
 pub struct PhotoDrag {
@@ -31,6 +38,14 @@ pub(super) enum Ask {
     Rename { target: Target, name: String },
     /// renaming a keyword onto a name that exists at the same place: merge `from` into `into`
     MergeKeyword { from: i64, into: i64 },
+    /// merging several keywords into one (dialog "Stichwörter ordnen …", ⌥-drag)
+    MergeKeywords { from: Vec<i64>, into: i64 },
+    /// "never export" marks from the Lightroom catalog: the keywords that would be marked (background)
+    LightroomMarks { ids: Option<Result<Vec<i64>, String>> },
+    /// applying suggestions for ordering: (change, shown text), photos touched (background)
+    ApplySuggestions { items: Vec<(library::keyword_suggest::Change, String)>, impact: Option<Result<usize, String>> },
+    /// deleting a keyword with terms below it: everything, or only it (its children move up one level)
+    DeleteKeyword { id: i64, name: String, keep_children: bool, loss: Option<Result<(usize, usize, usize), String>> },
     Delete { target: Target, name: String, detail: Option<Result<String, String>> },
     MoveKeyword { id: i64, filter: String },
     Imports { list: Option<Result<Vec<manage::Import>, String>> },
@@ -39,6 +54,8 @@ pub(super) enum Ask {
 
 pub(super) enum Undo {
     Snap { label: String, snap: Snapshot, keywords: bool, smart: bool },
+    /// own order of collections (collection_order_ui.rs): only the list is loaded again afterwards
+    Order { label: String, snap: Snapshot },
     Added { label: String, snap: Snapshot },
     Quick { label: String, images: Vec<i64> },
     /// photos taken out of the quick collection: ⌘Z puts them back in
@@ -49,6 +66,28 @@ pub(super) enum Undo {
 pub(super) struct Manage {
     pub ask: Option<Ask>,
     pub undo: Vec<Undo>,
+    /// when each step was made (parallel to `undo`, [`crate::undo_order::tick`])
+    pub undo_at: Vec<u64>,
+    /// the open dialog "Stichwörter ordnen …"
+    pub(super) arrange: Option<keyword_arrange::Arrange>,
+}
+
+impl Manage {
+    /// A new undoable step of the management.
+    pub(super) fn push(&mut self, u: Undo) {
+        self.undo.push(u);
+        self.undo_at.push(crate::undo_order::tick());
+    }
+}
+
+impl Undo {
+    /// Rows the step holds (limit of the stack).
+    fn size(&self) -> usize {
+        match self {
+            Undo::Snap { snap, .. } | Undo::Order { snap, .. } | Undo::Added { snap, .. } => snap.size(),
+            Undo::Quick { images, .. } | Undo::QuickRemoved { images, .. } => images.len(),
+        }
+    }
 }
 
 /// Loss as dialog lines ("12 Fotos", "3 bearbeitete Fotos" …), only what is there.
@@ -195,7 +234,8 @@ impl LibraryView {
     pub(super) fn collection_menu(&mut self, ui: &mut egui::Ui, c: &library::db::Collection) {
         let id = c.id;
         let lr_set = |ui: &mut egui::Ui| ui.separator();
-        if c.kind == 1 {
+        // the set "Apple Fotos" mirrors Apple Photos: nothing is created in it
+        if c.kind == 1 && !c.apple {
             if lr::menu_item(ui, crate::tr("Sammlung erstellen …"), "", true) {
                 self.ask_new_collection(manage::COLLECTION, Some(id));
             }
@@ -210,15 +250,23 @@ impl LibraryView {
         if lr::menu_item(ui, crate::tr("Umbenennen …"), "", true) {
             self.manage.ask = Some(Ask::Rename { target: Target::Collection(id), name: c.name.clone() });
         }
-        // move: top level or into another set (never into itself or below)
-        let below = self.collection_descendants(id);
+        // own order within the level (collection_order_ui.rs); a set: its content by name again
+        self.order_menu(ui, c);
+        if c.kind == 1 {
+            self.sort_by_name_item(ui, Some(id));
+        }
+        // move: top level or into another set (never into itself or below, Apple Photos only within its set)
+        let free = !Self::ordering_locked();
+        let allowed = |list: &[library::db::Collection], to: Option<i64>| library::collection_order::check(list, id, to).is_ok();
         let sets: Vec<(i64, String)> = {
-            let mut v: Vec<(i64, String)> = self.collections.iter().filter(|s| s.kind == 1 && !below.contains(&s.id)).map(|s| (s.id, self.collection_path(s.id))).collect();
+            let mut v: Vec<(i64, String)> = self.collections.iter().filter(|s| s.kind == 1 && allowed(&self.collections, Some(s.id))).map(|s| (s.id, self.collection_path(s.id))).collect();
             v.sort_by_key(|(_, p)| p.to_lowercase());
             v
         };
-        ui.menu_button(crate::tr("Verschieben nach"), |ui| {
-            if lr::menu_item(ui, crate::tr("Oberste Ebene"), "", c.parent.is_some()) {
+        let top = allowed(&self.collections, None);
+        let moved = ui.add_enabled_ui(free && (top || !sets.is_empty()), |ui| ui.menu_button(crate::tr("Verschieben nach"), |ui| {
+            let why = if c.parent.is_none() { crate::tr("Steht schon auf der obersten Ebene") } else { crate::tr("Alben aus Apple Fotos bleiben in ihrem Satz") };
+            if lr::menu_item_why(ui, crate::tr("Oberste Ebene"), "", top && c.parent.is_some(), why) {
                 self.move_collection(id, None);
             }
             if !sets.is_empty() {
@@ -229,7 +277,12 @@ impl LibraryView {
                     self.move_collection(id, Some(*s));
                 }
             }
-        });
+        }));
+        if !free {
+            // a disabled widget reports no hover: the reason on a hover area over the same place
+            let probe = ui.interact(moved.response.rect, moved.response.id.with("warum"), egui::Sense::hover());
+            lr::hover_tip(ui, &probe, Self::locked_why());
+        }
         lr_set(ui);
         let text = match c.kind {
             1 => crate::tr("Sammlungssatz löschen …"),
@@ -249,28 +302,48 @@ impl LibraryView {
         match action {
             A::Rename => self.manage.ask = Some(Ask::Rename { target: Target::Keyword(id), name: k.name.clone() }),
             A::Move => self.manage.ask = Some(Ask::MoveKeyword { id, filter: String::new() }),
-            A::ToTop => self.keyword_job(crate::trf!("„{a}“ verschoben", a = k.name), move |db| manage::move_keyword(db, id, None)),
-            A::Delete => self.ask_delete(Target::Keyword(id), k.name.clone()),
+            A::ToTop => self.move_keyword(id, None),
+            A::Delete => self.ask_delete_keyword(id),
+            A::NewChild => self.open_arrange_with_child(id),
+            A::Arrange => self.open_arrange(Some(id)),
         }
     }
 
-    /// Ids of a collection and everything below it.
-    fn collection_descendants(&self, id: i64) -> HashSet<i64> {
-        let mut out = HashSet::from([id]);
-        let mut grew = true;
-        while grew {
-            grew = false;
-            for c in &self.collections {
-                if c.parent.is_some_and(|p| out.contains(&p)) && out.insert(c.id) {
-                    grew = true;
-                }
-            }
+    /// Delete a keyword: with terms below it the question offers both ways (everything / only it), else the plain
+    /// question.
+    pub(super) fn ask_delete_keyword(&mut self, id: i64) {
+        let Some(k) = self.keywords.iter().find(|k| k.id == id).cloned() else { return };
+        if !self.keywords.iter().any(|c| c.parent == Some(id)) {
+            self.ask_delete(Target::Keyword(id), k.name.clone());
+            return;
         }
-        out
+        self.manage.ask = Some(Ask::DeleteKeyword { id, name: k.name.clone(), keep_children: false, loss: None });
+        self.in_background(
+            move |db| library::keyword_arrange::delete_loss(db, id),
+            move |b, _, r| {
+                if let Some(Ask::DeleteKeyword { id: i, loss, .. }) = &mut b.manage.ask {
+                    if *i == id {
+                        *loss = Some(r);
+                    }
+                }
+            },
+        );
+    }
+
+    /// Move a keyword below `parent` (`None`: top level). A keyword of the same name already there (ignoring case)
+    /// is never duplicated: the question to merge into it comes instead.
+    fn move_keyword(&mut self, id: i64, parent: Option<i64>) {
+        let Some(k) = self.keywords.iter().find(|k| k.id == id).cloned() else { return };
+        let name = k.name.trim().to_lowercase();
+        if let Some(into) = self.keywords.iter().find(|x| x.id != id && x.parent == parent && x.name.trim().to_lowercase() == name).map(|x| x.id) {
+            self.manage.ask = Some(Ask::MergeKeyword { from: id, into });
+            return;
+        }
+        self.keyword_job(crate::trf!("„{a}“ verschoben", a = k.name), move |db| manage::move_keyword(db, id, parent));
     }
 
     /// "Set › Subset" for menus.
-    fn collection_path(&self, id: i64) -> String {
+    pub(super) fn collection_path(&self, id: i64) -> String {
         let mut v = Vec::new();
         let mut cur = Some(id);
         for _ in 0..20 {
@@ -298,7 +371,7 @@ impl LibraryView {
                 Ok(snap) => {
                     b.after_collections_changed();
                     actions.push(Action::Status(label.clone()));
-                    b.manage.undo.push(Undo::Snap { label, snap, keywords: false, smart });
+                    b.manage.push(Undo::Snap { label, snap, keywords: false, smart });
                     b.ops += 1;
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -314,8 +387,10 @@ impl LibraryView {
                 Ok((snap, loaded)) => {
                     b.reload_keywords();
                     b.adopt_or_reload(loaded);
-                    actions.push(Action::Status(label.clone()));
-                    b.manage.undo.push(Undo::Snap { label, snap, keywords: true, smart: false });
+                    // rules of smart collections may have followed a rename or a merge
+                    b.after_collections_changed();
+                    actions.push(Action::Status(keyword_status(&label, &snap)));
+                    b.manage.push(Undo::Snap { label, snap, keywords: true, smart: true });
                     b.ops += 1;
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -336,7 +411,7 @@ impl LibraryView {
                         b.set_source(Source::All);
                     }
                     actions.push(Action::Status(label.clone()));
-                    b.manage.undo.push(Undo::Snap { label, snap, keywords: false, smart: false });
+                    b.manage.push(Undo::Snap { label, snap, keywords: false, smart: false });
                     b.ops += 1;
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -351,9 +426,10 @@ impl LibraryView {
         }
     }
 
-    fn after_collections_changed(&mut self) {
+    pub(super) fn after_collections_changed(&mut self) {
         if let Some(db) = &self.db {
-            self.collections = db.collections().unwrap_or_default();
+            let list = db.collections().unwrap_or_default();
+            self.set_collections(list);
         }
         self.smart_counts.clear();
         let gone = match self.source {
@@ -365,17 +441,15 @@ impl LibraryView {
         }
     }
 
+    /// "Verschieben nach": to the end of the target level (shown at once, `collection_order_ui.rs`).
     fn move_collection(&mut self, id: i64, parent: Option<i64>) {
-        let name = self.collections.iter().find(|c| c.id == id).map(|c| c.name.clone()).unwrap_or_default();
-        if let Some(p) = parent {
-            self.open_collections.insert(p);
-        }
-        self.collection_job(crate::trf!("„{a}“ verschoben", a = name), false, move |db| manage::move_collection(db, id, parent));
+        self.place_collection(id, parent, None);
     }
 
     /// ⌘Z of the management: the newest step. Returns: something was undone.
     pub(super) fn manage_undo(&mut self) -> bool {
         let Some(u) = self.manage.undo.pop() else { return false };
+        self.manage.undo_at.pop();
         match u {
             Undo::Quick { label, images } => {
                 for b in &images {
@@ -405,26 +479,44 @@ impl LibraryView {
                     },
                 );
             }
+            Undo::Order { label, snap } => {
+                self.in_background(
+                    move |db| manage::undo(db, &snap),
+                    move |b, actions, r| {
+                        b.after_collections_changed();
+                        match r {
+                            Ok(()) => actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label))),
+                            Err(e) => b.dialog = Some(Dialog::Error(e)),
+                        }
+                    },
+                );
+            }
             Undo::Snap { label, snap, keywords, smart } => {
                 let ticket = self.load_ticket();
                 self.in_background(
                     move |db| {
                         manage::undo(db, &snap)?;
-                        if keywords {
-                            manage::after_keyword_undo(db, &snap)?;
+                        // the undo is committed: sidecars and search entries following it only warn
+                        let warning = if keywords { manage::after_keyword_undo(db, &snap).err() } else { None };
+                        if let Some(e) = &warning {
+                            eprintln!("undo of a keyword change: follow-up failed: {e}");
                         }
                         if smart {
                             let _ = library::collection_file::write_if_enabled(db);
                         }
-                        Ok(ticket.load(db).ok())
+                        Ok((ticket.load(db).ok(), warning))
                     },
                     move |b, actions, r| match r {
-                        Ok(loaded) => {
+                        Ok((loaded, warning)) => {
                             b.after_collections_changed();
                             b.reload_keywords();
                             b.adopt_or_reload(loaded);
                             b.build_tree();
-                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                            let mut text = crate::trf!("Rückgängig: {a}", a = label);
+                            if let Some(e) = warning {
+                                text = format!("{text} · {}", crate::trf!("Gespeichert, aber nicht alles nachgezogen: {e}", e = e));
+                            }
+                            actions.push(Action::Status(text));
                         }
                         Err(e) => b.dialog = Some(Dialog::Error(e)),
                     },
@@ -469,7 +561,7 @@ impl LibraryView {
                 self.source_changed();
                 self.quick_send(QuickJob::Set(inside.clone(), false));
                 actions.push(Action::Status(label.clone()));
-                self.manage.undo.push(Undo::QuickRemoved { label, images: inside });
+                self.manage.push(Undo::QuickRemoved { label, images: inside });
             }
             Source::Collection(id) => {
                 let ticket = self.load_ticket();
@@ -481,7 +573,7 @@ impl LibraryView {
                             b.after_collections_changed();
                             b.adopt_or_reload(loaded);
                             actions.push(Action::Status(label.clone()));
-                            b.manage.undo.push(Undo::Snap { label, snap, keywords: false, smart: false });
+                            b.manage.push(Undo::Snap { label, snap, keywords: false, smart: false });
                         }
                         Err(e) => b.dialog = Some(Dialog::Error(e)),
                     },
@@ -515,7 +607,7 @@ impl LibraryView {
                     };
                     actions.push(Action::Status(text.clone()));
                     if n > 0 {
-                        b.manage.undo.push(Undo::Added { label: text, snap });
+                        b.manage.push(Undo::Added { label: text, snap });
                     }
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -531,7 +623,7 @@ impl LibraryView {
         self.quick.extend(new.iter().copied());
         self.quick_send(QuickJob::Set(new.clone(), true));
         let text = crate::trf!("{a} zur Schnellsammlung hinzugefügt", a = crate::dialog::count(new.len(), crate::tr("Foto"), crate::tr("Fotos")));
-        self.manage.undo.push(Undo::Quick { label: text.clone(), images: new });
+        self.manage.push(Undo::Quick { label: text.clone(), images: new });
         text
     }
 
@@ -590,9 +682,10 @@ impl LibraryView {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::NoDrop);
             }
         }
-        if !allowed {
+        if !allowed || !hovering {
             return None;
         }
+        // only with photos: egui's release takes any payload before checking its type (a dragged collection would be lost)
         resp.dnd_release_payload::<PhotoDrag>().map(|p| p.images.clone())
     }
 
@@ -603,6 +696,18 @@ impl LibraryView {
         if let Some(m) = self.manage_message.take() {
             actions.push(Action::Status(m));
         }
+        // the ⌘Z stack keeps the newest steps (large merges hold many rows)
+        let mut dropped = 0;
+        while self.manage.undo.len() > UNDO_STEPS || self.manage.undo.len() > 1 && self.manage.undo.iter().map(Undo::size).sum::<usize>() > UNDO_ROWS {
+            self.manage.undo.remove(0);
+            self.manage.undo_at.remove(0);
+            dropped += 1;
+        }
+        if dropped > 0 {
+            actions.push(Action::Status(crate::trf!("Ältere Schritte lassen sich nicht mehr rückgängig machen ({n})", n = dropped)));
+        }
+        // the dialog "Stichwörter ordnen …" lies below the questions it opens
+        self.arrange_dialog(ctx, actions);
         let Some(mut ask) = self.manage.ask.take() else { return };
         let mut keep = true;
         match &mut ask {
@@ -675,10 +780,7 @@ impl LibraryView {
                     manage::SMART => crate::tr("Smart-Sammlung erstellen"),
                     _ => crate::tr("Sammlung erstellen"),
                 };
-                let mut sets: Vec<(Option<i64>, String)> = vec![(None, crate::tr("Keiner (oberste Ebene)").to_string())];
-                let mut more: Vec<(Option<i64>, String)> = self.collections.iter().filter(|s| s.kind == 1).map(|s| (Some(s.id), self.collection_path(s.id))).collect();
-                more.sort_by_key(|(_, p)| p.to_lowercase());
-                sets.extend(more);
+                let sets = self.set_choices();
                 let can = !name.trim().is_empty() && (*kind != manage::SMART || !rule.trim().is_empty());
                 let a = dialog::show(
                     ctx,
@@ -688,13 +790,7 @@ impl LibraryView {
                     |ui| {
                         dialog::input(ui, crate::tr("Name"), name);
                         ui.add_space(4.0);
-                        ui.label(egui::RichText::new(crate::tr("Im Sammlungssatz")).small().color(lr::TEXT_DIM));
-                        let shown = sets.iter().find(|(id, _)| id == parent).map(|(_, n)| n.clone()).unwrap_or_default();
-                        egui::ComboBox::from_id_salt("bib-neue-sammlung-satz").selected_text(shown).width(ui.available_width()).show_ui(ui, |ui| {
-                            for (id, n) in &sets {
-                                ui.selectable_value(parent, *id, n);
-                            }
-                        });
+                        Self::set_choice(ui, "bib-neue-sammlung-satz", &sets, parent);
                         if *kind == manage::SMART {
                             ui.add_space(4.0);
                             ui.label(egui::RichText::new(crate::tr("Regel (Suche, z. B. kamera:dp2 sterne>=3)")).small().color(lr::TEXT_DIM));
@@ -732,6 +828,10 @@ impl LibraryView {
                             move |b, actions, r| match r {
                                 Ok((id, name)) => {
                                     b.after_collections_changed();
+                                    // in an ordered level it comes last: show it there
+                                    b.open_parents_of(id);
+                                    b.collection_drag.scroll_to = Some(id);
+                                    b.collection_drag.flash(id);
                                     // the new collection is chosen (a set is opened)
                                     match kind {
                                         manage::SET => {
@@ -763,7 +863,7 @@ impl LibraryView {
                 let clash = match *target {
                     Target::Keyword(id) => {
                         let parent = self.keywords.iter().find(|k| k.id == id).and_then(|k| k.parent);
-                        self.keywords.iter().find(|k| k.id != id && k.parent == parent && k.name == name.trim()).map(|k| k.id)
+                        self.keywords.iter().find(|k| k.id != id && k.parent == parent && k.name.trim().to_lowercase() == name.trim().to_lowercase()).map(|k| k.id)
                     }
                     Target::Collection(_) => None,
                 };
@@ -789,7 +889,7 @@ impl LibraryView {
                                 let smart = self.collections.iter().any(|c| c.id == id && c.kind == 2);
                                 self.collection_job(label, smart, move |db| manage::rename_collection(db, id, &new));
                             }
-                            Target::Keyword(id) => self.keyword_job(label, move |db| manage::rename_keyword(db, id, &new)),
+                            Target::Keyword(id) => self.keyword_job(label, move |db| library::keyword_arrange::rename(db, id, &new)),
                         }
                         keep = false;
                     }
@@ -804,16 +904,193 @@ impl LibraryView {
                     self.manage.ask = None;
                     return;
                 };
+                // the paths: after a move the two may lie in different branches
+                let (a_path, b_path) = (self.kw_path(from).replace('|', " › "), self.kw_path(into).replace('|', " › "));
+                let large = a_kw.count >= library::keywords::BACKUP_FROM;
                 let a = dialog::show(ctx, "bib-stichwort-zusammenfuehren", &crate::trf!("„{a}“ mit „{b}“ zusammenführen?", a = a_kw.name, b = b_kw.name), dialog::WIDTH, |ui| {
                     dialog::text(ui, &crate::trf!("Alle Fotos mit „{a}“ bekommen „{b}“. „{a}“ verschwindet; Stichwörter darunter liegen danach unter „{b}“.", a = a_kw.name, b = b_kw.name));
-                    dialog::chip(ui, &crate::trf!("„{a}“: {n}", a = a_kw.name, n = crate::dialog::count(a_kw.count, crate::tr("Foto"), crate::tr("Fotos"))));
-                    dialog::chip(ui, &crate::trf!("„{a}“: {n}", a = b_kw.name, n = crate::dialog::count(b_kw.count, crate::tr("Foto"), crate::tr("Fotos"))));
+                    dialog::chip(ui, &crate::trf!("„{a}“: {n}", a = a_path, n = crate::dialog::count(a_kw.count, crate::tr("Foto"), crate::tr("Fotos"))));
+                    dialog::chip(ui, &crate::trf!("„{a}“: {n}", a = b_path, n = crate::dialog::count(b_kw.count, crate::tr("Foto"), crate::tr("Fotos"))));
+                    if large {
+                        dialog::hint(ui, crate::tr("Vorher wird die Bibliothek gesichert."));
+                    }
                     dialog::hint(ui, crate::tr("⌘Z holt alles zurück."));
                 }, Buttons::confirm(crate::tr("Zusammenführen"), true));
                 match a {
                     Answer::Primary => {
                         let label = crate::trf!("„{a}“ mit „{b}“ zusammengeführt", a = a_kw.name, b = b_kw.name);
-                        self.keyword_job(label, move |db| manage::merge_keyword(db, from, into));
+                        self.keyword_job(label, move |db| {
+                            // a merge touching many photos: a backup of the library first (besides ⌘Z)
+                            if manage::keyword_loss(db, from)? >= library::keywords::BACKUP_FROM {
+                                library::backup::create_action_backup(db, "merge")?;
+                            }
+                            library::keyword_arrange::merge_keywords(db, &[from], into)
+                        });
+                        keep = false;
+                    }
+                    Answer::Cancel => keep = false,
+                    Answer::Open => {}
+                }
+            }
+            Ask::MergeKeywords { from, into } => {
+                let into = *into;
+                let kw = |id: i64| self.keywords.iter().find(|k| k.id == id).cloned();
+                let Some(target) = kw(into) else {
+                    self.manage.ask = None;
+                    return;
+                };
+                let froms: Vec<Keyword> = from.iter().filter_map(|f| kw(*f)).collect();
+                let total: usize = froms.iter().map(|k| k.count).sum();
+                let a = dialog::show(ctx, "bib-stichwoerter-zusammenfuehren", &crate::trf!("{n} Stichwörter mit „{b}“ zusammenführen?", n = froms.len(), b = target.name), dialog::WIDTH, |ui| {
+                    dialog::text(ui, &crate::trf!("Alle Fotos mit diesen Stichwörtern bekommen „{b}“. Die Stichwörter verschwinden; Begriffe darunter liegen danach unter „{b}“.", b = target.name));
+                    for k in froms.iter().take(8) {
+                        dialog::chip(ui, &crate::trf!("„{a}“: {n}", a = self.kw_path(k.id).replace('|', " › "), n = crate::dialog::count(k.count, crate::tr("Foto"), crate::tr("Fotos"))));
+                    }
+                    if froms.len() > 8 {
+                        dialog::hint(ui, &crate::trf!("und {n} weitere", n = froms.len() - 8));
+                    }
+                    dialog::chip(ui, &crate::trf!("Ziel „{a}“: {n}", a = self.kw_path(into).replace('|', " › "), n = crate::dialog::count(target.count, crate::tr("Foto"), crate::tr("Fotos"))));
+                    if total >= library::keywords::BACKUP_FROM {
+                        dialog::hint(ui, crate::tr("Vorher wird die Bibliothek gesichert."));
+                    }
+                    dialog::hint(ui, crate::tr("⌘Z holt alles zurück."));
+                }, Buttons::confirm(crate::tr("Zusammenführen"), !froms.is_empty()));
+                match a {
+                    Answer::Primary => {
+                        let ids: Vec<i64> = froms.iter().map(|k| k.id).collect();
+                        let label = crate::trf!("{n} Stichwörter mit „{b}“ zusammengeführt", n = ids.len(), b = target.name);
+                        self.keyword_job(label, move |db| {
+                            let mut n = 0;
+                            for k in &ids {
+                                n += manage::keyword_loss(db, *k)?;
+                            }
+                            if n >= library::keywords::BACKUP_FROM {
+                                library::backup::create_action_backup(db, "merge")?;
+                            }
+                            library::keyword_arrange::merge_keywords(db, &ids, into)
+                        });
+                        keep = false;
+                    }
+                    Answer::Cancel => keep = false,
+                    Answer::Open => {}
+                }
+            }
+            Ask::LightroomMarks { ids } => {
+                let n = matches!(ids, Some(Ok(v)) if !v.is_empty());
+                let a = dialog::show(ctx, "bib-lr-marken", crate::tr("Marken aus Lightroom übernehmen?"), dialog::WIDTH, |ui| {
+                    match ids {
+                        None => dialog::pending(ui, crate::tr("Lightroom-Katalog wird gelesen …")),
+                        Some(Err(e)) => dialog::warning(ui, e),
+                        Some(Ok(v)) if v.is_empty() => dialog::text(ui, crate::tr("Alle Stichwörter, die Lightroom nicht exportiert, sind hier schon markiert.")),
+                        Some(Ok(v)) => {
+                            dialog::text(ui, &crate::trf!("{n} Stichwörter würden als „nicht exportieren“ markiert (mit allem darunter).", n = v.len()));
+                            for id in v.iter().take(8) {
+                                dialog::chip(ui, &self.kw_path(*id).replace('|', " › "));
+                            }
+                            if v.len() > 8 {
+                                dialog::hint(ui, &crate::trf!("und {n} weitere", n = v.len() - 8));
+                            }
+                        }
+                    }
+                    dialog::hint(ui, crate::tr("Der Katalog wird nur gelesen. ⌘Z holt alles zurück."));
+                }, Buttons::confirm(crate::tr("Markieren"), n));
+                match a {
+                    Answer::Primary => {
+                        if let Some(Ok(v)) = ids.take() {
+                            let label = crate::trf!("{n} Stichwörter werden nicht exportiert", n = v.len());
+                            self.keyword_job(label, move |db| library::keyword_arrange::set_export(db, &v, false));
+                        }
+                        keep = false;
+                    }
+                    Answer::Cancel => keep = false,
+                    Answer::Open => {}
+                }
+            }
+            Ask::ApplySuggestions { items, impact } => {
+                use library::keyword_suggest::Change;
+                let below = items.iter().filter(|x| matches!(x.0, Change::Below { .. })).count();
+                let merged = items.len() - below;
+                let ready = matches!(impact, Some(Ok(_)));
+                let a = dialog::show(ctx, "bib-vorschlaege-anwenden", &crate::trf!("{n} Vorschläge anwenden?", n = items.len()), dialog::WIDTH, |ui| {
+                    match impact {
+                        None => dialog::pending(ui, crate::tr("wird ermittelt …")),
+                        Some(Err(e)) => dialog::warning(ui, e),
+                        Some(Ok(p)) => dialog::text(ui, &crate::trf!("{a} Stichwörter werden untergeordnet, {b} zusammengeführt; {c} betroffen.", a = below, b = merged, c = crate::dialog::count(*p, crate::tr("Foto"), crate::tr("Fotos")))),
+                    }
+                    for (_, t) in items.iter().take(6) {
+                        dialog::chip(ui, t);
+                    }
+                    if items.len() > 6 {
+                        dialog::hint(ui, &crate::trf!("und {n} weitere", n = items.len() - 6));
+                    }
+                    dialog::hint(ui, crate::tr("Vorher wird die Bibliothek gesichert."));
+                    dialog::hint(ui, crate::tr("⌘Z holt alles zurück."));
+                }, Buttons::confirm(crate::tr("Anwenden"), ready));
+                match a {
+                    Answer::Primary => {
+                        let changes: Vec<Change> = items.iter().map(|x| x.0).collect();
+                        let ticket = self.load_ticket();
+                        self.in_background(
+                            move |db| {
+                                // always a backup first: suggestions change many keywords at once
+                                library::backup::create_action_backup(db, "suggestions")?;
+                                let r = library::keyword_suggest::apply(db, &changes)?;
+                                Ok((r, ticket.load(db).ok()))
+                            },
+                            move |b, actions, r| match r {
+                                Ok(((snap, done, skipped), loaded)) => {
+                                    b.reload_keywords();
+                                    b.adopt_or_reload(loaded);
+                                    b.after_collections_changed();
+                                    let label = if skipped.is_empty() { crate::trf!("{n} Vorschläge angewendet", n = done) } else { crate::trf!("{n} Vorschläge angewendet, {m} übersprungen", n = done, m = skipped.len()) };
+                                    actions.push(Action::Status(keyword_status(&label, &snap)));
+                                    if !snap.is_empty() {
+                                        b.manage.push(Undo::Snap { label, snap, keywords: true, smart: true });
+                                    }
+                                    if let Some(a) = &mut b.manage.arrange {
+                                        a.close_suggestions();
+                                    }
+                                }
+                                Err(e) => b.dialog = Some(Dialog::Error(e)),
+                            },
+                        );
+                        keep = false;
+                    }
+                    Answer::Cancel => keep = false,
+                    Answer::Open => {}
+                }
+            }
+            Ask::DeleteKeyword { id, name, keep_children, loss } => {
+                let id = *id;
+                let ready = matches!(loss, Some(Ok(_)));
+                let a = dialog::show(ctx, "bib-oberbegriff-loeschen", &crate::trf!("„{a}“ löschen?", a = name), dialog::WIDTH, |ui| {
+                    match loss {
+                        None => dialog::pending(ui, crate::tr("wird ermittelt …")),
+                        Some(Err(e)) => dialog::warning(ui, e),
+                        Some(Ok((all, own, children))) => {
+                            let all_text = crate::trf!("Mit allen Unterbegriffen löschen ({n} Unterbegriffe; {p} verlieren Stichwörter)", n = children, p = crate::dialog::count(*all, crate::tr("Foto"), crate::tr("Fotos")));
+                            let own_text = crate::trf!("Nur „{a}“ löschen; Unterbegriffe rücken eine Ebene hoch ({p} verlieren „{a}“)", a = name, p = crate::dialog::count(*own, crate::tr("Foto"), crate::tr("Fotos")));
+                            ui.radio_value(keep_children, false, all_text);
+                            ui.radio_value(keep_children, true, own_text);
+                            let n = if *keep_children { *own } else { *all };
+                            if n >= library::keywords::BACKUP_FROM {
+                                dialog::hint(ui, crate::tr("Vorher wird die Bibliothek gesichert."));
+                            }
+                        }
+                    }
+                    dialog::hint(ui, crate::tr("Die Fotos bleiben in der Bibliothek. ⌘Z holt alles zurück."));
+                }, Buttons::destructive(crate::tr("Löschen"), ready));
+                match a {
+                    Answer::Primary => {
+                        let keep_kids = *keep_children;
+                        let label = crate::trf!("„{a}“ gelöscht", a = name);
+                        self.keyword_job(label, move |db| {
+                            let (all, own, _) = library::keyword_arrange::delete_loss(db, id)?;
+                            if (if keep_kids { own } else { all }) >= library::keywords::BACKUP_FROM {
+                                library::backup::create_action_backup(db, "delete-keywords")?;
+                            }
+                            if keep_kids { library::keyword_arrange::delete_keep_children(db, id) } else { library::keyword_arrange::delete_with_children(db, id) }
+                        });
                         keep = false;
                     }
                     Answer::Cancel => keep = false,
@@ -859,7 +1136,12 @@ impl LibraryView {
                                 let smart = self.collections.iter().any(|c| c.id == id && c.kind == 2);
                                 self.collection_job(label, smart, move |db| manage::delete_collection(db, id));
                             }
-                            Target::Keyword(id) => self.keyword_job(label, move |db| manage::delete_keyword(db, id)),
+                            Target::Keyword(id) => self.keyword_job(label, move |db| {
+                                if manage::keyword_loss(db, id)? >= library::keywords::BACKUP_FROM {
+                                    library::backup::create_action_backup(db, "delete-keywords")?;
+                                }
+                                library::keyword_arrange::delete_with_children(db, id)
+                            }),
                         }
                         keep = false;
                     }
@@ -902,7 +1184,8 @@ impl LibraryView {
                     });
                 }, Buttons::close());
                 if let Some(k) = chosen {
-                    self.keyword_job(crate::trf!("„{a}“ verschoben", a = name), move |db| manage::move_keyword(db, me, Some(k)));
+                    self.manage.ask = None;
+                    self.move_keyword(me, Some(k));
                     keep = false;
                 } else if a != Answer::Open {
                     keep = false;
@@ -1003,4 +1286,22 @@ mod tests {
         assert_eq!(v.len(), 3, "{v:?}");
         assert!(v[0].contains('3'));
     }
+}
+
+/// Status text after a keyword change: the label, the smart collections that followed or were kept unchanged
+/// (ambiguous terms), and a follow-up step that failed after the change was saved (the change stands, ⌘Z works).
+pub(crate) fn keyword_status(label: &str, snap: &Snapshot) -> String {
+    let mut parts = vec![label.to_string()];
+    match snap.smart_changed() {
+        0 => {}
+        1 => parts.push(crate::tr("1 Smart-Sammlung angepasst").to_string()),
+        n => parts.push(crate::trf!("{n} Smart-Sammlungen angepasst", n = n)),
+    }
+    if !snap.smart_kept().is_empty() {
+        parts.push(crate::trf!("Smart-Sammlungen unverändert (Begriff mehrdeutig): {a}", a = snap.smart_kept().join(", ")));
+    }
+    if let Some(w) = snap.warnings().first() {
+        parts.push(crate::trf!("Gespeichert, aber nicht alles nachgezogen: {e}", e = w));
+    }
+    parts.join(" · ")
 }

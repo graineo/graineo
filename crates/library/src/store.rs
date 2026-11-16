@@ -477,10 +477,20 @@ struct Pending {
     settings: Option<Option<String>>,
     meta: Option<(u8, i8, u8)>,
     generation: u64,
+    /// changes of the develop history (numbered), written in the same transaction as the settings
+    history: Vec<(u64, crate::develop_history::Op)>,
+}
+
+impl Pending {
+    fn is_empty(&self) -> bool {
+        self.settings.is_none() && self.meta.is_none() && self.history.is_empty()
+    }
 }
 
 static OVERLAY: Mutex<Option<HashMap<(i64, String), Pending>>> = Mutex::new(None);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Number of the last queued history change.
+static HISTORY_OP: AtomicU64 = AtomicU64::new(0);
 static OPEN_JOBS: AtomicUsize = AtomicUsize::new(0);
 static SENDER: Mutex<Option<Sender<(PathBuf, Vec<(i64, String, u64)>)>>> = Mutex::new(None);
 /// Changes that could not be written after several tries (file, copy key); they stay in the overlay (reads see them)
@@ -488,6 +498,55 @@ static SENDER: Mutex<Option<Sender<(PathBuf, Vec<(i64, String, u64)>)>>> = Mutex
 static UNSAVED: Mutex<Vec<(i64, String)>> = Mutex::new(Vec::new());
 /// Last error of the writer (for a visible message), cleared after a successful write.
 static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
+/// Rounds a change failed on a constraint of the library (file, copy key → count). Such an error does not go away by
+/// waiting: after [`CONSTRAINT_ROUNDS`] the queued history changes are dropped, after twice as many the whole change.
+static CONSTRAINT_FAILS: Mutex<Option<HashMap<(i64, String), u32>>> = Mutex::new(None);
+/// Rounds of constraint errors before queued history changes of a photo are dropped.
+const CONSTRAINT_ROUNDS: u32 = 3;
+
+/// Is `e` an error that a later try cannot fix (a foreign key or other constraint of the library)?
+fn is_constraint_error(e: &str) -> bool {
+    e.contains("constraint failed")
+}
+
+/// A change failed on a constraint once more: drop what cannot be written (history changes first, then the whole
+/// change) after a bounded number of rounds. `true`: something is left to try again.
+fn constraint_failed(file: i64, copy: &str, e: &str) -> bool {
+    let n = {
+        let mut g = CONSTRAINT_FAILS.lock().unwrap_or_else(|x| x.into_inner());
+        let c = g.get_or_insert_with(HashMap::new).entry((file, copy.to_string())).or_insert(0);
+        *c += 1;
+        *c
+    };
+    let key = (file, copy.to_string());
+    if n >= 2 * CONSTRAINT_ROUNDS {
+        eprintln!("develop change of file {file} dropped after {n} rounds: {e}");
+        overlay(|o| o.remove(&key));
+        forget_constraint_fails(file, copy);
+        return false;
+    }
+    if n >= CONSTRAINT_ROUNDS {
+        let dropped = overlay(|o| {
+            let Some(p) = o.get_mut(&key) else { return 0 };
+            let k = p.history.len();
+            p.history.clear();
+            if p.is_empty() {
+                o.remove(&key);
+            }
+            k
+        });
+        if dropped > 0 {
+            eprintln!("develop history of file {file}: {dropped} queued changes dropped after {n} rounds: {e}");
+        }
+    }
+    overlay(|o| o.contains_key(&key))
+}
+
+fn forget_constraint_fails(file: i64, copy: &str) {
+    if let Some(m) = CONSTRAINT_FAILS.lock().unwrap_or_else(|x| x.into_inner()).as_mut() {
+        m.remove(&(file, copy.to_string()));
+    }
+}
 
 /// Error ending of a sidecar write whose folder is not reachable right now (the write stays queued).
 const UNREACHABLE: &str = "Ordner nicht erreichbar";
@@ -677,6 +736,11 @@ fn start_writer() -> Option<Sender<(PathBuf, Vec<(i64, String, u64)>)>> {
                         last.clear();
                         break;
                     }
+                    Ok(Err(e)) if is_constraint_error(&e) => {
+                        // waiting does not help: handled below without further tries
+                        last = e;
+                        break;
+                    }
                     Ok(Err(e)) => last = e,
                     Err(_) => {
                         // the connection may be in an odd state after a panic: open a new one
@@ -687,6 +751,15 @@ fn start_writer() -> Option<Sender<(PathBuf, Vec<(i64, String, u64)>)>> {
             }
             if last.is_empty() {
                 *LAST_ERROR.lock().unwrap_or_else(|x| x.into_inner()) = None;
+                for (file, copy, _) in &items {
+                    forget_constraint_fails(*file, copy);
+                }
+            } else if is_constraint_error(&last) {
+                for (file, copy, _) in &items {
+                    if constraint_failed(*file, copy, &last) {
+                        remember_unsaved(*file, copy.clone(), last.clone());
+                    }
+                }
             } else {
                 for (file, copy, _) in &items {
                     remember_unsaved(*file, copy.clone(), last.clone());
@@ -722,42 +795,59 @@ pub fn retry_unsaved() {
 /// Write changes: one alone as before, several in one transaction (if that fails, one by one).
 fn apply_all(db: &Db, items: &[(i64, String, u64)]) -> R<()> {
     if let [(file, copy, g)] = items {
-        return apply(db, *file, copy, *g);
+        return apply(db, *file, copy, *g).map(|_| ());
     }
     db.conn.execute_batch("BEGIN IMMEDIATE").map_err(f)?;
-    match items.iter().try_for_each(|(file, copy, g)| apply(db, *file, copy, *g)) {
-        Ok(()) => {
+    match items.iter().map(|(file, copy, g)| apply(db, *file, copy, *g)).collect::<R<Vec<u64>>>() {
+        Ok(ops) => {
             if let Err(e) = db.conn.execute_batch("COMMIT") {
                 let _ = db.conn.execute_batch("ROLLBACK");
                 return Err(f(e));
             }
             COMMITS.fetch_add(1, Ordering::Relaxed);
-            for (file, copy, g) in items {
-                written(*file, copy, *g);
+            for ((file, copy, g), op) in items.iter().zip(ops) {
+                written(*file, copy, *g, op);
             }
             Ok(())
         }
         Err(_) => {
             // e.g. a sidecar still to be taken over first (needs a transaction of its own): one by one
             let _ = db.conn.execute_batch("ROLLBACK");
-            items.iter().try_for_each(|(file, copy, g)| apply(db, *file, copy, *g))
+            items.iter().try_for_each(|(file, copy, g)| apply(db, *file, copy, *g).map(|_| ()))
         }
     }
 }
 
-/// A change reached the library: it leaves the overlay unless a newer one came meanwhile.
-fn written(file: i64, copy: &str, generation: u64) {
+/// A change reached the library: settings and rating leave the overlay unless newer ones came meanwhile, history
+/// changes up to number `history_op` leave it in any case.
+fn written(file: i64, copy: &str, generation: u64, history_op: u64) {
     overlay(|o| {
-        if o.get(&(file, copy.to_string())).is_some_and(|q| q.generation == generation) {
-            o.remove(&(file, copy.to_string()));
+        let key = (file, copy.to_string());
+        let Some(p) = o.get_mut(&key) else { return };
+        if p.generation == generation {
+            p.settings = None;
+            p.meta = None;
+        }
+        p.history.retain(|(n, _)| *n > history_op);
+        if p.is_empty() {
+            o.remove(&key);
         }
     });
 }
 
-/// Write one change (inside a transaction of [`apply_all`], or in its own).
-fn apply(db: &Db, file: i64, copy: &str, generation: u64) -> R<()> {
+/// Write one change (inside a transaction of [`apply_all`], or in its own). Returns the number of the last history
+/// change written (0: none).
+fn apply(db: &Db, file: i64, copy: &str, generation: u64) -> R<u64> {
     let p = overlay(|o| o.get(&(file, copy.to_string())).cloned());
-    let Some(p) = p else { return Ok(()) };
+    let Some(p) = p else { return Ok(0) };
+    // the photo left the library meanwhile (removed, or merged into another one by a move): nothing of it can be
+    // written any more; dropping it keeps the writer from failing on the foreign key again and again
+    let exists = db.conn.query_row("SELECT 1 FROM file WHERE id = ?1", [file], |_| Ok(())).optional().map_err(f)?.is_some();
+    if !exists {
+        eprintln!("develop change of file {file} dropped: no longer in the library");
+        overlay(|o| o.remove(&(file, copy.to_string())));
+        return Ok(0);
+    }
     // a sidecar not read yet: take it over first (it must not overwrite this change later)
     let unread: bool = db.conn.query_row("SELECT xmp_read IS NULL FROM file WHERE id = ?1", [file], |r| r.get(0)).optional().map_err(f)?.unwrap_or(false);
     if unread {
@@ -776,18 +866,169 @@ fn apply(db: &Db, file: i64, copy: &str, generation: u64) -> R<()> {
             .execute("UPDATE image SET stars = ?3, flag = ?4, label = ?5, rating_time = ?6, changed = ?6 WHERE file = ?1 AND copy IS ?2", params![file, copy_opt, s, m, e, now])
             .map_err(f)?;
     }
-    queue_sidecar(&db.conn, file)?;
+    let last_op = p.history.last().map_or(0, |(n, _)| *n);
+    if !p.history.is_empty() {
+        // errors in the history never hold back the settings: its operations in a savepoint, on an error rolled back,
+        // logged and dropped (the next load of the history finds the difference and records it as "changed elsewhere")
+        let ops: Vec<crate::develop_history::Op> = p.history.iter().map(|(_, op)| op.clone()).collect();
+        db.conn.execute_batch("SAVEPOINT history_ops").map_err(f)?;
+        match crate::develop_history::apply_ops(&db.conn, file, copy_opt, &ops) {
+            Ok(()) => db.conn.execute_batch("RELEASE history_ops").map_err(f)?,
+            Err(e) => {
+                eprintln!("develop history of file {file}: {} operations not written: {e}", ops.len());
+                db.conn.execute_batch("ROLLBACK TO history_ops; RELEASE history_ops").map_err(f)?;
+            }
+        }
+    }
+    if p.settings.is_some() || p.meta.is_some() {
+        queue_sidecar(&db.conn, file)?;
+    }
     if let Some(tx) = tx {
         tx.commit().map_err(f)?;
         COMMITS.fetch_add(1, Ordering::Relaxed);
-        written(file, copy, generation);
+        written(file, copy, generation, last_op);
     }
-    Ok(())
+    Ok(last_op)
 }
 
 /// Save the own develop settings of a photo of the library (in the background; reads see it right away).
 pub fn set_develop(file: i64, copy: Option<&str>, settings: Option<String>) {
     send(file, copy, |p| p.settings = Some(settings));
+}
+
+/// Queue changes of the develop history of a photo of the library. They go to the library with the next save of
+/// its settings ([`set_develop`]) in the same transaction, or with [`send_history`]; reads ([`load_history`]) see them
+/// right away.
+pub fn queue_history(file: i64, copy: Option<&str>, ops: Vec<crate::develop_history::Op>) {
+    if ops.is_empty() {
+        return;
+    }
+    overlay(|o| {
+        let p = o.entry((file, copy_key(copy).to_string())).or_default();
+        for op in ops {
+            p.history.push((HISTORY_OP.fetch_add(1, Ordering::SeqCst) + 1, op));
+        }
+    });
+}
+
+/// Drop the history changes queued for a photo or copy that is removed (a new copy of the same name must not inherit
+/// them). Settings and rating still queued stay (they are written or fail on their own).
+pub(crate) fn drop_queued_history(file: i64, copy: Option<&str>) {
+    overlay(|o| {
+        let key = (file, copy_key(copy).to_string());
+        if let Some(p) = o.get_mut(&key) {
+            p.history.clear();
+            if p.is_empty() {
+                o.remove(&key);
+            }
+        }
+    });
+}
+
+/// Hand every queued history change to the writer (after the settings were saved, or there was nothing to save).
+pub fn send_history() {
+    let keys: Vec<(i64, String, u64)> = overlay(|o| o.iter().filter(|(_, p)| !p.history.is_empty()).map(|((f, c), p)| (*f, c.clone(), p.generation)).collect());
+    if keys.is_empty() {
+        return;
+    }
+    batch(|| {
+        for (file, copy, g) in keys {
+            to_writer(file, copy, g);
+        }
+    });
+}
+
+/// Develop history of a photo of the library: steps and cursor (`seq`, `None`: on the newest step), including changes
+/// not written yet. `None`: no library or the table cannot be read.
+pub fn load_history(file: i64, copy: Option<&str>) -> Option<(Vec<crate::develop_history::Step>, Option<i64>)> {
+    let (mut steps, mut cursor) = with_conn(|c| crate::develop_history::load(c, file, copy).ok())?;
+    let ops: Vec<crate::develop_history::Op> = overlay(|o| o.get(&(file, copy_key(copy).to_string())).map(|p| p.history.iter().map(|(_, op)| op.clone()).collect()).unwrap_or_default());
+    crate::develop_history::apply_ops_mem(&mut steps, &mut cursor, &ops);
+    Some((steps, cursor))
+}
+
+/// A command for several photos changed photo `file`/`copy` from `before` to `after` (stored JSON of the settings):
+/// queue its step ([`crate::develop_history::plan_command`]); it is written with the photo's settings. Nothing while
+/// keeping the history is off.
+#[allow(clippy::too_many_arguments)]
+pub fn command_step(file: i64, copy: Option<&str>, before: &serde_json::Value, after: &serde_json::Value, kind: &str, label: &serde_json::Value, command: i64, undo: bool) {
+    if !save_history() {
+        return;
+    }
+    let (steps, cursor) = load_history(file, copy).unwrap_or_default();
+    let ops = crate::develop_history::plan_command(&steps, cursor, before, after, kind, label, command, undo, crate::now());
+    queue_history(file, copy, ops);
+}
+
+/// Hand the queued history changes of one photo to the writer (inside [`batch`]: in its transaction).
+pub fn send_history_of(file: i64, copy: Option<&str>) {
+    let g = overlay(|o| o.get(&(file, copy_key(copy).to_string())).filter(|p| !p.history.is_empty()).map(|p| p.generation));
+    if let Some(g) = g {
+        to_writer(file, copy_key(copy).to_string(), g);
+    }
+}
+
+/// Lightroom's develop history of a photo of the library (name and time of every step, oldest first), read from the
+/// chosen catalog strictly read-only ([`crate::lightroom::open_catalog`]) – never stored, only shown. `None`: not from
+/// Lightroom, no catalog chosen or not readable. Reads the catalog file: for background threads.
+pub fn lr_history(file: i64, copy: Option<&str>) -> Option<Vec<(String, i64)>> {
+    let (lr_id, catalog) = with_conn(|c| {
+        let id: i64 = c.prepare_cached("SELECT lr_id FROM image WHERE file = ?1 AND copy IS ?2").ok()?.query_row(params![file, copy], |r| r.get::<_, Option<i64>>(0)).optional().ok().flatten().flatten()?;
+        let cat: String = c.query_row("SELECT value FROM info WHERE name = 'lightroom_catalog'", [], |r| r.get::<_, Option<String>>(0)).optional().ok().flatten().flatten()?;
+        Some((id, cat))
+    })?;
+    let path = PathBuf::from(catalog.trim());
+    if !path.is_file() {
+        return None;
+    }
+    let conn = crate::lightroom::open_catalog(&path).ok()?;
+    crate::lightroom::develop_history(&conn, lr_id).ok()
+}
+
+/// Last change of the photo in Lightroom (`image.lr_touch`, Unix seconds), if known.
+pub fn lr_touch(file: i64, copy: Option<&str>) -> Option<i64> {
+    with_conn(|c| c.prepare_cached("SELECT lr_touch FROM image WHERE file = ?1 AND copy IS ?2").ok()?.query_row(params![file, copy], |r| r.get::<_, Option<i64>>(0)).optional().ok().flatten().flatten())
+}
+
+static HISTORY_CACHE: Mutex<Option<(std::time::Instant, bool)>> = Mutex::new(None);
+
+/// Keep the develop history in the library? Setting `saveHistory` (default on). Off: the history lives only for the
+/// session, as before. Never while a backup is viewed.
+pub fn save_history() -> bool {
+    if crate::backup_view::active().is_some() {
+        return false;
+    }
+    let mut c = HISTORY_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((t, v)) = *c {
+        if t.elapsed() < std::time::Duration::from_secs(2) {
+            return v;
+        }
+    }
+    let v = crate::settings::value("saveHistory").as_bool() != Some(false);
+    *c = Some((std::time::Instant::now(), v));
+    v
+}
+
+/// Switch keeping the develop history on or off (setting `saveHistory`).
+pub fn set_save_history(on: bool) -> R<()> {
+    crate::settings::set_checked("saveHistory", serde_json::Value::Bool(on))?;
+    *HISTORY_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((std::time::Instant::now(), on));
+    Ok(())
+}
+
+/// Remove every develop history of the library (the user's "Delete all histories …", after a question): queued
+/// changes are dropped first, then the tables are emptied. Returns the steps removed.
+pub fn forget_all_histories(db: &Db) -> R<usize> {
+    overlay(|o| {
+        for p in o.values_mut() {
+            p.history.clear();
+        }
+        o.retain(|_, p| !p.is_empty());
+    });
+    let tx = db.conn.unchecked_transaction().map_err(f)?;
+    let n = crate::develop_history::forget_all(&tx).map_err(f)?;
+    tx.commit().map_err(f)?;
+    Ok(n)
 }
 
 /// Save the rating of a photo or copy of the library (in the background; reads see it right away).

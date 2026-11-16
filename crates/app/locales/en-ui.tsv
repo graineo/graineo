@@ -2315,6 +2315,18 @@ Für Druckereien und Fotolabore, die Adobe RGB verlangen. Im Zweifel dort nachfr
 Größter Farbraum, zum Weiterbearbeiten in Photoshop oder Lightroom – am besten als TIFF 16 Bit.	The largest color space, for further editing in Photoshop or Lightroom – ideally as 16-bit TIFF.
 graineo zeigt Bilder derzeit in sRGB; was darüber hinausgeht, siehst du erst im Zielprogramm.	graineo currently displays images in sRGB; anything beyond that only shows up in the target app.
 Gesichter anzeigen	Show faces
+Fokusfeld der Kamera zeigen	Show the camera's focus area
+Fokusfeld der Kamera ein/aus (Z/Klick: 100 % an dieser Stelle)	Camera's focus area on/off (Z/click: 100 % at that spot)
+Fokusfeld der Kamera: scharf gemeldet	Camera's focus area: reported in focus
+Fokusfeld der Kamera: gewählt	Camera's focus area: selected
+Fokusstelle der Kamera	Camera's focus position
+Fokuspunkt der Kamera: Kamera meldet unscharf	Camera's focus point: camera reports out of focus
+Fokuspunkt der Kamera	Camera's focus point
+Motivbereich laut Kamera	Subject area according to the camera
+Klick oder {k}: 100 % an dieser Stelle	Click or {k}: 100 % at this spot
+Kein Fokusfeld in dieser Datei	No focus area in this file
+Manuell fokussiert – kein Fokusfeld	Focused manually – no focus area
+Fokusfeld liegt außerhalb des Ausschnitts	Focus area lies outside the crop
 Umbenennen …	Rename…
 Ja, zusammenführen	Yes, merge
 „{a}“ gibt es schon. {b} Gesichter von „{c}“ dazunehmen?	“{a}” already exists. Add {b} faces from “{c}”?
@@ -5251,3 +5263,208 @@ Nur ansehen – Originale unverändert	View only – your originals stay untouch
 Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	Applies to ratings only. Develop edits are always saved as a sidecar next to the photo.
 Zielordner wird geprüft …	Checking the destination folder …
 Zielordner antwortet nicht: {}	Destination folder is not responding: {}
+{n} spätere Schritte verworfen – ⌘Z holt sie zurück	{n} later steps discarded – ⌘Z brings them back
+Ausgangszustand (Lightroom)	Initial state (Lightroom)
+Stand vor dem Verlauf	State before the history
+Außerhalb geändert	Changed elsewhere
+Ältere Schritte zusammengefasst	Older steps combined
+Vorgabe: {name}	Preset: {name}
+Film: {name}	Film: {name}
+Look: {name}	Look: {name}
+Einstellungen eingefügt	Settings pasted
+Einstellungen übertragen	Settings transferred
+Aus Lightroom übernommen	Taken over from Lightroom
+Mehrere Einstellungen ({names}, +{n})	Several settings ({names}, +{n})
+Alle Verläufe löschen?	Delete all histories?
+Die Schritte aller Fotos werden aus der Bibliothek gelöscht. Die Bearbeitungen selbst bleiben, wie sie jetzt sind.	The steps of all photos are deleted from the library. The edits themselves stay as they are now.
+Ältere Sicherungen der Bibliothek enthalten die Verläufe weiterhin.	Older backups of the library still contain the histories.
+Alle löschen	Delete all
+{n} Schritte gelöscht	{n} steps deleted
+Verlauf speichern	Keep history
+Schritte jeder Bearbeitung, nur in der Bibliothek auf diesem Rechner. Aus: nur bis zum Beenden.	Steps of every edit, only in the library on this computer. Off: only until quitting.
+Alle Verläufe löschen	Delete all histories
+Jeder Schritt der Bearbeitung dieses Fotos, der neueste oben.	Every step of this photo's edit, the newest on top.
+• **Klick** auf einen Schritt springt dorthin; das Bild zeigt seinen Stand. Es entsteht kein neuer Schritt\n• **▶** markiert den Schritt, der gerade gilt\n• **Gedimmte Schritte** liegen nach dem Zeiger und bleiben anklickbar. Die nächste Änderung verwirft sie; ⌘Z gleich danach holt sie zurück\n• **Überfahren** zeigt den Stand eines Schritts im Bild, ohne zu springen\n• **Original** springt zum Ausgangszustand, so wie graineo das Foto zuerst entwickelt hat\n• **(3×)** – Änderungen am selben Regler kurz hintereinander, zusammengefasst\n\nDer Verlauf steht in der Bibliothek auf diesem Rechner (Einstellungen → Bibliothek: „Verlauf speichern“).	• **Click** a step to jump to it; the image shows its state. No new step is added\n• **▶** marks the step that currently applies\n• **Dimmed steps** come after the pointer and stay clickable. The next change discards them; ⌘Z right after brings them back\n• **Hovering** shows a step's state in the image without jumping\n• **Original** jumps to the initial state, as graineo first developed the photo\n• **(3×)** – changes to the same slider in quick succession, combined\n\nThe history is kept in the library on this computer (Settings → Library: “Keep history”).
+{n} Schritte	{n} steps
+Original ⟲	Original ⟲
+Noch keine Änderungen	No changes yet
+Zum Ausgangszustand springen	Jump to the initial state
+gestern	yesterday
+Aufklappen (⌥-Klick: mit allen Unterbegriffen)	Expand (⌥-click: with all subterms)
+Zuklappen (⌥-Klick: mit allen Unterbegriffen)	Collapse (⌥-click: with all subterms)
+{a} mit Unterbegriffen · {b} direkt vergeben	{a} including subterms · {b} assigned directly
+„{a}“ gibt es mehrfach – bitte wählen	“{a}” exists more than once – please choose
+Stichwort „{a}“ zugewiesen	Keyword “{a}” assigned
+Stichwort „{a}“ entfernt	Keyword “{a}” removed
+{a} ({n} Begleitdatei(en) geschrieben)	{a} ({n} sidecar file(s) written)
+Vorher wird die Bibliothek gesichert.	The library is backed up first.
+„{a}“ in „{b}“ gelegt	“{a}” put into “{b}”
+„{a}“ auf die oberste Ebene gelegt	“{a}” moved to the top level
+{a} – dort gibt es schon eine mit diesem Namen	{a} – one with this name is already there
+„{a}“ nach Namen geordnet	“{a}” sorted by name
+Sammlungen nach Namen geordnet	Collections sorted by name
+Ordnen	Arrange
+Nach Namen ordnen	Sort by Name
+gezeigte Sammlung in ihrer Ebene nach oben	move the shown collection up within its level
+gezeigte Sammlung in ihrer Ebene nach unten	move the shown collection down within its level
+Die Sammlung gibt es nicht mehr.	The collection no longer exists.
+Ziel ist kein Sammlungssatz.	The target is not a collection set.
+Ein Satz kann nicht in sich selbst liegen.	A set cannot lie inside itself.
+Alben von Apple Fotos bleiben im Satz „Apple Fotos“.	Albums of Apple Photos stay in the set “Apple Fotos”.
+In den Satz „Apple Fotos“ kommen nur Alben von Apple Fotos.	Only albums of Apple Photos go into the set “Apple Fotos”.
+Nach oben	Move Up
+Nach unten	Move Down
+An den Anfang	Move to Top
+Ans Ende	Move to Bottom
+Aus dem Verlauf von {name}, Schritt {n}	From the history of {name}, step {n}
+Eingefügt von {name}	Pasted from {name}
+Übertragen von {name} (relativ)	Transferred from {name} (relative)
+Übertragen von {name}	Transferred from {name}
+Rückgängig: {name}	Undo: {name}
+Als Version speichern …	Save as Version …
+Mit aktuellem Stand vergleichen	Compare with Current State
+Verlauf bis hier zusammenfassen	Combine History up to Here
+Verlauf dieses Fotos löschen …	Delete History of This Photo …
+Verlauf · {name}	History · {name}
+Als Version speichern	Save as Version
+Name der Version	Name of the version
+Eine virtuelle Kopie mit dem Stand dieses Schritts. Das Foto selbst bleibt, wie es ist.	A virtual copy with the state of this step. The photo itself stays as it is.
+Verlauf dieses Fotos löschen?	Delete the history of this photo?
+Alle Schritte dieses Fotos werden gelöscht. Die Bearbeitung selbst bleibt, wie sie jetzt ist.	All steps of this photo are deleted. The edit itself stays as it is now.
+Stichwörter ordnen	Arrange keywords
+Häufigkeit	Frequency
+Sortieren	Sort
+Personen zeigen	Show people
+Personen sind Stichwörter mit Gesichtern; sie bleiben sonst ausgeblendet, damit sie nicht aus Versehen umgehängt werden.	People are keywords with faces; otherwise they stay hidden so they are not moved by mistake.
+{n} Änderungen · ⌘Z nimmt sie einzeln zurück	{n} changes · ⌘Z undoes them one by one
+{a} auf die oberste Ebene legen	Move {a} to the top level
+{a} mit „{b}“ zusammenführen	Merge {a} into “{b}”
+{a} unter „{b}“ legen	Put {a} below “{b}”
+„{a}“ angelegt	“{a}” created
+Neuer Oberbegriff „{a}“	New parent term “{a}”
+„{a}“ unter „{b}“ gelegt	“{a}” put below “{b}”
+{n} Stichwörter unter „{b}“ gelegt	{n} keywords put below “{b}”
+{n} Stichwörter auf die oberste Ebene gelegt	{n} keywords moved to the top level
+{n} Stichwörter	{n} keywords
+Kein Stichwort gewählt	No keyword selected
+{a} Fotos ({b} direkt)	{a} photos ({b} directly)
+{n} Unterbegriffe	{n} subterms
+{n} Stichwörter gewählt	{n} keywords selected
+Neuer Unterbegriff (auch „A > B“)	New subterm (also “A > B”)
+Name des Oberbegriffs	Name of the parent term
+Zusammenführen mit (filtern)	Merge into (filter)
+Verschieben unter (filtern)	Move below (filter)
+Ältere Schritte lassen sich nicht mehr rückgängig machen ({n})	Older steps can no longer be undone ({n})
+{n} Stichwörter mit „{b}“ zusammenführen?	Merge {n} keywords into “{b}”?
+Alle Fotos mit diesen Stichwörtern bekommen „{b}“. Die Stichwörter verschwinden; Begriffe darunter liegen danach unter „{b}“.	All photos with these keywords get “{b}”. The keywords disappear; terms below them then lie below “{b}”.
+und {n} weitere	and {n} more
+Ziel „{a}“: {n}	Target “{a}”: {n}
+{n} Stichwörter mit „{b}“ zusammengeführt	{n} keywords merged into “{b}”
+Mit allen Unterbegriffen löschen ({n} Unterbegriffe; {p} verlieren Stichwörter)	Delete with all subterms ({n} subterms; {p} lose keywords)
+Nur „{a}“ löschen; Unterbegriffe rücken eine Ebene hoch ({p} verlieren „{a}“)	Delete only “{a}”; subterms move up one level ({p} lose “{a}”)
+Die Fotos bleiben in der Bibliothek. ⌘Z holt alles zurück.	The photos stay in the library. ⌘Z brings everything back.
+Stichwörter ordnen … (Bibliothek)	Arrange keywords… (library)
+Stichwörter ordnen …	Arrange keywords…
+Neuer Unterbegriff …	New subterm…
+Neues Stichwort …	New keyword…
+Neuer Oberbegriff …	New parent term…
+Zusammenführen mit …	Merge into…
+Nur einzeln	One at a time only
+Legt einen Begriff an und hängt die Auswahl darunter	Creates a term and puts the selection below it
+Auch per Ziehen auf eine Zeile	Also by dragging onto a row
+Auch per Ziehen mit ⌥	Also by dragging with ⌥
+Schließt den Dialog und zeigt die Fotos mit diesem Stichwort und allen darunter	Closes the dialog and shows the photos with this keyword and all below it
+Liegt schon dort.	Already there.
+Ein Stichwort kann nicht unter sich selbst liegen.	A keyword cannot lie below itself.
+Marken aus Lightroom …	Marks from Lightroom…
+Stichwörter, die Lightroom nicht exportiert, hier als „nicht exportieren“ markieren (der Katalog wird nur gelesen)	Mark keywords Lightroom does not export as “do not export” here (the catalog is only read)
+Vorschläge …	Suggestions…
+Vorschläge zum Ordnen: Schreibweisen, Einzahl/Mehrzahl, Mehrwort-Namen, fast immer gemeinsam vergebene Stichwörter	Suggestions for arranging: spellings, singular/plural, multi-word names, keywords almost always assigned together
+{n} Stichwörter werden wieder exportiert	{n} keywords are exported again
+{n} Stichwörter werden nicht exportiert	{n} keywords are not exported
+Nicht exportieren	Do not export
+Vorschläge zum Ordnen	Suggestions for arranging
+Vorschläge werden berechnet …	Computing suggestions…
+„{a}“ mit „{b}“ zusammenführen	Merge “{a}” into “{b}”
+„{a}“ unter „{b}“ legen	Put “{a}” below “{b}”
+{a} / {b} Fotos · {p} %	{a} / {b} photos · {p} %
+{a} / {b} Fotos	{a} / {b} photos
+Keine Vorschläge.	No suggestions.
+Gewählte anwenden …	Apply selected…
+„{a}“ → „{b}“	“{a}” → “{b}”
+„{a}“ unter „{b}“	“{a}” below “{b}”
+Oberbegriffe mitschreiben	Include parent terms
+Zu „Labrador“ auch „Hunde“ und „Tiere“ in die Stichwörter der Datei	With “Labrador” also “Hunde” and “Tiere” in the file’s keywords
+Hierarchie mitschreiben	Include hierarchy
+Zusätzlich die vollen Pfade („Tiere|Hunde|Labrador“, lr:hierarchicalSubject) für Programme, die Stichwort-Hierarchien lesen	Also the full paths (“Tiere|Hunde|Labrador”, lr:hierarchicalSubject) for programs that read keyword hierarchies
+Oberbegriffe der Stichwörter mitschreiben	Include parent terms of keywords
+Zu „Labrador“ auch „Hunde“ und „Tiere“; gilt beim Export mit Metadaten „Alles“	With “Labrador” also “Hunde” and “Tiere”; applies to exports with metadata “All”
+Stichwort-Hierarchie mitschreiben	Include keyword hierarchy
+Volle Pfade in lr:hierarchicalSubject, für Programme, die Hierarchien lesen	Full paths in lr:hierarchicalSubject, for programs that read hierarchies
+Marken aus Lightroom übernehmen?	Take over marks from Lightroom?
+Lightroom-Katalog wird gelesen …	Reading the Lightroom catalog…
+Alle Stichwörter, die Lightroom nicht exportiert, sind hier schon markiert.	All keywords Lightroom does not export are already marked here.
+{n} Stichwörter würden als „nicht exportieren“ markiert (mit allem darunter).	{n} keywords would be marked “do not export” (with everything below).
+Der Katalog wird nur gelesen. ⌘Z holt alles zurück.	The catalog is only read. ⌘Z brings everything back.
+Markieren	Mark
+{n} Vorschläge anwenden?	Apply {n} suggestions?
+{a} Stichwörter werden untergeordnet, {b} zusammengeführt; {c} betroffen.	{a} keywords put below another, {b} merged; {c} affected.
+{n} Vorschläge angewendet	{n} suggestions applied
+{n} Vorschläge angewendet, {m} übersprungen	{n} suggestions applied, {m} skipped
+Schreibweise	Spelling
+Einzahl/Mehrzahl	Singular/plural
+Mehrwort-Name	Multi-word name
+Fast immer zusammen	Almost always together
+Ein Oberbegriff ist schon als „nicht exportieren“ markiert	A parent term is already marked “do not export”
+Gilt mit allem darunter: diese Stichwörter kommen nicht in exportierte Dateien	Applies with everything below: these keywords are not written into exported files
+{a} ({n})	{a} ({n})
+Keine Fotos gefunden.	No photos found.
+Die Messung ist mit einem Fehler abgebrochen (siehe Protokoll).	The measurement stopped with an error (see the log).
+Messung abbrechen	Stop Measuring
+Leistungsbericht erstellen	Create Performance Report
+graineo misst, wie schnell dieser Rechner Fotos öffnet und entwickelt: jede Stufe dreimal, mit Grafikkarte und Prozessor. Das dauert einige Minuten, der Lüfter kann dabei anlaufen.	graineo measures how fast this computer opens and develops photos: every stage three times, on the graphics card and on the processor. This takes a few minutes, and the fan may start.
+Der Bericht ist eine Textdatei auf diesem Rechner, ohne Pfade, Datei-, Benutzer- und Rechnernamen. graineo sendet nichts – schick die Datei bei Bedarf selbst.	The report is a text file on this computer, without paths, file, user or computer names. graineo sends nothing – send the file yourself if you like.
+Systemangaben	System information
+Foto {a} von {b} · {c} · Lauf {d} von {e} · {f}	Photo {a} of {b} · {c} · run {d} of {e} · {f}
+Bitte währenddessen nicht mit graineo arbeiten; andere Programme verfälschen die Zeiten.	Please don’t work with graineo meanwhile; other programs distort the times.
+Bericht gespeichert. Schick die Textdatei (und die JSON-Datei daneben) an die Entwickler, z. B. per E-Mail oder als Anhang eines GitHub-Issues.	Report saved. Send the text file (and the JSON file next to it) to the developers, e.g. by e-mail or attached to a GitHub issue.
+Im Explorer zeigen	Show in Explorer
+Pfad kopieren	Copy Path
+Dateien wählen …	Choose Files…
+Fotos werden gesucht …	Looking for photos…
+Keine Fotos gefunden (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).	No photos found (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).
+Je Kamerafamilie ein Foto aus {a} gefundenen.	One photo per camera family, out of {a} found.
+{a} weitere Dateien nicht berücksichtigt (höchstens 10).	{a} more files left out (at most 10).
+Wähle einen Ordner oder bis zu 10 Fotos: am besten je eines von jeder Kamera, die du nutzt (Merrill, Quattro, ältere Foveon, Fuji X-Trans, andere RAWs, JPEG/HEIC).	Choose a folder or up to 10 photos: ideally one from each camera you use (Merrill, Quattro, older Foveon, Fuji X-Trans, other RAWs, JPEG/HEIC).
+Messung abgebrochen, kein Bericht geschrieben.	Measurement stopped, no report written.
+Ordner mit Fotos für den Leistungsbericht	Folder with photos for the performance report
+Fotos für den Leistungsbericht (bis zu 10)	Photos for the performance report (up to 10)
+Zeitprotokoll	Timing log
+Schreibt je geöffnetem Foto eine Zeile mit Zeiten (ohne Datei- und Ordnernamen) in timings.log im Protokollordner. Bleibt auf diesem Rechner; der Leistungsbericht hängt die letzten 100 Zeilen an	Writes one line of times per opened photo (without file or folder names) to timings.log in the logs folder. Stays on this computer; the performance report adds the last 100 lines
+Leistungsbericht	Performance report
+Misst, wie schnell dieser Rechner Fotos öffnet und entwickelt, und schreibt eine Textdatei zum Einsenden	Measures how fast this computer opens and develops photos and writes a text file you can send in
+Erstellen …	Create…
+Je Kamerafamilie nimmt graineo ein Foto aus dem Ordner (höchstens 8)	graineo takes one photo per camera family from the folder (at most 8)
+Bis zu 10 Fotos; je Kamerafamilie zählt eines	Up to 10 photos; one counts per camera family
+Pfad der Textdatei in die Zwischenablage	Copy the path of the text file to the clipboard
+Datei lesen	Read file
+Erstes Bild	First picture
+Exakte Basis (Grafikkarte)	Exact base (graphics card)
+Exakte Basis (Prozessor)	Exact base (processor)
+Eingepasste Ansicht	Fitted view
+Volle Auflösung (Grafikkarte)	Full resolution (graphics card)
+Volle Auflösung (Prozessor)	Full resolution (processor)
+JPEG-Export	JPEG export
+1 Smart-Sammlung angepasst	1 smart collection updated
+{n} Smart-Sammlungen angepasst	{n} smart collections updated
+Smart-Sammlungen unverändert (Begriff mehrdeutig): {a}	Smart collections unchanged (ambiguous term): {a}
+Gespeichert, aber nicht alles nachgezogen: {e}	Saved, but not everything was updated: {e}
+ · ohne Stichwörter (Bibliothek nicht lesbar)	 · without keywords (library not readable)
+ · Metadaten nicht geschrieben	 · metadata not written
+Alben aus Apple Fotos lassen sich hier nicht füllen – der nächste Abgleich würde die Zuordnung wieder überschreiben.	Albums from Apple Photos cannot be filled here – the next sync would overwrite the assignment.
+Steht schon ganz oben	Already at the top
+Steht schon ganz unten	Already at the bottom
+Schon nach Namen geordnet	Already sorted by name
+Steht schon auf der obersten Ebene	Already on the top level
+Alben aus Apple Fotos bleiben in ihrem Satz	Albums from Apple Photos stay in their set
+In Lightroom: {n} Schritte	In Lightroom: {n} steps

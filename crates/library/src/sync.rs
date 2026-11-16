@@ -8,7 +8,7 @@
 //! - virtual copies: union by name; if one is missing in the sidecar, it is added.
 //! - database lost → during sync all values come back from the sidecars.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use rusqlite::{params, OptionalExtension};
@@ -41,9 +41,9 @@ pub fn keyword_paths(db: &Db, image: i64) -> R<Vec<String>> {
     let mut st = db
         .conn
         .prepare_cached(
-            "WITH RECURSIVE p(id, name, parent) AS (
-                SELECT s.id, s.name, s.parent FROM image_keyword bs JOIN keyword s ON s.id = bs.keyword WHERE bs.image = ?1
-                UNION ALL SELECT p.id, e.name || '|' || p.name, e.parent FROM p JOIN keyword e ON e.id = p.parent)
+            "WITH RECURSIVE p(id, name, parent, depth) AS (
+                SELECT s.id, s.name, s.parent, 0 FROM image_keyword bs JOIN keyword s ON s.id = bs.keyword WHERE bs.image = ?1
+                UNION ALL SELECT p.id, e.name || '|' || p.name, e.parent, p.depth + 1 FROM p JOIN keyword e ON e.id = p.parent WHERE p.depth < 64)
              SELECT name FROM p WHERE parent IS NULL ORDER BY name",
         )
         .map_err(f)?;
@@ -51,19 +51,12 @@ pub fn keyword_paths(db: &Db, image: i64) -> R<Vec<String>> {
     Ok(r)
 }
 
-/// Create or find a keyword chain; returns: ID of the leaf.
+/// Create or find a keyword chain given as stored path ("Orte|Italien|Rom", the sidecar and Lightroom form);
+/// returns the ID of the leaf. Only `|` separates: typed input goes through [`crate::keywords::resolve`].
 pub fn create_keyword(db: &Db, path: &str) -> R<Option<i64>> {
     let mut parent: Option<i64> = None;
-    for part in path.split(['|', '>', '›']).map(str::trim).filter(|t| !t.is_empty()) {
-        let id: Option<i64> = db.conn.query_row("SELECT id FROM keyword WHERE name = ?1 AND parent IS ?2 ORDER BY id LIMIT 1", params![part, parent], |r| r.get(0)).optional().map_err(f)?;
-        let id = match id {
-            Some(i) => i,
-            None => {
-                db.conn.execute("INSERT INTO keyword(name, parent) VALUES(?1, ?2)", params![part, parent]).map_err(f)?;
-                db.conn.last_insert_rowid()
-            }
-        };
-        parent = Some(id);
+    for part in path.split('|').map(str::trim).filter(|t| !t.is_empty()).take(crate::keywords::MAX_DEPTH) {
+        parent = Some(crate::keywords::child(&db.conn, parent, part)?);
     }
     Ok(parent)
 }
@@ -371,37 +364,14 @@ pub fn create_copy(db: &Db, image: i64, name: Option<&str>) -> R<i64> {
         .execute("INSERT INTO image(file, copy, stars, flag, label, rating_time, changed) VALUES(?1,?2,?3,?4,?5,?6,?6)", params![file, name, stars, mark, et, t])
         .map_err(f)?;
     let id = db.conn.last_insert_rowid();
-    let sw = keyword_paths(db, image)?;
-    set_keywords(db, id, &sw, t, true)?;
+    let ids = crate::keywords::ids_of(&db.conn, image)?;
+    crate::keywords::set_ids(db, id, &ids, t, true)?;
     write_sidecar(db, file)?;
     Ok(id)
 }
 
-/// Change keywords of several images (add/remove) and write the sidecars.
+/// Change keywords of several images (add/remove typed texts, see [`crate::keywords::change_text`]) and write the
+/// sidecars. Returns the number of files touched.
 pub fn change_keywords(db: &Db, images: &[i64], added: &[String], remove_fn: &[String]) -> R<usize> {
-    let t = crate::now();
-    let mut files: HashMap<i64, ()> = HashMap::new();
-    // remember the sidecar state of files on unreachable locations before anything changes (for merging later)
-    let all_files: Vec<i64> = images.iter().filter_map(|&b| db.conn.query_row("SELECT file FROM image WHERE id=?1", [b], |r| r.get(0)).ok()).collect();
-    crate::location::note_before_change(db, &all_files);
-    for &b in images {
-        let mut sw = keyword_paths(db, b)?;
-        let before = sw.clone();
-        for d in added {
-            let d = d.split(['>', '›']).map(str::trim).collect::<Vec<_>>().join("|");
-            if !sw.iter().any(|s| crate::search::fold_text(s) == crate::search::fold_text(&d)) {
-                sw.push(d);
-            }
-        }
-        sw.retain(|s| !remove_fn.iter().any(|w| crate::search::fold_text(s) == crate::search::fold_text(w) || crate::search::fold_text(s.rsplit('|').next().unwrap_or(s)) == crate::search::fold_text(w)));
-        if sw != before {
-            set_keywords(db, b, &sw, t, true)?;
-            let d: i64 = db.conn.query_row("SELECT file FROM image WHERE id=?1", [b], |r| r.get(0)).map_err(f)?;
-            files.insert(d, ());
-        }
-    }
-    for d in files.keys() {
-        write_sidecar(db, *d)?;
-    }
-    Ok(files.len())
+    crate::keywords::change_text(db, images, added, remove_fn)
 }

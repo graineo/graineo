@@ -594,6 +594,13 @@ fn xmp_packet(f: &OwnFields) -> Option<String> {
             }
             body.push_str("</rdf:Bag></dc:subject>");
         }
+        if !p.hierarchy.is_empty() {
+            body.push_str("<lr:hierarchicalSubject><rdf:Bag>");
+            for k in p.hierarchy.iter().take(MAX_KEYWORDS) {
+                body.push_str(&format!("<rdf:li>{}</rdf:li>", xml(&shortened(k, MAX_KEYWORD_CHARS * 4))));
+            }
+            body.push_str("</rdf:Bag></lr:hierarchicalSubject>");
+        }
         if let Some(t) = &p.title {
             body.push_str(&alt("dc:title", &shortened(t, MAX_TEXT_CHARS)));
         }
@@ -605,7 +612,7 @@ fn xmp_packet(f: &OwnFields) -> Option<String> {
         body.push_str(&alt("dc:rights", c));
     }
     Some(format!(
-        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"{attrs}>{body}</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
+        "<?xpacket begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"><rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:lr=\"http://ns.adobe.com/lightroom/1.0/\"{attrs}>{body}</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end=\"w\"?>"
     ))
 }
 
@@ -1015,6 +1022,18 @@ mod tests {
         let again = jpeg_with(&out, &exif_block(&f), None).unwrap();
         assert_eq!(String::from_utf8_lossy(&again).matches("Exif\0\0").count(), 1);
         assert!(!String::from_utf8_lossy(&again).contains("xmp:Rating"));
+    }
+
+    /// Keywords with parents in dc:subject and the paths in lr:hierarchicalSubject (only when given).
+    #[test]
+    fn keyword_hierarchy_in_the_packet() {
+        let fields = ExportFields { personal: true, keywords: vec!["Rom".into(), "Italien".into(), "Orte".into()], hierarchy: vec!["Orte|Italien|Rom".into()], ..Default::default() };
+        let xmp = xmp_packet(&OwnFields { fields: fields.clone(), width: 1, height: 1 }).unwrap();
+        assert!(xmp.contains("<rdf:li>Orte|Italien|Rom</rdf:li>") && xmp.contains("<lr:hierarchicalSubject>") && xmp.contains("<rdf:li>Italien</rdf:li>"));
+        let back = crate::xmp::read_text(&xmp).unwrap();
+        assert_eq!(back.keywords, vec!["Orte|Italien|Rom".to_string()], "read back: parents are no extra keywords");
+        let plain = xmp_packet(&OwnFields { fields: ExportFields { hierarchy: Vec::new(), ..fields }, width: 1, height: 1 }).unwrap();
+        assert!(!plain.contains("hierarchicalSubject"));
     }
 
     /// Review N4: a huge title (Lightroom allows megabytes) neither removes the other metadata nor the copyright.

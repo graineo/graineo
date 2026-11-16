@@ -7,7 +7,7 @@
 //!   import syncs instead of duplicating.
 //! - The file lives locally (not on the NAS): `library.sqlite` in Application Support.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -133,6 +133,14 @@ CREATE TABLE IF NOT EXISTS keyword (
     lr_id   INTEGER UNIQUE
 );
 CREATE INDEX IF NOT EXISTS keyword_parent ON keyword(parent);
+-- per-keyword options beside the tree (added without a version step: older versions ignore the table); no row =
+-- defaults. export = 0: the keyword and everything below it are never written into exported files (Lightroom
+-- "includeOnExport" = 0)
+CREATE TABLE IF NOT EXISTS keyword_option (
+    keyword   INTEGER PRIMARY KEY REFERENCES keyword(id) ON DELETE CASCADE,
+    export    INTEGER NOT NULL DEFAULT 1,
+    synonyms  TEXT
+);
 CREATE TABLE IF NOT EXISTS image_keyword (
     image     INTEGER NOT NULL REFERENCES image(id) ON DELETE CASCADE,
     keyword   INTEGER NOT NULL REFERENCES keyword(id) ON DELETE CASCADE,
@@ -156,6 +164,13 @@ CREATE TABLE IF NOT EXISTS collection_image (
     PRIMARY KEY (collection, image)
 ) WITHOUT ROWID;
 CREATE INDEX IF NOT EXISTS collection_image_i ON collection_image(image);
+-- own order of the collections in the left panel (`crate::collection_order`; added without a version step: older
+-- versions ignore the table). A position counts only while `parent` equals the collection's parent.
+CREATE TABLE IF NOT EXISTS collection_order (
+    collection INTEGER PRIMARY KEY REFERENCES collection(id) ON DELETE CASCADE,
+    parent     INTEGER,                  -- parent the position was given in (NULL = top level)
+    position   INTEGER NOT NULL          -- 1, 2, 3 … within that parent
+);
 CREATE TABLE IF NOT EXISTS info (
     name    TEXT PRIMARY KEY,
     value   TEXT
@@ -236,6 +251,29 @@ CREATE TABLE IF NOT EXISTS develop_state (
     lr_file        TEXT,                     -- name of the photo the Lightroom data belongs to
     UNIQUE (file, copy)
 );
+-- develop history per photo / virtual copy, one row per step (`crate::develop_history`; added without a version step:
+-- older versions ignore the tables, the check on loading catches states they wrote without a step)
+CREATE TABLE IF NOT EXISTS develop_step (
+    id       INTEGER PRIMARY KEY,
+    file     INTEGER NOT NULL REFERENCES file(id) ON DELETE CASCADE,
+    copy     TEXT NOT NULL DEFAULT '',  -- '' = original, else name of the virtual copy (as develop_state)
+    seq      INTEGER NOT NULL,          -- 0 = start state, then ascending
+    time     INTEGER NOT NULL,          -- Unix seconds (last change of a merged step)
+    kind     TEXT NOT NULL,             -- 'start' | 'slider' | 'preset' | 'film' | 'paste' | 'sync' | 'auto' | 'reset' | 'crop'
+                                        -- | 'mask' | 'retouch' | 'lightroom' | 'external' | 'version' | 'compacted'
+    label    TEXT,                      -- JSON: key and values of the displayed name (translated when shown)
+    patch    TEXT NOT NULL,             -- start/compacted: whole settings JSON; else patch from the step before
+    count    INTEGER NOT NULL DEFAULT 1,-- merged steps
+    command  INTEGER,                   -- id of a command for several photos
+    UNIQUE (file, copy, seq)
+);
+-- where the cursor stands (only stored when it is not on the newest step)
+CREATE TABLE IF NOT EXISTS develop_cursor (
+    file   INTEGER NOT NULL REFERENCES file(id) ON DELETE CASCADE,
+    copy   TEXT NOT NULL DEFAULT '',
+    seq    INTEGER NOT NULL,
+    PRIMARY KEY (file, copy)
+) WITHOUT ROWID;
 -- folders and files removed from the library by the user (files untouched): the sync does not take them in
 -- again; importing or adding them explicitly lifts it (`crate::manage`)
 CREATE TABLE IF NOT EXISTS excluded_path (
@@ -378,6 +416,10 @@ pub struct Collection {
     pub translatable: bool,
     /// Lightroom smart collection of the plug-in "Find Duplicates 2" – replaced by "Duplikate"
     pub duplicates: bool,
+    /// own place within its level (`crate::collection_order`), `None` = not placed (behind the placed ones)
+    pub position: Option<i64>,
+    /// mirrors Apple Photos (the set "Apple Fotos" and its albums, `crate::apple_photos`)
+    pub apple: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -769,10 +811,11 @@ impl Db {
     pub fn collections(&self) -> Result<Vec<Collection>> {
         let mut st = self.conn.prepare(
             "SELECT s.id, s.name, s.parent, s.kind, (SELECT count(*) FROM collection_image sb JOIN image b ON b.id = sb.image JOIN file d ON d.id = b.file WHERE sb.collection = s.id AND d.status <> 4), s.search, s.translatable,
-                    coalesce(s.rules, '') LIKE '%finddupes2%'
-             FROM collection s ORDER BY s.name COLLATE NOCASE",
+                    coalesce(s.rules, '') LIKE '%finddupes2%', o.position, coalesce(s.rules, '') = ?1
+             FROM collection s LEFT JOIN collection_order o ON o.collection = s.id AND o.parent IS s.parent
+             ORDER BY s.name COLLATE NOCASE",
         )?;
-        let rows = st.query_map([], |r| {
+        let rows = st.query_map([crate::apple_photos::COLLECTION_MARKER], |r| {
             Ok(Collection {
                 id: r.get(0)?,
                 name: r.get(1)?,
@@ -782,17 +825,39 @@ impl Db {
                 search: r.get(5)?,
                 translatable: r.get::<_, i64>(6)? != 0,
                 duplicates: r.get(7)?,
+                position: r.get(8)?,
+                apple: r.get(9)?,
             })
         })?;
         rows.collect()
     }
 
     pub fn keywords(&self) -> Result<Vec<Keyword>> {
-        let mut st = self.conn.prepare(
-            "SELECT s.id, s.name, s.parent, (SELECT count(*) FROM image_keyword bs JOIN image b ON b.id = bs.image JOIN file d ON d.id = b.file WHERE bs.keyword = s.id AND d.status <> 4), s.person
-             FROM keyword s ORDER BY s.name COLLATE NOCASE",
-        )?;
-        let rows = st.query_map([], |r| Ok(Keyword { id: r.get(0)?, name: r.get(1)?, parent: r.get(2)?, count: r.get::<_, i64>(3)? as usize, person: r.get::<_, i64>(4)? != 0 }))?;
+        // count per keyword: images whose file is not marked missing (status 4). Counted here in one pass over the
+        // assignments (~60 ms for 340 000) instead of a correlated subquery per keyword (two lookups per assignment,
+        // ~0.3 s for 11 000 keywords)
+        let mut live: HashSet<i64> = HashSet::new();
+        {
+            let mut st = self.conn.prepare("SELECT b.id FROM image b JOIN file d ON d.id = b.file WHERE d.status <> 4")?;
+            for id in st.query_map([], |r| r.get::<_, i64>(0))? {
+                live.insert(id?);
+            }
+        }
+        let mut count: HashMap<i64, usize> = HashMap::new();
+        {
+            let mut st = self.conn.prepare("SELECT image, keyword FROM image_keyword")?;
+            for pair in st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
+                let (image, keyword) = pair?;
+                if live.contains(&image) {
+                    *count.entry(keyword).or_default() += 1;
+                }
+            }
+        }
+        let mut st = self.conn.prepare("SELECT s.id, s.name, s.parent, s.person FROM keyword s ORDER BY s.name COLLATE NOCASE")?;
+        let rows = st.query_map([], |r| {
+            let id: i64 = r.get(0)?;
+            Ok(Keyword { id, name: r.get(1)?, parent: r.get(2)?, count: count.get(&id).copied().unwrap_or(0), person: r.get::<_, i64>(3)? != 0 })
+        })?;
         rows.collect()
     }
 
@@ -997,14 +1062,10 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
-    /// Collection set ("folder" for collections) at the top level with this name: take the existing one or create it.
+    /// Collection set ("folder" for collections) for this name: the one remembered for it (also after moving or
+    /// renaming), else one of this name, else a new one at the top level (`crate::collection_order::find_or_create_set`).
     pub fn find_or_create_collection_set(&self, name: &str) -> Result<i64> {
-        let name = name.trim();
-        if let Some(id) = self.conn.query_row("SELECT id FROM collection WHERE kind=1 AND parent IS NULL AND lower(name)=lower(?1) ORDER BY id LIMIT 1", [name], |r| r.get::<_, i64>(0)).optional()? {
-            return Ok(id);
-        }
-        self.conn.execute("INSERT INTO collection(name, kind) VALUES(?1, 1)", [name])?;
-        Ok(self.conn.last_insert_rowid())
+        crate::collection_order::find_or_create_set(&self.conn, name)
     }
 
     /// Append images to a plain collection (already contained ones stay). Returns: newly added.
@@ -1043,7 +1104,7 @@ impl Db {
     /// Image IDs with this keyword or one below it.
     pub fn images_with_keyword(&self, keyword: i64) -> Result<Vec<i64>> {
         let mut st = self.conn.prepare(
-            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
+            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
              SELECT DISTINCT image FROM image_keyword WHERE keyword IN (SELECT id FROM t)",
         )?;
         let rows = st.query_map([keyword], |r| r.get(0))?;
@@ -1066,9 +1127,9 @@ impl Db {
     /// Keywords of an image (name, with parent path "A › B").
     pub fn keywords_of(&self, image: i64) -> Result<Vec<String>> {
         let mut st = self.conn.prepare(
-            "WITH RECURSIVE p(id, name, parent, tiefe) AS (
+            "WITH RECURSIVE p(id, name, parent, depth) AS (
                 SELECT s.id, s.name, s.parent, 0 FROM image_keyword bs JOIN keyword s ON s.id = bs.keyword WHERE bs.image = ?1
-                UNION ALL SELECT p.id, e.name || ' › ' || p.name, e.parent, p.tiefe + 1 FROM p JOIN keyword e ON e.id = p.parent)
+                UNION ALL SELECT p.id, e.name || ' › ' || p.name, e.parent, p.depth + 1 FROM p JOIN keyword e ON e.id = p.parent WHERE p.depth < 64)
              SELECT name FROM p WHERE parent IS NULL ORDER BY name COLLATE NOCASE",
         )?;
         let rows = st.query_map([image], |r| r.get(0))?;
@@ -1131,6 +1192,8 @@ impl Db {
                 n += tx.execute("DELETE FROM image WHERE id=?1", [b])?;
                 // the copy's develop state goes with it (a new copy of the same name starts fresh)
                 tx.execute("DELETE FROM develop_state WHERE file=?1 AND copy=?2", rusqlite::params![file, copy])?;
+                crate::develop_history::forget(&tx, file, copy.as_deref())?;
+                crate::store::drop_queued_history(file, copy.as_deref());
                 continue;
             }
             n += tx.query_row("SELECT count(*) FROM image WHERE file=?1", [file], |r| r.get::<_, i64>(0))? as usize;
@@ -1323,6 +1386,28 @@ pub fn orientation_from_lightroom(o: &str) -> Option<i64> {
 #[cfg(test)]
 mod migration_guard_tests {
     use super::*;
+
+    /// The keyword counts (images whose file is not marked missing) are those of the earlier correlated subquery.
+    #[test]
+    fn keyword_counts_match_the_subquery() {
+        let db = Db::open(Path::new(":memory:")).unwrap();
+        db.conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             INSERT INTO file(id, folder, name, format, status) VALUES (1, 1, 'a.jpg', 'JPG', 0), (2, 1, 'b.jpg', 'JPG', 4), (3, 1, 'c.jpg', 'JPG', 1), (4, 1, 'd.jpg', 'JPG', 0);
+             INSERT INTO image(id, file) VALUES (10, 1), (11, 4), (20, 2), (30, 3), (40, 99);
+             INSERT INTO keyword(id, name, person) VALUES (1, 'Rom', 0), (2, 'italien', 0), (3, 'Eva', 1), (4, 'leer', 0);
+             INSERT INTO image_keyword VALUES (10, 1), (11, 1), (20, 1), (30, 2), (40, 2), (10, 3), (77, 3);",
+        )
+        .unwrap();
+        let mut st = db
+            .conn
+            .prepare("SELECT s.id, (SELECT count(*) FROM image_keyword bs JOIN image b ON b.id = bs.image JOIN file d ON d.id = b.file WHERE bs.keyword = s.id AND d.status <> 4) FROM keyword s ORDER BY s.name COLLATE NOCASE")
+            .unwrap();
+        let old: Vec<(i64, usize)> = st.query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize))).unwrap().map(|x| x.unwrap()).collect();
+        let new: Vec<(i64, usize)> = db.keywords().unwrap().iter().map(|k| (k.id, k.count)).collect();
+        assert_eq!(new, old);
+        assert_eq!(new, vec![(3, 1), (2, 1), (4, 0), (1, 2)]);
+    }
 
     /// Opening a library with the current schema writes nothing: it works while another connection holds the write
     /// lock, and the WAL does not grow.

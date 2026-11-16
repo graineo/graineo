@@ -1145,7 +1145,7 @@ dependencies = [
 
 [[package]]
 name = "develop"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "bytemuck",
  "crc32fast",
@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "faces"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "image",
  "matrixmultiply",
@@ -2248,7 +2248,7 @@ dependencies = [
 
 [[package]]
 name = "graineo"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -2286,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "graineo-color"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "moxcms",
  "rayon",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "graineo-dev"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "develop",
@@ -3023,7 +3023,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "legacy_names"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "rusqlite",
  "serde",
@@ -3032,7 +3032,7 @@ dependencies = [
 
 [[package]]
 name = "lensprof"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "legacy_names",
  "serde",
@@ -3088,7 +3088,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "library"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "base64",
  "block2 0.6.2",
@@ -3217,7 +3217,7 @@ dependencies = [
 
 [[package]]
 name = "masks"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "bytemuck",
  "image",
@@ -4295,7 +4295,7 @@ dependencies = [
 
 [[package]]
 name = "pools"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "libc",
  "rayon",
@@ -4535,7 +4535,7 @@ checksum = "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08"
 
 [[package]]
 name = "raw"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "flate2",
  "graineo-color",
@@ -4570,7 +4570,7 @@ dependencies = [
 
 [[package]]
 name = "rawdev"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "bytemuck",
  "develop",
@@ -4732,7 +4732,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "retouch"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "image",
  "rayon",
@@ -4980,7 +4980,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "sensor_view"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "ab_glyph",
  "image",
@@ -5422,7 +5422,7 @@ dependencies = [
 
 [[package]]
 name = "sysdirs"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "system-deps"
@@ -7068,7 +7068,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x3f"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "rayon",
  "thiserror 2.0.21",

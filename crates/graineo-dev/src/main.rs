@@ -60,6 +60,7 @@ mod lens_measure;
 mod noise_measure;
 mod hotpixel;
 mod looks;
+mod focus_cmd;
 mod lr_handover;
 mod gpu_measure;
 mod qa;
@@ -168,6 +169,10 @@ fn main() -> Result<()> {
         return grain_measure::run(&args[1..]);
     }
     // measure camera looks (picture style from the makernote, RAW/JPEG pairs), see looks.rs
+    // focus areas the camera wrote into the file (normalised), see focus_cmd.rs
+    if cmd == "focus" {
+        return focus_cmd::run(&args[1..]);
+    }
     if matches!(cmd, "style") {
         return looks::style(&args[1..]);
     }

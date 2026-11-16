@@ -17,6 +17,17 @@ use egui::Color32;
 
 use crate::lr;
 
+#[path = "keyword_tree.rs"]
+mod keyword_tree;
+
+#[path = "library_facets_build.rs"]
+mod facets_build;
+pub use facets_build::inputs_fingerprint;
+
+#[cfg(test)]
+#[path = "library_facets_bench.rs"]
+mod facets_bench;
+
 pub const CATEGORIES: [&str; N] = ["Kamera", "Objektiv", "Jahr", "Stichwort", "KI-Qualität", "Format", "Etikett", "Sterne", "Person", "Monat", "Tag im Monat", "Wochentag", "Tageszeit"];
 /// Number of columns
 const N: usize = 13;
@@ -229,8 +240,14 @@ pub struct Facets {
     kw_ids: Vec<(i64, bool)>,
     /// keyword column: the parent term per value (index into `names[3]`), for the hierarchy (Orte › Italien › Rom)
     kw_parent: Vec<Option<u32>>,
+    /// keyword column: photos carrying the term itself (whole library, without the filter)
+    kw_direct: Vec<usize>,
+    /// keyword column: values whose name occurs more than once (ignoring case): shown with their path
+    kw_ambiguous: HashSet<u32>,
     /// chosen in the context menu of a keyword row, taken by the library ([`Facets::take_keyword_request`])
     keyword_request: Option<(i64, KeywordAction)>,
+    /// [`inputs_fingerprint`] of what these filters were built from (0: not known)
+    pub fingerprint: u64,
 }
 
 /// Management of a keyword from the context menu of the keyword column (formerly in the left panel).
@@ -240,133 +257,16 @@ pub enum KeywordAction {
     Move,
     ToTop,
     Delete,
+    /// a new term below this one (dialog "Stichwörter ordnen …")
+    NewChild,
+    /// open "Stichwörter ordnen …" on this keyword
+    Arrange,
 }
 
 impl Facets {
-    /// Build from all rows and the keyword assignments (image → keyword IDs).
+    /// Build from all rows and the keyword assignments (image → keyword IDs); see `library_facets_build.rs`.
     pub fn build(rows: &[Row], keywords: &[Keyword], keywords_per_image: &HashMap<i64, Vec<i64>>) -> Self {
-        let mut names: [Vec<String>; N] = Default::default();
-        let mut dict: [HashMap<String, u32>; N] = Default::default();
-        let mut wid = |k: usize, s: String, names: &mut [Vec<String>; N]| -> u32 {
-            if let Some(&i) = dict[k].get(&s) {
-                return i;
-            }
-            let i = names[k].len() as u32;
-            names[k].push(s.clone());
-            dict[k].insert(s, i);
-            i
-        };
-        let mut values = Vec::with_capacity(rows.len());
-        for z in rows {
-            let mut w = [NO_VALUE; N];
-            if let Some(k) = &z.camera {
-                w[0] = wid(0, k.clone(), &mut names);
-            }
-            if let Some(o) = &z.lens {
-                w[1] = wid(1, o.clone(), &mut names);
-            }
-            if let Some(j) = z.year() {
-                w[2] = wid(2, j.to_string(), &mut names);
-            }
-            if let Some(month) = z.month().filter(|m| (1..=12).contains(m)) {
-                w[9] = wid(9, format!("{month:02}"), &mut names);
-            }
-            if let Some(day) = z.day() {
-                w[10] = wid(10, format!("{day:02}"), &mut names);
-            }
-            // Weekday (1 Monday … 7 Sunday) and time of day (0 night … 3 evening)
-            if let Some(d) = library::search::weekday_of(z) {
-                w[WEEKDAY_COL] = wid(WEEKDAY_COL, d.to_string(), &mut names);
-            }
-            if let Some(h) = library::search::hour_of(z) {
-                w[TIME_COL] = wid(TIME_COL, library::search_fields::time_of_day(h).to_string(), &mut names);
-            }
-            if let Some(q) = z.ai_quality {
-                w[4] = wid(4, ["Ausschuss", "mittel", "gut"][q as usize % 3].to_string(), &mut names);
-            }
-            w[5] = wid(5, z.format.as_str().to_string(), &mut names);
-            w[6] = wid(6, library::label::NAMES[z.label as usize % 6].to_string(), &mut names);
-            w[7] = wid(7, if z.stars == 0 { "ohne".into() } else { "★".repeat(z.stars as usize) }, &mut names);
-            values.push(w);
-        }
-        // People are in the "Person" column, not in the keyword column
-        let mut keyword_index: HashMap<i64, u32> = HashMap::new();
-        let mut person_index: HashMap<i64, u32> = HashMap::new();
-        let mut kw_ids = Vec::new();
-        for s in keywords {
-            let (index, k) = if s.person { (&mut person_index, PERSON_COL) } else { (&mut keyword_index, KEYWORD_COL) };
-            index.insert(s.id, names[k].len() as u32);
-            names[k].push(s.name.clone());
-            if !s.person {
-                kw_ids.push((s.id, s.parent.is_some()));
-            }
-        }
-        let row_list = |index: &HashMap<i64, u32>, image: i64| -> Vec<u32> { keywords_per_image.get(&image).map(|v| v.iter().filter_map(|s| index.get(s).copied()).collect()).unwrap_or_default() };
-        // hierarchy: a parent term includes its children (a photo with "Rom" also counts for "Italien" and "Orte", once
-        // each); the parents of a person (Lightroom "Personen › Christa") count as keywords as well
-        let parent_of: HashMap<i64, Option<i64>> = keywords.iter().map(|s| (s.id, s.parent)).collect();
-        let kw_parent: Vec<Option<u32>> = keywords.iter().filter(|s| !s.person).map(|s| s.parent.and_then(|p| keyword_index.get(&p).copied())).collect();
-        let kw = rows
-            .iter()
-            .map(|z| {
-                let mut list: Vec<u32> = Vec::new();
-                for &id in keywords_per_image.get(&z.image).map(Vec::as_slice).unwrap_or_default() {
-                    let mut cur = Some(id);
-                    let mut steps = 0;
-                    while let Some(k) = cur {
-                        if let Some(&i) = keyword_index.get(&k) {
-                            if !list.contains(&i) {
-                                list.push(i);
-                            }
-                        }
-                        cur = parent_of.get(&k).copied().flatten();
-                        steps += 1;
-                        if steps > 64 {
-                            break;
-                        }
-                    }
-                }
-                list
-            })
-            .collect();
-        let persons = rows.iter().map(|z| row_list(&person_index, z.image)).collect();
-        // number lists: only the values or groups that occur, ascending; "(none)" last
-        let mut bands: [Vec<Band>; 4] = Default::default();
-        let mut band_rows = vec![[NO_VALUE; 4]; rows.len()];
-        for k in 0..4 {
-            // key per row once; only the distinct keys are sorted (with the field name resolved per comparison,
-            // sorting all rows took seconds on 65 000 photos)
-            let row_keys: Vec<Option<i64>> = rows.iter().map(|z| range_value(z, k).filter(|v| v.is_finite() && *v > 0.0).map(|v| band_key(k, v))).collect();
-            let mut keys: Vec<i64> = row_keys.iter().flatten().copied().collect();
-            keys.sort_unstable();
-            keys.dedup();
-            keys.sort_by(|a, b| library::search::key_value(FIELDS[k], *a).total_cmp(&library::search::key_value(FIELDS[k], *b)));
-            let index: HashMap<i64, u32> = keys.iter().enumerate().map(|(i, key)| (*key, i as u32)).collect();
-            bands[k] = keys.iter().map(|key| band_of(k, *key)).collect();
-            for (key, b) in row_keys.iter().zip(band_rows.iter_mut()) {
-                if let Some(key) = key {
-                    b[k] = index[key];
-                }
-            }
-        }
-        Self {
-            names,
-            values,
-            kw,
-            persons,
-            selection: Default::default(),
-            numbers: Default::default(),
-            bands,
-            band_rows,
-            band_selection: Default::default(),
-            band_numbers: Default::default(),
-            anchor: [None; N + 4],
-            search: Default::default(),
-            slots: load_slots(),
-            kw_ids,
-            kw_parent,
-            keyword_request: None,
-        }
+        Self::build_timed(rows, keywords, keywords_per_image).0
     }
 
     /// Number of rows these filters were built for (they only fit a list of exactly this length).
@@ -401,7 +301,10 @@ impl Facets {
         let mut v = Vec::new();
         for (k, a) in self.selection.iter().enumerate() {
             for &i in a {
-                if let Some(n) = self.names[k].get(i as usize) {
+                if k == KEYWORD_COL && (i as usize) < self.names[k].len() {
+                    // by path: a name in two branches ("Orte › Paris", "Personen › Paris") stays the one chosen
+                    v.push((k, self.kw_path(i)));
+                } else if let Some(n) = self.names[k].get(i as usize) {
                     v.push((k, n.clone()));
                 } else if i == NO_VALUE {
                     v.push((k, String::from("\u{0}ohne")));
@@ -422,6 +325,13 @@ impl Facets {
         for (k, n) in &g.0 {
             if n == "\u{0}ohne" {
                 self.selection[*k].insert(NO_VALUE);
+            } else if *k == KEYWORD_COL {
+                match (0..self.names[*k].len() as u32).find(|v| self.kw_path(*v) == *n) {
+                    Some(v) => {
+                        self.selection[*k].insert(v);
+                    }
+                    None => self.choose_name(*k, n),
+                }
             } else {
                 self.choose_name(*k, n);
             }
@@ -454,7 +364,7 @@ impl Facets {
             .filter(|s| self.slot_active(*s))
             .map(|s| {
                 let values: Vec<String> = match s {
-                    Slot::Cat(k) => self.selection[k].iter().map(|v| self.display_name(k, *v)).collect(),
+                    Slot::Cat(k) => self.selection[k].iter().map(|v| if k == KEYWORD_COL && self.kw_ambiguous.contains(v) { self.kw_path(*v) } else { self.display_name(k, *v) }).collect(),
                     Slot::Range(r) => self.band_selection[r].iter().map(|v| self.band_name(r, *v)).collect(),
                 };
                 (s.title(), values_text(values))
@@ -625,6 +535,11 @@ impl Facets {
         chain
     }
 
+    /// Shown path of a keyword value ("Orte › Italien › Rom").
+    fn kw_path(&self, w: u32) -> String {
+        self.kw_chain(w).into_iter().map(|x| self.name(KEYWORD_COL, x)).collect::<Vec<_>>().join(library::keywords::SHOWN_SEPARATOR)
+    }
+
     /// The list of values of a row for columns with several values per image (keyword, person).
     fn row_list(&self, k: usize, i: usize) -> Option<&[u32]> {
         match k {
@@ -672,6 +587,8 @@ impl Facets {
             for w in &self.selection[k] {
                 let n = self.name(k, *w);
                 let n = match k {
+                    // a keyword name in several branches: the path names exactly the one chosen
+                    KEYWORD_COL if self.kw_ambiguous.contains(w) => self.kw_chain(*w).into_iter().map(|x| self.name(KEYWORD_COL, x)).collect::<Vec<_>>().join(" > "),
                     4 | 6 => n.to_lowercase(),
                     7 if n == "ohne" => "0".into(),
                     7 => n.chars().count().to_string(),
@@ -811,54 +728,21 @@ impl Facets {
 
     /// Search field and value list of an attribute (only this list scrolls, and only up and down).
     fn value_list(&mut self, ui: &mut egui::Ui, k: usize, w: f32) -> bool {
+        if k == KEYWORD_COL {
+            return self.keyword_list(ui, w);
+        }
         crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut self.search[k]).hint_text(crate::tr("Suchen")).font(egui::FontId::proportional(10.5)).desired_width(w - 8.0).margin(egui::vec2(4.0, 1.0)));
         let pattern = self.search[k].trim().to_lowercase();
         let numbers: Vec<(u32, usize)> = if pattern.is_empty() {
             self.numbers[k].clone()
         } else {
             // selected values stay visible so they can be deselected
-            let mut shown: HashSet<u32> = self.numbers[k].iter().map(|x| x.0).filter(|w| self.selection[k].contains(w) || self.display_name(k, *w).to_lowercase().contains(&pattern)).collect();
-            // keywords: a hit keeps its parents (the tree stays readable)
-            if k == KEYWORD_COL {
-                for w in shown.clone() {
-                    if w != NO_VALUE {
-                        shown.extend(self.kw_chain(w));
-                    }
-                }
-            }
+            let shown: HashSet<u32> = self.numbers[k].iter().map(|x| x.0).filter(|w| self.selection[k].contains(w) || self.display_name(k, *w).to_lowercase().contains(&pattern)).collect();
             self.numbers[k].iter().copied().filter(|(w, _)| shown.contains(w)).collect()
         };
-        // keywords indented below their parent term
-        // (only the rows in view are named: up to 5000 keywords per frame took milliseconds)
-        let name_of = |i: usize| -> String {
-            let v = numbers[i].0;
-            if k == KEYWORD_COL && v != NO_VALUE { format!("{}{}", "  ".repeat(self.kw_chain(v).len() - 1), self.display_name(k, v)) } else { self.display_name(k, v) }
-        };
-        // keywords: rename, move, delete in the context menu of a row
-        let kw_ids = if k == KEYWORD_COL { self.kw_ids.clone() } else { Vec::new() };
-        let mut request = None;
-        let mut menu = |resp: &egui::Response, value: u32| {
-            let Some(&(id, has_parent)) = kw_ids.get(value as usize) else { return };
-            resp.context_menu(|ui| {
-                for (action, text, on) in [
-                    (KeywordAction::Rename, "Umbenennen …", true),
-                    (KeywordAction::Move, "Verschieben nach …", true),
-                    (KeywordAction::ToTop, "Auf oberste Ebene", has_parent),
-                    (KeywordAction::Delete, "Stichwort löschen …", true),
-                ] {
-                    if action == KeywordAction::Delete {
-                        ui.separator();
-                    }
-                    if lr::menu_item(ui, crate::tr(text), "", on) {
-                        request = Some((id, action));
-                    }
-                }
-            });
-        };
-        let clicked = list_rows(ui, ("bib-facette", k), &numbers, &name_of, &self.selection[k], if k == KEYWORD_COL { Some(&mut menu) } else { None });
-        if request.is_some() {
-            self.keyword_request = request;
-        }
+        // (only the rows in view are named: up to 5000 values per frame took milliseconds)
+        let name_of = |i: usize| -> String { self.display_name(k, numbers[i].0) };
+        let clicked = list_rows(ui, ("bib-facette", k), &numbers, &name_of, &self.selection[k], None);
         let Some((value, mods)) = clicked else { return false };
         let order: Vec<u32> = numbers.iter().map(|x| x.0).collect();
         list_click(&mut self.selection[k], &order, &mut self.anchor[k], value, mods);
@@ -1095,6 +979,30 @@ pub(crate) mod tests {
         f.choose_name(KEYWORD_COL, "Rom");
         assert_eq!(f.apply(&rows, &all), vec![0]);
         assert_eq!(f.as_search().unwrap(), "keyword:=\"Rom\"");
+    }
+
+    /// "Paris" below places and below people: the filter button shows the path, remembering and restoring the
+    /// selection keeps the one chosen (not the first of that name).
+    #[test]
+    fn ambiguous_keyword_names_keep_their_path() {
+        let kw = |id: i64, name: &str, parent: Option<i64>| Keyword { id, name: name.into(), parent, count: 1, person: false };
+        let keywords = vec![kw(1, "Orte", None), kw(2, "Paris", Some(1)), kw(3, "Personen", None), kw(4, "Paris", Some(3))];
+        let mut rows = vec![row(35.0, 0.01, 100, 2.0); 2];
+        rows[0].image = 1;
+        rows[1].image = 2;
+        let per_image: HashMap<i64, Vec<i64>> = HashMap::from([(1, vec![2]), (2, vec![4])]);
+        let mut f = Facets::build(&rows, &keywords, &per_image);
+        let all: Vec<usize> = (0..rows.len()).collect();
+        f.apply(&rows, &all);
+        let second = f.names[KEYWORD_COL].iter().rposition(|n| n == "Paris").unwrap() as u32;
+        f.selection[KEYWORD_COL].insert(second);
+        assert_eq!(f.apply(&rows, &all), vec![1]);
+        assert_eq!(f.active_columns(), vec![("Stichwort", "Personen › Paris".to_string())]);
+        assert_eq!(f.as_search().unwrap(), "keyword:=\"Personen > Paris\"", "the rule names the path");
+        let remembered = f.remember();
+        let mut g = Facets::build(&rows, &keywords, &per_image);
+        g.restore(&remembered);
+        assert_eq!(g.apply(&rows, &all), vec![1], "the person Paris, not the place");
     }
 
     #[test]

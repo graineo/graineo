@@ -404,11 +404,16 @@ impl RawDoc {
         }
         let t = std::time::Instant::now();
         let f = raw::RawFile::open(path).map_err(|e| e.to_string())?;
+        crate::timings::lap("CPU read RAW file", t.elapsed());
         if !keep_going() {
             return Ok(None);
         }
         let info = f.info.clone();
         let b = f.basis(Demosaic::Auto, true, true, Size::Preview(PREVIEW_EDGE)).map_err(|e| e.to_string())?;
+        // stages of the binned preview for measurements (no-op unless `timings::collect` is on)
+        for (n, d) in &b.timings {
+            crate::timings::lap(&format!("CPU {n}"), *d);
+        }
         if !keep_going() {
             return Ok(None);
         }

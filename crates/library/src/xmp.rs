@@ -246,10 +246,14 @@ pub fn read_text(text: &str) -> Option<Values> {
     }
     let here = element(&text, "lr:hierarchicalSubject").map(li_texts).unwrap_or_default();
     let flat = element(&text, "dc:subject").map(li_texts).unwrap_or_default();
-    // hierarchical takes precedence; leaves without hierarchy in addition
+    // hierarchical takes precedence; flat keywords without hierarchy in addition. Lightroom (and graineo) repeat
+    // every parent term in `dc:subject`: a flat entry that is any segment of a path is part of that path, not an
+    // extra top-level keyword
+    let segments: std::collections::HashSet<String> = here.iter().flat_map(|h| h.split('|')).map(|s| s.trim().to_lowercase()).collect();
     let mut sw: Vec<String> = here.clone();
     for f in flat {
-        if !here.iter().any(|h| h.rsplit('|').next() == Some(f.as_str())) {
+        let key = f.trim().to_lowercase();
+        if !key.is_empty() && !segments.contains(&key) && !sw.iter().any(|s| s.to_lowercase() == key) {
             sw.push(f);
         }
     }
@@ -393,8 +397,18 @@ pub fn insert_into(old: &str, w: &Values) -> Option<String> {
     }
     let mut new = String::new();
     if !w.keywords.is_empty() {
-        let mut leaves: Vec<String> = w.keywords.iter().map(|s| s.rsplit('|').next().unwrap_or(s).to_string()).collect();
-        leaves.dedup();
+        // like Lightroom: the leaves first, then every parent term, each once (ignoring case); reading takes the
+        // parents back as segments of the paths, not as extra keywords
+        let mut leaves: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let segs: Vec<Vec<&str>> = w.keywords.iter().map(|s| s.split('|').collect()).collect();
+        let last = segs.iter().filter_map(|p| p.last().copied());
+        let parents = segs.iter().flat_map(|p| p[..p.len().saturating_sub(1)].iter().copied());
+        for b in last.chain(parents) {
+            if !b.trim().is_empty() && seen.insert(b.trim().to_lowercase()) {
+                leaves.push(b.to_string());
+            }
+        }
         new.push_str("\n   <dc:subject>\n    <rdf:Bag>\n");
         for b in &leaves {
             new.push_str(&format!("     <rdf:li>{}</rdf:li>\n", esc(b)));
@@ -769,6 +783,67 @@ mod tests {
         assert_eq!(t.matches("</rdf:Description>").count(), 2);
     }
     use super::*;
+
+    /// A sidecar as Lightroom Classic writes it with "Export containing keywords" (default): `dc:subject` holds the
+    /// leaves *and* every parent term, `lr:hierarchicalSubject` the full paths. Artificial file, written here.
+    const LIGHTROOM_KEYWORDS: &str = r#"<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 7.0-c000 1.000000, 0000/00/00-00:00:00        ">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+   xmp:Rating="3">
+   <dc:subject>
+    <rdf:Bag>
+     <rdf:li>Hund</rdf:li>
+     <rdf:li>Italien</rdf:li>
+     <rdf:li>Labrador</rdf:li>
+     <rdf:li>Orte</rdf:li>
+     <rdf:li>Rom</rdf:li>
+     <rdf:li>Sommer</rdf:li>
+     <rdf:li>Tiere</rdf:li>
+    </rdf:Bag>
+   </dc:subject>
+   <lr:hierarchicalSubject>
+    <rdf:Bag>
+     <rdf:li>Orte|Italien|Rom</rdf:li>
+     <rdf:li>Tiere|Hund|Labrador</rdf:li>
+     <rdf:li>Sommer</rdf:li>
+    </rdf:Bag>
+   </lr:hierarchicalSubject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"#;
+
+    /// Parent terms Lightroom repeats in `dc:subject` are not taken as extra top-level keywords; a flat keyword
+    /// that is no segment of any path stays.
+    #[test]
+    fn lightroom_parents_in_dc_subject_are_no_extra_roots() {
+        let w = read_text(LIGHTROOM_KEYWORDS).unwrap();
+        let mut got = w.keywords.clone();
+        got.sort();
+        assert_eq!(got, vec!["Orte|Italien|Rom", "Sommer", "Tiere|Hund|Labrador"], "{:?}", w.keywords);
+        // a flat keyword beside the paths (another program, no hierarchy) is kept
+        let extra = LIGHTROOM_KEYWORDS.replace("<rdf:li>Tiere</rdf:li>", "<rdf:li>Tiere</rdf:li>\n     <rdf:li>Strand</rdf:li>");
+        assert!(read_text(&extra).unwrap().keywords.contains(&"Strand".to_string()));
+        // written by graineo: leaves and parents in dc:subject, each once (two "Paris" in different branches),
+        // and read back to exactly the same paths
+        let dir = std::env::temp_dir().join(format!("xmp-kw-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("a.xmp");
+        let paths = vec!["Orte|Frankreich|Paris".to_string(), "Personen|Paris".to_string(), "AC/DC".to_string()];
+        let w = Values { keywords: paths.clone(), has_keywords: true, ..Default::default() };
+        write(&p, &w).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        let subject = element(&text, "dc:subject").map(li_texts).unwrap();
+        assert_eq!(subject, vec!["Paris", "AC/DC", "Orte", "Frankreich", "Personen"]);
+        let mut back = read_text(&text).unwrap().keywords;
+        back.sort();
+        let mut want = paths;
+        want.sort();
+        assert_eq!(back, want);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn lightroom_data_round_trip_keeps_everything_else() {

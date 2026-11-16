@@ -286,11 +286,7 @@ mod language_state_tests {
             })
             .collect::<Vec<_>>();
         let before = files(&dir);
-        let history = app
-            .history
-            .iter()
-            .map(|(k, h)| (*k, (h.undo.len(), h.redo.len())))
-            .collect::<BTreeMap<_, _>>();
+        let history = app.history.snapshot();
         let tabs = (app.tab, app.tool_tab);
         for choice in [i18n::Choice::En, i18n::Choice::Ja, i18n::Choice::Fr, i18n::Choice::Es, i18n::Choice::De] {
             i18n::locale::choose(choice).unwrap();
@@ -320,13 +316,7 @@ mod language_state_tests {
                     .collect::<Vec<_>>(),
                 entries
             );
-            assert_eq!(
-                app.history
-                    .iter()
-                    .map(|(k, h)| (*k, (h.undo.len(), h.redo.len())))
-                    .collect::<BTreeMap<_, _>>(),
-                history
-            );
+            assert_eq!(app.history.snapshot(), history);
             assert_eq!(doc.render_preview(&settings).data, render);
             app.save_current();
             assert_eq!(

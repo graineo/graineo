@@ -3110,6 +3110,26 @@ pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool) -
     clicked
 }
 
+/// [`menu_item`] that, while disabled, tells why: `why` as a tooltip after the usual delay ([`hover_tip`]). Enabled
+/// entries look and act as [`menu_item`].
+pub fn menu_item_why(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool, why: &str) -> bool {
+    let mut b = egui::Button::new(text);
+    if !shortcut.is_empty() {
+        b = b.shortcut_text(egui::RichText::new(shortcut).color(TEXT_DIM));
+    }
+    let resp = ui.add_enabled(enabled, b);
+    if !enabled && !why.is_empty() {
+        // a disabled widget reports no hover: a hover area of its own over the same place
+        let probe = ui.interact(resp.rect, resp.id.with("warum"), egui::Sense::hover());
+        hover_tip(ui, &probe, why);
+    }
+    let clicked = resp.clicked();
+    if clicked {
+        ui.close();
+    }
+    clicked
+}
+
 /// Input field (text or number) like the search field: dark surface [`FIELD_FILL`] with a 1 px frame
 /// [`FIELD_STROKE`], lighter while it has the focus. Buttons stay frameless (surface only).
 pub fn text_field(ui: &mut egui::Ui, widget: impl egui::Widget) -> egui::Response {

@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn groups_never_overlap_and_go_whole() {
         let fixed = [140.0];
-        let groups = [(Group::View, 120.0), (Group::ZoomButtons, 60.0), (Group::Flag, 60.0), (Group::Stars, 110.0), (Group::Labels, 110.0), (Group::Rotate, 60.0), (Group::Overlays, 120.0), (Group::Darkroom, 200.0)];
+        let groups = [(Group::View, 120.0), (Group::ZoomButtons, 60.0), (Group::Flag, 60.0), (Group::Stars, 110.0), (Group::Labels, 110.0), (Group::Rotate, 60.0), (Group::Overlays, 150.0), (Group::Darkroom, 200.0)];
         let mut w = 200.0;
         let mut last = 0;
         while w <= 1600.0 {

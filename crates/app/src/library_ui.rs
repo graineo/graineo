@@ -28,6 +28,10 @@ mod library_filter_bar;
 mod library_load;
 #[path = "library_manage.rs"]
 mod library_manage;
+#[path = "collection_order_ui.rs"]
+mod collection_order_ui;
+#[path = "collection_drag.rs"]
+mod collection_drag;
 #[path = "library_pairs.rs"]
 mod library_pairs;
 // Cleaning up duplicates (group view, suggestion, Trash)
@@ -52,6 +56,9 @@ mod library_views;
 pub use library_manage::PhotoDrag;
 pub use library_load::Loaded;
 use crate::library_filter::Facets;
+
+/// Selection of the column filters and the filters themselves, kept across a rebuild (see `take_facets_state`).
+type FacetsState = (crate::library_filter::Remembered, Option<Box<Facets>>);
 use crate::lr;
 use library::similar::Vectors;
 use library::search;
@@ -350,6 +357,10 @@ pub struct LibraryView {
     writer: crate::rating::Writer,
     /// previous values per rating (⌘Z), newest last
     rating_undo: Vec<Vec<crate::rating::Value>>,
+    /// when each rating change was made (parallel to `rating_undo`, [`crate::undo_order::tick`])
+    rating_at: Vec<u64>,
+    /// when the last move / rename of this session finished (⌘Z of the grid takes it back, see `undo_order.rs`)
+    pub(crate) move_at: u64,
     /// the last undoable action was a rating
     last_was_rating: bool,
     /// show RAW+JPEG pairs as one image (setting `rawJpegStacks`, on by default)
@@ -374,7 +385,13 @@ pub struct LibraryView {
     without_date: usize,
     open_dates: HashSet<String>,
     collections: Vec<Collection>,
+    /// members of every level of `collections` in the panel's order (built when the list changes, `set_collections`)
+    collection_tree: library::collection_order::Tree,
     open_collections: HashSet<i64>,
+    /// open sets as last written to the settings (`None` until restored after the first load)
+    open_collections_saved: Option<HashSet<i64>>,
+    /// dragging collections in the left panel (collection_drag.rs)
+    collection_drag: collection_drag::DragState,
     keywords: Vec<Keyword>,
     /// flat list of the visible keyword rows (depth, index), rebuilt on change
     last_run: Option<i64>,
@@ -445,6 +462,8 @@ pub struct LibraryView {
     centre_width: f32,
     smart_window: bool,
     smart_name: String,
+    /// "Save as smart collection": in this set (`None`: top level)
+    smart_parent: Option<i64>,
     smart_counts: HashMap<i64, Option<usize>>,
     suggestion: usize,
     /// names for the completion in the search field (built in the background)
@@ -785,6 +804,8 @@ impl LibraryView {
             db: None,
             writer: crate::rating::Writer::new(Some(library::db_path())),
             rating_undo: Vec::new(),
+            rating_at: Vec::new(),
+            move_at: 0,
             last_was_rating: false,
             stack: library::settings::value("rawJpegStacks").as_bool().unwrap_or(true),
             kind: library::settings::value("libraryKind").as_u64().map_or(0, |v| v.min(2) as u8),
@@ -802,7 +823,10 @@ impl LibraryView {
             without_date: 0,
             open_dates: HashSet::new(),
             collections: Vec::new(),
+            collection_tree: Default::default(),
             open_collections: HashSet::new(),
+            open_collections_saved: None,
+            collection_drag: Default::default(),
             keywords: Vec::new(),
             last_run: None,
             catalog_counts: None,
@@ -848,6 +872,7 @@ impl LibraryView {
             viewed_listing: None,
             smart_window: false,
             smart_name: String::new(),
+            smart_parent: None,
             smart_counts: HashMap::new(),
             suggestion: 0,
             search_job: Default::default(),
@@ -1043,6 +1068,7 @@ impl LibraryView {
     /// After the first load: last source and active photo, test filters, sync or search index in the background.
     fn after_first_load(&mut self) {
         let Some(ctx) = self.quick_ctx.clone() else { return };
+        self.restore_open_collections();
         self.restore_source();
         self.test_filter(&ctx);
         self.start_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
@@ -1112,12 +1138,16 @@ impl LibraryView {
                 }
                 "collection" => {
                     if let Some(x) = self.collections.iter().find(|x| x.name == v).cloned() {
-                        if let Some(e) = x.parent {
-                            self.open_collections.insert(e);
-                        }
+                        self.open_parents_of(x.id);
                         self.set_source(if x.kind == 2 { Source::Smart(x.id) } else { Source::Collection(x.id) });
                     }
                 }
+                // all sets open (screenshots of the order)
+                "open_collections" if v == "all" => {
+                    self.open_collections.extend(self.collections.iter().filter(|c| c.kind == 1).map(|c| c.id));
+                }
+                // a drag held still for screenshots: "drag=Source>Target:0.5" (names; 0.5 = middle of the target row)
+                "drag" => self.collection_drag.test = collection_drag::test_drag(&self.collections, v),
                 "active" => {
                     self.apply_filter();
                     if let Some(&i) = v.parse::<usize>().ok().and_then(|n| self.visible.get(n)) {
@@ -1182,49 +1212,58 @@ impl LibraryView {
             return;
         }
         let Some(path) = self.db.as_ref().map(|d| d.path.clone()) else { return };
-        self.start_facets(Default::default(), library_facets_job::Assignments::FromDb(path));
+        self.start_facets((Default::default(), None), library_facets_job::Assignments::FromDb(path));
     }
 
-    /// Start (or restart) the background build; `remembered` is restored on the result.
-    fn start_facets(&mut self, remembered: crate::library_filter::Remembered, source: library_facets_job::Assignments) {
+    /// Start (or restart) the background build; the remembered selection is restored on the result, the previous
+    /// filters are kept if nothing they were built from changed.
+    fn start_facets(&mut self, (remembered, previous): FacetsState, source: library_facets_job::Assignments) {
         self.facets = None;
-        self.facets_job = library_facets_job::FacetsJob::start(self.rows.clone(), self.keywords.clone(), source, remembered, self.quick_ctx.clone());
+        self.facets_job = library_facets_job::FacetsJob::start(self.rows.clone(), self.keywords.clone(), source, remembered, previous, self.columns_open, self.quick_ctx.clone());
     }
 
-    /// The selection of the column filters (also while they are being rebuilt) for a rebuild: the filters are taken
-    /// away; `None` if they are not in use at all.
-    fn take_facets_state(&mut self) -> Option<crate::library_filter::Remembered> {
+    /// The selection of the column filters (also while they are being rebuilt) and the filters themselves for a
+    /// rebuild: the filters are taken away; `None` if they are not in use at all.
+    fn take_facets_state(&mut self) -> Option<FacetsState> {
         match self.facets.take() {
             Some(f) => {
                 self.facets_job = None;
-                Some(f.remember())
+                Some((f.remember(), Some(Box::new(f))))
             }
-            None => self.facets_job.take().map(|j| j.remembered),
+            None => self.facets_job.take().map(|j| (j.remembered, j.previous)),
         }
     }
 
     /// Every frame: take the finished column filters (restores the selection, then the grid is filtered again).
     fn poll_facets(&mut self) {
         let Some(job) = &mut self.facets_job else { return };
-        match job.poll() {
-            library_facets_job::Poll::Pending => {}
-            library_facets_job::Poll::Ready(mut f) => {
-                let Some(job) = self.facets_job.take() else { return };
-                if job.rows_len != self.rows.len() {
-                    // the list changed meanwhile: build again for the current one
-                    let source = library_facets_job::Assignments::FromDb(self.db.as_ref().map(|d| d.path.clone()).unwrap_or_default());
-                    self.start_facets(job.remembered, source);
-                    return;
-                }
-                f.restore(&job.remembered);
-                self.facets = Some(*f);
-                self.refilter = true;
-            }
+        // the new filters, or `None`: the inputs are unchanged, the previous ones stay
+        let built = match job.poll() {
+            library_facets_job::Poll::Pending => return,
             library_facets_job::Poll::Lost => {
                 self.facets_job = None;
                 self.refilter = true;
+                return;
             }
+            library_facets_job::Poll::Unchanged => None,
+            library_facets_job::Poll::Ready(f) => Some(f),
+        };
+        let Some(mut job) = self.facets_job.take() else { return };
+        if job.rows_len != self.rows.len() {
+            // the list changed meanwhile: build again for the current one
+            let source = library_facets_job::Assignments::FromDb(self.db.as_ref().map(|d| d.path.clone()).unwrap_or_default());
+            self.start_facets((job.remembered, job.previous), source);
+            return;
         }
+        let Some(mut f) = built.or_else(|| job.previous.take()) else {
+            self.refilter = true;
+            return;
+        };
+        // the same names again (also on the kept filters: the selection may have been cleared meanwhile)
+        f.reset();
+        f.restore(&job.remembered);
+        self.facets = Some(*f);
+        self.refilter = true;
     }
 
     /// Test setup only: the column filters right now (the rows must be loaded).
@@ -2486,8 +2525,10 @@ impl LibraryView {
             return new;
         }
         self.rating_undo.push(old);
+        self.rating_at.push(crate::undo_order::tick());
         if self.rating_undo.len() > 200 {
             self.rating_undo.remove(0);
+            self.rating_at.remove(0);
         }
         self.last_was_rating = true;
         self.write_rating(&new);
@@ -2502,6 +2543,7 @@ impl LibraryView {
             return None;
         }
         let old = self.rating_undo.pop()?;
+        self.rating_at.pop();
         for &(b, s, m, e) in &old {
             if let Some(&i) = self.index.get(&b) {
                 let z = &mut Arc::make_mut(&mut self.rows)[i];
@@ -2512,6 +2554,21 @@ impl LibraryView {
         self.write_rating(&old);
         self.refilter = true;
         Some(old)
+    }
+
+    /// When the rating change ⌘Z would take back was made (`None`: none left).
+    pub fn rating_stamp(&self) -> Option<u64> {
+        self.rating_at.last().copied()
+    }
+
+    /// ⌘Z chose the rating as the most recent action: take it back even if other actions were flagged since.
+    pub fn rating_recent(&mut self) {
+        self.last_was_rating = !self.rating_undo.is_empty();
+    }
+
+    /// When the step ⌘Z of the grid takes back was made: the management (collections, keywords …) or the last move.
+    pub fn external_stamp(&self) -> u64 {
+        self.manage.undo_at.last().copied().unwrap_or(0).max(self.move_at)
     }
 
     /// Another undoable action (slider, move) came after the last rating.
@@ -3174,7 +3231,13 @@ impl LibraryView {
 
     #[allow(clippy::too_many_arguments)]
     fn list_row_icon(ui: &mut egui::Ui, icon: Option<lr::Icon>, text: &str, right: Option<String>, active: bool, depth: usize, open: Option<bool>, dimmed: bool) -> (bool, bool, egui::Response) {
-        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::click());
+        Self::list_row_sense(ui, egui::Sense::click(), icon, text, right, active, depth, open, dimmed)
+    }
+
+    /// [`Self::list_row_icon`] with its own sense (collections: click and drag).
+    #[allow(clippy::too_many_arguments)]
+    fn list_row_sense(ui: &mut egui::Ui, sense: egui::Sense, icon: Option<lr::Icon>, text: &str, right: Option<String>, active: bool, depth: usize, open: Option<bool>, dimmed: bool) -> (bool, bool, egui::Response) {
+        let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), sense);
         if !ui.is_rect_visible(rect) {
             return (false, false, resp);
         }
@@ -3253,6 +3316,7 @@ impl LibraryView {
         egui::ScrollArea::vertical().id_salt("bib-links-scroll").auto_shrink([false; 2]).max_width(w).show(ui, |ui| crate::sticky::scope(ui, |ui| {
             // inside the scroll area: never wider than its viewport (it keeps a band free for the bar)
             ui.set_max_width(ui.available_width().min(w));
+            self.collection_drag.content_top = ui.cursor().min.y;
             if let Some(f) = &self.error {
                 ui.label(egui::RichText::new(crate::menu::i18n::tr_msg(f)).color(Color32::from_rgb(230, 120, 100)));
             }
@@ -3344,15 +3408,10 @@ impl LibraryView {
             // "+" on the right of the SAMMLUNGEN header: create collection, smart collection, set
             let header_top = ui.cursor().min.y;
             let header_right = ui.max_rect().right();
-            lr::section(ui, "Sammlungen", true, |ui| {
-                let root_rows: Vec<usize> = (0..self.collections.len()).filter(|&i| self.collections[i].parent.is_none() && self.collections[i].kind != 3 && Some(self.collections[i].id) != self.quick_id).collect();
-                let mut sorted = root_rows;
-                // sets first, then collections; each by name
-                sorted.sort_by_key(|&i| (self.collections[i].kind != 1, self.collections[i].name.to_lowercase()));
-                for i in sorted {
-                    self.collection_node(ui, i, 0);
-                }
-            });
+            // own order per level (collection_order_ui.rs), dragging (collection_drag.rs)
+            lr::section(ui, "Sammlungen", true, |ui| self.collection_list(ui));
+            self.collections_header_menu(ui, egui::Rect::from_min_max(egui::pos2(ui.max_rect().left(), header_top), egui::pos2(header_right, header_top + 28.0)));
+            self.remember_open_collections();
             {
                 let resp = Self::header_plus(ui, header_top, header_right, "bib-sammlungen-plus", "Sammlung erstellen");
                 egui::Popup::menu(&resp).show(|ui| {
@@ -3471,47 +3530,6 @@ impl LibraryView {
             let children = self.nodes[k].children.clone();
             for c in children {
                 self.folder_node(ui, c, depth + 1, offline);
-            }
-        }
-    }
-
-    fn collection_node(&mut self, ui: &mut egui::Ui, i: usize, depth: usize) {
-        let s = self.collections[i].clone();
-        let children: Vec<usize> = {
-            let mut v: Vec<usize> = (0..self.collections.len()).filter(|&j| self.collections[j].parent == Some(s.id)).collect();
-            v.sort_by_key(|&j| (self.collections[j].kind != 1, self.collections[j].name.to_lowercase()));
-            v
-        };
-        let open = self.open_collections.contains(&s.id);
-        let active = self.source_marked(&Source::Collection(s.id)) || self.source_marked(&Source::Smart(s.id));
-        let count = match s.kind {
-            1 => None,
-            2 => self.smart_count(s.id),
-            _ => Some(s.count),
-        };
-        let name = if s.duplicates { crate::trf!("{a} → Duplikate", a = s.name) } else if s.kind == 2 { format!("{} ⚙", s.name) } else { s.name.clone() };
-        let (click, triangle, resp) = Self::list_row(ui, &name, count, active, depth, (s.kind == 1).then_some(open), s.kind == 2 && !s.translatable && !s.duplicates);
-        if !s.duplicates {
-            resp.context_menu(|ui| self.collection_menu(ui, &s));
-        }
-        // photos dragged here: only plain collections take them (sets and smart collections visibly blocked)
-        if let Some(images) = Self::drop_target(ui, &resp, s.kind == 0 && !s.duplicates) {
-            self.drop_on_collection(s.id, images);
-        }
-        if triangle || (click && s.kind == 1) {
-            if open {
-                self.open_collections.remove(&s.id);
-            } else {
-                self.open_collections.insert(s.id);
-            }
-        } else if click && s.duplicates {
-            self.show_duplicates();
-        } else if click {
-            self.set_source(if s.kind == 2 { Source::Smart(s.id) } else { Source::Collection(s.id) });
-        }
-        if s.kind == 1 && self.open_collections.contains(&s.id) {
-            for c in children {
-                self.collection_node(ui, c, depth + 1);
             }
         }
     }
@@ -3757,6 +3775,11 @@ impl LibraryView {
         // an existing smart collection is never replaced from here: a taken name gets " (2)" etc.
         let actual_name = if name_ok { self.db.as_ref().and_then(|d| d.unique_smart_name(self.smart_name.trim()).ok()) } else { None };
         let renamed = actual_name.as_deref().filter(|n| *n != self.smart_name.trim()).map(str::to_string);
+        // the set to save into (as for "New collection …"); a set that is gone falls back to the top level
+        let sets = self.set_choices();
+        if !sets.iter().any(|(id, _)| *id == self.smart_parent) {
+            self.smart_parent = None;
+        }
         let answer = crate::dialog::show(
             ctx,
             "smart",
@@ -3769,6 +3792,8 @@ impl LibraryView {
                     crate::dialog::text(ui, &crate::trf!("Der Name ist schon vergeben, gesichert wird als „{n}“.", n = n));
                 }
                 ui.add_space(4.0);
+                Self::set_choice(ui, "smart-collection-set", &sets, &mut self.smart_parent);
+                ui.add_space(4.0);
                 ui.label(egui::RichText::new(crate::tr("Regel")).small().color(lr::TEXT_DIM));
                 crate::dialog::chip(ui, &search_text);
             },
@@ -3780,9 +3805,14 @@ impl LibraryView {
         }
         if save && !self.smart_name.trim().is_empty() {
             let name = self.smart_name.trim().to_string();
+            let parent = self.smart_parent;
             let started = self.in_background(
                 move |db| {
                     let (id, _) = db.save_smart_new(&name, &search_text).map_err(|e| e.to_string())?;
+                    // in the chosen set, at its end (new ones at the top level come last there anyway)
+                    if parent.is_some() {
+                        library::collection_order::place(db, id, parent, None)?;
+                    }
                     // optional copy in the root folder (only with "write sidecars"); the library is the main store
                     if let Err(e) = library::collection_file::write_if_enabled(db) {
                         crate::log(&format!("Smart-Sammlungen nicht in Datei geschrieben: {e}"));
@@ -3792,8 +3822,11 @@ impl LibraryView {
                 |b, actions, r| match r {
                     Ok(id) => {
                         if let Some(db) = &b.db {
-                            b.collections = db.collections().unwrap_or_default();
+                            b.set_collections(db.collections().unwrap_or_default());
                         }
+                        b.open_parents_of(id);
+                        b.collection_drag.scroll_to = Some(id);
+                        b.collection_drag.flash(id);
                         b.smart_counts.clear();
                         b.filter.text.clear();
                         if let Some(f) = &mut b.facets {
@@ -4037,6 +4070,8 @@ impl LibraryView {
         if crate::shortcuts::pressed(ui.ctx(), "jump_to_selection") {
             self.jump_request = true;
         }
+        // ⌥⌘↑ / ⌥⌘↓: the collection shown moves within its level (collection_order_ui.rs)
+        self.collection_order_keys(ui.ctx());
         let width = self.centre_width.min(ui.available_width());
         let columns = ((width / self.cell_size).floor() as usize).max(1);
         self.columns = columns;
@@ -4664,13 +4699,14 @@ impl LibraryView {
                     });
                 }
             }
-            let (keywords, collections) = self.db.as_ref().map_or((Vec::new(), Vec::new()), |d| (d.keywords_of(z.image).unwrap_or_default(), d.collections_of(z.image).unwrap_or_default()));
+            // keywords with their id: removing and the keyword sets act on exactly the keyword meant
+            let (keywords, collections) = self.db.as_ref().map_or((Vec::new(), Vec::new()), |d| (library::keywords::shown_of(&d.conn, z.image).unwrap_or_default(), d.collections_of(z.image).unwrap_or_default()));
             // AI keywords in Lightroom (written by an AI tool, mostly without a parent term, partly under
             // "KI-Stichworte"/"KI-Analyse") visibly separated: same words as in the AI description
             let ai = self.db.as_ref().and_then(|d| d.ai_of(z.file));
             let ai_set: HashSet<String> = ai.as_ref().map(|k| k.keywords.iter().map(|w| search::fold_text(w)).collect()).unwrap_or_default();
-            let (ai_kw, keywords): (Vec<String>, Vec<String>) =
-                keywords.into_iter().partition(|s| s.starts_with("KI-") || ai_set.contains(&search::fold_text(s.rsplit(" › ").next().unwrap_or(s))));
+            let (ai_kw, keywords): (Vec<(i64, String)>, Vec<(i64, String)>) =
+                keywords.into_iter().partition(|(_, s)| s.starts_with("KI-") || ai_set.contains(&search::fold_text(s.rsplit(" › ").next().unwrap_or(s))));
             let words = search::free_words(&self.query);
             let mut search_word: Option<String> = None;
             lr::section(ui, "KI", true, |ui| {
@@ -4688,7 +4724,7 @@ impl LibraryView {
                             highlighted(ui, t, &words);
                             ui.add_space(3.0);
                         }
-                        let chips: Vec<String> = if k.keywords.is_empty() { ai_kw.iter().map(|s| s.rsplit(" › ").next().unwrap_or(s).to_string()).collect() } else { k.keywords.clone() };
+                        let chips: Vec<String> = if k.keywords.is_empty() { ai_kw.iter().map(|(_, s)| s.rsplit(" › ").next().unwrap_or(s).to_string()).collect() } else { k.keywords.clone() };
                         if let Some(w) = chips_row(ui, &chips) {
                             search_word = Some(w);
                         }
@@ -4775,8 +4811,9 @@ impl LibraryView {
                 self.in_background(move |d| library::people::answer_suggestion(d, id, accept), |b, _, _| b.review_checked = None);
                 self.review_checked = None;
             }
-            let mut kw_remove: Option<String> = None;
-            let mut kw_add: Option<String> = None;
+            let mut kw_remove: Option<(i64, String)> = None;
+            // chosen keyword (id) or typed text (resolved in the background)
+            let mut kw_add: Option<(Option<i64>, String)> = None;
             lr::section(ui, "Stichwörter", true, |ui| {
                 let n = self.target().len();
                 if n > 1 {
@@ -4789,9 +4826,9 @@ impl LibraryView {
                 // after them, dimmed (a keyword added here that the AI also named must not disappear)
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
-                    for (s, dim) in keywords.iter().map(|s| (s, false)).chain(ai_kw.iter().map(|s| (s, true))) {
+                    for ((id, s), dim) in keywords.iter().map(|s| (s, false)).chain(ai_kw.iter().map(|s| (s, true))) {
                         if chip_remove(ui, s, dim) {
-                            kw_remove = Some(s.rsplit(" › ").next().unwrap_or(s).to_string());
+                            kw_remove = Some((*id, s.clone()));
                         }
                     }
                 });
@@ -4801,10 +4838,13 @@ impl LibraryView {
                 let id = egui::Id::unique("library-keyword-input");
                 let focused = ui.memory(|m| m.has_focus(id));
                 let t = search::fold_text(self.kw_input.trim());
-                let suggestions: Vec<String> = if focused && t.chars().count() >= 2 {
+                // a name in several branches ("Paris" below places and people) is not taken from the typed text alone:
+                // all of them come first in the list and one has to be chosen
+                let same_name = if t.contains(['>', '›', '|']) { 0 } else { self.keywords.iter().filter(|s| search::fold_text(&s.name) == t).count() };
+                let suggestions: Vec<(i64, String)> = if focused && (t.chars().count() >= 2 || same_name > 1) {
                     let mut v: Vec<&Keyword> = self.keywords.iter().filter(|s| search::fold_text(&s.name).starts_with(t.as_str())).collect();
-                    v.sort_by(|a, b| b.count.cmp(&a.count));
-                    v.into_iter().take(6).map(|s| self.kw_path(s.id)).collect()
+                    v.sort_by(|a, b| (search::fold_text(&b.name) == t).cmp(&(search::fold_text(&a.name) == t)).then(b.count.cmp(&a.count)));
+                    v.into_iter().take(same_name.max(6)).map(|s| (s.id, self.kw_path(s.id))).collect()
                 } else {
                     Vec::new()
                 };
@@ -4824,11 +4864,21 @@ impl LibraryView {
                 }
                 let r = crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut self.kw_input).id(id).hint_text(crate::tr("Stichwort hinzufügen")).desired_width(ui.available_width() - 4.0));
                 if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !self.kw_input.trim().is_empty() {
-                    kw_add = Some(suggestions.get(self.kw_pick.wrapping_sub(1)).cloned().unwrap_or_else(|| self.kw_input.trim().to_string()));
+                    match suggestions.get(self.kw_pick.wrapping_sub(1)) {
+                        Some((id, path)) => kw_add = Some((Some(*id), path.replace('|', " › "))),
+                        None if same_name > 1 => {
+                            // ambiguous: the field keeps the text, a suggestion has to be chosen
+                            ui.memory_mut(|m| m.request_focus(id));
+                        }
+                        None => kw_add = Some((None, self.kw_input.trim().to_string())),
+                    }
                 }
-                for (n, path) in suggestions.iter().enumerate() {
+                if same_name > 1 && self.kw_pick == 0 {
+                    ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es mehrfach – bitte wählen", a = self.kw_input.trim())).small().color(lr::TEXT_DIM));
+                }
+                for (n, (kid, path)) in suggestions.iter().enumerate() {
                     if lr::list_item(ui, &path.replace('|', " › "), self.kw_pick == n + 1).clicked() {
-                        kw_add = Some(path.clone());
+                        kw_add = Some((Some(*kid), path.replace('|', " › ")));
                     }
                 }
                 if kw_add.is_some() {
@@ -4850,16 +4900,18 @@ impl LibraryView {
                         });
                     });
                     let set_words = self.kw_sets.get(self.kw_set).map(|x| x.1.clone()).unwrap_or_default();
-                    let leaves: Vec<String> = keywords.iter().map(|s| search::fold_text(s.rsplit(" › ").next().unwrap_or(s))).collect();
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
                         for w in &set_words {
-                            let on = leaves.contains(&search::fold_text(w.rsplit(['|', '>']).next().unwrap_or(w).trim()));
-                            if ui.selectable_label(on, w.rsplit(['|', '>']).next().unwrap_or(w).trim()).clicked() {
-                                if on {
-                                    kw_remove = Some(w.rsplit(['|', '>']).next().unwrap_or(w).trim().to_string());
-                                } else {
-                                    kw_add = Some(w.clone());
+                            // the keyword of the photo this set word means: the same path, or for a plain name the same leaf
+                            let segs = library::keywords::split_typed(w);
+                            let leaf = segs.last().cloned().unwrap_or_default();
+                            let shown = segs.join(library::keywords::SHOWN_SEPARATOR);
+                            let have = keywords.iter().find(|(_, p)| search::fold_text(p) == search::fold_text(&shown) || segs.len() == 1 && search::fold_text(p.rsplit(" › ").next().unwrap_or(p)) == search::fold_text(&leaf));
+                            if ui.selectable_label(have.is_some(), &leaf).clicked() {
+                                match have {
+                                    Some(h) => kw_remove = Some(h.clone()),
+                                    None => kw_add = Some((None, w.clone())),
                                 }
                             }
                         }
@@ -4867,19 +4919,41 @@ impl LibraryView {
                 }
                 if ui.add_enabled(!keywords.is_empty(), egui::Button::new(crate::tr("Als Stichwortsatz sichern …")).small()).clicked() {
                     let n = crate::trf!("Satz {a}", a = self.kw_sets.len() + 1);
-                    self.kw_set_dialog = Some((n, keywords.iter().map(|s| s.replace(" › ", "|")).collect()));
+                    self.kw_set_dialog = Some((n, keywords.iter().map(|(_, s)| s.replace(" › ", "|")).collect()));
                 }
             });
             if kw_add.is_some() || kw_remove.is_some() {
                 let target = self.target();
-                let extra: Vec<String> = kw_add.into_iter().collect();
-                let remove: Vec<String> = kw_remove.into_iter().collect();
-                // database and sidecars in the background; afterwards list and filters again
+                let label = match (&kw_add, &kw_remove) {
+                    (Some((_, t)), _) => crate::trf!("Stichwort „{a}“ zugewiesen", a = t),
+                    (None, Some((_, t))) => crate::trf!("Stichwort „{a}“ entfernt", a = t),
+                    _ => String::new(),
+                };
+                // database and sidecars in the background, by id (exactly the keyword meant); ⌘Z takes it back
                 self.in_background(
-                    move |db| library::sync::change_keywords(db, &target, &extra, &remove),
-                    |b, actions, r| {
+                    move |db| {
+                        let mut add = Vec::new();
+                        match kw_add {
+                            Some((Some(id), _)) => add.push(id),
+                            Some((None, text)) => match library::keywords::resolve(db, &text, true)? {
+                                library::keywords::Resolved::Existing(id) | library::keywords::Resolved::Created(id) => add.push(id),
+                                library::keywords::Resolved::Missing => {}
+                                library::keywords::Resolved::Ambiguous(paths) => return Err(library::keywords::ambiguous_message(&text, &paths)),
+                            },
+                            None => {}
+                        }
+                        let remove: Vec<i64> = kw_remove.into_iter().map(|x| x.0).collect();
+                        library::keywords::change(db, &target, &add, &remove)
+                    },
+                    move |b, actions, r| {
                         match r {
-                            Ok(n) => actions.push(Action::Status(crate::trf!("Stichwörter geändert ({n} Begleitdatei(en) geschrieben)", n = n))),
+                            Ok((n, snap)) => {
+                                let text = crate::trf!("{a} ({n} Begleitdatei(en) geschrieben)", a = label, n = n);
+                                actions.push(Action::Status(library_manage::keyword_status(&text, &snap)));
+                                if !snap.is_empty() {
+                                    b.manage.push(library_manage::Undo::Snap { label, snap, keywords: true, smart: false });
+                                }
+                            }
                             Err(e) => actions.push(Action::Status(crate::trf!("Stichwörter: {e}", e = e))),
                         }
                         b.reload_keywords();
@@ -6082,6 +6156,7 @@ impl LibraryView {
             |b, actions, r| match r {
                 Ok((v, loaded)) => {
                     actions.push(Action::Status(crate::trf!("{a} – ⌘Z macht es rückgängig", a = v.title)));
+                    b.move_at = crate::undo_order::tick();
                     b.adopt_or_reload(loaded);
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -6105,6 +6180,8 @@ impl LibraryView {
         if self.manage_undo() {
             return;
         }
+        // the move of this session is taken back (older journals count as old)
+        self.move_at = 0;
         // in the background; the message comes with the result, after a move still running (jobs run in order)
         let ticket = self.load_ticket();
         self.in_background(
@@ -7050,9 +7127,14 @@ impl LibraryView {
     /// Create a virtual copy of `image` in the background; then reload the list and report `Action::CopyCreated`.
     /// `false`: no library.
     pub fn create_copy_for(&mut self, image: i64) -> bool {
+        self.create_copy_named(image, None)
+    }
+
+    /// [`Self::create_copy_for`] with a name for the copy (taken if free, else "Kopie N").
+    pub fn create_copy_named(&mut self, image: i64, name: Option<String>) -> bool {
         let ticket = self.load_ticket();
         self.in_background(
-            move |db| library::sync::create_copy(db, image, None).map(|c| (c, ticket.load(db).ok())),
+            move |db| library::sync::create_copy(db, image, name.as_deref()).map(|c| (c, ticket.load(db).ok())),
             move |b, actions, r| {
                 let r = match r {
                     Ok((c, loaded)) => {
@@ -7507,11 +7589,8 @@ impl LibraryView {
                     }
                     self.scroll_to_folder = Some((*r, p.clone()));
                 }
-                if let Some(e) = match &q {
-                    Source::Collection(id) | Source::Smart(id) => self.collections.iter().find(|x| x.id == *id).and_then(|x| x.parent),
-                    _ => None,
-                } {
-                    self.open_collections.insert(e);
+                if let Source::Collection(id) | Source::Smart(id) = &q {
+                    self.open_parents_of(*id);
                 }
                 self.source = q;
                 self.source_changed();

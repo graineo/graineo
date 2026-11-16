@@ -56,6 +56,8 @@ struct Job {
     done: usize,
     record: bool,
     changes: Vec<Change>,
+    /// the develop history of the command (photos held in memory are recorded here when their block arrives)
+    history: Option<crate::multi_apply::HistoryJob>,
 }
 
 /// State of "Apply to the selection" (one per app).
@@ -271,19 +273,26 @@ impl App {
             return;
         }
         let mode = self.multi.mode();
-        self.multi_submit(vec![step(&base, &now, mode)], targets, true);
+        let cmd = crate::history::Command::new(crate::history::Hint::sync(&self.entries[cur].name, Some(mode == Mode::Relative)));
+        self.multi_submit(vec![step(&base, &now, mode)], targets, true, Some((cmd, false)));
         // the change is handed over: the next one counts from here
         self.multi_base = Some((self.entries[cur].image, now));
         self.lib.rating_not_recent();
     }
 
     /// Hand a request to the background; its progress shows at the top of the Edit tool and in the title bar.
-    pub(crate) fn multi_submit(&mut self, steps: Vec<Step>, targets: Vec<Target>, record: bool) {
+    /// `history`: the command and whether this is its undo (steps of the develop history, see `history.rs`).
+    pub(crate) fn multi_submit(&mut self, steps: Vec<Step>, targets: Vec<Target>, record: bool, history: Option<(crate::history::Command, bool)>) {
         let total = targets.len();
         let ctx = self.multi.ctx.clone();
-        let id = self.multi.runner.submit(ctx.as_ref(), steps, targets, record);
+        let history = history.map(|(cmd, undo)| crate::multi_apply::HistoryJob {
+            cmd,
+            undo,
+            memory: targets.iter().filter(|t| self.history.in_memory(&crate::history::Key { path: t.path.clone(), copy: t.copy.clone() })).map(|t| (t.image, t.copy.clone())).collect(),
+        });
+        let id = self.multi.runner.submit_with(ctx.as_ref(), steps, targets, record, history.clone());
         if !self.multi.jobs.iter().any(|j| j.id == id) {
-            self.multi.jobs.push(Job { id, total, done: 0, record, changes: Vec::new() });
+            self.multi.jobs.push(Job { id, total, done: 0, record, changes: Vec::new(), history });
         }
     }
 
@@ -308,6 +317,14 @@ impl App {
         for m in self.multi.runner.take() {
             match m {
                 Msg::Block { id, changes, done, total } => {
+                    // steps of the photos whose history is held here (the others went into the library with the block)
+                    if let Some(h) = self.multi.jobs.iter().find(|j| j.id == id).and_then(|j| j.history.clone()) {
+                        for (c, _) in changes.iter().filter(|(c, _)| h.memory.contains(&(c.image, c.copy.clone()))) {
+                            if let Some(i) = self.entries.iter().position(|e| e.image == c.image && e.copy == c.copy) {
+                                self.history_command(i, &c.before, &c.after, &h.cmd, h.undo);
+                            }
+                        }
+                    }
                     self.multi_block(&changes);
                     if let Some(j) = self.multi.jobs.iter_mut().find(|j| j.id == id) {
                         j.done = done;
@@ -323,7 +340,8 @@ impl App {
                     let n = j.changes.len();
                     if j.record && n > 0 {
                         self.lib.rating_not_recent();
-                        self.turn_undo.record_settings(j.changes);
+                        let cmd = j.history.map_or_else(|| crate::history::Command::new(crate::history::Hint::sync("", None)), |h| h.cmd);
+                        self.turn_undo.record_settings(j.changes, cmd);
                     }
                     if errors > 0 {
                         self.status = crate::trf!("{n} Fotos nicht gespeichert: {e}", n = errors, e = error.unwrap_or_default());

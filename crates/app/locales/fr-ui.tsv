@@ -2303,6 +2303,18 @@ Für Druckereien und Fotolabore, die Adobe RGB verlangen. Im Zweifel dort nachfr
 Größter Farbraum, zum Weiterbearbeiten in Photoshop oder Lightroom – am besten als TIFF 16 Bit.	Plus grand espace colorimétrique, pour poursuivre le traitement dans Photoshop ou Lightroom – de préférence en TIFF 16 bits.
 graineo zeigt Bilder derzeit in sRGB; was darüber hinausgeht, siehst du erst im Zielprogramm.	graineo affiche actuellement les images en sRVB ; les couleurs au-delà n'apparaissent que dans le programme de destination.
 Gesichter anzeigen	Afficher les visages
+Fokusfeld der Kamera zeigen	Afficher la zone de mise au point de l'appareil
+Fokusfeld der Kamera ein/aus (Z/Klick: 100 % an dieser Stelle)	Zone de mise au point de l'appareil oui/non (Z/clic : 100 % à cet endroit)
+Fokusfeld der Kamera: scharf gemeldet	Zone de mise au point de l'appareil : signalée nette
+Fokusfeld der Kamera: gewählt	Zone de mise au point de l'appareil : sélectionnée
+Fokusstelle der Kamera	Position de mise au point de l'appareil
+Fokuspunkt der Kamera: Kamera meldet unscharf	Point de mise au point de l'appareil : l'appareil signale un flou
+Fokuspunkt der Kamera	Point de mise au point de l'appareil
+Motivbereich laut Kamera	Zone du sujet selon l'appareil
+Klick oder {k}: 100 % an dieser Stelle	Clic ou {k} : 100 % à cet endroit
+Kein Fokusfeld in dieser Datei	Aucune zone de mise au point dans ce fichier
+Manuell fokussiert – kein Fokusfeld	Mise au point manuelle – pas de zone de mise au point
+Fokusfeld liegt außerhalb des Ausschnitts	La zone de mise au point est hors du recadrage
 Umbenennen …	Renommer…
 Ja, zusammenführen	Oui, fusionner
 „{a}“ gibt es schon. {b} Gesichter von „{c}“ dazunehmen?	« {a} » existe déjà. Ajouter {b} visages de « {c} » ?
@@ -5249,3 +5261,208 @@ Nur ansehen – Originale unverändert	Affichage seul – tes originaux restent 
 Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	Ne concerne que les notes. Les développements sont toujours enregistrés dans un fichier annexe à côté de la photo.
 Zielordner wird geprüft …	Vérification du dossier de destination …
 Zielordner antwortet nicht: {}	Le dossier de destination ne répond pas : {}
+{n} spätere Schritte verworfen – ⌘Z holt sie zurück	{n} étapes suivantes abandonnées – ⌘Z les rétablit
+Ausgangszustand (Lightroom)	État initial (Lightroom)
+Stand vor dem Verlauf	État avant l’historique
+Außerhalb geändert	Modifié ailleurs
+Ältere Schritte zusammengefasst	Étapes plus anciennes regroupées
+Vorgabe: {name}	Préréglage : {name}
+Film: {name}	Film : {name}
+Look: {name}	Look : {name}
+Einstellungen eingefügt	Réglages collés
+Einstellungen übertragen	Réglages transférés
+Aus Lightroom übernommen	Repris de Lightroom
+Mehrere Einstellungen ({names}, +{n})	Plusieurs réglages ({names}, +{n})
+Alle Verläufe löschen?	Supprimer tous les historiques ?
+Die Schritte aller Fotos werden aus der Bibliothek gelöscht. Die Bearbeitungen selbst bleiben, wie sie jetzt sind.	Les étapes de toutes les photos sont supprimées de la bibliothèque. Les retouches elles-mêmes restent telles qu’elles sont.
+Ältere Sicherungen der Bibliothek enthalten die Verläufe weiterhin.	Les sauvegardes plus anciennes de la bibliothèque contiennent toujours les historiques.
+Alle löschen	Tout supprimer
+{n} Schritte gelöscht	{n} étapes supprimées
+Verlauf speichern	Conserver l’historique
+Schritte jeder Bearbeitung, nur in der Bibliothek auf diesem Rechner. Aus: nur bis zum Beenden.	Étapes de chaque retouche, uniquement dans la bibliothèque de cet ordinateur. Désactivé : seulement jusqu’à la fermeture.
+Alle Verläufe löschen	Supprimer tous les historiques
+Jeder Schritt der Bearbeitung dieses Fotos, der neueste oben.	Chaque étape de la retouche de cette photo, la plus récente en haut.
+• **Klick** auf einen Schritt springt dorthin; das Bild zeigt seinen Stand. Es entsteht kein neuer Schritt\n• **▶** markiert den Schritt, der gerade gilt\n• **Gedimmte Schritte** liegen nach dem Zeiger und bleiben anklickbar. Die nächste Änderung verwirft sie; ⌘Z gleich danach holt sie zurück\n• **Überfahren** zeigt den Stand eines Schritts im Bild, ohne zu springen\n• **Original** springt zum Ausgangszustand, so wie graineo das Foto zuerst entwickelt hat\n• **(3×)** – Änderungen am selben Regler kurz hintereinander, zusammengefasst\n\nDer Verlauf steht in der Bibliothek auf diesem Rechner (Einstellungen → Bibliothek: „Verlauf speichern“).	• **Cliquer** sur une étape y saute ; l’image montre son état. Aucune nouvelle étape n’est créée\n• **▶** marque l’étape qui s’applique actuellement\n• **Les étapes estompées** suivent le pointeur et restent cliquables. La modification suivante les abandonne ; ⌘Z juste après les rétablit\n• **Le survol** montre l’état d’une étape dans l’image sans y sauter\n• **Original** saute à l’état initial, tel que graineo a développé la photo la première fois\n• **(3×)** – modifications du même curseur coup sur coup, regroupées\n\nL’historique est conservé dans la bibliothèque de cet ordinateur (Réglages → Bibliothèque : « Conserver l’historique »).
+{n} Schritte	{n} étapes
+Original ⟲	Original ⟲
+Noch keine Änderungen	Aucune modification pour l’instant
+Zum Ausgangszustand springen	Sauter à l’état initial
+gestern	hier
+Aufklappen (⌥-Klick: mit allen Unterbegriffen)	Déplier (⌥-clic : avec tous les sous-termes)
+Zuklappen (⌥-Klick: mit allen Unterbegriffen)	Replier (⌥-clic : avec tous les sous-termes)
+{a} mit Unterbegriffen · {b} direkt vergeben	{a} avec sous-termes · {b} attribuées directement
+„{a}“ gibt es mehrfach – bitte wählen	« {a} » existe plusieurs fois – veuillez choisir
+Stichwort „{a}“ zugewiesen	Mot-clé « {a} » attribué
+Stichwort „{a}“ entfernt	Mot-clé « {a} » retiré
+{a} ({n} Begleitdatei(en) geschrieben)	{a} ({n} fichier(s) annexe(s) écrit(s))
+Vorher wird die Bibliothek gesichert.	La bibliothèque est d’abord sauvegardée.
+„{a}“ in „{b}“ gelegt	« {a} » placé dans « {b} »
+„{a}“ auf die oberste Ebene gelegt	« {a} » placé au niveau supérieur
+{a} – dort gibt es schon eine mit diesem Namen	{a} – il y en a déjà une portant ce nom
+„{a}“ nach Namen geordnet	« {a} » trié par nom
+Sammlungen nach Namen geordnet	Collections triées par nom
+Ordnen	Organiser
+Nach Namen ordnen	Trier par nom
+gezeigte Sammlung in ihrer Ebene nach oben	monter la collection affichée dans son niveau
+gezeigte Sammlung in ihrer Ebene nach unten	descendre la collection affichée dans son niveau
+Die Sammlung gibt es nicht mehr.	La collection n’existe plus.
+Ziel ist kein Sammlungssatz.	La cible n’est pas un ensemble de collections.
+Ein Satz kann nicht in sich selbst liegen.	Un ensemble ne peut pas se trouver dans lui-même.
+Alben von Apple Fotos bleiben im Satz „Apple Fotos“.	Les albums d’Apple Photos restent dans l’ensemble « Apple Fotos ».
+In den Satz „Apple Fotos“ kommen nur Alben von Apple Fotos.	Seuls les albums d’Apple Photos vont dans l’ensemble « Apple Fotos ».
+Nach oben	Monter
+Nach unten	Descendre
+An den Anfang	Placer au début
+Ans Ende	Placer à la fin
+Aus dem Verlauf von {name}, Schritt {n}	De l’historique de {name}, étape {n}
+Eingefügt von {name}	Collé depuis {name}
+Übertragen von {name} (relativ)	Transféré depuis {name} (relatif)
+Übertragen von {name}	Transféré depuis {name}
+Rückgängig: {name}	Annuler : {name}
+Als Version speichern …	Enregistrer comme version …
+Mit aktuellem Stand vergleichen	Comparer à l’état actuel
+Verlauf bis hier zusammenfassen	Regrouper l’historique jusqu’ici
+Verlauf dieses Fotos löschen …	Supprimer l’historique de cette photo …
+Verlauf · {name}	Historique · {name}
+Als Version speichern	Enregistrer comme version
+Name der Version	Nom de la version
+Eine virtuelle Kopie mit dem Stand dieses Schritts. Das Foto selbst bleibt, wie es ist.	Une copie virtuelle avec l’état de cette étape. La photo elle-même reste telle quelle.
+Verlauf dieses Fotos löschen?	Supprimer l’historique de cette photo ?
+Alle Schritte dieses Fotos werden gelöscht. Die Bearbeitung selbst bleibt, wie sie jetzt ist.	Toutes les étapes de cette photo sont supprimées. La retouche elle-même reste telle qu’elle est.
+Stichwörter ordnen	Organiser les mots-clés
+Häufigkeit	Fréquence
+Sortieren	Trier
+Personen zeigen	Afficher les personnes
+Personen sind Stichwörter mit Gesichtern; sie bleiben sonst ausgeblendet, damit sie nicht aus Versehen umgehängt werden.	Les personnes sont des mots-clés avec des visages ; sinon elles restent masquées pour ne pas être déplacées par erreur.
+{n} Änderungen · ⌘Z nimmt sie einzeln zurück	{n} modifications · ⌘Z les annule une à une
+{a} auf die oberste Ebene legen	Placer {a} au niveau supérieur
+{a} mit „{b}“ zusammenführen	Fusionner {a} avec « {b} »
+{a} unter „{b}“ legen	Placer {a} sous « {b} »
+„{a}“ angelegt	« {a} » créé
+Neuer Oberbegriff „{a}“	Nouveau terme parent « {a} »
+„{a}“ unter „{b}“ gelegt	« {a} » placé sous « {b} »
+{n} Stichwörter unter „{b}“ gelegt	{n} mots-clés placés sous « {b} »
+{n} Stichwörter auf die oberste Ebene gelegt	{n} mots-clés placés au niveau supérieur
+{n} Stichwörter	{n} mots-clés
+Kein Stichwort gewählt	Aucun mot-clé sélectionné
+{a} Fotos ({b} direkt)	{a} photos ({b} directement)
+{n} Unterbegriffe	{n} sous-termes
+{n} Stichwörter gewählt	{n} mots-clés sélectionnés
+Neuer Unterbegriff (auch „A > B“)	Nouveau sous-terme (aussi « A > B »)
+Name des Oberbegriffs	Nom du terme parent
+Zusammenführen mit (filtern)	Fusionner avec (filtrer)
+Verschieben unter (filtern)	Déplacer sous (filtrer)
+Ältere Schritte lassen sich nicht mehr rückgängig machen ({n})	Les étapes plus anciennes ne peuvent plus être annulées ({n})
+{n} Stichwörter mit „{b}“ zusammenführen?	Fusionner {n} mots-clés avec « {b} » ?
+Alle Fotos mit diesen Stichwörtern bekommen „{b}“. Die Stichwörter verschwinden; Begriffe darunter liegen danach unter „{b}“.	Toutes les photos avec ces mots-clés reçoivent « {b} ». Les mots-clés disparaissent ; les termes en dessous passent sous « {b} ».
+und {n} weitere	et {n} de plus
+Ziel „{a}“: {n}	Cible « {a} » : {n}
+{n} Stichwörter mit „{b}“ zusammengeführt	{n} mots-clés fusionnés avec « {b} »
+Mit allen Unterbegriffen löschen ({n} Unterbegriffe; {p} verlieren Stichwörter)	Supprimer avec tous les sous-termes ({n} sous-termes ; {p} perdent des mots-clés)
+Nur „{a}“ löschen; Unterbegriffe rücken eine Ebene hoch ({p} verlieren „{a}“)	Supprimer seulement « {a} » ; les sous-termes remontent d’un niveau ({p} perdent « {a} »)
+Die Fotos bleiben in der Bibliothek. ⌘Z holt alles zurück.	Les photos restent dans la bibliothèque. ⌘Z rétablit tout.
+Stichwörter ordnen … (Bibliothek)	Organiser les mots-clés… (bibliothèque)
+Stichwörter ordnen …	Organiser les mots-clés…
+Neuer Unterbegriff …	Nouveau sous-terme…
+Neues Stichwort …	Nouveau mot-clé…
+Neuer Oberbegriff …	Nouveau terme parent…
+Zusammenführen mit …	Fusionner avec…
+Nur einzeln	Un seul à la fois
+Legt einen Begriff an und hängt die Auswahl darunter	Crée un terme et place la sélection dessous
+Auch per Ziehen auf eine Zeile	Aussi en glissant sur une ligne
+Auch per Ziehen mit ⌥	Aussi en glissant avec ⌥
+Schließt den Dialog und zeigt die Fotos mit diesem Stichwort und allen darunter	Ferme la boîte de dialogue et affiche les photos avec ce mot-clé et tous ceux en dessous
+Liegt schon dort.	Déjà à cet endroit.
+Ein Stichwort kann nicht unter sich selbst liegen.	Un mot-clé ne peut pas se trouver sous lui-même.
+Marken aus Lightroom …	Marques de Lightroom…
+Stichwörter, die Lightroom nicht exportiert, hier als „nicht exportieren“ markieren (der Katalog wird nur gelesen)	Marquer ici comme « ne pas exporter » les mots-clés que Lightroom n’exporte pas (le catalogue est seulement lu)
+Vorschläge …	Suggestions…
+Vorschläge zum Ordnen: Schreibweisen, Einzahl/Mehrzahl, Mehrwort-Namen, fast immer gemeinsam vergebene Stichwörter	Suggestions de classement : graphies, singulier/pluriel, noms en plusieurs mots, mots-clés presque toujours attribués ensemble
+{n} Stichwörter werden wieder exportiert	{n} mots-clés sont de nouveau exportés
+{n} Stichwörter werden nicht exportiert	{n} mots-clés ne sont pas exportés
+Nicht exportieren	Ne pas exporter
+Vorschläge zum Ordnen	Suggestions de classement
+Vorschläge werden berechnet …	Calcul des suggestions…
+„{a}“ mit „{b}“ zusammenführen	Fusionner « {a} » avec « {b} »
+„{a}“ unter „{b}“ legen	Placer « {a} » sous « {b} »
+{a} / {b} Fotos · {p} %	{a} / {b} photos · {p} %
+{a} / {b} Fotos	{a} / {b} photos
+Keine Vorschläge.	Aucune suggestion.
+Gewählte anwenden …	Appliquer la sélection…
+„{a}“ → „{b}“	« {a} » → « {b} »
+„{a}“ unter „{b}“	« {a} » sous « {b} »
+Oberbegriffe mitschreiben	Inclure les termes parents
+Zu „Labrador“ auch „Hunde“ und „Tiere“ in die Stichwörter der Datei	Avec « Labrador », aussi « Hunde » et « Tiere » dans les mots-clés du fichier
+Hierarchie mitschreiben	Inclure la hiérarchie
+Zusätzlich die vollen Pfade („Tiere|Hunde|Labrador“, lr:hierarchicalSubject) für Programme, die Stichwort-Hierarchien lesen	Aussi les chemins complets (« Tiere|Hunde|Labrador », lr:hierarchicalSubject) pour les programmes qui lisent les hiérarchies
+Oberbegriffe der Stichwörter mitschreiben	Inclure les termes parents des mots-clés
+Zu „Labrador“ auch „Hunde“ und „Tiere“; gilt beim Export mit Metadaten „Alles“	Avec « Labrador », aussi « Hunde » et « Tiere » ; s’applique aux exports avec métadonnées « Tout »
+Stichwort-Hierarchie mitschreiben	Inclure la hiérarchie des mots-clés
+Volle Pfade in lr:hierarchicalSubject, für Programme, die Hierarchien lesen	Chemins complets dans lr:hierarchicalSubject, pour les programmes qui lisent les hiérarchies
+Marken aus Lightroom übernehmen?	Reprendre les marques de Lightroom ?
+Lightroom-Katalog wird gelesen …	Lecture du catalogue Lightroom…
+Alle Stichwörter, die Lightroom nicht exportiert, sind hier schon markiert.	Tous les mots-clés que Lightroom n’exporte pas sont déjà marqués ici.
+{n} Stichwörter würden als „nicht exportieren“ markiert (mit allem darunter).	{n} mots-clés seraient marqués « ne pas exporter » (avec tout ce qui est dessous).
+Der Katalog wird nur gelesen. ⌘Z holt alles zurück.	Le catalogue est seulement lu. ⌘Z rétablit tout.
+Markieren	Marquer
+{n} Vorschläge anwenden?	Appliquer {n} suggestions ?
+{a} Stichwörter werden untergeordnet, {b} zusammengeführt; {c} betroffen.	{a} mots-clés subordonnés, {b} fusionnés ; {c} concernées.
+{n} Vorschläge angewendet	{n} suggestions appliquées
+{n} Vorschläge angewendet, {m} übersprungen	{n} suggestions appliquées, {m} ignorées
+Schreibweise	Graphie
+Einzahl/Mehrzahl	Singulier/pluriel
+Mehrwort-Name	Nom en plusieurs mots
+Fast immer zusammen	Presque toujours ensemble
+Ein Oberbegriff ist schon als „nicht exportieren“ markiert	Un terme parent est déjà marqué « ne pas exporter »
+Gilt mit allem darunter: diese Stichwörter kommen nicht in exportierte Dateien	S’applique avec tout ce qui est dessous : ces mots-clés n’entrent pas dans les fichiers exportés
+{a} ({n})	{a} ({n})
+Keine Fotos gefunden.	Aucune photo trouvée.
+Die Messung ist mit einem Fehler abgebrochen (siehe Protokoll).	La mesure s’est arrêtée sur une erreur (voir le journal).
+Messung abbrechen	Arrêter la mesure
+Leistungsbericht erstellen	Créer un rapport de performances
+graineo misst, wie schnell dieser Rechner Fotos öffnet und entwickelt: jede Stufe dreimal, mit Grafikkarte und Prozessor. Das dauert einige Minuten, der Lüfter kann dabei anlaufen.	graineo mesure la vitesse à laquelle cet ordinateur ouvre et développe les photos : chaque étape trois fois, avec la carte graphique et avec le processeur. Cela prend quelques minutes et le ventilateur peut se mettre en marche.
+Der Bericht ist eine Textdatei auf diesem Rechner, ohne Pfade, Datei-, Benutzer- und Rechnernamen. graineo sendet nichts – schick die Datei bei Bedarf selbst.	Le rapport est un fichier texte sur cet ordinateur, sans chemins ni noms de fichier, d’utilisateur ou d’ordinateur. graineo n’envoie rien – envoie le fichier toi-même si tu le souhaites.
+Systemangaben	Informations système
+Foto {a} von {b} · {c} · Lauf {d} von {e} · {f}	Photo {a} sur {b} · {c} · passe {d} sur {e} · {f}
+Bitte währenddessen nicht mit graineo arbeiten; andere Programme verfälschen die Zeiten.	Évite de travailler avec graineo pendant ce temps ; d’autres programmes faussent les durées.
+Bericht gespeichert. Schick die Textdatei (und die JSON-Datei daneben) an die Entwickler, z. B. per E-Mail oder als Anhang eines GitHub-Issues.	Rapport enregistré. Envoie le fichier texte (et le fichier JSON à côté) aux développeurs, par exemple par e-mail ou en pièce jointe d’un ticket GitHub.
+Im Explorer zeigen	Afficher dans l’Explorateur
+Pfad kopieren	Copier le chemin
+Dateien wählen …	Choisir des fichiers…
+Fotos werden gesucht …	Recherche des photos…
+Keine Fotos gefunden (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).	Aucune photo trouvée (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).
+Je Kamerafamilie ein Foto aus {a} gefundenen.	Une photo par famille d’appareils, parmi {a} trouvées.
+{a} weitere Dateien nicht berücksichtigt (höchstens 10).	{a} autres fichiers ignorés (10 au maximum).
+Wähle einen Ordner oder bis zu 10 Fotos: am besten je eines von jeder Kamera, die du nutzt (Merrill, Quattro, ältere Foveon, Fuji X-Trans, andere RAWs, JPEG/HEIC).	Choisis un dossier ou jusqu’à 10 photos : idéalement une de chaque appareil que tu utilises (Merrill, Quattro, anciens Foveon, Fuji X-Trans, autres RAW, JPEG/HEIC).
+Messung abgebrochen, kein Bericht geschrieben.	Mesure arrêtée, aucun rapport écrit.
+Ordner mit Fotos für den Leistungsbericht	Dossier de photos pour le rapport de performances
+Fotos für den Leistungsbericht (bis zu 10)	Photos pour le rapport de performances (jusqu’à 10)
+Zeitprotokoll	Journal des durées
+Schreibt je geöffnetem Foto eine Zeile mit Zeiten (ohne Datei- und Ordnernamen) in timings.log im Protokollordner. Bleibt auf diesem Rechner; der Leistungsbericht hängt die letzten 100 Zeilen an	Écrit une ligne de durées par photo ouverte (sans noms de fichier ni de dossier) dans timings.log, dans le dossier des journaux. Reste sur cet ordinateur ; le rapport de performances ajoute les 100 dernières lignes
+Leistungsbericht	Rapport de performances
+Misst, wie schnell dieser Rechner Fotos öffnet und entwickelt, und schreibt eine Textdatei zum Einsenden	Mesure la vitesse à laquelle cet ordinateur ouvre et développe les photos et écrit un fichier texte à envoyer
+Erstellen …	Créer…
+Je Kamerafamilie nimmt graineo ein Foto aus dem Ordner (höchstens 8)	graineo prend une photo par famille d’appareils dans le dossier (8 au maximum)
+Bis zu 10 Fotos; je Kamerafamilie zählt eines	Jusqu’à 10 photos ; une seule compte par famille d’appareils
+Pfad der Textdatei in die Zwischenablage	Copie le chemin du fichier texte dans le presse-papiers
+Datei lesen	Lire le fichier
+Erstes Bild	Première image
+Exakte Basis (Grafikkarte)	Base exacte (carte graphique)
+Exakte Basis (Prozessor)	Base exacte (processeur)
+Eingepasste Ansicht	Vue ajustée
+Volle Auflösung (Grafikkarte)	Pleine résolution (carte graphique)
+Volle Auflösung (Prozessor)	Pleine résolution (processeur)
+JPEG-Export	Export JPEG
+1 Smart-Sammlung angepasst	1 collection dynamique mise à jour
+{n} Smart-Sammlungen angepasst	{n} collections dynamiques mises à jour
+Smart-Sammlungen unverändert (Begriff mehrdeutig): {a}	Collections dynamiques inchangées (terme ambigu) : {a}
+Gespeichert, aber nicht alles nachgezogen: {e}	Enregistré, mais tout n’a pas été mis à jour : {e}
+ · ohne Stichwörter (Bibliothek nicht lesbar)	 · sans mots-clés (bibliothèque illisible)
+ · Metadaten nicht geschrieben	 · métadonnées non écrites
+Alben aus Apple Fotos lassen sich hier nicht füllen – der nächste Abgleich würde die Zuordnung wieder überschreiben.	Les albums d’Apple Photos ne peuvent pas être remplis ici – la prochaine synchronisation écraserait l’attribution.
+Steht schon ganz oben	Déjà tout en haut
+Steht schon ganz unten	Déjà tout en bas
+Schon nach Namen geordnet	Déjà trié par nom
+Steht schon auf der obersten Ebene	Déjà au niveau supérieur
+Alben aus Apple Fotos bleiben in ihrem Satz	Les albums d’Apple Photos restent dans leur ensemble
+In Lightroom: {n} Schritte	Dans Lightroom : {n} étapes

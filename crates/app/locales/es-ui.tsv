@@ -2303,6 +2303,18 @@ Für Druckereien und Fotolabore, die Adobe RGB verlangen. Im Zweifel dort nachfr
 Größter Farbraum, zum Weiterbearbeiten in Photoshop oder Lightroom – am besten als TIFF 16 Bit.	Espacio de color más amplio, para seguir editando en Photoshop o Lightroom; mejor como TIFF de 16 bits.
 graineo zeigt Bilder derzeit in sRGB; was darüber hinausgeht, siehst du erst im Zielprogramm.	graineo muestra por ahora las imágenes en sRGB; lo que va más allá solo lo verás en el programa de destino.
 Gesichter anzeigen	Mostrar rostros
+Fokusfeld der Kamera zeigen	Mostrar el área de enfoque de la cámara
+Fokusfeld der Kamera ein/aus (Z/Klick: 100 % an dieser Stelle)	Área de enfoque de la cámara sí/no (Z/clic: 100 % en ese punto)
+Fokusfeld der Kamera: scharf gemeldet	Área de enfoque de la cámara: indicada como enfocada
+Fokusfeld der Kamera: gewählt	Área de enfoque de la cámara: seleccionada
+Fokusstelle der Kamera	Posición de enfoque de la cámara
+Fokuspunkt der Kamera: Kamera meldet unscharf	Punto de enfoque de la cámara: la cámara indica desenfoque
+Fokuspunkt der Kamera	Punto de enfoque de la cámara
+Motivbereich laut Kamera	Área del motivo según la cámara
+Klick oder {k}: 100 % an dieser Stelle	Clic o {k}: 100 % en este punto
+Kein Fokusfeld in dieser Datei	Este archivo no contiene área de enfoque
+Manuell fokussiert – kein Fokusfeld	Enfoque manual: sin área de enfoque
+Fokusfeld liegt außerhalb des Ausschnitts	El área de enfoque está fuera del recorte
 Umbenennen …	Renombrar…
 Ja, zusammenführen	Sí, combinar
 „{a}“ gibt es schon. {b} Gesichter von „{c}“ dazunehmen?	«{a}» ya existe. ¿Añadir {b} rostros de «{c}»?
@@ -5249,3 +5261,208 @@ Nur ansehen – Originale unverändert	Solo ver – tus originales no se modific
 Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	Solo afecta a las valoraciones. El revelado siempre se guarda como archivo auxiliar junto a la foto.
 Zielordner wird geprüft …	Comprobando la carpeta de destino …
 Zielordner antwortet nicht: {}	La carpeta de destino no responde: {}
+{n} spätere Schritte verworfen – ⌘Z holt sie zurück	{n} pasos posteriores descartados: ⌘Z los recupera
+Ausgangszustand (Lightroom)	Estado inicial (Lightroom)
+Stand vor dem Verlauf	Estado anterior al historial
+Außerhalb geändert	Cambiado fuera
+Ältere Schritte zusammengefasst	Pasos anteriores combinados
+Vorgabe: {name}	Ajuste preestablecido: {name}
+Film: {name}	Película: {name}
+Look: {name}	Look: {name}
+Einstellungen eingefügt	Ajustes pegados
+Einstellungen übertragen	Ajustes transferidos
+Aus Lightroom übernommen	Tomado de Lightroom
+Mehrere Einstellungen ({names}, +{n})	Varios ajustes ({names}, +{n})
+Alle Verläufe löschen?	¿Eliminar todos los historiales?
+Die Schritte aller Fotos werden aus der Bibliothek gelöscht. Die Bearbeitungen selbst bleiben, wie sie jetzt sind.	Se eliminan de la biblioteca los pasos de todas las fotos. Las ediciones en sí se quedan como están ahora.
+Ältere Sicherungen der Bibliothek enthalten die Verläufe weiterhin.	Las copias de seguridad anteriores de la biblioteca siguen conteniendo los historiales.
+Alle löschen	Eliminar todo
+{n} Schritte gelöscht	{n} pasos eliminados
+Verlauf speichern	Guardar historial
+Schritte jeder Bearbeitung, nur in der Bibliothek auf diesem Rechner. Aus: nur bis zum Beenden.	Pasos de cada edición, solo en la biblioteca de este ordenador. Desactivado: solo hasta salir.
+Alle Verläufe löschen	Eliminar todos los historiales
+Jeder Schritt der Bearbeitung dieses Fotos, der neueste oben.	Cada paso de la edición de esta foto, el más reciente arriba.
+• **Klick** auf einen Schritt springt dorthin; das Bild zeigt seinen Stand. Es entsteht kein neuer Schritt\n• **▶** markiert den Schritt, der gerade gilt\n• **Gedimmte Schritte** liegen nach dem Zeiger und bleiben anklickbar. Die nächste Änderung verwirft sie; ⌘Z gleich danach holt sie zurück\n• **Überfahren** zeigt den Stand eines Schritts im Bild, ohne zu springen\n• **Original** springt zum Ausgangszustand, so wie graineo das Foto zuerst entwickelt hat\n• **(3×)** – Änderungen am selben Regler kurz hintereinander, zusammengefasst\n\nDer Verlauf steht in der Bibliothek auf diesem Rechner (Einstellungen → Bibliothek: „Verlauf speichern“).	• **Haz clic** en un paso para saltar a él; la imagen muestra su estado. No se crea ningún paso nuevo\n• **▶** marca el paso que se aplica ahora\n• **Los pasos atenuados** están después del puntero y siguen siendo clicables. El siguiente cambio los descarta; ⌘Z justo después los recupera\n• **Pasar el ratón** muestra el estado de un paso en la imagen sin saltar\n• **Original** salta al estado inicial, tal como graineo reveló la foto por primera vez\n• **(3×)**: cambios en el mismo control seguidos, agrupados\n\nEl historial se guarda en la biblioteca de este ordenador (Ajustes → Biblioteca: «Guardar historial»).
+{n} Schritte	{n} pasos
+Original ⟲	Original ⟲
+Noch keine Änderungen	Aún no hay cambios
+Zum Ausgangszustand springen	Saltar al estado inicial
+gestern	ayer
+Aufklappen (⌥-Klick: mit allen Unterbegriffen)	Desplegar (⌥-clic: con todos los subtérminos)
+Zuklappen (⌥-Klick: mit allen Unterbegriffen)	Plegar (⌥-clic: con todos los subtérminos)
+{a} mit Unterbegriffen · {b} direkt vergeben	{a} con subtérminos · {b} asignadas directamente
+„{a}“ gibt es mehrfach – bitte wählen	«{a}» existe varias veces: elige uno
+Stichwort „{a}“ zugewiesen	Palabra clave «{a}» asignada
+Stichwort „{a}“ entfernt	Palabra clave «{a}» eliminada
+{a} ({n} Begleitdatei(en) geschrieben)	{a} ({n} archivo(s) sidecar escritos)
+Vorher wird die Bibliothek gesichert.	Antes se hace una copia de seguridad de la biblioteca.
+„{a}“ in „{b}“ gelegt	“{a}” colocado en “{b}”
+„{a}“ auf die oberste Ebene gelegt	“{a}” movido al nivel superior
+{a} – dort gibt es schon eine mit diesem Namen	{a} – ya hay una con este nombre
+„{a}“ nach Namen geordnet	“{a}” ordenado por nombre
+Sammlungen nach Namen geordnet	Colecciones ordenadas por nombre
+Ordnen	Ordenar
+Nach Namen ordnen	Ordenar por nombre
+gezeigte Sammlung in ihrer Ebene nach oben	subir la colección mostrada dentro de su nivel
+gezeigte Sammlung in ihrer Ebene nach unten	bajar la colección mostrada dentro de su nivel
+Die Sammlung gibt es nicht mehr.	La colección ya no existe.
+Ziel ist kein Sammlungssatz.	El destino no es un conjunto de colecciones.
+Ein Satz kann nicht in sich selbst liegen.	Un conjunto no puede estar dentro de sí mismo.
+Alben von Apple Fotos bleiben im Satz „Apple Fotos“.	Los álbumes de Apple Fotos permanecen en el conjunto “Apple Fotos”.
+In den Satz „Apple Fotos“ kommen nur Alben von Apple Fotos.	En el conjunto “Apple Fotos” solo entran álbumes de Apple Fotos.
+Nach oben	Subir
+Nach unten	Bajar
+An den Anfang	Al principio
+Ans Ende	Al final
+Aus dem Verlauf von {name}, Schritt {n}	Del historial de {name}, paso {n}
+Eingefügt von {name}	Pegado de {name}
+Übertragen von {name} (relativ)	Transferido de {name} (relativo)
+Übertragen von {name}	Transferido de {name}
+Rückgängig: {name}	Deshacer: {name}
+Als Version speichern …	Guardar como versión …
+Mit aktuellem Stand vergleichen	Comparar con el estado actual
+Verlauf bis hier zusammenfassen	Combinar el historial hasta aquí
+Verlauf dieses Fotos löschen …	Eliminar el historial de esta foto …
+Verlauf · {name}	Historial · {name}
+Als Version speichern	Guardar como versión
+Name der Version	Nombre de la versión
+Eine virtuelle Kopie mit dem Stand dieses Schritts. Das Foto selbst bleibt, wie es ist.	Una copia virtual con el estado de este paso. La foto en sí se queda como está.
+Verlauf dieses Fotos löschen?	¿Eliminar el historial de esta foto?
+Alle Schritte dieses Fotos werden gelöscht. Die Bearbeitung selbst bleibt, wie sie jetzt ist.	Se eliminan todos los pasos de esta foto. La edición en sí se queda como está ahora.
+Stichwörter ordnen	Ordenar palabras clave
+Häufigkeit	Frecuencia
+Sortieren	Ordenar
+Personen zeigen	Mostrar personas
+Personen sind Stichwörter mit Gesichtern; sie bleiben sonst ausgeblendet, damit sie nicht aus Versehen umgehängt werden.	Las personas son palabras clave con caras; si no, quedan ocultas para no moverlas por error.
+{n} Änderungen · ⌘Z nimmt sie einzeln zurück	{n} cambios · ⌘Z los deshace uno a uno
+{a} auf die oberste Ebene legen	Mover {a} al nivel superior
+{a} mit „{b}“ zusammenführen	Fusionar {a} con «{b}»
+{a} unter „{b}“ legen	Colocar {a} bajo «{b}»
+„{a}“ angelegt	«{a}» creada
+Neuer Oberbegriff „{a}“	Nuevo término superior «{a}»
+„{a}“ unter „{b}“ gelegt	«{a}» colocada bajo «{b}»
+{n} Stichwörter unter „{b}“ gelegt	{n} palabras clave colocadas bajo «{b}»
+{n} Stichwörter auf die oberste Ebene gelegt	{n} palabras clave movidas al nivel superior
+{n} Stichwörter	{n} palabras clave
+Kein Stichwort gewählt	Ninguna palabra clave seleccionada
+{a} Fotos ({b} direkt)	{a} fotos ({b} directamente)
+{n} Unterbegriffe	{n} subtérminos
+{n} Stichwörter gewählt	{n} palabras clave seleccionadas
+Neuer Unterbegriff (auch „A > B“)	Nuevo subtérmino (también «A > B»)
+Name des Oberbegriffs	Nombre del término superior
+Zusammenführen mit (filtern)	Fusionar con (filtrar)
+Verschieben unter (filtern)	Mover bajo (filtrar)
+Ältere Schritte lassen sich nicht mehr rückgängig machen ({n})	Los pasos más antiguos ya no se pueden deshacer ({n})
+{n} Stichwörter mit „{b}“ zusammenführen?	¿Fusionar {n} palabras clave con «{b}»?
+Alle Fotos mit diesen Stichwörtern bekommen „{b}“. Die Stichwörter verschwinden; Begriffe darunter liegen danach unter „{b}“.	Todas las fotos con estas palabras clave reciben «{b}». Las palabras clave desaparecen; los términos que tenían debajo pasan a «{b}».
+und {n} weitere	y {n} más
+Ziel „{a}“: {n}	Destino «{a}»: {n}
+{n} Stichwörter mit „{b}“ zusammengeführt	{n} palabras clave fusionadas con «{b}»
+Mit allen Unterbegriffen löschen ({n} Unterbegriffe; {p} verlieren Stichwörter)	Eliminar con todos los subtérminos ({n} subtérminos; {p} pierden palabras clave)
+Nur „{a}“ löschen; Unterbegriffe rücken eine Ebene hoch ({p} verlieren „{a}“)	Eliminar solo «{a}»; los subtérminos suben un nivel ({p} pierden «{a}»)
+Die Fotos bleiben in der Bibliothek. ⌘Z holt alles zurück.	Las fotos permanecen en la biblioteca. ⌘Z lo recupera todo.
+Stichwörter ordnen … (Bibliothek)	Ordenar palabras clave… (biblioteca)
+Stichwörter ordnen …	Ordenar palabras clave…
+Neuer Unterbegriff …	Nuevo subtérmino…
+Neues Stichwort …	Nueva palabra clave…
+Neuer Oberbegriff …	Nuevo término superior…
+Zusammenführen mit …	Fusionar con…
+Nur einzeln	Solo de uno en uno
+Legt einen Begriff an und hängt die Auswahl darunter	Crea un término y coloca la selección debajo
+Auch per Ziehen auf eine Zeile	También arrastrando a una fila
+Auch per Ziehen mit ⌥	También arrastrando con ⌥
+Schließt den Dialog und zeigt die Fotos mit diesem Stichwort und allen darunter	Cierra el diálogo y muestra las fotos con esta palabra clave y todas las inferiores
+Liegt schon dort.	Ya está ahí.
+Ein Stichwort kann nicht unter sich selbst liegen.	Una palabra clave no puede estar bajo sí misma.
+Marken aus Lightroom …	Marcas de Lightroom…
+Stichwörter, die Lightroom nicht exportiert, hier als „nicht exportieren“ markieren (der Katalog wird nur gelesen)	Marcar aquí como «no exportar» las palabras clave que Lightroom no exporta (el catálogo solo se lee)
+Vorschläge …	Sugerencias…
+Vorschläge zum Ordnen: Schreibweisen, Einzahl/Mehrzahl, Mehrwort-Namen, fast immer gemeinsam vergebene Stichwörter	Sugerencias para ordenar: grafías, singular/plural, nombres de varias palabras, palabras clave casi siempre juntas
+{n} Stichwörter werden wieder exportiert	{n} palabras clave se vuelven a exportar
+{n} Stichwörter werden nicht exportiert	{n} palabras clave no se exportan
+Nicht exportieren	No exportar
+Vorschläge zum Ordnen	Sugerencias para ordenar
+Vorschläge werden berechnet …	Calculando sugerencias…
+„{a}“ mit „{b}“ zusammenführen	Fusionar «{a}» con «{b}»
+„{a}“ unter „{b}“ legen	Colocar «{a}» bajo «{b}»
+{a} / {b} Fotos · {p} %	{a} / {b} fotos · {p} %
+{a} / {b} Fotos	{a} / {b} fotos
+Keine Vorschläge.	Sin sugerencias.
+Gewählte anwenden …	Aplicar seleccionadas…
+„{a}“ → „{b}“	«{a}» → «{b}»
+„{a}“ unter „{b}“	«{a}» bajo «{b}»
+Oberbegriffe mitschreiben	Incluir términos superiores
+Zu „Labrador“ auch „Hunde“ und „Tiere“ in die Stichwörter der Datei	Con «Labrador» también «Hunde» y «Tiere» en las palabras clave del archivo
+Hierarchie mitschreiben	Incluir jerarquía
+Zusätzlich die vollen Pfade („Tiere|Hunde|Labrador“, lr:hierarchicalSubject) für Programme, die Stichwort-Hierarchien lesen	También las rutas completas («Tiere|Hunde|Labrador», lr:hierarchicalSubject) para programas que leen jerarquías
+Oberbegriffe der Stichwörter mitschreiben	Incluir términos superiores de las palabras clave
+Zu „Labrador“ auch „Hunde“ und „Tiere“; gilt beim Export mit Metadaten „Alles“	Con «Labrador» también «Hunde» y «Tiere»; se aplica al exportar con metadatos «Todo»
+Stichwort-Hierarchie mitschreiben	Incluir jerarquía de palabras clave
+Volle Pfade in lr:hierarchicalSubject, für Programme, die Hierarchien lesen	Rutas completas en lr:hierarchicalSubject, para programas que leen jerarquías
+Marken aus Lightroom übernehmen?	¿Adoptar las marcas de Lightroom?
+Lightroom-Katalog wird gelesen …	Leyendo el catálogo de Lightroom…
+Alle Stichwörter, die Lightroom nicht exportiert, sind hier schon markiert.	Todas las palabras clave que Lightroom no exporta ya están marcadas aquí.
+{n} Stichwörter würden als „nicht exportieren“ markiert (mit allem darunter).	{n} palabras clave se marcarían como «no exportar» (con todo lo inferior).
+Der Katalog wird nur gelesen. ⌘Z holt alles zurück.	El catálogo solo se lee. ⌘Z lo recupera todo.
+Markieren	Marcar
+{n} Vorschläge anwenden?	¿Aplicar {n} sugerencias?
+{a} Stichwörter werden untergeordnet, {b} zusammengeführt; {c} betroffen.	{a} palabras clave se subordinan, {b} se fusionan; {c} afectadas.
+{n} Vorschläge angewendet	{n} sugerencias aplicadas
+{n} Vorschläge angewendet, {m} übersprungen	{n} sugerencias aplicadas, {m} omitidas
+Schreibweise	Grafía
+Einzahl/Mehrzahl	Singular/plural
+Mehrwort-Name	Nombre de varias palabras
+Fast immer zusammen	Casi siempre juntas
+Ein Oberbegriff ist schon als „nicht exportieren“ markiert	Un término superior ya está marcado como «no exportar»
+Gilt mit allem darunter: diese Stichwörter kommen nicht in exportierte Dateien	Se aplica con todo lo inferior: estas palabras clave no van a los archivos exportados
+{a} ({n})	{a} ({n})
+Keine Fotos gefunden.	No se encontraron fotos.
+Die Messung ist mit einem Fehler abgebrochen (siehe Protokoll).	La medición se detuvo por un error (consulta el registro).
+Messung abbrechen	Detener medición
+Leistungsbericht erstellen	Crear informe de rendimiento
+graineo misst, wie schnell dieser Rechner Fotos öffnet und entwickelt: jede Stufe dreimal, mit Grafikkarte und Prozessor. Das dauert einige Minuten, der Lüfter kann dabei anlaufen.	graineo mide la rapidez con la que este ordenador abre y revela fotos: cada etapa tres veces, con la tarjeta gráfica y con el procesador. Tarda unos minutos y el ventilador puede ponerse en marcha.
+Der Bericht ist eine Textdatei auf diesem Rechner, ohne Pfade, Datei-, Benutzer- und Rechnernamen. graineo sendet nichts – schick die Datei bei Bedarf selbst.	El informe es un archivo de texto en este ordenador, sin rutas ni nombres de archivo, de usuario o de equipo. graineo no envía nada: envía tú el archivo si quieres.
+Systemangaben	Datos del sistema
+Foto {a} von {b} · {c} · Lauf {d} von {e} · {f}	Foto {a} de {b} · {c} · pasada {d} de {e} · {f}
+Bitte währenddessen nicht mit graineo arbeiten; andere Programme verfälschen die Zeiten.	No trabajes con graineo mientras tanto; otros programas falsean los tiempos.
+Bericht gespeichert. Schick die Textdatei (und die JSON-Datei daneben) an die Entwickler, z. B. per E-Mail oder als Anhang eines GitHub-Issues.	Informe guardado. Envía el archivo de texto (y el archivo JSON que está al lado) a los desarrolladores, p. ej. por correo o adjunto a un issue de GitHub.
+Im Explorer zeigen	Mostrar en el Explorador
+Pfad kopieren	Copiar ruta
+Dateien wählen …	Elegir archivos…
+Fotos werden gesucht …	Buscando fotos…
+Keine Fotos gefunden (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).	No se encontraron fotos (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).
+Je Kamerafamilie ein Foto aus {a} gefundenen.	Una foto por familia de cámaras, de {a} encontradas.
+{a} weitere Dateien nicht berücksichtigt (höchstens 10).	{a} archivos más no tenidos en cuenta (máximo 10).
+Wähle einen Ordner oder bis zu 10 Fotos: am besten je eines von jeder Kamera, die du nutzt (Merrill, Quattro, ältere Foveon, Fuji X-Trans, andere RAWs, JPEG/HEIC).	Elige una carpeta o hasta 10 fotos: idealmente una de cada cámara que uses (Merrill, Quattro, Foveon antiguas, Fuji X-Trans, otros RAW, JPEG/HEIC).
+Messung abgebrochen, kein Bericht geschrieben.	Medición detenida, no se escribió ningún informe.
+Ordner mit Fotos für den Leistungsbericht	Carpeta con fotos para el informe de rendimiento
+Fotos für den Leistungsbericht (bis zu 10)	Fotos para el informe de rendimiento (hasta 10)
+Zeitprotokoll	Registro de tiempos
+Schreibt je geöffnetem Foto eine Zeile mit Zeiten (ohne Datei- und Ordnernamen) in timings.log im Protokollordner. Bleibt auf diesem Rechner; der Leistungsbericht hängt die letzten 100 Zeilen an	Escribe una línea con tiempos por cada foto abierta (sin nombres de archivo ni de carpeta) en timings.log, en la carpeta de registros. Se queda en este ordenador; el informe de rendimiento añade las últimas 100 líneas
+Leistungsbericht	Informe de rendimiento
+Misst, wie schnell dieser Rechner Fotos öffnet und entwickelt, und schreibt eine Textdatei zum Einsenden	Mide la rapidez con la que este ordenador abre y revela fotos y escribe un archivo de texto para enviar
+Erstellen …	Crear…
+Je Kamerafamilie nimmt graineo ein Foto aus dem Ordner (höchstens 8)	graineo toma una foto por familia de cámaras de la carpeta (máximo 8)
+Bis zu 10 Fotos; je Kamerafamilie zählt eines	Hasta 10 fotos; cuenta una por familia de cámaras
+Pfad der Textdatei in die Zwischenablage	Copia la ruta del archivo de texto al portapapeles
+Datei lesen	Leer archivo
+Erstes Bild	Primera imagen
+Exakte Basis (Grafikkarte)	Base exacta (tarjeta gráfica)
+Exakte Basis (Prozessor)	Base exacta (procesador)
+Eingepasste Ansicht	Vista ajustada
+Volle Auflösung (Grafikkarte)	Resolución completa (tarjeta gráfica)
+Volle Auflösung (Prozessor)	Resolución completa (procesador)
+JPEG-Export	Exportación JPEG
+1 Smart-Sammlung angepasst	1 colección inteligente actualizada
+{n} Smart-Sammlungen angepasst	{n} colecciones inteligentes actualizadas
+Smart-Sammlungen unverändert (Begriff mehrdeutig): {a}	Colecciones inteligentes sin cambios (término ambiguo): {a}
+Gespeichert, aber nicht alles nachgezogen: {e}	Guardado, pero no todo se actualizó: {e}
+ · ohne Stichwörter (Bibliothek nicht lesbar)	 · sin palabras clave (biblioteca ilegible)
+ · Metadaten nicht geschrieben	 · metadatos no escritos
+Alben aus Apple Fotos lassen sich hier nicht füllen – der nächste Abgleich würde die Zuordnung wieder überschreiben.	Los álbumes de Apple Fotos no se pueden llenar aquí: la próxima sincronización sobrescribiría la asignación.
+Steht schon ganz oben	Ya está arriba del todo
+Steht schon ganz unten	Ya está abajo del todo
+Schon nach Namen geordnet	Ya está ordenado por nombre
+Steht schon auf der obersten Ebene	Ya está en el nivel superior
+Alben aus Apple Fotos bleiben in ihrem Satz	Los álbumes de Apple Fotos se quedan en su conjunto
+In Lightroom: {n} Schritte	En Lightroom: {n} pasos

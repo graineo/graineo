@@ -132,7 +132,8 @@ impl App {
         let src = self.entries[main].settings.clone();
         let name = self.entries[main].name.clone();
         let (targets, skipped) = self.transfer_targets(main);
-        let n = self.settings_command(&targets, move |s| paste::merge(s, &src, &groups));
+        let cmd = crate::history::Command::new(crate::history::Hint::sync(&name, None));
+        let n = self.settings_command(&targets, cmd, move |s| paste::merge(s, &src, &groups));
         let mut t = crate::trf!("Einstellungen von {a} auf {n} Fotos übertragen (⌘Z nimmt es zurück)", a = name, n = n);
         if skipped > 0 {
             t = crate::trf!("{t}; {k} übersprungen (Original nicht erreichbar oder nicht entwickelbar)", t = t, k = skipped);
@@ -203,7 +204,7 @@ impl App {
             }
             r
         };
-        if self.settings_command(&[i], reset) > 0 {
+        if self.settings_command(&[i], crate::history::Command::new(crate::history::Hint::reset()), reset) > 0 {
             self.status = crate::tr("Alle Einstellungen zurückgesetzt (⌘Z nimmt es zurück)").to_string();
         }
     }
@@ -211,10 +212,10 @@ impl App {
     /// New settings for the given photos as one undoable command. Returns the number of photos that changed.
     /// Many photos (more than [`crate::multi_edit::RIGHT_AWAY_MAX`]) go through the background: loaded, changed and saved
     /// there block by block; the undo entry follows when it is done.
-    pub(crate) fn settings_command(&mut self, targets: &[usize], f: impl Fn(&Settings) -> Settings + Send + Sync + 'static) -> usize {
+    pub(crate) fn settings_command(&mut self, targets: &[usize], cmd: crate::history::Command, f: impl Fn(&Settings) -> Settings + Send + Sync + 'static) -> usize {
         if targets.len() > crate::multi_edit::RIGHT_AWAY_MAX {
             let list = targets.iter().map(|&i| crate::multi_apply::Target { image: self.entries[i].image, copy: self.entries[i].copy.clone(), path: self.entries[i].path.clone(), set: None }).collect();
-            self.multi_submit(vec![std::sync::Arc::new(f) as crate::multi_apply::Step], list, true);
+            self.multi_submit(vec![std::sync::Arc::new(f) as crate::multi_apply::Step], list, true, Some((cmd, false)));
             self.lib.rating_not_recent();
             return targets.len();
         }
@@ -223,15 +224,16 @@ impl App {
         }
         let items: Vec<(i64, Option<String>, Settings)> = targets.iter().map(|&i| (self.entries[i].image, self.entries[i].copy.clone(), self.entries[i].settings.clone())).collect();
         let changes = plan(&items, &f);
-        let n = self.apply_changes(&changes, true);
+        let n = self.apply_changes(&changes, true, &cmd);
         // whatever was undoable before (rating, move) now comes after this command
         self.lib.rating_not_recent();
-        self.turn_undo.record_settings(changes);
+        self.turn_undo.record_settings(changes, cmd);
         n
     }
 
     /// Put the photos of a command into the state after (`forward`) or before it.
-    pub(crate) fn apply_changes(&mut self, changes: &[Change], forward: bool) -> usize {
+    /// The develop history gets a step per photo (or its cursor moves back / forward for undo / redo), see `history.rs`.
+    pub(crate) fn apply_changes(&mut self, changes: &[Change], forward: bool, cmd: &crate::history::Command) -> usize {
         if changes.len() > crate::multi_edit::RIGHT_AWAY_MAX {
             // many photos: in the background, block by block (undo/redo of a command for many photos)
             let pos: std::collections::HashMap<(i64, Option<&str>), usize> = self.entries.iter().enumerate().map(|(i, e)| ((e.image, e.copy.as_deref()), i)).collect();
@@ -241,14 +243,16 @@ impl App {
                 .map(|(c, i)| crate::multi_apply::Target { image: c.image, copy: c.copy.clone(), path: self.entries[i].path.clone(), set: Some(if forward { c.after.clone() } else { c.before.clone() }) })
                 .collect();
             let n = list.len();
-            self.multi_submit(Vec::new(), list, false);
+            self.multi_submit(Vec::new(), list, false, Some((cmd.clone(), !forward)));
             return n;
         }
         let mut n = 0;
         for c in changes {
             let Some(i) = self.entries.iter().position(|e| e.image == c.image && e.copy == c.copy) else { continue };
             self.ensure_entry(i);
-            self.set_settings(i, if forward { &c.after } else { &c.before });
+            let (from, to) = if forward { (&c.before, &c.after) } else { (&c.after, &c.before) };
+            self.history_command(i, from, to, cmd, !forward);
+            self.set_settings(i, to);
             n += 1;
         }
         self.compute_thumbnails();
@@ -313,9 +317,9 @@ mod tests {
         let mut u = crate::library_turn::TurnUndo::default();
         let items: Vec<_> = (0..30).map(|i| (i, None, Settings::default())).collect();
         let changes = plan(&items, |s| Settings { exposure: 2.0, ..s.clone() });
-        u.record_settings(changes.clone());
+        u.record_settings(changes.clone(), crate::history::Command::new(crate::history::Hint::reset()));
         match u.undo() {
-            Some(crate::library_turn::Undoable::Settings(c)) => assert_eq!(c.len(), 30),
+            Some(crate::library_turn::Undoable::Settings(c, _)) => assert_eq!(c.len(), 30),
             other => panic!("settings command expected, got {other:?}"),
         }
         assert!(u.undo().is_none());

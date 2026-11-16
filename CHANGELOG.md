@@ -322,6 +322,18 @@ Everything merged, re-measured, and the whole app reviewed end to end. Merrill a
 - **Catalog import, checked first:** "Check" shows how many photos, collections and keywords would come along before anything is written; the report lists what was not taken over (for example AI masks). graineo now refuses to merge a second, different catalog into a library that already holds another one, and a catalog with missing parts no longer clears values you already have.
 - **Linux (experimental):** graineo builds on Linux for x86_64 and aarch64; the face finder, the film shelf and everything else run there too. No signed packages yet, no hardware testing.
 
+## 1.2.0 · History, Keywords and Collections
+
+Existing libraries open as before; a few small tables are added automatically, with no migration step. Image processing is unchanged.
+
+- **Edit history:** every photo and virtual copy keeps a lasting, named history of its edits in the library. The list in "Presets & History" shows the newest step on top; click a step to jump to it, hover to preview it, and right-click to save it as a version, compare it with the current state, collapse the history up to there, or delete it. Pasting, syncing or resetting several photos adds one step per photo, and one undo takes the whole command back. The edit history of an imported catalog is shown read-only next to it. History can be switched off and cleared in Settings → Library.
+- **Undo in time order:** ⌘Z always undoes the most recent action, whether it was an edit, a rating, a move or a library change, and ⇧⌘Z redoes it.
+- **Arrange collections:** drag collections and collection sets into your own order, or use "Arrange", "Sort by Name" and ⌥⌘↑/⌥⌘↓; everything can be undone. Expanded sets stay open after a restart, and a new catalog import or the Apple Photos sync keeps your order.
+- **Keyword hierarchy:** keywords form a tree in the filter column and in the new "Arrange keywords …" dialog (⇧⌘K): rename, nest, move, merge and delete with or without children, all undoable. Whole branches can be marked "do not export"; exports write keywords with their parents and never person names. Search for paths such as `keyword:="Places > Paris"`, and let graineo suggest clean-ups (spelling, singular/plural, multi-word names, keywords that almost always go together); nothing is applied without your choice.
+- **Focus point:** ⇧F shows where the camera focused (Canon, Sony, Fujifilm, and Exif subject area), and a click zooms to 100 % right there.
+- **Performance report:** Help → "Create Performance Report …" times graineo's real processing steps on a few of your photos and writes a report without paths or names. A small local timing log can be switched off in Settings.
+- **Also:** faster filter columns in large libraries, a two-finger swipe on a fitted photo no longer changes the zoom, Apple Photos albums no longer accept dropped photos, and disabled menu items tell you why. Findings from two internal data-safety and logic reviews are fixed, among them keyword changes that could lose keywords after a late error and backups before large actions that replaced the daily backup.
+
 ---
 
 ## Thanks

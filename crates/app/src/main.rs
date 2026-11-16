@@ -82,6 +82,11 @@ mod paste;
 mod settings_group;
 mod display_color;
 mod help;
+// develop history of the open photo (steps, cursor, kept in the library)
+mod history;
+mod history_panel;
+// ⌘Z / ⇧⌘Z: the most recent action of all kinds
+mod undo_order;
 mod jobs;
 mod lr;
 mod presets;
@@ -99,6 +104,7 @@ mod lens_room;
 mod lens_wizard;
 mod lens_grid_pdf;
 mod face_frames;
+mod focus_frame;
 mod people_ui;
 mod people_model;
 mod video_ui;
@@ -139,6 +145,7 @@ mod lightroom_state;
 mod move_folder_ui;
 mod relink_ui;
 mod library_filter;
+mod keyword_export;
 mod test_image;
 mod update_ui;
 mod binning_ui;
@@ -146,6 +153,10 @@ mod crash_log;
 mod crossfade;
 mod file_migration;
 mod bug_report;
+mod perf_measure;
+mod perf_report;
+mod perf_text;
+mod timing_log;
 
 use crate::menu::i18n::DeComma as _;
 use std::collections::HashMap;
@@ -418,12 +429,6 @@ enum Refine {
     Done { at: f64 },
 }
 
-#[derive(Default)]
-struct History {
-    undo: Vec<Settings>,
-    redo: Vec<Settings>,
-}
-
 struct App {
     egui_ctx: egui::Context,
     worker: Worker,
@@ -474,7 +479,8 @@ struct App {
     stress: Option<stress::Stress>,
     /// Time from slider change to image (test hook `GRAINEO_EDIT_LOG`, see `stress.rs`)
     edit_log: stress::EditLog,
-    history: HashMap<usize, History>,
+    /// develop history (⌘Z / ⇧⌘Z move its cursor), see `history.rs`
+    history: history::History,
     /// turns made in the library (⌘Z for all photos of one command, see `library_turn.rs`)
     turn_undo: library_turn::TurnUndo,
     turn_ops: u64,
@@ -545,6 +551,8 @@ struct App {
     show_clipping: bool,
     /// Face frames in single view; cache: (image, time, faces)
     show_faces: bool,
+    /// Focus area of the camera in single view (⇧F)
+    show_focus: bool,
     /// Placeholder from the last developed view (image, texture) and the last stored state
     developed_tex: Option<(i64, egui::TextureHandle)>,
     developed_stored: Option<(i64, Settings)>,
@@ -854,7 +862,7 @@ impl App {
             refine: Refine::None,
             open_generation: Arc::new(AtomicUsize::new(0)),
             view_changed_at: 0.0,
-            history: HashMap::new(),
+            history: history::History::default(),
             turn_undo: Default::default(),
             turn_ops: 0,
             strip_ext: None,
@@ -894,6 +902,7 @@ impl App {
             look_compare: Default::default(),
             show_clipping: false,
             show_faces: crate::env::var_os("GRAINEO_FACES").is_some(),
+            show_focus: crate::env::var_os("GRAINEO_FOCUS").is_some(),
             developed_tex: None,
             developed_stored: None,
             thumbs_done: Arc::default(),
@@ -1339,7 +1348,6 @@ impl App {
             self.pending_wide = self.pending_wide.take().and_then(|(i, s)| map(i).map(|n| (n, s)));
             self.not_developable = self.not_developable.and_then(map);
             self.damaged = self.damaged.and_then(map);
-            self.history = std::mem::take(&mut self.history).into_iter().filter_map(|(i, h)| map(i).map(|n| (n, h))).collect();
             self.committed = self.committed.take().and_then(|(i, s)| map(i).map(|n| (n, s)));
             self.rendered_for = self.rendered_for.take().and_then(|(i, s)| map(i).map(|n| (n, s)));
             self.panes.reset();
@@ -1607,6 +1615,7 @@ impl App {
         self.shown_at = self.now();
         if let Some((i, t)) = self.selected_at.filter(|(i, _)| *i == index) {
             log(&format!("time: {i} shown after {:.0} ms{}", (self.now() - t) * 1000.0, if has_spp { ", already exact" } else { "" }));
+            timing_log::shown(&loaded, (self.now() - t) * 1000.0, has_spp);
         }
         self.current = Some(Current {
             index,
@@ -1631,7 +1640,10 @@ impl App {
         self.look_compare.end();
         self.before.menu_open = false;
         self.rendered_for = None;
-        self.committed = Some((index, self.entries[index].settings.clone()));
+        self.committed = Some((index, Settings { view: View::Developed, ..self.entries[index].settings.clone() }));
+        // the develop history of the photo and its neighbours comes from the library in the background
+        let keys: Vec<history::Key> = (index.saturating_sub(1)..(index + 2).min(self.entries.len())).map(|i| self.history_key(i)).collect();
+        self.history.request(keys);
         // already developed during preloading with the same settings: show immediately, without delay and without a change in appearance
         if let Some((vs, w, h, rgb)) = self.current.as_mut().and_then(|c| c.loaded.prerendered.take()) {
             if vs == self.entries[index].settings {
@@ -1696,12 +1708,16 @@ impl App {
             // nothing changed since the sidecar was read or written: no file access (other formats; Sigma as before)
             let now = (sidecar_settings(&e.settings), e.meta.clone());
             if image_kind::of(&e.path) != image_kind::ImageKind::Foveon && self.saved.get(&e.image) == Some(&now) {
+                // already saved: only steps of the develop history may be waiting (a cursor move back and forth)
+                library::store::send_history();
                 return;
             }
             let image = e.image;
             match save_entry(e) {
                 Ok(()) => {
                     self.saved.insert(image, now);
+                    // the steps of the develop history follow the saved state
+                    library::store::send_history();
                 }
                 Err(err) => {
                     self.saved.remove(&image);
@@ -2323,6 +2339,7 @@ impl App {
                         self.spp_seconds = Some(seconds);
                         if let Some((i, t)) = self.selected_at.filter(|(i, _)| *i == index) {
                             log(&format!("time: {i} exact after {:.0} ms", (ctx.input(|i| i.time) - t) * 1000.0));
+                            timing_log::exact((ctx.input(|i| i.time) - t) * 1000.0);
                         }
                         self.refine = Refine::Done { at: ctx.input(|i| i.time) };
                         self.prefetch_due = Some(ctx.input(|i| i.time) + 0.3);
@@ -3065,39 +3082,53 @@ impl App {
         self.profile_export = Some(film_profiles_ui::ExportCheck::new(&self.egui_ctx, Job::Export { items, format: self.export_format, engine: self.export_engine, dir, gain_map: self.export_gain_map, allow_missing_profiles: false, as_print: self.export_as_print, color_space: self.export_color_space, options: self.export_options.clone() }));
     }
 
-    /// Record settings changes for undo as soon as no mouse button is pressed.
+    /// Identity of entry `i` in the develop history.
+    fn history_key(&self, i: usize) -> history::Key {
+        history::Key { path: self.entries[i].path.clone(), copy: self.entries[i].copy.clone() }
+    }
+
+    /// Record settings changes as steps of the develop history as soon as no mouse button is pressed.
     fn track_history(&mut self, ctx: &egui::Context) {
-        let Some(c) = &self.current else { return };
+        let Some(c) = &self.current else {
+            self.history.poll();
+            return;
+        };
         let index = c.index;
         let current = Settings { view: View::Developed, ..self.entries[index].settings.clone() };
         if ctx.input(|i| i.pointer.any_down()) {
             return;
         }
+        let key = self.history_key(index);
         match &self.committed {
             Some((i, s)) if *i == index && *s != current => {
-                let h = self.history.entry(index).or_default();
-                h.undo.push(s.clone());
-                h.redo.clear();
+                let before = s.clone();
+                if let Some(t) = self.history.record(&key, index, &before, &current) {
+                    self.status = t;
+                }
                 self.lib.rating_not_recent();
                 self.turn_undo.other_action();
                 self.committed = Some((index, current));
             }
-            Some((i, _)) if *i == index => {}
+            // changed by a command that sets `committed` itself (several photos, rotation): a step of its own
+            Some((i, s)) if *i == index => self.history.follow(&key, index, s),
             _ => self.committed = Some((index, current)),
         }
     }
 
+    /// ⌘Z / ⇧⌘Z on the open photo: move the cursor of its develop history one step.
     fn undo(&mut self, redo: bool) {
         let Some(index) = self.current.as_ref().map(|c| c.index) else { return };
-        let h = self.history.entry(index).or_default();
-        let from = if redo { h.redo.pop() } else { h.undo.pop() };
-        if let Some(target) = from {
-            let now = Settings { view: View::Developed, ..self.entries[index].settings.clone() };
-            if redo {
-                h.undo.push(now);
-            } else {
-                h.redo.push(now);
+        let key = self.history_key(index);
+        let now = Settings { view: View::Developed, ..self.entries[index].settings.clone() };
+        // a change not recorded yet (e.g. ⌘Z while typing in a field) becomes a step first
+        if let Some((i, s)) = &self.committed {
+            if *i == index && *s != now {
+                let before = s.clone();
+                self.history.record(&key, index, &before, &now);
+                self.committed = Some((index, now.clone()));
             }
+        }
+        if let Some(target) = self.history.undo(&key, index, &now, redo) {
             let view = self.entries[index].settings.view;
             self.entries[index].settings = Settings { view, ..target.clone() };
             self.committed = Some((index, target));
@@ -3111,7 +3142,8 @@ impl App {
         // every selected photo (grid: the selection, Develop: filmstrip selection + open photo); one ⌘Z for all
         let (targets, unreachable) = self.without_unreachable(self.selection());
         let pasted = src.clone();
-        let n = self.settings_command(&targets, move |s| paste::merge(s, &pasted, &groups));
+        let cmd = history::Command::new(history::Hint::paste(history::clipboard_source().as_deref()));
+        let n = self.settings_command(&targets, cmd, move |s| paste::merge(s, &pasted, &groups));
         if let Some(w) = rawdev::film_profiles::missing(&src) {
             self.status = crate::trf!("Eingefügt – {w}", w = w);
         } else if n > 1 {
@@ -3137,6 +3169,7 @@ impl App {
         if all {
             self.copy_groups = paste::Groups::all();
             self.clipboard = self.settings().cloned();
+            history::copied_from(self.current.as_ref().map(|c| self.entries[c.index].name.clone()));
             if let Some(w) = self.clipboard.as_ref().and_then(rawdev::film_profiles::missing) { self.status = crate::trf!("Kopiert – {w}", w = w); }
         } else {
             self.copy_dialog = true;
@@ -3180,6 +3213,7 @@ impl App {
     /// preview that is displayed. Undo works through the normal history.
     fn auto_tone_current(&mut self) {
         let Some(c) = &self.current else { return };
+        history::hint(c.index, history::Hint::auto());
         let (previews, cal) = (c.loaded.previews.clone(), c.loaded.cal.clone());
         if let Some(doc) = &previews.foreign {
             doc.auto_tone(&mut self.entries[c.index].settings);
@@ -3225,19 +3259,11 @@ impl App {
                     self.status = crate::tr("Nur in einer Sammlung möglich").to_string();
                 }
             }
-            // ⌘Z: first a rating just set, otherwise moving (grid) or sliders
-            // turns (grid) and settings commands for several photos (transfer, paste, reset: every view)
+            // ⌘Z / ⇧⌘Z: the most recent action of all kinds (undo_order.rs); the people view keeps its own
             Undo if self.in_grid() && people_ui::is_open() => people_ui::request(people_ui::Request::Undo),
-            Undo if self.undo_turn() => {}
-            Undo if self.undo_rating() => {}
-            Undo if self.in_grid() => {
-                let a = self.lib.undo_external();
-                self.library_actions(a);
-            }
-            Undo => self.undo(false),
+            Undo => self.undo_latest(),
             Redo if self.in_grid() && people_ui::is_open() => people_ui::request(people_ui::Request::Redo),
-            Redo if self.redo_turn() => {}
-            Redo => self.undo(true),
+            Redo => self.redo_latest(),
             CopyPhoto => self.copy_photo_command(ctx),
             CopySettings => self.copy_settings(false),
             PasteSettings => self.paste_settings(),
@@ -3303,6 +3329,10 @@ impl App {
             NewSmartCollection => self.lib.ask_new_collection(library::manage::SMART, None),
             NewCollectionSet => self.lib.ask_new_collection(library::manage::SET, None),
             ManageImports => self.lib.ask_imports_external(),
+            ArrangeKeywords => {
+                self.tab = Tab::Library;
+                self.lib.open_arrange(None);
+            }
             ContactPrint => self.open_contact_print(),
             LensRoom => lens_assign::request(lens_assign::Request::Room),
             Compare => {
@@ -3329,6 +3359,8 @@ impl App {
             ShowLogs => crash_log::show_folder(),
             // Help → Report a Problem: anonymised report, pre-filled issue in the browser
             ReportBug => bug_report::open(false),
+            // Help → Create Performance Report: measures this computer, writes a local text file
+            PerfReport => perf_report::open(),
             About => self.brand.show_about(),
             // colour proof: display only – the layer draws again with another uniform, nothing is computed
             ProofToggle => {
@@ -3354,7 +3386,8 @@ impl App {
         let Some(cur) = self.current.as_ref().map(|c| c.index) else { return };
         let s = develop::Settings { view: View::Developed, ..self.entries[cur].settings.clone() };
         let targets: Vec<usize> = (0..self.entries.len()).filter(|&i| i != cur && image_kind::of(&self.entries[i].path).editable() && self.entries[i].state == 0).collect();
-        self.settings_command(&targets, move |_| s.clone());
+        let cmd = history::Command::new(history::Hint::sync(&self.entries[cur].name, None));
+        self.settings_command(&targets, cmd, move |_| s.clone());
     }
 
     /// Keyboard shortcuts as in common photo apps (only when no input field has focus).
@@ -3419,8 +3452,12 @@ impl App {
             self.tool_tab = workspace::ToolTab::Edit;
             self.show_right = true;
         }
-        if cmd && pressed(egui::Key::Z) && (shift || !self.undo_rating()) {
-            self.undo(shift);
+        if cmd && pressed(egui::Key::Z) {
+            if shift {
+                self.redo_latest();
+            } else {
+                self.undo_latest();
+            }
         }
         if cmd && shift && pressed(egui::Key::C) {
             self.copy_settings(alt);
@@ -3498,6 +3535,9 @@ impl App {
         if pressed(egui::Key::J) {
             self.show_clipping = !self.show_clipping;
         }
+        if shortcuts::pressed(ctx, "focus_frame") {
+            self.toggle_focus();
+        }
 
         // L = lights out: dimmed → off → normal
         if pressed(egui::Key::L) {
@@ -3511,7 +3551,7 @@ impl App {
         // Video in single view: space starts/pauses
         if pressed(egui::Key::Space) && self.not_developable.and_then(|i| self.entries.get(i)).is_some_and(|e| e.format == "VIDEO") {
             self.video.toggle_on();
-        } else if pressed(egui::Key::Z) || pressed(egui::Key::Space) {
+        } else if (pressed(egui::Key::Z) || pressed(egui::Key::Space)) && !self.zoom_to_focus() {
             self.toggle_zoom();
         }
         // without ⌘: ⌘Y/⇧⌘Y belong to the colour proof
@@ -3608,6 +3648,25 @@ impl App {
     }
 
     /// Fit ↔ 100 % (Z, space).
+    fn toggle_focus(&mut self) {
+        self.show_focus = !self.show_focus;
+        focus_frame::reset_status();
+    }
+
+    /// Z with the focus area shown: 100 % centred on the area the camera reports (false: no area, or zoomed in).
+    fn zoom_to_focus(&mut self) -> bool {
+        if !self.show_focus || self.zoom > 1.01 {
+            return false;
+        }
+        let Some(path) = self.current.as_ref().and_then(|c| self.entries.get(c.index)).map(|e| e.path.clone()) else { return false };
+        let Some(u) = focus_frame::target(&path, self.now()) else { return false };
+        self.navigation.zoom.cancel();
+        self.zoom = self.one_to_one.max(1.0);
+        self.pan = egui::vec2((0.5 - u[0]) * self.fit_size.x, (0.5 - u[1]) * self.fit_size.y) * self.zoom;
+        self.view_changed_at = self.now();
+        true
+    }
+
     fn toggle_zoom(&mut self) {
         self.navigation.zoom.cancel();
         if self.zoom > 1.01 {
@@ -4355,6 +4414,8 @@ impl eframe::App for App {
         self.settings_group_frame(&ctx);
         self.photo_copy_frame(&ctx);
         if self.copy_dialog && paste::dialog(&ctx, &mut self.copy_dialog, &mut self.copy_groups, copy_warning.as_deref()) {
+            let from = self.copy_from.or(self.current.as_ref().map(|c| c.index));
+            history::copied_from(from.and_then(|i| self.entries.get(i)).map(|e| e.name.clone()));
             self.clipboard = self.copy_from.take().and_then(|i| self.entries.get(i)).map(|e| e.settings.clone()).or_else(|| self.settings().cloned());
             self.status = self.clipboard.as_ref().and_then(rawdev::film_profiles::missing).map_or_else(|| crate::tr("Einstellungen kopiert – ⌘⇧V fügt sie ein").into(), |w| crate::trf!("Kopiert – {w}", w = w));
         }
@@ -4378,6 +4439,7 @@ impl eframe::App for App {
         stack::test_helper();
         crash_log::test_panic(&ctx);
         bug_report::frame(&ctx);
+        perf_report::frame(&ctx);
         if stack::reload_needed() {
             self.lib.discard_all_textures();
         }
@@ -4390,6 +4452,7 @@ impl eframe::App for App {
         }
 
         self.track_history(&ctx);
+        self.history_test_hook();
         let now = ui.input(|i| i.time);
         self.schedule(now);
         if self.spp_due.is_some() || self.prefetch_due.is_some() || self.browse.open_due.is_some() || self.browse.full_due.is_some() || !matches!(self.refine, Refine::None) {
@@ -4488,6 +4551,9 @@ impl App {
                     if next != pos {
                         if let Some(c) = &cur {
                             apply = Some(all[next].1.apply(c));
+                            if let Some(i) = self.current.as_ref().map(|c| c.index) {
+                                history::hint(i, history::Hint::preset(&all[next].1.name));
+                            }
                         }
                         self.preset_cursor = Some(all[next].0.clone());
                         moved = true;
@@ -4566,13 +4632,17 @@ impl App {
                 if let (Some(key), Some(p)) = (key, preset) {
                     apply = Some(p.apply(c));
                     clicked_key = Some(key);
+                    if let Some(i) = self.current.as_ref().map(|c| c.index) {
+                        history::hint(i, history::Hint::preset(&p.name));
+                    }
                 }
             }
         });
         let hovered: Option<Settings> = match (hovered_recipe, cur.as_ref()) {
             (Some(darkroom_recipes::Source::BuiltIn(i)), Some(c)) => lib.get(i).map(|(_, p)| p.apply(c)),
             (Some(darkroom_recipes::Source::Own(i)), Some(c)) => self.presets.get(i).map(|p| p.apply(c)),
-            _ => None,
+            // a step hovered in the list "Verlauf" (last frame): its state as the preview
+            _ => self.history.take_hover(),
         };
         if let Some(i) = delete_own {
             delete = Some(i);
@@ -4605,10 +4675,7 @@ impl App {
             self.entries[i].settings = s;
             self.hover_preset = None;
         }
-        lr::section(ui, "Verlauf", true, |ui| {
-            let n = self.current.as_ref().and_then(|c| self.history.get(&c.index)).map_or(0, |h| h.undo.len());
-            ui.label(crate::trf!("{n} Änderung(en) – ⌘Z / ⌘⇧Z", n = n));
-        });
+        self.history_section(ui);
     }
 
     /// Left part of the filmstrip header: source, count, delete rejected, selection.
@@ -5372,7 +5439,8 @@ impl App {
         let frame = if self.crop_mode.is_some() {
             Frame::full_settings(&self.entries[c.index].settings, fw_px, fh_px, cam)
         } else {
-            Frame::from_settings(&self.entries[c.index].settings, fw_px, fh_px, cam)
+            // a hovered preset or history step shows its own crop
+            Frame::from_settings(self.hover_shown().map_or(&self.entries[c.index].settings, |(h, _)| h), fw_px, fh_px, cam)
         };
         let img_size = egui::vec2(frame.w, frame.h);
         // Darkroom: border and "On paper" need space around the photo
@@ -5438,7 +5506,7 @@ impl App {
             let mut factor = pinch;
             if matches!(self.tab, Tab::Develop | Tab::Sensor) {
                 // Develop and sensor view (with and without darkroom): mouse wheel zooms; trackpad swipe pans once zoomed in
-                // (fitted it zooms as before); pinch and ⌘ + scrolling zoom around the fingers; pan by dragging
+                // (fitted it does nothing); pinch and ⌘ + scrolling zoom around the fingers; pan by dragging
                 let (f, p) = zoom::develop_gesture(pinch, swipe, self.scroll_trackpad, alt, self.zoom > 1.01);
                 factor = f;
                 if p != egui::Vec2::ZERO {
@@ -5481,7 +5549,12 @@ impl App {
             Some(media_library::Geste::Raster) => { self.to_grid(); return; }
             Some(media_library::Geste::Zoom(m)) => {
                 let target = if self.zoom > 1.01 { (1.0,egui::Vec2::ZERO) } else {
-                    let rel=m-avail.center(); let z=one_to_one.max(1.0); (z,rel-rel*z)
+                    let z=one_to_one.max(1.0);
+                    // a click on the camera's focus area: 100 % centred on it
+                    match focus_frame::hit(m, now).filter(|_| self.show_focus) {
+                        Some(c) => (z, -(c-avail.center())*z),
+                        None => { let rel=m-avail.center(); (z,rel-rel*z) }
+                    }
                 };
                 (self.zoom,self.pan)=self.navigation.zoom.start(now,(self.zoom,self.pan),target,zoom_frame,zoom::reduced_motion());
                 ui.ctx().request_repaint(); self.view_changed_at=now;
@@ -5563,6 +5636,11 @@ impl App {
             }
             if self.faces_search.is_some() {
                 badge(&painter, rect.intersect(avail), crate::tr("Gesichter werden gesucht …"), None);
+            }
+        }
+        if self.show_focus && self.crop_mode.is_none() && !self.show_camera_jpeg {
+            if let Some(status) = focus_frame::draw(ui, avail, rect, &frame, &self.entries[c.index].path) {
+                badge(&painter, rect.intersect(avail), &status, None);
             }
         }
         let overlay_clip = self.show_clipping && !self.show_camera_jpeg && !self.show_before;
@@ -5978,6 +6056,7 @@ impl App {
                         let index = c.index;
                         let cal = c.loaded.cal.clone();
                         let foreign = c.loaded.previews.foreign.clone();
+                        history::hint(index, history::Hint::white_balance_picker());
                         let s = &mut self.entries[index].settings;
                         if let Some(doc) = &foreign {
                             raw_app::pipette(doc, s, acc.map(|a| a / n));
@@ -7030,8 +7109,10 @@ impl App {
                     let t_info = lr::with_shortcut("Bildinfos im Bild: kurz → ausführlich → aus", "info_overlay");
                     let t_clip = lr::with_shortcut("Clipping-Warnung", "clipping");
                     let t_hdr = if has_hdr { "HDR-Anzeige" } else { "" };
+                    let t_focus = lr::with_shortcut("Fokusfeld der Kamera zeigen", "focus_frame");
                     let cells = [
                         (Cell::Symbol(lr::Icon::Smiley, lr::TEXT), self.show_faces, "Gesichter anzeigen"),
+                        (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT), self.show_focus, t_focus.as_str()),
                         (Cell::Symbol(lr::Icon::Warning, lr::TEXT), self.show_clipping, t_clip.as_str()),
                         (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT } else { Color32::from_gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
                         (Cell::Symbol(lr::Icon::Info, lr::TEXT), self.info_level > 0, t_info.as_str()),
@@ -7040,9 +7121,10 @@ impl App {
                     widths.push((Group::Overlays.key(), r.width()));
                     match c {
                         Some(0) => self.show_faces = !self.show_faces,
-                        Some(1) => self.show_clipping = !self.show_clipping,
-                        Some(2) if has_hdr => self.display.hdr_on = !self.display.hdr_on,
-                        Some(3) => self.info_next(),
+                        Some(1) => self.toggle_focus(),
+                        Some(2) => self.show_clipping = !self.show_clipping,
+                        Some(3) if has_hdr => self.display.hdr_on = !self.display.hdr_on,
+                        Some(4) => self.info_next(),
                         _ => {}
                     }
                 }
@@ -7135,6 +7217,9 @@ impl App {
                     Group::Overlays => {
                         if item(ui, Some(lr::Icon::Smiley), None, crate::tr("Gesichter anzeigen"), self.show_faces) {
                             self.show_faces = !self.show_faces;
+                        }
+                        if item(ui, Some(lr::Icon::Crosshair), None, crate::tr("Fokusfeld der Kamera zeigen"), self.show_focus) {
+                            self.toggle_focus();
                         }
                         if item(ui, Some(lr::Icon::Warning), None, crate::tr("Clipping-Warnung"), self.show_clipping) {
                             self.show_clipping = !self.show_clipping;
@@ -8455,6 +8540,9 @@ impl App {
                     library::settings::set("exportOptions", v);
                 }
             }
+            // keywords: parent terms in dc:subject (default on), the hierarchy (lr:hierarchicalSubject) optional
+            let personal = self.export_options.metadata == develop::export::Metadata::All;
+            export_row(ui, "", |ui| crate::keyword_export::controls(ui, personal));
 
             // ── Development (Sigma only)
             if has_x3f {
@@ -9200,27 +9288,46 @@ fn contains(outer: [usize; 4], inner: [usize; 4]) -> bool {
 }
 
 /// Shorten paths in the log to the file name: "open /Users/x/Photos/a.RAF: …" → "open a.RAF: …".
-/// A path starts with "/" at the start of a word and ends at the next space; trailing punctuation stays.
+/// A path starts at the start of a word with "/", a UNC prefix or a drive ("C:", then a separator); it runs over
+/// single spaces as long as the next word still holds a separator (folders with spaces: "/Users/x/My Photos/a.RAF")
+/// and ends before trailing punctuation, which stays.
 fn shorten_paths(msg: &str) -> String {
+    let is_sep = |c: char| c == '/' || c == '\\';
+    // a path starts at byte `i` of `msg`
+    let starts = |i: usize| -> bool {
+        let before_ok = msg[..i].chars().next_back().is_none_or(|c| c.is_whitespace() || "([\"'=:".contains(c));
+        let rest = &msg[i..];
+        let mut ch = rest.chars();
+        let drive = matches!((ch.next(), ch.next(), ch.next()), (Some(d), Some(':'), Some(s)) if d.is_ascii_alphabetic() && is_sep(s));
+        before_ok && (rest.starts_with('/') || rest.starts_with("\\\\") || drive)
+    };
+    let word_end = |i: usize| msg[i..].find(char::is_whitespace).map_or(msg.len(), |e| i + e);
+    let trim = |t: &str| t.trim_end_matches(|c| ":,;)]\"'".contains(c)).len();
     let mut out = String::with_capacity(msg.len());
-    let mut rest = msg;
-    while let Some(i) = rest.find('/') {
-        let word_start = rest[..i].chars().last().is_none_or(|c| c.is_whitespace() || "([\"'=:".contains(c));
-        if !word_start {
-            out.push_str(&rest[..=i]);
-            rest = &rest[i + 1..];
+    let mut i = 0;
+    while i < msg.len() {
+        if !starts(i) {
+            let c = msg[i..].chars().next().expect("inside the text");
+            out.push(c);
+            i += c.len_utf8();
             continue;
         }
-        out.push_str(&rest[..i]);
-        let tail = &rest[i..];
-        let end = tail.find(char::is_whitespace).unwrap_or(tail.len());
-        let token = &tail[..end];
-        let core_token = token.trim_end_matches(|c| ":,;)]\"'".contains(c));
-        out.push_str(core_token.rsplit('/').next().unwrap_or(""));
-        out.push_str(&token[core_token.len()..]);
-        rest = &tail[end..];
+        let mut end = word_end(i);
+        // over single spaces while the next word is still part of the path (holds a separator, starts no new path)
+        while trim(&msg[i..end]) == end - i && msg[end..].starts_with(' ') && !msg[end + 1..].starts_with(char::is_whitespace) {
+            let next = end + 1;
+            let next_end = word_end(next);
+            if next_end == next || starts(next) || !msg[next..next_end].contains(is_sep) {
+                break;
+            }
+            end = next_end;
+        }
+        let token = &msg[i..end];
+        let core = &token[..trim(token)];
+        out.push_str(core.rsplit(is_sep).next().unwrap_or(""));
+        out.push_str(&token[core.len()..]);
+        i = end;
     }
-    out.push_str(rest);
     out
 }
 
@@ -9380,6 +9487,16 @@ mod log_tests {
         // Fractions and ratios stay
         assert_eq!(shorten_paths("Zeile 3/4, Stufe 1/2"), "Zeile 3/4, Stufe 1/2");
         assert_eq!(shorten_paths("ohne Pfad"), "ohne Pfad");
+        // folders with spaces and Windows paths: no folder name is left
+        assert_eq!(shorten_paths("focus /Users/x/Meine Fotos/a.CR3: 3 field(s)"), "focus a.CR3: 3 field(s)");
+        assert_eq!(shorten_paths("öffnen C:\\Users\\x\\Mein Ordner\\foto.raw: ok"), "öffnen foto.raw: ok");
+        assert_eq!(shorten_paths("Fehler (D:/Bilder/Neue Fotos/b.NEF)"), "Fehler (b.NEF)");
+        assert_eq!(shorten_paths("netz \\\\nas\\Fotos\\c.ARW fertig"), "netz c.ARW fertig");
+        // a file name with a space keeps its second word; two paths stay two
+        assert_eq!(shorten_paths("öffnen /a/b/Mein Foto.jpg"), "öffnen Mein Foto.jpg");
+        assert_eq!(shorten_paths("von /a/b.jpg nach /c/d.jpg"), "von b.jpg nach d.jpg");
+        assert_eq!(shorten_paths("kopiert /a/b.jpg /c/d.jpg"), "kopiert b.jpg d.jpg");
+        assert_eq!(shorten_paths("Verhältnis 16:9, Fläche 3/4"), "Verhältnis 16:9, Fläche 3/4");
     }
 }
 

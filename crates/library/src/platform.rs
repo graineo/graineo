@@ -3,6 +3,8 @@
 
 use std::path::Path;
 
+pub mod info;
+
 /// Free space (bytes available to the user) on the volume of the existing path `p`.
 #[cfg(unix)]
 pub fn free_bytes(p: &Path) -> Option<u64> {
@@ -350,7 +352,18 @@ pub fn cpu_seconds() -> Option<f64> {
         let t = |v: libc::timeval| v.tv_sec as f64 + v.tv_usec as f64 / 1e6;
         (r == 0).then(|| t(u.ru_utime) + t(u.ru_stime))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::FILETIME;
+        use windows_sys::Win32::System::Threading::{GetCurrentProcess, GetProcessTimes};
+        let (mut created, mut exited, mut kernel, mut user): (FILETIME, FILETIME, FILETIME, FILETIME) = Default::default();
+        // SAFETY: pseudo handle of the own process, four output values
+        let ok = unsafe { GetProcessTimes(GetCurrentProcess(), &mut created, &mut exited, &mut kernel, &mut user) } != 0;
+        // 100-ns units
+        let v = |f: FILETIME| (((f.dwHighDateTime as u64) << 32) | f.dwLowDateTime as u64) as f64 / 1e7;
+        ok.then(|| v(kernel) + v(user))
+    }
+    #[cfg(not(any(unix, windows)))]
     None
 }
 

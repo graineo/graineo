@@ -82,6 +82,7 @@ pub enum Cmd {
     Shortcuts,
     ShowLogs,
     ReportBug,
+    PerfReport,
     About,
     CheckUpdates,
     TabInfo,
@@ -94,6 +95,8 @@ pub enum Cmd {
     NewSmartCollection,
     NewCollectionSet,
     ManageImports,
+    /// dialog "Stichwörter ordnen …" (library)
+    ArrangeKeywords,
     ProofFull,
     ProofSrgb,
     ProofP3,
@@ -545,11 +548,13 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
     ),
     (Cmd::ShowLogs, Text::MenuShowLogs, None, Some("doc.text.magnifyingglass")),
     (Cmd::ReportBug, Text::MenuReportBug, None, Some("exclamationmark.bubble")),
+    (Cmd::PerfReport, Text::MenuPerfReport, None, Some("speedometer")),
     (Cmd::NewCollection, Text::MenuNewCollection, Some("new_collection"), Some("rectangle.stack.badge.plus")),
     (Cmd::NewSmartCollection, Text::MenuNewSmartCollection, None, Some("gearshape.2")),
     (Cmd::NewCollectionSet, Text::MenuNewCollectionSet, None, Some("folder.badge.plus")),
     (Cmd::JumpToSelection, Text::MenuJumpToSelection, Some("jump_to_selection"), Some("scope")),
     (Cmd::ManageImports, Text::MenuManageImports, None, Some("tray.full")),
+    (Cmd::ArrangeKeywords, Text::MenuArrangeKeywords, Some("arrange_keywords"), Some("tag")),
     (Cmd::ProofFull, Text::MenuProofFull, None, None),
     (Cmd::ProofSrgb, Text::MenuProofSrgb, None, None),
     (Cmd::ProofP3, Text::MenuProofP3, None, None),
@@ -805,6 +810,7 @@ impl AppMenu {
                 &item(Cmd::NewCollectionSet),
                 &PredefinedMenuItem::separator(),
                 &item(Cmd::ManageImports),
+                &item(Cmd::ArrangeKeywords),
             ],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
@@ -924,7 +930,7 @@ impl AppMenu {
         let help = Submenu::with_items(
             i18n::text_in(language, Text::NativeHelp),
             true,
-            &[&item(Cmd::Shortcuts), &PredefinedMenuItem::separator(), &item(Cmd::ReportBug), &item(Cmd::ShowLogs)],
+            &[&item(Cmd::Shortcuts), &PredefinedMenuItem::separator(), &item(Cmd::ReportBug), &item(Cmd::PerfReport), &item(Cmd::ShowLogs)],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
         if !mac {

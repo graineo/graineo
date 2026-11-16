@@ -52,7 +52,8 @@ pub fn plan_steps(items: &[(i64, Option<String>, Settings)], clockwise: bool) ->
 #[derive(Clone, Debug, PartialEq)]
 pub enum Undoable {
     Turn(Vec<Step>),
-    Settings(Vec<crate::settings_group::Change>),
+    /// with the command as the develop history knows it (one id for the steps of all its photos)
+    Settings(Vec<crate::settings_group::Change>, crate::history::Command),
 }
 
 /// Photos kept in the undo stack of commands for several photos (memory: two settings per photo).
@@ -63,7 +64,7 @@ impl Undoable {
     pub fn photos(&self) -> usize {
         match self {
             Undoable::Turn(s) => s.len(),
-            Undoable::Settings(c) => c.len(),
+            Undoable::Settings(c, _) => c.len(),
         }
     }
 }
@@ -73,6 +74,9 @@ impl Undoable {
 pub struct TurnUndo {
     undo: Vec<Undoable>,
     redo: Vec<Undoable>,
+    /// when each entry was done / taken back ([`crate::undo_order::tick`], parallel to `undo` / `redo`)
+    undo_at: Vec<u64>,
+    redo_at: Vec<u64>,
     /// the last undoable action was one of these (or its undo/redo); anything else resets it
     pub recent: bool,
 }
@@ -86,21 +90,24 @@ impl TurnUndo {
     }
 
     /// New settings for several photos as one command (one ⌘Z for all of them).
-    pub fn record_settings(&mut self, changes: Vec<crate::settings_group::Change>) {
+    pub fn record_settings(&mut self, changes: Vec<crate::settings_group::Change>, cmd: crate::history::Command) {
         if changes.is_empty() {
             return;
         }
-        self.push(Undoable::Settings(changes));
+        self.push(Undoable::Settings(changes, cmd));
     }
 
     fn push(&mut self, u: Undoable) {
         self.undo.push(u);
+        self.undo_at.push(crate::undo_order::tick());
         // at most 100 commands and – commands for thousands of photos keep two settings per photo – at most
         // [`PHOTOS_MAX`] photos in all (the newest command always stays)
         while self.undo.len() > 100 || (self.undo.len() > 1 && self.undo.iter().map(Undoable::photos).sum::<usize>() > PHOTOS_MAX) {
             self.undo.remove(0);
+            self.undo_at.remove(0);
         }
         self.redo.clear();
+        self.redo_at.clear();
         self.recent = true;
     }
 
@@ -120,7 +127,9 @@ impl TurnUndo {
             return None;
         }
         let s = self.undo.pop()?;
+        self.undo_at.pop();
         self.redo.push(s.clone());
+        self.redo_at.push(crate::undo_order::tick());
         self.recent = !self.undo.is_empty() || !self.redo.is_empty();
         Some(s)
     }
@@ -131,8 +140,35 @@ impl TurnUndo {
             return None;
         }
         let s = self.redo.pop()?;
+        self.redo_at.pop();
         self.undo.push(s.clone());
+        self.undo_at.push(crate::undo_order::tick());
         Some(s)
+    }
+
+    /// Command id of the settings command ⌘Z / ⇧⌘Z would take back / do again (its steps in the develop history).
+    pub fn undo_command(&self) -> Option<i64> {
+        match self.undo.last()? {
+            Undoable::Settings(_, c) => Some(c.id),
+            Undoable::Turn(_) => None,
+        }
+    }
+
+    pub fn redo_command(&self) -> Option<i64> {
+        match self.redo.last()? {
+            Undoable::Settings(_, c) => Some(c.id),
+            Undoable::Turn(_) => None,
+        }
+    }
+
+    /// When the command ⌘Z would take back was done, and whether it is a turn (`None`: none).
+    pub fn undo_stamp(&self) -> Option<(u64, bool)> {
+        Some((*self.undo_at.last()?, matches!(self.undo.last()?, Undoable::Turn(_))))
+    }
+
+    /// When the command ⇧⌘Z would do again was taken back, and whether it is a turn.
+    pub fn redo_stamp(&self) -> Option<(u64, bool)> {
+        Some((*self.redo_at.last()?, matches!(self.redo.last()?, Undoable::Turn(_))))
     }
 
     /// Another action came after the last command: ⌘Z belongs to that one.
@@ -250,6 +286,9 @@ pub(crate) fn save_background(path: std::path::PathBuf, copy: Option<String>, s:
 impl App {
     /// ⌘R / ⇧⌘R and the buttons of the library: turn all selected photos (in Develop: the open photo).
     pub(crate) fn rotate_command(&mut self, clockwise: bool) {
+        if let Some(i) = self.current.as_ref().map(|c| c.index) {
+            crate::history::hint(i, crate::history::Hint::rotate(clockwise));
+        }
         if self.in_grid() {
             self.rotate_selection(clockwise);
         } else {
@@ -348,8 +387,8 @@ impl App {
                 let n = self.apply_steps(&steps, false);
                 self.status = crate::trf!("Rückgängig: Drehung ({n} Fotos)", n = n);
             }
-            Some(Undoable::Settings(changes)) => {
-                let n = self.apply_changes(&changes, false);
+            Some(Undoable::Settings(changes, cmd)) => {
+                let n = self.apply_changes(&changes, false, &cmd);
                 self.status = crate::trf!("Rückgängig: Einstellungen ({n} Fotos)", n = n);
             }
             None => return false,
@@ -371,8 +410,8 @@ impl App {
                 let n = self.apply_steps(&steps, true);
                 self.status = crate::trf!("Wiederholt: Drehung ({n} Fotos)", n = n);
             }
-            Some(Undoable::Settings(changes)) => {
-                let n = self.apply_changes(&changes, true);
+            Some(Undoable::Settings(changes, cmd)) => {
+                let n = self.apply_changes(&changes, true, &cmd);
                 self.status = crate::trf!("Wiederholt: Einstellungen ({n} Fotos)", n = n);
             }
             None => return false,

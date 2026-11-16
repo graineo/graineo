@@ -483,6 +483,8 @@ impl App {
                             self.status = crate::trf!("Kopie: Einstellungen nicht gespeichert ({e})", e = e);
                         }
                     }
+                    // made from a step of the develop history: the copy's history starts there
+                    self.history_version_done(source, pos);
                     self.lib.set_active(id);
                     if single {
                         self.select(pos, false);

@@ -639,6 +639,40 @@ fn sidecar_question(ctx: &egui::Context) {
     }
 }
 
+/// Question before deleting every develop history, and its outcome.
+static HISTORY_QUESTION: Mutex<bool> = Mutex::new(false);
+static HISTORY_MESSAGE: Mutex<String> = Mutex::new(String::new());
+
+fn history_question(ctx: &egui::Context) {
+    if !*HISTORY_QUESTION.lock().unwrap_or_else(|e| e.into_inner()) {
+        return;
+    }
+    let answer = crate::dialog::show(
+        ctx,
+        "verlauf-loeschen",
+        crate::tr("Alle Verläufe löschen?"),
+        crate::dialog::WIDTH,
+        |ui| {
+            crate::dialog::text(ui, crate::tr("Die Schritte aller Fotos werden aus der Bibliothek gelöscht. Die Bearbeitungen selbst bleiben, wie sie jetzt sind."));
+            crate::dialog::hint(ui, crate::tr("Ältere Sicherungen der Bibliothek enthalten die Verläufe weiterhin."));
+        },
+        crate::dialog::Buttons::destructive(crate::tr("Alle löschen"), true),
+    );
+    match answer {
+        crate::dialog::Answer::Open => {}
+        crate::dialog::Answer::Cancel => *HISTORY_QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = false,
+        crate::dialog::Answer::Primary => {
+            *HISTORY_QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = false;
+            crate::history::delete_all(|r| {
+                *HISTORY_MESSAGE.lock().unwrap_or_else(|e| e.into_inner()) = match r {
+                    Ok(n) => crate::trf!("{n} Schritte gelöscht", n = n),
+                    Err(e) => crate::trf!("Fehler: {e}", e = e),
+                };
+            });
+        }
+    }
+}
+
 /// Backup chosen in "Wiederherstellen" (index into `State::backup_list`) and the open question before restoring.
 static RESTORE_CHOICE: Mutex<usize> = Mutex::new(0);
 static RESTORE_QUESTION: Mutex<Option<(std::path::PathBuf, u64)>> = Mutex::new(None);
@@ -691,7 +725,7 @@ fn restore_question(ctx: &egui::Context) {
 }
 
 /// Setting "Grafikkarte verwenden" (`useGpu`, default on).
-fn gpu_setting() -> bool {
+pub(crate) fn gpu_setting() -> bool {
     setting_bool("useGpu", true)
 }
 
@@ -893,6 +927,26 @@ fn library(ui: &mut egui::Ui) {
         });
         sidecar_question(ui.ctx());
         restore_question(ui.ctx());
+        separator(ui);
+        // develop history (steps of every photo): kept in the library, may be switched off and deleted
+        row(ui, crate::tr("Verlauf speichern"), Some(crate::tr("Schritte jeder Bearbeitung, nur in der Bibliothek auf diesem Rechner. Aus: nur bis zum Beenden.")), |ui| {
+            let mut an = library::store::save_history();
+            if toggle(ui, &mut an) {
+                if let Err(e) = library::store::set_save_history(an) {
+                    crate::log(&format!("saveHistory: {e}"));
+                }
+            }
+        });
+        row(ui, crate::tr("Alle Verläufe löschen"), None, |ui| {
+            if ui.add_enabled(!running(), egui::Button::new(crate::tr("Löschen …"))).clicked() {
+                *HISTORY_QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = true;
+            }
+            let m = HISTORY_MESSAGE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            if !m.is_empty() {
+                ui.add(egui::Label::new(egui::RichText::new(m).small().color(lr::TEXT_DIM)).truncate());
+            }
+        });
+        history_question(ui.ctx());
         separator(ui);
         row(ui, crate::tr("Begleitdateien einlesen"), None, |ui| {
             if ui.add_enabled(!running(), egui::Button::new(crate::tr("Einlesen …"))).clicked() {
@@ -1206,6 +1260,19 @@ fn develop_section(ui: &mut egui::Ui) {
                 pools::set_gpu_allowed(an);
             }
         });
+        separator(ui);
+        row(ui, crate::tr("Zeitprotokoll"), Some(crate::tr("Schreibt je geöffnetem Foto eine Zeile mit Zeiten (ohne Datei- und Ordnernamen) in timings.log im Protokollordner. Bleibt auf diesem Rechner; der Leistungsbericht hängt die letzten 100 Zeilen an")), |ui| {
+            let mut an = crate::timing_log::enabled();
+            if toggle(ui, &mut an) {
+                crate::timing_log::set_enabled(an);
+            }
+        });
+        separator(ui);
+        row(ui, crate::tr("Leistungsbericht"), Some(crate::tr("Misst, wie schnell dieser Rechner Fotos öffnet und entwickelt, und schreibt eine Textdatei zum Einsenden")), |ui| {
+            if ui.button(crate::tr("Erstellen …")).clicked() {
+                crate::perf_report::open();
+            }
+        });
     });
     group(ui, crate::tr("Foveon: Zwischenspeicher der Foveon-Basis"), |ui| {
         row(ui, crate::tr("Belegt"), Some(crate::tr("Höchstens 20 GB; pausiert unter 15 GB freiem Platz")), |ui| match &z {
@@ -1297,6 +1364,8 @@ fn export(ui: &mut egui::Ui) {
                 e["reveal"] = json!(r);
             }
         });
+        separator(ui);
+        crate::keyword_export::settings_rows(ui);
     });
     if e != before {
         library::settings::set("export", e);

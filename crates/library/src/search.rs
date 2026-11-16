@@ -661,21 +661,55 @@ fn person_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     out
 }
 
-/// Images with a keyword (name contains `t`, folded) or one below it.
+/// Images with a keyword (name contains `t`, folded) or one below it. With a path (`keyword:="Orte > Paris"`, also
+/// "›" or "|"): exact = exactly this keyword (the path from the top), else every keyword whose path ends so (the
+/// last segment may be part of the name).
 fn keyword_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
-    let mut ids: Vec<i64> = Vec::new();
-    if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword") {
-        if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
-            ids = rows.flatten().filter(|(_, n)| name_ok(n, t, exact)).map(|(i, _)| i).collect();
-        }
-    }
     let mut out = HashSet::new();
-    for id in ids {
+    for id in keyword_ids(db, t, exact) {
         if let Ok(v) = db.images_with_keyword(id) {
             out.extend(v);
         }
     }
     out
+}
+
+/// Keywords a `keyword:` term finds (`t` as the query holds it; a path "a > b" matches from the bottom up).
+pub(crate) fn keyword_ids(db: &Db, t: &str, exact: bool) -> Vec<i64> {
+    let segs: Vec<String> = crate::keywords::split_typed(t).iter().map(|s| fold_text(s)).collect();
+    let mut ids: Vec<i64> = Vec::new();
+    if segs.len() > 1 {
+        if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name, parent FROM keyword") {
+            if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, (fold_text(&r.get::<_, String>(1)?), r.get::<_, Option<i64>>(2)?)))) {
+                let nodes: HashMap<i64, (String, Option<i64>)> = rows.flatten().collect();
+                for (&id, (name, _)) in &nodes {
+                    if !name_ok(name, &segs[segs.len() - 1], exact) {
+                        continue;
+                    }
+                    // the parents from the bottom up must be the earlier segments
+                    let mut cur = nodes[&id].1;
+                    let mut ok = true;
+                    for want in segs[..segs.len() - 1].iter().rev() {
+                        match cur.and_then(|c| nodes.get(&c).map(|n| (c, n))) {
+                            Some((_, (n, p))) if n == want => cur = *p,
+                            _ => {
+                                ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    if ok && (!exact || cur.is_none()) {
+                        ids.push(id);
+                    }
+                }
+            }
+        }
+    } else if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword") {
+        if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
+            ids = rows.flatten().filter(|(_, n)| name_ok(n, t, exact)).map(|(i, _)| i).collect();
+        }
+    }
+    ids
 }
 
 /// Images with a place keyword (name contains `t`, folded) or one below it.
@@ -1191,6 +1225,14 @@ mod tests {
         assert_eq!(evaluate(&k, &parse("kw:italien")), vec![true, false, false]);
         assert_eq!(evaluate(&k, &parse("keyword:rom")), vec![true, false, true], "Rom and Rom-Reise");
         assert_eq!(place_keywords(&db), HashSet::from([2, 3]));
+        // paths: "Paris" below places and below people are told apart
+        db.conn.execute_batch("INSERT INTO keyword(id, name, parent) VALUES(6, 'Paris', 1), (7, 'Personen', NULL), (8, 'Paris', 7); INSERT INTO image_keyword(image, keyword) VALUES(2, 6), (3, 8);").unwrap();
+        assert_eq!(evaluate(&k, &parse("keyword:=\"Paris\"")), vec![false, true, true], "by name: both");
+        assert_eq!(evaluate(&k, &parse("keyword:=\"Orte > Paris\"")), vec![false, true, false], "exactly the place");
+        assert_eq!(evaluate(&k, &parse("keyword:=\"Personen › Paris\"")), vec![false, false, true]);
+        assert_eq!(evaluate(&k, &parse("keyword:\"Italien > Rom\"")), vec![true, false, false], "the end of a path");
+        assert_eq!(evaluate(&k, &parse("keyword:=\"Italien > Rom\"")), vec![false, false, false], "exact = from the top");
+        assert_eq!(evaluate(&k, &parse("keyword:=\"Orte > Italien\"")), vec![true, false, false], "with the children below");
     }
 
     /// Every name of a field gives the same query (base form inside), quoted values can be negated,

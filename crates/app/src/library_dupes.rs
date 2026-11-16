@@ -670,7 +670,7 @@ impl LibraryView {
                     let snap = std::mem::take(&mut o.snapshot);
                     if o.removed > 0 {
                         let label = crate::trf!("{a} entfernt", a = crate::dialog::count(o.removed, crate::tr("Duplikat"), crate::tr("Duplikate")));
-                        self.manage.undo.push(library_manage::Undo::Snap { label: label.clone(), snap, keywords: false, smart: false });
+                        self.manage.push(library_manage::Undo::Snap { label: label.clone(), snap, keywords: false, smart: false });
                         actions.push(Action::Status(label));
                     }
                     self.reload();

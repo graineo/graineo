@@ -44,6 +44,17 @@ pub struct Request {
     pub targets: Vec<Target>,
     /// an undoable command of its own (not: undo/redo of one)
     pub record: bool,
+    /// the develop history: steps of this command (written with the settings, in the same block)
+    pub history: Option<HistoryJob>,
+}
+
+/// What the develop history needs of a request: the command, whether it is its undo, and the photos whose history the
+/// app holds in memory (it records theirs itself when the block arrives).
+#[derive(Clone)]
+pub struct HistoryJob {
+    pub cmd: crate::history::Command,
+    pub undo: bool,
+    pub memory: std::collections::HashSet<(i64, Option<String>)>,
 }
 
 /// From the helper thread to the UI.
@@ -65,7 +76,7 @@ pub fn run(
     req: &Request,
     cancelled: &dyn Fn() -> bool,
     load: &dyn Fn(&Target) -> Result<(Settings, Meta), String>,
-    save: &mut dyn FnMut(&[(&Target, &Settings, &Meta)]) -> Vec<String>,
+    save: &mut dyn FnMut(&[(&Target, &Settings, &Settings, &Meta)]) -> Vec<String>,
     emit: &mut dyn FnMut(Msg),
 ) {
     let total = req.targets.len();
@@ -94,7 +105,7 @@ pub fn run(
                 changes.push((t, Change { image: t.image, copy: t.copy.clone(), before, after }, meta));
             }
         }
-        let list: Vec<(&Target, &Settings, &Meta)> = changes.iter().map(|(t, c, m)| (*t, &c.after, m)).collect();
+        let list: Vec<(&Target, &Settings, &Settings, &Meta)> = changes.iter().map(|(t, c, m)| (*t, &c.before, &c.after, m)).collect();
         let failed = if list.is_empty() { Vec::new() } else { save(&list) };
         if let Some(e) = failed.last() {
             error = Some(e.clone());
@@ -118,15 +129,26 @@ fn load_photo(t: &Target) -> Result<(Settings, Meta), String> {
 }
 
 /// Save one block: every photo through the usual path, the library writes of the block in one transaction. The
-/// rating is read again right before (a star set meanwhile must not be overwritten with the one loaded earlier).
-fn save_block(list: &[(&Target, &Settings, &Meta)]) -> Vec<String> {
+/// rating is read again right before (a star set meanwhile must not be overwritten with the one loaded earlier). The
+/// step of the develop history goes into the same transaction (photos whose history the app holds: it records them).
+fn save_block(list: &[(&Target, &Settings, &Settings, &Meta)], history: Option<&HistoryJob>) -> Vec<String> {
     library::store::batch(|| {
         let mut errors = Vec::new();
-        for (t, s, meta) in list {
-            let fresh = library::store::locate(&t.path).and_then(|(file, _)| library::store::meta(file, t.copy.as_deref())).map(|m| Meta { rating: m.0, flag: crate::sidecar::Flag::from_i8(m.1), label: m.2 });
+        for (t, before, s, meta) in list {
+            let loc = library::store::locate(&t.path);
+            let step = history.filter(|h| !h.memory.contains(&(t.image, t.copy.clone()))).zip(loc);
+            if let Some((h, (file, _))) = step {
+                let (b, a) = (crate::history::value(before), crate::history::value(s));
+                library::store::command_step(file, t.copy.as_deref(), &b, &a, h.cmd.hint.kind, &h.cmd.hint.label, h.cmd.id, h.undo);
+            }
+            let fresh = loc.and_then(|(file, _)| library::store::meta(file, t.copy.as_deref())).map(|m| Meta { rating: m.0, flag: crate::sidecar::Flag::from_i8(m.1), label: m.2 });
             let meta = fresh.unwrap_or_else(|| (*meta).clone());
             if let Err(e) = crate::sidecar::save_entry(&t.path, t.copy.as_deref(), s, &meta) {
                 errors.push(format!("{}: {e}", t.path.display()));
+            }
+            // also when the settings needed no write (equal to the stored ones)
+            if let Some((_, (file, _))) = step {
+                library::store::send_history_of(file, t.copy.as_deref());
             }
         }
         errors
@@ -160,6 +182,11 @@ impl Default for Runner {
 impl Runner {
     /// Hand over a request. Returns its id; when it was taken along by the request still waiting before it, that one's id.
     pub fn submit(&mut self, ctx: Option<&eframe::egui::Context>, steps: Vec<Step>, targets: Vec<Target>, record: bool) -> u64 {
+        self.submit_with(ctx, steps, targets, record, None)
+    }
+
+    /// [`Self::submit`] with the steps of the develop history.
+    pub fn submit_with(&mut self, ctx: Option<&eframe::egui::Context>, steps: Vec<Step>, targets: Vec<Target>, record: bool, history: Option<HistoryJob>) -> u64 {
         self.start(ctx.cloned());
         let (m, cv) = &*self.shared;
         let mut q = m.lock().unwrap_or_else(|e| e.into_inner());
@@ -172,7 +199,7 @@ impl Runner {
             }
         }
         let id = self.next.fetch_add(1, Ordering::SeqCst);
-        q.waiting.push_back(Request { id, steps, targets, record });
+        q.waiting.push_back(Request { id, steps, targets, record, history });
         cv.notify_all();
         id
     }
@@ -223,7 +250,7 @@ impl Runner {
                             c.request_repaint();
                         }
                     };
-                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&req, &cancelled, &load_photo, &mut save_block, &mut emit)));
+                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&req, &cancelled, &load_photo, &mut |l| save_block(l, req.history.as_ref()), &mut emit)));
                     if r.is_err() {
                         emit(Msg::End { id, cancelled: true, errors: 1, error: Some(crate::tr("interner Fehler beim Speichern").to_string()) });
                     }
@@ -260,8 +287,8 @@ mod tests {
         fn go(&self, req: &Request, cancel_after_blocks: Option<usize>) -> Vec<Msg> {
             let mut out = Vec::new();
             let load = |t: &Target| -> Result<(Settings, Meta), String> { Ok((self.s.borrow()[&t.image].clone(), Meta::default())) };
-            let mut save = |l: &[(&Target, &Settings, &Meta)]| {
-                for (t, s, _) in l {
+            let mut save = |l: &[(&Target, &Settings, &Settings, &Meta)]| {
+                for (t, _, s, _) in l {
                     self.s.borrow_mut().insert(t.image, (*s).clone());
                 }
                 self.transactions.borrow_mut().push(l.len());
@@ -276,7 +303,7 @@ mod tests {
     #[test]
     fn blocks_of_250_one_transaction_each_with_progress() {
         let lib = Lib::new(3000);
-        let req = Request { id: 1, steps: vec![plus(0.5)], targets: targets(3000), record: true };
+        let req = Request { id: 1, steps: vec![plus(0.5)], targets: targets(3000), record: true, history: None };
         let msgs = lib.go(&req, None);
         assert_eq!(*lib.transactions.borrow(), vec![250; 12], "12 blocks of 250, one transaction each");
         let progress: Vec<(usize, usize)> = msgs.iter().filter_map(|m| if let Msg::Block { done, total, .. } = m { Some((*done, *total)) } else { None }).collect();
@@ -291,7 +318,7 @@ mod tests {
     #[test]
     fn last_block_may_be_short() {
         let lib = Lib::new(2806);
-        lib.go(&Request { id: 1, steps: vec![plus(1.0)], targets: targets(2806), record: true }, None);
+        lib.go(&Request { id: 1, steps: vec![plus(1.0)], targets: targets(2806), record: true, history: None }, None);
         let t = lib.transactions.borrow();
         assert_eq!(t.len(), 12);
         assert_eq!(*t.last().unwrap(), 2806 - 11 * 250);
@@ -300,7 +327,7 @@ mod tests {
     #[test]
     fn cancel_stops_between_blocks_never_half_a_block() {
         let lib = Lib::new(3000);
-        let msgs = lib.go(&Request { id: 1, steps: vec![plus(1.0)], targets: targets(3000), record: true }, Some(3));
+        let msgs = lib.go(&Request { id: 1, steps: vec![plus(1.0)], targets: targets(3000), record: true, history: None }, Some(3));
         assert_eq!(*lib.transactions.borrow(), vec![250, 250, 250]);
         assert!(matches!(msgs.last(), Some(Msg::End { cancelled: true, .. })));
         let s = lib.s.borrow();
@@ -313,11 +340,11 @@ mod tests {
     fn undo_restores_every_photo_in_one_request() {
         let lib = Lib::new(600);
         let start: HashMap<i64, Settings> = lib.s.borrow().clone();
-        let msgs = lib.go(&Request { id: 1, steps: vec![plus(0.3)], targets: targets(600), record: true }, None);
+        let msgs = lib.go(&Request { id: 1, steps: vec![plus(0.3)], targets: targets(600), record: true, history: None }, None);
         let changes: Vec<Change> = msgs.into_iter().flat_map(|m| if let Msg::Block { changes, .. } = m { changes.into_iter().map(|(c, _)| c).collect() } else { Vec::new() }).collect();
         // one undo step: all photos back (the request of ⌘Z sets "before")
         let back: Vec<Target> = changes.iter().map(|c| Target { image: c.image, copy: None, path: PathBuf::new(), set: Some(c.before.clone()) }).collect();
-        lib.go(&Request { id: 2, steps: vec![], targets: back, record: false }, None);
+        lib.go(&Request { id: 2, steps: vec![], targets: back, record: false, history: None }, None);
         let s = lib.s.borrow();
         assert!((0..600).all(|i| s[&i] == stored(&start[&i])));
     }
@@ -325,7 +352,7 @@ mod tests {
     #[test]
     fn photos_that_do_not_change_are_not_saved() {
         let lib = Lib::new(10);
-        let msgs = lib.go(&Request { id: 1, steps: vec![Arc::new(|s: &Settings| s.clone())], targets: targets(10), record: true }, None);
+        let msgs = lib.go(&Request { id: 1, steps: vec![Arc::new(|s: &Settings| s.clone())], targets: targets(10), record: true, history: None }, None);
         assert!(lib.transactions.borrow().is_empty());
         assert!(matches!(msgs.last(), Some(Msg::End { cancelled: false, .. })));
     }
@@ -389,6 +416,63 @@ mod tests {
         for (f, _) in &files {
             let s: Settings = serde_json::from_str(&library::store::develop(*f, None).expect("saved")).unwrap();
             assert!((s.exposure - 0.5).abs() < 1e-9);
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The develop history of a command for 200 photos: one step per photo with the command's id, written in the
+    /// blocks of the settings; its undo moves every photo's cursor back (the step stays, dimmed), the redo forward.
+    #[test]
+    fn history_steps_for_200_photos_and_their_undo() {
+        assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
+        let _app_lock = crate::ui_test::app_lock();
+        let root = std::env::temp_dir().join(format!("graineo-multi-history-{}", std::process::id()));
+        let dir = root.join("H");
+        std::fs::create_dir_all(&dir).unwrap();
+        let n = 200;
+        for k in 0..n {
+            image::RgbImage::from_pixel(8, 6, image::Rgb([(k % 200) as u8, 70, 60])).save(dir.join(format!("h{k:04}.png"))).unwrap();
+        }
+        let db = library::db::Db::open(&library::db_path()).unwrap();
+        library::reconcile::add_root(&db, &root, &|_| {}).unwrap();
+        let files: Vec<(i64, PathBuf)> = (0..n).map(|k| dir.join(format!("h{k:04}.png"))).map(|p| (library::store::locate(&p).expect("in the library").0, p)).collect();
+        let cmd = crate::history::Command::new(crate::history::Hint::paste(Some("h0000.png")));
+        let job = |undo: bool| Some(HistoryJob { cmd: cmd.clone(), undo, memory: Default::default() });
+        let mut r = Runner::default();
+        let wait = |r: &Runner, id: u64| -> Vec<Change> {
+            let t = std::time::Instant::now();
+            let mut changes = Vec::new();
+            loop {
+                for m in r.take() {
+                    match m {
+                        Msg::Block { id: i, changes: c, .. } if i == id => changes.extend(c.into_iter().map(|(c, _)| c)),
+                        Msg::End { id: i, .. } if i == id => return changes,
+                        _ => {}
+                    }
+                }
+                assert!(t.elapsed() < crate::ui_test::WAIT, "background apply does not end");
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        };
+        let targets: Vec<Target> = files.iter().map(|(f, p)| Target { image: *f, copy: None, path: p.clone(), set: None }).collect();
+        let id = r.submit_with(None, vec![plus(0.4)], targets, true, job(false));
+        let changes = wait(&r, id);
+        assert_eq!(changes.len(), n);
+        assert!(library::store::flush(std::time::Duration::from_secs(60)));
+        let conn = library::db::Db::open(&library::db_path()).unwrap();
+        for (f, _) in &files {
+            let (steps, cursor) = library::develop_history::load(&conn.conn, *f, None).unwrap();
+            assert_eq!(steps.len(), 2, "start + paste");
+            assert_eq!((steps[1].kind.as_str(), steps[1].command, cursor), ("paste", Some(cmd.id), None));
+        }
+        // undo of the command: every cursor back on the start, the paste step stays
+        let back: Vec<Target> = changes.iter().map(|c| Target { image: c.image, copy: None, path: files.iter().find(|(f, _)| *f == c.image).unwrap().1.clone(), set: Some(c.before.clone()) }).collect();
+        let id = r.submit_with(None, Vec::new(), back, false, job(true));
+        wait(&r, id);
+        assert!(library::store::flush(std::time::Duration::from_secs(60)));
+        for (f, _) in &files {
+            let (steps, cursor) = library::develop_history::load(&conn.conn, *f, None).unwrap();
+            assert_eq!((steps.len(), cursor), (2, Some(0)));
         }
         let _ = std::fs::remove_dir_all(&root);
     }

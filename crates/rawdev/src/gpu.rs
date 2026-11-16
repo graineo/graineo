@@ -201,6 +201,38 @@ impl Gpu {
     }
 }
 
+/// One graphics adapter of this computer (performance report).
+#[derive(Clone, Debug)]
+pub struct AdapterSummary {
+    pub name: String,
+    /// "Metal", "Vulkan", "Dx12", "Gl"
+    pub backend: String,
+    /// "IntegratedGpu", "DiscreteGpu", "VirtualGpu", "Cpu" (software renderer), "Other"
+    pub device_type: String,
+    pub driver: String,
+    pub driver_info: String,
+}
+
+/// All graphics adapters wgpu finds on any backend (a fresh instance; does not open a device). For the
+/// performance report only: costs a few hundred milliseconds on some systems.
+pub fn adapters() -> Vec<AdapterSummary> {
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(desc);
+    pollster::block_on(instance.enumerate_adapters(wgpu::Backends::all()))
+        .into_iter()
+        .map(|a| {
+            let i = a.get_info();
+            AdapterSummary { name: i.name, backend: format!("{:?}", i.backend), device_type: format!("{:?}", i.device_type), driver: i.driver, driver_info: i.driver_info }
+        })
+        .collect()
+}
+
+/// Name of the adapter the development uses, if one is open already (never opens one).
+pub fn adapter_in_use() -> Option<String> {
+    GPU.get().and_then(|g| g.as_ref()).map(|g| g.name.clone())
+}
+
 /// Largest storage buffer (bytes) a kernel can bind.
 pub fn max_buffer() -> Option<u64> {
     gpu().map(|g| g.max_buffer)

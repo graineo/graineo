@@ -1247,42 +1247,28 @@ pub enum Answer {
     RemoveName,
 }
 
-/// Path ("A|B") of a keyword via its parents.
-fn keyword_path(c: &Connection, id: i64) -> Option<String> {
-    c.query_row(
-        "WITH RECURSIVE p(id, name, parent) AS (SELECT id, name, parent FROM keyword WHERE id=?1 UNION ALL SELECT e.id, e.name || '|' || p.name, e.parent FROM p JOIN keyword e ON e.id = p.parent)
-         SELECT name FROM p WHERE parent IS NULL",
-        [id],
-        |r| r.get::<_, String>(0),
-    )
-    .ok()
-}
-
 /// Change the person on an image: the old keyword is dropped if no other face of the image carries this name any more; the new one is added.
 /// Also writes the sidecar (the source of truth).
 fn change_image_person(db: &crate::db::Db, image: i64, except_face: i64, old: Option<i64>, new: Option<i64>) -> Result<(), String> {
     let fe = |e: rusqlite::Error| e.to_string();
-    let mut paths = crate::sync::keyword_paths(db, image)?;
-    let before = paths.clone();
+    // by id: a name is never taken apart into a path ("AC/DC", "A > B")
+    let mut ids = crate::keywords::ids_of(&db.conn, image)?;
+    let before = ids.clone();
     if let Some(a) = old {
         let remaining: i64 = db.conn.query_row("SELECT count(*) FROM face WHERE image=?1 AND person=?2 AND id<>?3 AND status='confirmed'", params![image, a, except_face], |r| r.get(0)).map_err(fe)?;
         if remaining == 0 {
-            if let Some(p) = keyword_path(&db.conn, a) {
-                paths.retain(|x| crate::search::fold_text(x) != crate::search::fold_text(&p));
-            }
+            ids.retain(|x| *x != a);
         }
     }
     if let Some(n) = new {
-        if let Some(p) = keyword_path(&db.conn, n) {
-            if !paths.iter().any(|x| crate::search::fold_text(x) == crate::search::fold_text(&p)) {
-                paths.push(p);
-            }
+        if !ids.contains(&n) {
+            ids.push(n);
         }
     }
-    if paths != before {
+    if ids != before {
         let file: i64 = db.conn.query_row("SELECT file FROM image WHERE id=?1", [image], |r| r.get(0)).map_err(fe)?;
         crate::location::note_before_change(db, &[file]);
-        crate::sync::set_keywords(db, image, &paths, crate::now(), true)?;
+        crate::keywords::set_ids(db, image, &ids, crate::now(), true)?;
         // if the location is currently unreachable (NAS), the write waits in the queue (`crate::location`)
         let _ = crate::sync::write_sidecar(db, file);
     }
@@ -1342,7 +1328,8 @@ pub fn find_or_create_person(db: &crate::db::Db, name: &str) -> Result<i64, Stri
     if let Some(id) = db.conn.query_row("SELECT id FROM keyword WHERE person=1 AND lower(name)=lower(?1) ORDER BY id LIMIT 1", [name], |r| r.get::<_, i64>(0)).optional().map_err(fe)? {
         return Ok(id);
     }
-    let id = crate::sync::create_keyword(db, name)?.ok_or("Stichwort nicht angelegt")?;
+    // the name is taken literally at the top level (no path splitting); a keyword of that name there becomes the person
+    let id = crate::keywords::child(&db.conn, None, name)?;
     db.conn.execute("UPDATE keyword SET person=1 WHERE id=?1", [id]).map_err(fe)?;
     Ok(id)
 }
@@ -1378,25 +1365,21 @@ pub fn rename_person(db: &crate::db::Db, from: i64, name: &str) -> Result<usize,
 
 /// Like `change_image_person`, but does not write the sidecar right away (bulk rename: the sync catches up).
 pub(crate) fn change_image_person_without_file(db: &crate::db::Db, image: i64, old: Option<i64>, new: Option<i64>) -> Result<(), String> {
-    let mut paths = crate::sync::keyword_paths(db, image)?;
-    let before = paths.clone();
+    let mut ids = crate::keywords::ids_of(&db.conn, image)?;
+    let before = ids.clone();
     if let Some(a) = old {
         let remaining: i64 = db.conn.query_row("SELECT count(*) FROM face WHERE image=?1 AND person=?2", params![image, a], |r| r.get(0)).map_err(|e| e.to_string())?;
         if remaining == 0 {
-            if let Some(p) = keyword_path(&db.conn, a) {
-                paths.retain(|x| crate::search::fold_text(x) != crate::search::fold_text(&p));
-            }
+            ids.retain(|x| *x != a);
         }
     }
     if let Some(n) = new {
-        if let Some(p) = keyword_path(&db.conn, n) {
-            if !paths.iter().any(|x| crate::search::fold_text(x) == crate::search::fold_text(&p)) {
-                paths.push(p);
-            }
+        if !ids.contains(&n) {
+            ids.push(n);
         }
     }
-    if paths != before {
-        crate::sync::set_keywords(db, image, &paths, crate::now(), true)?;
+    if ids != before {
+        crate::keywords::set_ids(db, image, &ids, crate::now(), true)?;
     }
     Ok(())
 }

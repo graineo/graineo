@@ -315,7 +315,7 @@ pub const PARKED: i64 = 4;
 /// Origin of the Photos library root folder in the library.
 pub const ORIGIN: &str = "apple-photos";
 /// Marker (column `rules`) of collections that come from Apple Photos albums.
-const COLLECTION_MARKER: &str = "apple-photos";
+pub(crate) const COLLECTION_MARKER: &str = "apple-photos";
 
 /// Result of a sync.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -843,6 +843,14 @@ mod tests {
         assert_eq!(on_vacation, 2);
         let b = reconcile(&db, &dir).unwrap();
         assert_eq!((b.new, b.removed), (0, 0));
+        // an own order of the albums inside the set survives the sync (it never writes positions)
+        let album = |name: &str| -> i64 { db.conn.query_row("SELECT id FROM collection WHERE name = ?1 AND rules = 'apple-photos'", [name], |r| r.get(0)).unwrap() };
+        crate::collection_order::place(&db, album("Urlaub"), Some(album("Apple Fotos")), Some(album("Favoriten"))).unwrap();
+        let order = || -> Vec<(i64, i64)> { db.conn.prepare("SELECT collection, position FROM collection_order ORDER BY 1").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().map(|r| r.unwrap()).collect() };
+        let ordered = order();
+        assert_eq!(ordered.len(), 2);
+        reconcile(&db, &dir).unwrap();
+        assert_eq!(order(), ordered);
         let photos = Connection::open(dir.join("database").join("Photos.sqlite")).unwrap();
         db.conn.execute("UPDATE image SET stars = 4 WHERE file = (SELECT id FROM file WHERE name = 'BBB.mov')", []).unwrap();
         let state = || -> Option<(i64, i64)> { db.conn.query_row("SELECT d.status, b.stars FROM file d JOIN image b ON b.file = d.id WHERE d.name = 'BBB.mov'", [], |r| Ok((r.get(0)?, r.get(1)?))).ok() };

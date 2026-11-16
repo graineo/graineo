@@ -905,7 +905,7 @@ pub(crate) fn rotate_rgb(w: usize, h: usize, rgb: Vec<u8>, q: u8) -> (usize, usi
 
 /// Thread pool for the SPP base (half the cores – the fast preview has priority by its larger pool). Priority as the
 /// front pool: the user waits for the exact image (with "utility" it came up to twice as late while opening, measured).
-fn spp_pool() -> &'static rayon::ThreadPool {
+pub(crate) fn spp_pool() -> &'static rayon::ThreadPool {
     static POOL: std::sync::OnceLock<rayon::ThreadPool> = std::sync::OnceLock::new();
     POOL.get_or_init(|| {
         let n = library::platform::foreground_threads();
@@ -1835,9 +1835,9 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                         .and_then(|mut sess| develop::export::color::export(&mut sess, &s, format, engine, &out, color_space, &options).map_err(|e| e.to_string()))
                 };
                 // Metadata (shooting data of the original, copyright; personal fields as chosen) without recompressing
-                let meta_report = match (&result, format) {
+                let (meta_report, meta_note) = match (&result, format) {
                     (Ok(_), Format::Jpeg { .. } | Format::Tiff16 | Format::Png16) => write_export_metadata(&out, &path, image, &meta, &options, decoder_shot.take()),
-                    _ => String::new(),
+                    _ => (String::new(), String::new()),
                 };
                 if crate::env::var_os("GRAINEO_LOG").is_some() && !meta_report.is_empty() {
                     eprintln!("export {}: metadata {meta_report}", out.display());
@@ -1874,7 +1874,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 let (message, failed) = match result {
                     Ok((spp, target)) => (
                         format!(
-                            "{}{}{hdr_note}",
+                            "{}{}{hdr_note}{meta_note}",
                             crate::trf!("{a} gespeichert", a = target.file_name().unwrap_or_default().to_string_lossy()),
                             if engine == Engine::Spp && !spp { crate::tr(" (eigene Pipeline: Regler/Monochrom aktiv)") } else { "" }
                         ),
@@ -1982,23 +1982,44 @@ fn upright(k: String, w: usize, h: usize, rgb: Vec<u8>, q: u8) -> (String, usize
 /// shooting data of the original (for X3F from the X3F properties) and the copyright given at import;
 /// with "All" also stars, label, keywords (without names of people), title and caption from the library (read only);
 /// the location only with `options.gps`. Never serial numbers.
-fn write_export_metadata(out: &std::path::Path, original: &std::path::Path, image: i64, meta: &crate::sidecar::Meta, options: &develop::export::Options, shot: Option<library::export_meta::Shot>) -> String {
+/// Returns the report (log) and a note for the export message when something chosen could not go into the file (the
+/// export itself goes on).
+fn write_export_metadata(out: &std::path::Path, original: &std::path::Path, image: i64, meta: &crate::sidecar::Meta, options: &develop::export::Options, shot: Option<library::export_meta::Shot>) -> (String, String) {
     use develop::export::Metadata;
     if options.metadata == Metadata::None {
-        return String::new();
+        return (String::new(), String::new());
     }
+    let mut note = String::new();
     let mut f = export_fields(meta, options, shot);
     if image > 0 {
         if let Ok(db) = library::db::Db::standard() {
             f.copyright = db.copyright_of(image);
             if f.personal {
-                f.keywords = db.keywords_without_people(image).unwrap_or_default();
+                // leaves (and parent terms, as chosen), never people, nothing of a branch marked "never export"
+                let (parents, hierarchy) = library::keywords::export_choices();
+                let (subject, paths) = match library::keywords::export_lists(&db.conn, image, parents) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        // the file is still exported, but the message says that its keywords are missing
+                        eprintln!("export {}: keywords not read: {e}", out.display());
+                        note.push_str(crate::tr(" · ohne Stichwörter (Bibliothek nicht lesbar)"));
+                        Default::default()
+                    }
+                };
+                f.keywords = subject;
+                if hierarchy {
+                    f.hierarchy = paths;
+                }
                 f.description = db.image_text_of(image).filter(|t| !t.trim().is_empty());
                 f.title = db.title_of(image);
             }
         }
     }
-    library::export_meta::write(out, original, &f).unwrap_or_else(|e| format!("not written: {e}"))
+    let report = library::export_meta::write(out, original, &f).unwrap_or_else(|e| {
+        note.push_str(crate::tr(" · Metadaten nicht geschrieben"));
+        format!("not written: {e}")
+    });
+    (report, note)
 }
 
 /// The export fields of the chosen metadata level without the library (stars and label from `meta`).

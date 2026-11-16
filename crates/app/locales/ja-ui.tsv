@@ -2303,6 +2303,18 @@ Für Druckereien und Fotolabore, die Adobe RGB verlangen. Im Zweifel dort nachfr
 Größter Farbraum, zum Weiterbearbeiten in Photoshop oder Lightroom – am besten als TIFF 16 Bit.	最も広い色空間。Photoshop や Lightroom での再編集向けで、16ビットTIFFが最適です。
 graineo zeigt Bilder derzeit in sRGB; was darüber hinausgeht, siehst du erst im Zielprogramm.	graineo は現在、画像をsRGBで表示します。それを超える部分は書き出し先のアプリで初めて確認できます。
 Gesichter anzeigen	顔を表示
+Fokusfeld der Kamera zeigen	カメラのフォーカスエリアを表示
+Fokusfeld der Kamera ein/aus (Z/Klick: 100 % an dieser Stelle)	カメラのフォーカスエリアのオン/オフ（Z/クリック：その位置を100 %表示）
+Fokusfeld der Kamera: scharf gemeldet	カメラのフォーカスエリア：合焦と記録
+Fokusfeld der Kamera: gewählt	カメラのフォーカスエリア：選択
+Fokusstelle der Kamera	カメラのフォーカス位置
+Fokuspunkt der Kamera: Kamera meldet unscharf	カメラのフォーカスポイント：カメラがピンぼけを記録
+Fokuspunkt der Kamera	カメラのフォーカスポイント
+Motivbereich laut Kamera	カメラが記録した被写体エリア
+Klick oder {k}: 100 % an dieser Stelle	クリックまたは{k}：この位置を100 %表示
+Kein Fokusfeld in dieser Datei	このファイルにはフォーカスエリアがありません
+Manuell fokussiert – kein Fokusfeld	手動フォーカス – フォーカスエリアなし
+Fokusfeld liegt außerhalb des Ausschnitts	フォーカスエリアは切り抜き範囲外です
 Umbenennen …	名前を変更…
 Ja, zusammenführen	はい、統合
 „{a}“ gibt es schon. {b} Gesichter von „{c}“ dazunehmen?	「{a}」は既にあります。「{c}」の顔{b}件を追加しますか？
@@ -5249,3 +5261,208 @@ Nur ansehen – Originale unverändert	表示のみ – オリジナルは変更
 Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	評価にのみ適用されます。現像は常に写真の隣にサイドカーとして保存されます。
 Zielordner wird geprüft …	保存先フォルダーを確認中 …
 Zielordner antwortet nicht: {}	保存先フォルダーが応答しません: {}
+{n} spätere Schritte verworfen – ⌘Z holt sie zurück	後の{n}ステップを破棄しました – ⌘Zで元に戻せます
+Ausgangszustand (Lightroom)	初期状態（Lightroom）
+Stand vor dem Verlauf	履歴以前の状態
+Außerhalb geändert	外部で変更
+Ältere Schritte zusammengefasst	古いステップをまとめました
+Vorgabe: {name}	プリセット: {name}
+Film: {name}	フィルム: {name}
+Look: {name}	ルック: {name}
+Einstellungen eingefügt	設定を貼り付け
+Einstellungen übertragen	設定を転送
+Aus Lightroom übernommen	Lightroomから引き継ぎ
+Mehrere Einstellungen ({names}, +{n})	複数の設定（{names}、+{n}）
+Alle Verläufe löschen?	すべての履歴を削除しますか？
+Die Schritte aller Fotos werden aus der Bibliothek gelöscht. Die Bearbeitungen selbst bleiben, wie sie jetzt sind.	すべての写真のステップがライブラリから削除されます。編集内容そのものは現在のまま残ります。
+Ältere Sicherungen der Bibliothek enthalten die Verläufe weiterhin.	ライブラリの古いバックアップには履歴が残ります。
+Alle löschen	すべて削除
+{n} Schritte gelöscht	{n}ステップを削除しました
+Verlauf speichern	履歴を保存
+Schritte jeder Bearbeitung, nur in der Bibliothek auf diesem Rechner. Aus: nur bis zum Beenden.	各編集のステップ。このコンピュータのライブラリにのみ保存。オフ: 終了するまでのみ。
+Alle Verläufe löschen	すべての履歴を削除
+Jeder Schritt der Bearbeitung dieses Fotos, der neueste oben.	この写真の編集の各ステップ。新しいものが上です。
+• **Klick** auf einen Schritt springt dorthin; das Bild zeigt seinen Stand. Es entsteht kein neuer Schritt\n• **▶** markiert den Schritt, der gerade gilt\n• **Gedimmte Schritte** liegen nach dem Zeiger und bleiben anklickbar. Die nächste Änderung verwirft sie; ⌘Z gleich danach holt sie zurück\n• **Überfahren** zeigt den Stand eines Schritts im Bild, ohne zu springen\n• **Original** springt zum Ausgangszustand, so wie graineo das Foto zuerst entwickelt hat\n• **(3×)** – Änderungen am selben Regler kurz hintereinander, zusammengefasst\n\nDer Verlauf steht in der Bibliothek auf diesem Rechner (Einstellungen → Bibliothek: „Verlauf speichern“).	• ステップを**クリック**するとそこへジャンプし、画像がその状態になります。新しいステップは作られません\n• **▶** は現在適用されているステップを示します\n• **薄く表示されたステップ**はポインタより後のもので、クリックできます。次の変更で破棄されますが、直後の⌘Zで元に戻せます\n• **マウスを重ねる**と、ジャンプせずにそのステップの状態を画像に表示します\n• **オリジナル**は、graineoが最初に現像した初期状態へジャンプします\n• **(3×)** – 同じスライダーへの連続した変更をまとめたもの\n\n履歴はこのコンピュータのライブラリに保存されます（設定 → ライブラリ:「履歴を保存」）。
+{n} Schritte	{n}ステップ
+Original ⟲	オリジナル ⟲
+Noch keine Änderungen	まだ変更はありません
+Zum Ausgangszustand springen	初期状態へジャンプ
+gestern	昨日
+Aufklappen (⌥-Klick: mit allen Unterbegriffen)	展開（⌥クリック：下位語すべて）
+Zuklappen (⌥-Klick: mit allen Unterbegriffen)	折りたたむ（⌥クリック：下位語すべて）
+{a} mit Unterbegriffen · {b} direkt vergeben	下位語を含めて {a} · 直接付与 {b}
+„{a}“ gibt es mehrfach – bitte wählen	「{a}」は複数あります – 選択してください
+Stichwort „{a}“ zugewiesen	キーワード「{a}」を付与しました
+Stichwort „{a}“ entfernt	キーワード「{a}」を外しました
+{a} ({n} Begleitdatei(en) geschrieben)	{a}（サイドカー {n} 件を書き込み）
+Vorher wird die Bibliothek gesichert.	先にライブラリをバックアップします。
+„{a}“ in „{b}“ gelegt	「{a}」を「{b}」に入れました
+„{a}“ auf die oberste Ebene gelegt	「{a}」を最上位に移動しました
+{a} – dort gibt es schon eine mit diesem Namen	{a} – 同じ名前のものが既にあります
+„{a}“ nach Namen geordnet	「{a}」を名前順に並べました
+Sammlungen nach Namen geordnet	コレクションを名前順に並べました
+Ordnen	並べ替え
+Nach Namen ordnen	名前順に並べる
+gezeigte Sammlung in ihrer Ebene nach oben	表示中のコレクションを同じ階層で上へ
+gezeigte Sammlung in ihrer Ebene nach unten	表示中のコレクションを同じ階層で下へ
+Die Sammlung gibt es nicht mehr.	このコレクションはもう存在しません。
+Ziel ist kein Sammlungssatz.	移動先はコレクションセットではありません。
+Ein Satz kann nicht in sich selbst liegen.	セットを自分自身の中に入れることはできません。
+Alben von Apple Fotos bleiben im Satz „Apple Fotos“.	Apple 写真のアルバムは「Apple Fotos」セットに残ります。
+In den Satz „Apple Fotos“ kommen nur Alben von Apple Fotos.	「Apple Fotos」セットには Apple 写真のアルバムだけが入ります。
+Nach oben	上へ
+Nach unten	下へ
+An den Anfang	先頭へ
+Ans Ende	末尾へ
+Aus dem Verlauf von {name}, Schritt {n}	{name} の履歴から（ステップ {n}）
+Eingefügt von {name}	{name} から貼り付け
+Übertragen von {name} (relativ)	{name} から転送（相対）
+Übertragen von {name}	{name} から転送
+Rückgängig: {name}	取り消し: {name}
+Als Version speichern …	バージョンとして保存…
+Mit aktuellem Stand vergleichen	現在の状態と比較
+Verlauf bis hier zusammenfassen	ここまでの履歴をまとめる
+Verlauf dieses Fotos löschen …	この写真の履歴を削除…
+Verlauf · {name}	履歴 · {name}
+Als Version speichern	バージョンとして保存
+Name der Version	バージョン名
+Eine virtuelle Kopie mit dem Stand dieses Schritts. Das Foto selbst bleibt, wie es ist.	このステップの状態を持つ仮想コピー。写真そのものは変わりません。
+Verlauf dieses Fotos löschen?	この写真の履歴を削除しますか？
+Alle Schritte dieses Fotos werden gelöscht. Die Bearbeitung selbst bleibt, wie sie jetzt ist.	この写真のすべてのステップが削除されます。編集そのものは現在のまま残ります。
+Stichwörter ordnen	キーワードを整理
+Häufigkeit	頻度
+Sortieren	並べ替え
+Personen zeigen	人物を表示
+Personen sind Stichwörter mit Gesichtern; sie bleiben sonst ausgeblendet, damit sie nicht aus Versehen umgehängt werden.	人物は顔のあるキーワードです。誤って移動しないよう通常は非表示です。
+{n} Änderungen · ⌘Z nimmt sie einzeln zurück	{n} 件の変更 · ⌘Z で1つずつ取り消し
+{a} auf die oberste Ebene legen	{a} を最上位へ移動
+{a} mit „{b}“ zusammenführen	{a} を「{b}」に統合
+{a} unter „{b}“ legen	{a} を「{b}」の下へ
+„{a}“ angelegt	「{a}」を作成しました
+Neuer Oberbegriff „{a}“	新しい上位語「{a}」
+„{a}“ unter „{b}“ gelegt	「{a}」を「{b}」の下へ移動しました
+{n} Stichwörter unter „{b}“ gelegt	{n} 件のキーワードを「{b}」の下へ移動しました
+{n} Stichwörter auf die oberste Ebene gelegt	{n} 件のキーワードを最上位へ移動しました
+{n} Stichwörter	{n} 件のキーワード
+Kein Stichwort gewählt	キーワードが選択されていません
+{a} Fotos ({b} direkt)	{a} 枚（直接 {b}）
+{n} Unterbegriffe	下位語 {n} 件
+{n} Stichwörter gewählt	{n} 件のキーワードを選択
+Neuer Unterbegriff (auch „A > B“)	新しい下位語（「A > B」も可）
+Name des Oberbegriffs	上位語の名前
+Zusammenführen mit (filtern)	統合先（絞り込み）
+Verschieben unter (filtern)	移動先（絞り込み）
+Ältere Schritte lassen sich nicht mehr rückgängig machen ({n})	古い手順は取り消せなくなりました（{n}）
+{n} Stichwörter mit „{b}“ zusammenführen?	{n} 件のキーワードを「{b}」に統合しますか？
+Alle Fotos mit diesen Stichwörtern bekommen „{b}“. Die Stichwörter verschwinden; Begriffe darunter liegen danach unter „{b}“.	これらのキーワードを持つ写真すべてに「{b}」が付きます。キーワードは消え、その下位語は「{b}」の下に移ります。
+und {n} weitere	ほか {n} 件
+Ziel „{a}“: {n}	統合先「{a}」：{n}
+{n} Stichwörter mit „{b}“ zusammengeführt	{n} 件のキーワードを「{b}」に統合しました
+Mit allen Unterbegriffen löschen ({n} Unterbegriffe; {p} verlieren Stichwörter)	下位語ごと削除（下位語 {n} 件、{p} がキーワードを失います）
+Nur „{a}“ löschen; Unterbegriffe rücken eine Ebene hoch ({p} verlieren „{a}“)	「{a}」だけを削除し、下位語は1段上へ（{p} が「{a}」を失います）
+Die Fotos bleiben in der Bibliothek. ⌘Z holt alles zurück.	写真はライブラリに残ります。⌘Z ですべて元に戻せます。
+Stichwörter ordnen … (Bibliothek)	キーワードを整理…（ライブラリ）
+Stichwörter ordnen …	キーワードを整理…
+Neuer Unterbegriff …	新しい下位語…
+Neues Stichwort …	新しいキーワード…
+Neuer Oberbegriff …	新しい上位語…
+Zusammenführen mit …	統合…
+Nur einzeln	1件ずつのみ
+Legt einen Begriff an und hängt die Auswahl darunter	用語を作成し、選択をその下に置きます
+Auch per Ziehen auf eine Zeile	行へのドラッグでも可能
+Auch per Ziehen mit ⌥	⌥ を押しながらドラッグでも可能
+Schließt den Dialog und zeigt die Fotos mit diesem Stichwort und allen darunter	ダイアログを閉じ、このキーワードとその下位語の写真を表示します
+Liegt schon dort.	すでにそこにあります。
+Ein Stichwort kann nicht unter sich selbst liegen.	キーワードを自分自身の下には置けません。
+Marken aus Lightroom …	Lightroom のマーク…
+Stichwörter, die Lightroom nicht exportiert, hier als „nicht exportieren“ markieren (der Katalog wird nur gelesen)	Lightroom が書き出さないキーワードをここで「書き出さない」に設定（カタログは読み取りのみ）
+Vorschläge …	提案…
+Vorschläge zum Ordnen: Schreibweisen, Einzahl/Mehrzahl, Mehrwort-Namen, fast immer gemeinsam vergebene Stichwörter	整理の提案：表記ゆれ、単数/複数、複数語の名前、ほぼ常に一緒に付くキーワード
+{n} Stichwörter werden wieder exportiert	{n} 件のキーワードを再び書き出します
+{n} Stichwörter werden nicht exportiert	{n} 件のキーワードは書き出されません
+Nicht exportieren	書き出さない
+Vorschläge zum Ordnen	整理の提案
+Vorschläge werden berechnet …	提案を計算中…
+„{a}“ mit „{b}“ zusammenführen	「{a}」を「{b}」に統合
+„{a}“ unter „{b}“ legen	「{a}」を「{b}」の下へ
+{a} / {b} Fotos · {p} %	{a} / {b} 枚 · {p} %
+{a} / {b} Fotos	{a} / {b} 枚
+Keine Vorschläge.	提案はありません。
+Gewählte anwenden …	選択を適用…
+„{a}“ → „{b}“	「{a}」→「{b}」
+„{a}“ unter „{b}“	「{a}」を「{b}」の下
+Oberbegriffe mitschreiben	上位語も書き込む
+Zu „Labrador“ auch „Hunde“ und „Tiere“ in die Stichwörter der Datei	「Labrador」に加えて「Hunde」「Tiere」もファイルのキーワードに
+Hierarchie mitschreiben	階層も書き込む
+Zusätzlich die vollen Pfade („Tiere|Hunde|Labrador“, lr:hierarchicalSubject) für Programme, die Stichwort-Hierarchien lesen	階層を読めるアプリ向けに完全なパス（「Tiere|Hunde|Labrador」、lr:hierarchicalSubject）も
+Oberbegriffe der Stichwörter mitschreiben	キーワードの上位語も書き込む
+Zu „Labrador“ auch „Hunde“ und „Tiere“; gilt beim Export mit Metadaten „Alles“	「Labrador」に加えて「Hunde」「Tiere」も。メタデータ「すべて」の書き出しで有効
+Stichwort-Hierarchie mitschreiben	キーワード階層も書き込む
+Volle Pfade in lr:hierarchicalSubject, für Programme, die Hierarchien lesen	階層を読めるアプリ向けに lr:hierarchicalSubject に完全なパス
+Marken aus Lightroom übernehmen?	Lightroom のマークを取り込みますか？
+Lightroom-Katalog wird gelesen …	Lightroom カタログを読み込み中…
+Alle Stichwörter, die Lightroom nicht exportiert, sind hier schon markiert.	Lightroom が書き出さないキーワードはすべてマーク済みです。
+{n} Stichwörter würden als „nicht exportieren“ markiert (mit allem darunter).	{n} 件のキーワードを「書き出さない」に設定します（下位も含む）。
+Der Katalog wird nur gelesen. ⌘Z holt alles zurück.	カタログは読み取りのみです。⌘Z ですべて元に戻せます。
+Markieren	マークする
+{n} Vorschläge anwenden?	{n} 件の提案を適用しますか？
+{a} Stichwörter werden untergeordnet, {b} zusammengeführt; {c} betroffen.	{a} 件を下位へ、{b} 件を統合。影響：{c}。
+{n} Vorschläge angewendet	{n} 件の提案を適用しました
+{n} Vorschläge angewendet, {m} übersprungen	{n} 件を適用、{m} 件をスキップしました
+Schreibweise	表記
+Einzahl/Mehrzahl	単数/複数
+Mehrwort-Name	複数語の名前
+Fast immer zusammen	ほぼ常に一緒
+Ein Oberbegriff ist schon als „nicht exportieren“ markiert	上位語がすでに「書き出さない」に設定されています
+Gilt mit allem darunter: diese Stichwörter kommen nicht in exportierte Dateien	下位も含めて適用：これらのキーワードは書き出したファイルに入りません
+{a} ({n})	{a}（{n}）
+Keine Fotos gefunden.	写真が見つかりません。
+Die Messung ist mit einem Fehler abgebrochen (siehe Protokoll).	エラーのため計測が中断されました（ログを参照）。
+Messung abbrechen	計測を中止
+Leistungsbericht erstellen	パフォーマンスレポートを作成
+graineo misst, wie schnell dieser Rechner Fotos öffnet und entwickelt: jede Stufe dreimal, mit Grafikkarte und Prozessor. Das dauert einige Minuten, der Lüfter kann dabei anlaufen.	graineo は、このコンピュータが写真を開いて現像する速さを計測します。各段階をグラフィックカードとプロセッサでそれぞれ3回ずつ実行します。数分かかり、ファンが回ることがあります。
+Der Bericht ist eine Textdatei auf diesem Rechner, ohne Pfade, Datei-, Benutzer- und Rechnernamen. graineo sendet nichts – schick die Datei bei Bedarf selbst.	レポートはこのコンピュータ上のテキストファイルで、パス、ファイル名、ユーザー名、コンピュータ名は含みません。graineo は何も送信しません。必要に応じてご自身でファイルを送ってください。
+Systemangaben	システム情報
+Foto {a} von {b} · {c} · Lauf {d} von {e} · {f}	写真 {a}/{b} · {c} · {d}/{e} 回目 · {f}
+Bitte währenddessen nicht mit graineo arbeiten; andere Programme verfälschen die Zeiten.	計測中は graineo を操作しないでください。他のプログラムも時間に影響します。
+Bericht gespeichert. Schick die Textdatei (und die JSON-Datei daneben) an die Entwickler, z. B. per E-Mail oder als Anhang eines GitHub-Issues.	レポートを保存しました。テキストファイル（と隣の JSON ファイル）を、メールや GitHub の Issue への添付などで開発者に送ってください。
+Im Explorer zeigen	エクスプローラーで表示
+Pfad kopieren	パスをコピー
+Dateien wählen …	ファイルを選択…
+Fotos werden gesucht …	写真を検索中…
+Keine Fotos gefunden (X3F, RAF, CR2/CR3, ARW, NEF, DNG …, JPEG, HEIC).	写真が見つかりません（X3F、RAF、CR2/CR3、ARW、NEF、DNG …、JPEG、HEIC）。
+Je Kamerafamilie ein Foto aus {a} gefundenen.	見つかった {a} 枚から、カメラ系統ごとに1枚。
+{a} weitere Dateien nicht berücksichtigt (höchstens 10).	ほか {a} ファイルは対象外（最大10）。
+Wähle einen Ordner oder bis zu 10 Fotos: am besten je eines von jeder Kamera, die du nutzt (Merrill, Quattro, ältere Foveon, Fuji X-Trans, andere RAWs, JPEG/HEIC).	フォルダか最大10枚の写真を選んでください。お使いの各カメラから1枚ずつが理想です（Merrill、Quattro、旧 Foveon、Fuji X-Trans、その他の RAW、JPEG/HEIC）。
+Messung abgebrochen, kein Bericht geschrieben.	計測を中止しました。レポートは作成されていません。
+Ordner mit Fotos für den Leistungsbericht	パフォーマンスレポート用の写真フォルダ
+Fotos für den Leistungsbericht (bis zu 10)	パフォーマンスレポート用の写真（最大10枚）
+Zeitprotokoll	時間ログ
+Schreibt je geöffnetem Foto eine Zeile mit Zeiten (ohne Datei- und Ordnernamen) in timings.log im Protokollordner. Bleibt auf diesem Rechner; der Leistungsbericht hängt die letzten 100 Zeilen an	開いた写真ごとに時間を1行（ファイル名・フォルダ名なし）、ログフォルダの timings.log に書き込みます。このコンピュータ内に留まり、パフォーマンスレポートに最後の100行が添付されます
+Leistungsbericht	パフォーマンスレポート
+Misst, wie schnell dieser Rechner Fotos öffnet und entwickelt, und schreibt eine Textdatei zum Einsenden	このコンピュータが写真を開いて現像する速さを計測し、送付用のテキストファイルを書き出します
+Erstellen …	作成…
+Je Kamerafamilie nimmt graineo ein Foto aus dem Ordner (höchstens 8)	フォルダからカメラ系統ごとに1枚を使用します（最大8枚）
+Bis zu 10 Fotos; je Kamerafamilie zählt eines	最大10枚。カメラ系統ごとに1枚が対象です
+Pfad der Textdatei in die Zwischenablage	テキストファイルのパスをクリップボードにコピー
+Datei lesen	ファイル読み込み
+Erstes Bild	最初の画像
+Exakte Basis (Grafikkarte)	正確なベース（グラフィックカード）
+Exakte Basis (Prozessor)	正確なベース（プロセッサ）
+Eingepasste Ansicht	全体表示
+Volle Auflösung (Grafikkarte)	フル解像度（グラフィックカード）
+Volle Auflösung (Prozessor)	フル解像度（プロセッサ）
+JPEG-Export	JPEG 書き出し
+1 Smart-Sammlung angepasst	1 件のスマートコレクションを更新
+{n} Smart-Sammlungen angepasst	{n} 件のスマートコレクションを更新
+Smart-Sammlungen unverändert (Begriff mehrdeutig): {a}	スマートコレクションは変更なし（語が曖昧）: {a}
+Gespeichert, aber nicht alles nachgezogen: {e}	保存しましたが、一部を更新できませんでした: {e}
+ · ohne Stichwörter (Bibliothek nicht lesbar)	 · キーワードなし（ライブラリを読めません）
+ · Metadaten nicht geschrieben	 · メタデータを書き込めませんでした
+Alben aus Apple Fotos lassen sich hier nicht füllen – der nächste Abgleich würde die Zuordnung wieder überschreiben.	Apple 写真のアルバムにはここで追加できません – 次回の同期で割り当てが上書きされます。
+Steht schon ganz oben	すでに一番上です
+Steht schon ganz unten	すでに一番下です
+Schon nach Namen geordnet	すでに名前順です
+Steht schon auf der obersten Ebene	すでに最上位にあります
+Alben aus Apple Fotos bleiben in ihrem Satz	Apple 写真のアルバムはそのセット内に留まります
+In Lightroom: {n} Schritte	Lightroom: {n}ステップ

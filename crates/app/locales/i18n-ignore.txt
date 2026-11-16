@@ -26,3 +26,32 @@ bug_report.rs:SELECT name FROM collection
 bug_report.rs:SELECT path FROM folder
 bug_report.rs:…/Datei.{ext}
 bug_report.rs:Datei.{ext}
+# stage names of the development code, looked up for the English performance report (perf_measure::lap_name)
+perf_measure.rs:normieren+WB
+perf_measure.rs:Rauschmodell
+perf_measure.rs:Lichter
+perf_measure.rs:Vorschau
+perf_measure.rs:Demosaik
+perf_measure.rs:Zuschnitt
+perf_measure.rs:Rauschen
+perf_measure.rs:Rauschminderung (Vorschau)
+perf_measure.rs:Rauschminderung
+perf_measure.rs:Schärfe
+perf_measure.rs:Objektiv (Vorschau)
+perf_measure.rs:Objektiv
+perf_measure.rs:Farbe+Ton
+perf_measure.rs:Helligkeitskarte
+perf_measure.rs:Ausgabe (Ton/Farbe)
+perf_measure.rs:Ausgabe (Vorschau)
+perf_measure.rs:Hochladen (einmal je Stufe)
+perf_measure.rs:Hochladen
+perf_measure.rs:Zurücklesen
+perf_measure.rs:Rechnen (Detail + Ausgabe, ein Auftrag)
+perf_measure.rs:Rechnen (Detail, ein Auftrag)
+perf_measure.rs:Ausgabe: Parameter und Tabellen (CPU)
+perf_measure.rs:Ausgabe: GPU gesamt
+perf_measure.rs:Ausgabe: Nachstufe (CPU)
+perf_measure.rs:Look-Stufe (CPU)
+perf_measure.rs:Hochladen (Falschfarben)
+perf_measure.rs:Falschfarben gesamt
+perf_measure.rs:Falschfarben

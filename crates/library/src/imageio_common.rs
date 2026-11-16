@@ -42,8 +42,10 @@ pub struct ExportFields {
     pub stars: u8,
     /// label name as in common photo apps ("Rot" …), empty = none
     pub label: String,
-    /// keywords without names of people
+    /// keywords without names of people (`dc:subject`: leaves, with the parent terms if chosen)
     pub keywords: Vec<String>,
+    /// full keyword paths ("Orte|Italien|Rom") for `lr:hierarchicalSubject`; empty = not written
+    pub hierarchy: Vec<String>,
     pub title: Option<String>,
     pub description: Option<String>,
     /// copyright (given at import): EXIF Copyright and XMP dc:rights

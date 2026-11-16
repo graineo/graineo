@@ -42,12 +42,13 @@ base64 = "0.23"
 objc2 = "0.6"
 block2 = "0.6"
 dispatch2 = "0.3"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSString", "NSError", "NSURL", "NSData", "NSDate", "NSDictionary", "NSProgress", "NSValue", "NSEnumerator"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSString", "NSError", "NSURL", "NSData", "NSDate", "NSDictionary", "NSProgress", "NSValue", "NSEnumerator", "NSProcessInfo"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage"] }
 objc2-image-capture-core = { version = "0.3", default-features = false, features = ["std", "block2", "libc", "objc2-core-graphics", "ICCameraDevice", "ICCameraFile", "ICCameraFolder", "ICCameraItem", "ICDevice", "ICDeviceBrowser", "ImageCaptureConstants"] }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+# Win32_System_* beyond threading/file system: system facts for the performance report (platform::info)
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_SystemInformation", "Win32_System_Power", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Ioctl", "Win32_System_IO"] }
 # outside macOS the library reads PNG/TIFF itself (on the Mac via ImageIO)
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 

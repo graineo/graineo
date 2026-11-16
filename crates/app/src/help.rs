@@ -231,6 +231,11 @@ pub static PROOF: Card = card(
     None,
 );
 
+pub static HISTORY: Card = card(
+    "Jeder Schritt der Bearbeitung dieses Fotos, der neueste oben.",
+    "• **Klick** auf einen Schritt springt dorthin; das Bild zeigt seinen Stand. Es entsteht kein neuer Schritt\n• **▶** markiert den Schritt, der gerade gilt\n• **Gedimmte Schritte** liegen nach dem Zeiger und bleiben anklickbar. Die nächste Änderung verwirft sie; ⌘Z gleich danach holt sie zurück\n• **Überfahren** zeigt den Stand eines Schritts im Bild, ohne zu springen\n• **Original** springt zum Ausgangszustand, so wie graineo das Foto zuerst entwickelt hat\n• **(3×)** – Änderungen am selben Regler kurz hintereinander, zusammengefasst\n\nDer Verlauf steht in der Bibliothek auf diesem Rechner (Einstellungen → Bibliothek: „Verlauf speichern“).",
+    None,
+);
 pub static SIDECARS: Card = card(
     "Bearbeitungen, Sterne und Stichwörter zusätzlich als XMP-Datei neben jedes Foto schreiben.",
     "graineo speichert alles in der Bibliothek. Mit diesem Schalter steht zusätzlich eine Kopie als XMP neben dem Foto – für andere Programme, und sie wandert mit dem Foto mit. Die Originale bleiben unverändert.\n• **Begleitdateien einlesen** – holt Änderungen anderer Programme aus diesen Dateien in die Bibliothek",

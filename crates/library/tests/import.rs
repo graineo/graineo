@@ -55,6 +55,8 @@ fn catalog(path: &Path, photos: &Path) {
     for (id, name, parent, type_id) in [(1, None, None, None), (2, Some("Personen"), Some(1), None), (3, Some("Anna"), Some(2), Some("person")), (4, Some("Orte"), Some(1), None), (5, Some("Italien"), Some(4), None), (6, Some("Rom"), Some(5), None)] {
         c.execute("INSERT INTO AgLibraryKeyword(id_local,id_global,name,parent,genealogy,keywordType) VALUES(?1,?2,?3,?4,?5,?6)", params![id, format!("k{id}"), name, parent, format!("/{id}"), type_id]).unwrap();
     }
+    // "Orte" not included on export (Lightroom: the mark of a branch)
+    c.execute("UPDATE AgLibraryKeyword SET includeOnExport=0 WHERE id_local=4", []).unwrap();
     for (img, tag) in [(1000, 3), (1000, 6), (1002, 6), (1003, 5)] {
         c.execute("INSERT INTO AgLibraryKeywordImage(image,tag) VALUES(?1,?2)", [img, tag]).unwrap();
     }
@@ -120,6 +122,12 @@ fn import_reconcile_repeatable() {
     assert_eq!((b.roots, b.folder, b.files, b.images, b.virtual_copies), (2, 4, 7, 9, 2));
     assert_eq!(b.new_images, 9);
     assert_eq!((b.keywords, b.keyword_assignments), (5, 4));
+    // includeOnExport = 0 becomes the mark "never export" (the whole branch: Rom is not exported either)
+    let orte = count_rows(&db, "SELECT id FROM keyword WHERE name='Orte'");
+    assert_eq!(count_rows(&db, "SELECT count(*) FROM keyword_option WHERE export=0"), 1);
+    assert!(library::keywords::export_marked(&db.conn, orte));
+    let b1000 = count_rows(&db, "SELECT id FROM image WHERE lr_id=1000");
+    assert!(library::keywords::export_lists(&db.conn, b1000, true).unwrap().0.is_empty(), "Anna is a person, Rom below Orte");
     assert_eq!((b.collections, b.collection_sets, b.smart_collections, b.collection_assignments), (2, 1, 1, 3));
     assert_eq!(b.unknown_labels.get("Eigenes Etikett"), Some(&1));
     // catalog unchanged (only read, no -wal/-shm created)
@@ -961,5 +969,66 @@ fn import_into_a_collection_set() {
     assert_eq!(r.own_kept, 0, "{r:?}");
     assert_eq!(parent("Reisen"), Some(set));
     assert_eq!(count_rows(&db, "SELECT count(*) FROM collection WHERE name='Test'"), 1);
+    // an own order in graineo: a new import never writes positions and keeps them
+    let id = |name: &str| -> i64 { db.conn.query_row("SELECT id FROM collection WHERE name=?1", [name], |r| r.get(0)).unwrap() };
+    let first = library::collection_order::Tree::build(&db.collections().unwrap());
+    let shown = first.children(Some(set)).len();
+    assert!(shown >= 2, "{shown}");
+    library::collection_order::place(&db, id("Fünf Sterne"), Some(set), Some(id("Reisen"))).unwrap();
+    let order = || -> Vec<(i64, Option<i64>, i64)> {
+        db.conn.prepare("SELECT collection, parent, position FROM collection_order ORDER BY 1").unwrap().query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().map(|r| r.unwrap()).collect()
+    };
+    let ordered = order();
+    lightroom::import_with(&db, &cat, &opts, &|_| {}).unwrap();
+    assert_eq!(order(), ordered, "the import leaves the own order alone");
+    // the set moved into another set and renamed in graineo: the next import uses it, no second set
+    let other = db.create_collection_in("Archiv", None).unwrap();
+    db.conn.execute("UPDATE collection SET kind=1 WHERE id=?1", [other]).unwrap();
+    library::collection_order::place(&db, set, Some(other), None).unwrap();
+    library::manage::rename_collection(&db, set, "Lightroom").unwrap();
+    let r = lightroom::import_with(&db, &cat, &opts, &|_| {}).unwrap();
+    assert_eq!(r.own_kept, 0, "{r:?}");
+    assert_eq!(count_rows(&db, "SELECT count(*) FROM collection WHERE name='Test'"), 0, "no second set");
+    assert_eq!(parent("Reisen"), Some(set));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Own moves in graineo and opposite moves in Lightroom (A under B here, B under A there) must not give a loop: the
+/// parent change from Lightroom that would close it is left out and counted.
+#[test]
+fn reimport_never_creates_a_parent_cycle() {
+    let dir = tmp("zyklus");
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(&photos).unwrap();
+    disk(&photos);
+    let cat = dir.join("Test.lrcat");
+    catalog(&cat, &photos);
+    {
+        let c = Connection::open(&cat).unwrap();
+        c.execute("INSERT INTO AgLibraryCollection(id_local,name,parent,creationId,genealogy,systemOnly) VALUES(56,'Archiv',NULL,'com.adobe.ag.library.group','/56','0.0')", []).unwrap();
+    }
+    let db = Db::open(&dir.join("library.sqlite")).unwrap();
+    lightroom::import(&db, &cat, &|_| {}).unwrap();
+    let id = |sql: &str| count_rows(&db, sql);
+    let (people, places) = (id("SELECT id FROM keyword WHERE lr_id=2"), id("SELECT id FROM keyword WHERE lr_id=4"));
+    let (travel, archive) = (id("SELECT id FROM collection WHERE lr_id=50"), id("SELECT id FROM collection WHERE lr_id=56"));
+    // in graineo: "Personen" under "Orte", set "Reisen" into set "Archiv"
+    db.conn.execute("UPDATE keyword SET parent=?1 WHERE id=?2", [places, people]).unwrap();
+    db.conn.execute("UPDATE collection SET parent=?1 WHERE id=?2", [archive, travel]).unwrap();
+    // in Lightroom the other way round
+    {
+        let c = Connection::open(&cat).unwrap();
+        c.execute("UPDATE AgLibraryKeyword SET parent=2, genealogy='/2/4' WHERE id_local=4", []).unwrap();
+        c.execute("UPDATE AgLibraryCollection SET parent=50, genealogy='/50/56' WHERE id_local=56", []).unwrap();
+    }
+    let r = lightroom::import(&db, &cat, &|_| {}).unwrap();
+    assert_eq!(r.cycles_avoided, 2, "{}", r.json());
+    // the own places stay, no loop
+    assert_eq!(id(&format!("SELECT parent FROM keyword WHERE id={people}")), places);
+    assert_ne!(id(&format!("SELECT coalesce(parent, 0) FROM keyword WHERE id={places}")), people);
+    assert_eq!(id(&format!("SELECT parent FROM collection WHERE id={travel}")), archive);
+    assert_ne!(id(&format!("SELECT coalesce(parent, 0) FROM collection WHERE id={archive}")), travel);
+    // searches over the hierarchy still answer
+    assert!(db.images_with_keyword(places).is_ok());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

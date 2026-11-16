@@ -79,18 +79,18 @@ pub fn makernote(path: &Path) -> Option<(String, String, Vec<Entry>)> {
 // ---------------------------------------------------------------------------------------------
 // file → TIFF region(s)
 
-struct Source {
+pub(crate) struct Source {
     /// data containing the TIFF structures
-    d: Vec<u8>,
+    pub(crate) d: Vec<u8>,
     /// start of the TIFF header (EXIF) in `d`
-    tiff: usize,
+    pub(crate) tiff: usize,
     /// CR3: start of the Canon makernote (CMT3, own TIFF header) in `d`
-    cmt3: Option<usize>,
+    pub(crate) cmt3: Option<usize>,
     /// TIFF-like file, only the start read
-    truncated: bool,
+    pub(crate) truncated: bool,
 }
 
-fn read_range(f: &mut std::fs::File, off: u64, len: usize) -> Option<Vec<u8>> {
+pub(crate) fn read_range(f: &mut std::fs::File, off: u64, len: usize) -> Option<Vec<u8>> {
     let mut v = vec![0u8; len];
     f.seek(SeekFrom::Start(off)).ok()?;
     let mut n = 0;
@@ -105,7 +105,7 @@ fn read_range(f: &mut std::fs::File, off: u64, len: usize) -> Option<Vec<u8>> {
     Some(v)
 }
 
-fn jpeg_exif(d: &[u8]) -> Option<usize> {
+pub(crate) fn jpeg_exif(d: &[u8]) -> Option<usize> {
     if d.get(..2)? != [0xff, 0xd8] {
         return None;
     }
@@ -127,12 +127,12 @@ fn jpeg_exif(d: &[u8]) -> Option<usize> {
     None
 }
 
-fn find(d: &[u8], needle: &[u8]) -> Option<usize> {
+pub(crate) fn find(d: &[u8], needle: &[u8]) -> Option<usize> {
     d.windows(needle.len()).position(|w| w == needle)
 }
 
 impl Source {
-    fn load(path: &Path, full: bool) -> Option<Self> {
+    pub(crate) fn load(path: &Path, full: bool) -> Option<Self> {
         let mut f = std::fs::File::open(path).ok()?;
         let length = f.metadata().ok()?.len();
         let header = read_range(&mut f, 0, 4 << 20)?;
@@ -162,7 +162,7 @@ impl Source {
         None
     }
 
-    fn exif(&self) -> Option<Exif> {
+    pub(crate) fn exif(&self) -> Option<Exif> {
         let t = Tiff::new_at(&self.d, self.tiff)?;
         let ifd0 = t.ifd(t.u32(t.basis + 4)? as usize + t.basis, t.basis)?;
         let txt = |tag| ifd0.iter().find(|e| e.tag == tag).and_then(|e| t.text(e));
@@ -188,32 +188,32 @@ impl Source {
     }
 }
 
-struct Exif {
-    make: String,
-    model: String,
-    le: bool,
-    tiff: usize,
+pub(crate) struct Exif {
+    pub(crate) make: String,
+    pub(crate) model: String,
+    pub(crate) le: bool,
+    pub(crate) tiff: usize,
     /// Makernote: position in `Source::d`, length
-    mn: Option<(usize, usize)>,
+    pub(crate) mn: Option<(usize, usize)>,
 }
 
 #[derive(Clone, Copy)]
-struct RawEntry {
-    tag: u16,
-    type_name: u16,
-    n: u32,
+pub(crate) struct RawEntry {
+    pub(crate) tag: u16,
+    pub(crate) type_name: u16,
+    pub(crate) n: u32,
     /// Position of the entry (12 bytes) in the data
-    e: usize,
+    pub(crate) e: usize,
 }
 
-struct Tiff<'a> {
-    d: &'a [u8],
-    le: bool,
+pub(crate) struct Tiff<'a> {
+    pub(crate) d: &'a [u8],
+    pub(crate) le: bool,
     /// Reference point for offsets
-    basis: usize,
+    pub(crate) basis: usize,
 }
 
-fn type_size(t: u16) -> usize {
+pub(crate) fn type_size(t: u16) -> usize {
     match t {
         1 | 2 | 6 | 7 => 1,
         3 | 8 => 2,
@@ -224,7 +224,7 @@ fn type_size(t: u16) -> usize {
 }
 
 impl<'a> Tiff<'a> {
-    fn new_at(d: &'a [u8], basis: usize) -> Option<Self> {
+    pub(crate) fn new_at(d: &'a [u8], basis: usize) -> Option<Self> {
         let le = match d.get(basis..basis + 2)? {
             b"II" => true,
             b"MM" => false,
@@ -232,16 +232,16 @@ impl<'a> Tiff<'a> {
         };
         Some(Self { d, le, basis })
     }
-    fn u16(&self, o: usize) -> Option<u16> {
+    pub(crate) fn u16(&self, o: usize) -> Option<u16> {
         let b: [u8; 2] = self.d.get(o..o + 2)?.try_into().ok()?;
         Some(if self.le { u16::from_le_bytes(b) } else { u16::from_be_bytes(b) })
     }
-    fn u32(&self, o: usize) -> Option<u32> {
+    pub(crate) fn u32(&self, o: usize) -> Option<u32> {
         let b: [u8; 4] = self.d.get(o..o + 4)?.try_into().ok()?;
         Some(if self.le { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
     }
     /// IFD at absolute position `at`; value offsets relative to `basis`.
-    fn ifd(&self, at: usize, basis: usize) -> Option<Vec<RawEntry>> {
+    pub(crate) fn ifd(&self, at: usize, basis: usize) -> Option<Vec<RawEntry>> {
         let n = self.u16(at)? as usize;
         if n == 0 || n > 1000 {
             return None;
@@ -255,22 +255,22 @@ impl<'a> Tiff<'a> {
         Some(v)
     }
     /// Position of an entry's values (inline or via offset relative to `self.basis`).
-    fn value_pos(&self, e: &RawEntry) -> Option<usize> {
+    pub(crate) fn value_pos(&self, e: &RawEntry) -> Option<usize> {
         self.value_pos_base(e, self.basis)
     }
-    fn value_pos_base(&self, e: &RawEntry, basis: usize) -> Option<usize> {
+    pub(crate) fn value_pos_base(&self, e: &RawEntry, basis: usize) -> Option<usize> {
         let size = type_size(e.type_name) * e.n as usize;
         let p = if size <= 4 { e.e + 8 } else { basis + self.u32(e.e + 8)? as usize };
         (p + size <= self.d.len()).then_some(p)
     }
-    fn text(&self, e: &RawEntry) -> Option<String> {
+    pub(crate) fn text(&self, e: &RawEntry) -> Option<String> {
         let p = self.value_pos(e)?;
         let b = self.d.get(p..p + e.n as usize)?;
         let s: String = b.iter().take_while(|&&c| c != 0).map(|&c| c as char).collect();
         Some(s.trim().to_string())
     }
     /// Numeric values (up to `max`) of an entry.
-    fn numbers(&self, e: &RawEntry, basis: usize, max: usize) -> Vec<i64> {
+    pub(crate) fn numbers(&self, e: &RawEntry, basis: usize, max: usize) -> Vec<i64> {
         let Some(p) = self.value_pos_base(e, basis) else { return Vec::new() };
         let g = type_size(e.type_name);
         (0..(e.n as usize).min(max))
@@ -293,7 +293,7 @@ impl<'a> Tiff<'a> {
 // ---------------------------------------------------------------------------------------------
 // Makernotes
 
-enum Kind {
+pub(crate) enum Kind {
     Fuji,
     Canon,
     Sony,
@@ -306,16 +306,15 @@ enum Kind {
     Unknown,
 }
 
-struct Makernote<'a> {
-    t: Tiff<'a>,
-    basis: usize,
-    entries: Vec<RawEntry>,
-    kind: Kind,
+pub(crate) struct Makernote<'a> {
+    pub(crate) t: Tiff<'a>,
+    pub(crate) basis: usize,
+    pub(crate) entries: Vec<RawEntry>,
+    pub(crate) kind: Kind,
 }
 
 impl Exif {
-    fn makernote<'a>(&self, q: &'a Source) -> Option<Makernote<'a>> {
-        let h = self.make.to_ascii_uppercase();
+    pub(crate) fn makernote<'a>(&self, q: &'a Source) -> Option<Makernote<'a>> {
         // CR3: the makernote is a separate TIFF block
         if let Some(c3) = q.cmt3 {
             let t = Tiff::new_at(&q.d, c3)?;
@@ -324,69 +323,75 @@ impl Exif {
             return Some(Makernote { basis: c3, t, entries, kind: Kind::Canon });
         }
         let (p, len) = self.mn?;
-        let d = &q.d;
-        let header = d.get(p..p + 16.min(len))?;
-        if header.starts_with(b"FUJIFILM") {
-            // offsets relative to the makernote start, always little endian
-            let t = Tiff { d, le: true, basis: p };
-            let at = p + t.u32(p + 8)? as usize;
-            let entries = t.ifd(at, p)?;
-            return Some(Makernote { t, basis: p, entries, kind: Kind::Fuji });
-        }
-        if header.starts_with(b"SONY DSC ") || header.starts_with(b"SONY CAM ") {
-            let t = Tiff { d, le: self.le, basis: self.tiff };
-            let entries = t.ifd(p + 12, self.tiff)?;
-            return Some(Makernote { t, basis: self.tiff, entries, kind: Kind::Sony });
-        }
-        if header.starts_with(b"RICOH\0II") || header.starts_with(b"RICOH\0MM") {
-            // Pentax layout: count directly after the 8-byte header, offsets relative to the makernote start
-            let t = Tiff { d, le: &header[6..8] == b"II", basis: p };
-            let entries = t.ifd(p + 8, p)?;
-            return Some(Makernote { t, basis: p, entries, kind: Kind::Pentax });
-        }
-        if header.starts_with(b"Ricoh\0\0\0") || header.starts_with(b"RICOH\0\0\0") {
-            // older Ricoh (GR, GR II): big endian, count after the 8-byte header
-            let t = Tiff { d, le: false, basis: self.tiff };
-            let entries = t.ifd(p + 8, self.tiff)?;
-            return Some(Makernote { t, basis: self.tiff, entries, kind: Kind::RicohOld });
-        }
-        if header.starts_with(b"SIGMA\0\0\0") || header.starts_with(b"FOVEON\0\0") {
-            // 8-byte name, 2 bytes version, then count + entries; offsets are relative to the TIFF header
-            let t = Tiff { d, le: self.le, basis: self.tiff };
-            let entries = t.ifd(p + 10, self.tiff)?;
-            return Some(Makernote { t, basis: self.tiff, entries, kind: Kind::Sigma });
-        }
-        if header.starts_with(b"AOC\0") || header.starts_with(b"PENTAX \0") {
-            let s = if header.starts_with(b"AOC\0") { 4 } else { 8 };
-            // the header holds at most 16 bytes of a possibly short makernote
-            let le = header.get(s..s + 2)? == b"II";
-            let t = Tiff { d, le, basis: p };
-            let entries = t.ifd(p + s + 2, p)?;
-            return Some(Makernote { t, basis: p, entries, kind: Kind::Pentax });
-        }
-        if h.contains("CANON") {
-            let t = Tiff { d, le: self.le, basis: self.tiff };
-            let entries = t.ifd(p, self.tiff)?;
-            return Some(Makernote { t, basis: self.tiff, entries, kind: Kind::Canon });
-        }
-        if h.contains("SONY") {
-            let t = Tiff { d, le: self.le, basis: self.tiff };
-            let entries = t.ifd(p, self.tiff)?;
-            return Some(Makernote { t, basis: self.tiff, entries, kind: Kind::Sony });
-        }
-        let t = Tiff { d, le: self.le, basis: self.tiff };
-        let entries = t.ifd(p, self.tiff).unwrap_or_default();
-        Some(Makernote { t, basis: self.tiff, entries, kind: Kind::Unknown })
+        parse_makernote(&q.d, p, len, self.le, self.tiff, &self.make)
     }
 }
 
+/// Makernote at `p` (length `len`) in `d`, recognised by its header; `le`/`tiff`: byte order and start of the
+/// TIFF header the offsets of headerless makernotes refer to; `make`: camera maker from IFD0.
+pub(crate) fn parse_makernote<'a>(d: &'a [u8], p: usize, len: usize, le: bool, tiff: usize, make: &str) -> Option<Makernote<'a>> {
+    let h = make.to_ascii_uppercase();
+    let header = d.get(p..p + 16.min(len))?;
+    if header.starts_with(b"FUJIFILM") {
+        // offsets relative to the makernote start, always little endian
+        let t = Tiff { d, le: true, basis: p };
+        let at = p + t.u32(p + 8)? as usize;
+        let entries = t.ifd(at, p)?;
+        return Some(Makernote { t, basis: p, entries, kind: Kind::Fuji });
+    }
+    if header.starts_with(b"SONY DSC ") || header.starts_with(b"SONY CAM ") {
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p + 12, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Sony });
+    }
+    if header.starts_with(b"RICOH\0II") || header.starts_with(b"RICOH\0MM") {
+        // Pentax layout: count directly after the 8-byte header, offsets relative to the makernote start
+        let t = Tiff { d, le: &header[6..8] == b"II", basis: p };
+        let entries = t.ifd(p + 8, p)?;
+        return Some(Makernote { t, basis: p, entries, kind: Kind::Pentax });
+    }
+    if header.starts_with(b"Ricoh\0\0\0") || header.starts_with(b"RICOH\0\0\0") {
+        // older Ricoh (GR, GR II): big endian, count after the 8-byte header
+        let t = Tiff { d, le: false, basis: tiff };
+        let entries = t.ifd(p + 8, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::RicohOld });
+    }
+    if header.starts_with(b"SIGMA\0\0\0") || header.starts_with(b"FOVEON\0\0") {
+        // 8-byte name, 2 bytes version, then count + entries; offsets are relative to the TIFF header
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p + 10, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Sigma });
+    }
+    if header.starts_with(b"AOC\0") || header.starts_with(b"PENTAX \0") {
+        let s = if header.starts_with(b"AOC\0") { 4 } else { 8 };
+        // the header holds at most 16 bytes of a possibly short makernote
+        let le = header.get(s..s + 2)? == b"II";
+        let t = Tiff { d, le, basis: p };
+        let entries = t.ifd(p + s + 2, p)?;
+        return Some(Makernote { t, basis: p, entries, kind: Kind::Pentax });
+    }
+    if h.contains("CANON") {
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Canon });
+    }
+    if h.contains("SONY") {
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Sony });
+    }
+    let t = Tiff { d, le, basis: tiff };
+    let entries = t.ifd(p, tiff).unwrap_or_default();
+    Some(Makernote { t, basis: tiff, entries, kind: Kind::Unknown })
+}
+
 impl Makernote<'_> {
-    fn numbers(&self, tag: u16, max: usize) -> Option<Vec<i64>> {
+    pub(crate) fn numbers(&self, tag: u16, max: usize) -> Option<Vec<i64>> {
         let e = self.entries.iter().find(|e| e.tag == tag)?;
         let v = self.t.numbers(e, self.basis, max);
         (!v.is_empty()).then_some(v)
     }
-    fn number(&self, tag: u16) -> Option<i64> {
+    pub(crate) fn number(&self, tag: u16) -> Option<i64> {
         self.numbers(tag, 1).map(|v| v[0])
     }
     fn text(&self, tag: u16) -> Option<String> {

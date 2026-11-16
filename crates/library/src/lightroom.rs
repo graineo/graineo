@@ -97,6 +97,24 @@ pub(crate) fn merge<T: PartialEq>(own: T, old: Option<T>, lr: T) -> (T, bool) {
     }
 }
 
+/// Would giving `id` the parent `parent` close a loop in the hierarchy of `table` (`keyword` or `collection`)? Walks
+/// up from `parent`; a loop already above it counts as one too (the walk never runs forever).
+pub(crate) fn creates_cycle(conn: &Connection, table: &str, id: i64, parent: Option<i64>) -> rusqlite::Result<bool> {
+    debug_assert!(table == "keyword" || table == "collection");
+    let Some(mut p) = parent else { return Ok(false) };
+    let mut st = conn.prepare_cached(&format!("SELECT parent FROM {table} WHERE id = ?1"))?;
+    let mut seen = HashSet::new();
+    loop {
+        if p == id || !seen.insert(p) {
+            return Ok(true);
+        }
+        match st.query_row([p], |r| r.get::<_, Option<i64>>(0)).optional()?.flatten() {
+            Some(q) => p = q,
+            None => return Ok(false),
+        }
+    }
+}
+
 /// Highest Lightroom id that already existed at the last import (Lightroom numbers all tables with one counter).
 /// Without a stored value: the highest Lightroom id the library knows (0 if nothing was imported yet).
 pub(crate) fn horizon(conn: &Connection) -> i64 {
@@ -153,6 +171,9 @@ pub struct Report {
     /// own changes the import left as they were although Lightroom has something else (values, places, names)
     /// or did not bring back (removed in graineo)
     pub own_kept: usize,
+    /// parent changes from Lightroom left out because, together with own changes, they would have put a keyword or
+    /// collection below itself (A under B in graineo, B under A in Lightroom); the own place stays (also in `own_kept`)
+    pub cycles_avoided: usize,
     /// in our library but no longer in the catalog (left untouched)
     pub no_longer_in_catalog: usize,
     /// face boxes from the catalog and of these the ones with a confirmed name (the other names are unverified suggestions by Lightroom)
@@ -204,6 +225,7 @@ impl Report {
             },
             "conflicts": self.conflicts,
             "own_kept": self.own_kept,
+            "cycles_avoided": self.cycles_avoided,
             "no_longer_in_catalog": self.no_longer_in_catalog,
             "faces": self.faces,
             "faces_confirmed": self.faces_confirmed,
@@ -277,6 +299,28 @@ pub(crate) fn check_same_catalog(conn: &Connection, files: &HashMap<i64, String>
     Ok(())
 }
 
+/// [`check_same_catalog`] for an open catalog `lr` (file names and image files read from it; what its schema lacks
+/// is not compared). Reads only.
+pub(crate) fn check_catalog(conn: &Connection, lr: &Connection, schema: &CatalogSchema) -> Result<(), String> {
+    let error = |e: rusqlite::Error| e.to_string();
+    let name = if schema.has("AgLibraryFile", "idx_filename") { "coalesce(nullif(idx_filename, ''), baseName || '.' || extension)" } else { "baseName || '.' || coalesce(extension, '')" };
+    let files: HashMap<i64, String> = if schema.has("AgLibraryFile", "baseName") && schema.has("AgLibraryFile", "extension") {
+        let mut st = lr.prepare(&format!("SELECT id_local, {name} FROM AgLibraryFile")).map_err(error)?;
+        let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, text(r.get(1)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
+        r
+    } else {
+        HashMap::new()
+    };
+    let images: HashMap<i64, i64> = if schema.has("Adobe_images", "rootFile") {
+        let mut st = lr.prepare("SELECT id_local, rootFile FROM Adobe_images WHERE rootFile IS NOT NULL").map_err(error)?;
+        let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
+        r
+    } else {
+        HashMap::new()
+    };
+    check_same_catalog(conn, &files, &images)
+}
+
 /// Size of a WAL file header: a WAL of at most this size holds no frames (no change that is not in the catalog yet).
 pub const WAL_HEADER: u64 = 32;
 
@@ -340,6 +384,22 @@ pub fn open_catalog(path: &Path) -> rusqlite::Result<Connection> {
         return open("?mode=ro&immutable=1");
     }
     open("?mode=ro").or_else(|_| open("?mode=ro&immutable=1"))
+}
+
+/// Seconds between 2001-01-01 (Lightroom's time base) and 1970-01-01.
+const COCOA_EPOCH: i64 = 978_307_200;
+
+/// Lightroom's own develop history of an image of the catalog (`Adobe_images.id_local`): name and time (Unix seconds)
+/// of every step, oldest first – shown beside graineo's history, never applied. Snapshots are not part of it. Empty if
+/// the catalog has no such table.
+pub fn develop_history(conn: &Connection, image: i64) -> rusqlite::Result<Vec<(String, i64)>> {
+    let has: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'Adobe_libraryImageDevelopHistoryStep'", [], |r| r.get(0))?;
+    if has == 0 {
+        return Ok(Vec::new());
+    }
+    let mut st = conn.prepare_cached("SELECT coalesce(name, ''), dateCreated FROM Adobe_libraryImageDevelopHistoryStep WHERE image = ?1 ORDER BY dateCreated, id_local")?;
+    let rows = st.query_map([image], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<f64>>(1)?.map_or(0, |d| d as i64 + COCOA_EPOCH))))?;
+    rows.collect()
 }
 
 /// `Adobe_DBVersion` of the catalogs this import was tested with: Lightroom Classic 13 up to 15.1 all write 1500000
@@ -684,24 +744,7 @@ pub fn preview(db: &Db, catalog: &Path) -> Result<Preview, String> {
     p.roots_network = network;
     p.roots_unreachable = local.into_iter().filter(|r| !Path::new(r).is_dir()).collect();
     // another catalog than the one already imported: the check says so (the import refuses it as well)
-    {
-        let name = if schema.has("AgLibraryFile", "idx_filename") { "coalesce(nullif(idx_filename, ''), baseName || '.' || extension)" } else { "baseName || '.' || coalesce(extension, '')" };
-        let files: HashMap<i64, String> = if schema.has("AgLibraryFile", "baseName") && schema.has("AgLibraryFile", "extension") {
-            let mut st = lr.prepare(&format!("SELECT id_local, {name} FROM AgLibraryFile")).map_err(error)?;
-            let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, text(r.get(1)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
-            r
-        } else {
-            HashMap::new()
-        };
-        let images: HashMap<i64, i64> = if schema.has("Adobe_images", "rootFile") {
-            let mut st = lr.prepare("SELECT id_local, rootFile FROM Adobe_images WHERE rootFile IS NOT NULL").map_err(error)?;
-            let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
-            r
-        } else {
-            HashMap::new()
-        };
-        check_same_catalog(&db.conn, &files, &images)?;
-    }
+    check_catalog(&db.conn, &lr, &schema)?;
     // new: neither linked in the library nor removed there since the last import (those stay removed)
     let known: HashSet<i64> = {
         let mut st = db.conn.prepare("SELECT lr_id FROM image WHERE lr_id IS NOT NULL").map_err(|e| e.to_string())?;
@@ -890,12 +933,15 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
             .map_err(error)?;
         r
     };
-    let keywords: Vec<(i64, Option<String>, Option<i64>, Option<String>, Option<String>)> = if schema.require("AgLibraryKeyword", &["id_local", "name"]).is_ok() {
+    // (id, name, parent, genealogy, type, includeOnExport)
+    #[allow(clippy::type_complexity)]
+    let keywords: Vec<(i64, Option<String>, Option<i64>, Option<String>, Option<String>, Option<i64>)> = if schema.require("AgLibraryKeyword", &["id_local", "name"]).is_ok() {
         let k = |c: &str| schema.col("AgLibraryKeyword", "k", c);
         let (parent, genealogy) = (k("parent"), k("genealogy"));
-        let mut st = rows(&format!("SELECT k.id_local, k.name, {parent}, {genealogy}, {} FROM AgLibraryKeyword k ORDER BY length({genealogy}), k.id_local", k("keywordType")))?;
+        let include = if schema.has("AgLibraryKeyword", "includeOnExport") { "k.includeOnExport".to_string() } else { "NULL".to_string() };
+        let mut st = rows(&format!("SELECT k.id_local, k.name, {parent}, {genealogy}, {}, {include} FROM AgLibraryKeyword k ORDER BY length({genealogy}), k.id_local", k("keywordType")))?;
         let r = st
-            .query_map([], |r| Ok((r.get(0)?, text(r.get(1)?), number(r.get(2)?).map(|v| v as i64), text(r.get(3)?), text(r.get(4)?))))
+            .query_map([], |r| Ok((r.get(0)?, text(r.get(1)?), number(r.get(2)?).map(|v| v as i64), text(r.get(3)?), text(r.get(4)?), number(r.get(5)?).map(|v| v as i64))))
             .map_err(error)?
             .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(error)?;
@@ -1398,7 +1444,7 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
         let mut find = tx.prepare_cached("SELECT id, name, parent, person FROM keyword WHERE lr_id = ?1").map_err(error)?;
         let mut new = tx.prepare_cached("INSERT INTO keyword(name, parent, person, lr_id) VALUES(?1,?2,?3,?4)").map_err(error)?;
         let mut upd = tx.prepare_cached("UPDATE keyword SET name=?2, parent=?3, person=?4 WHERE id=?1").map_err(error)?;
-        for (lid, name, parent_lr, _gen, type_id) in &keywords {
+        for (lid, name, parent_lr, _gen, type_id, _include) in &keywords {
             let Some(name) = name.as_deref().filter(|n| !n.is_empty()) else { continue };
             let person = type_id.as_deref() == Some("person");
             state_keywords.push((*lid, json!([name, parent_lr, person])));
@@ -1412,7 +1458,12 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
                     let old_parent = old.and_then(|v| v.get(1)).map(|p| p.as_i64().and_then(|p| keyword_id.get(&p).copied()));
                     let old_person = old.and_then(|v| v.get(2)?.as_bool());
                     let (n, k1) = merge(own_name, old_name, name.to_string());
-                    let (p, k2) = merge(own_parent, old_parent, parent);
+                    let (mut p, mut k2) = merge(own_parent, old_parent, parent);
+                    if p != own_parent && creates_cycle(&tx, "keyword", id, p).map_err(error)? {
+                        p = own_parent;
+                        k2 = true;
+                        b.cycles_avoided += 1;
+                    }
                     let (s, k3) = merge(own_person, old_person, person);
                     b.own_kept += usize::from(k1 || k2 || k3);
                     upd.execute(params![id, n, p, s]).map_err(error)?;
@@ -1432,6 +1483,18 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
         }
     }
     b.keywords = keyword_id.len();
+    // "include on export" = 0 in Lightroom (e.g. a branch of AI keywords): marked "never export" here too. Only
+    // added, never taken away (a mark set or cleared in graineo stays)
+    {
+        let mut mark = tx.prepare_cached("INSERT OR IGNORE INTO keyword_option(keyword, export) VALUES(?1, 0)").map_err(error)?;
+        for (lid, _, _, _, _, include) in &keywords {
+            if *include == Some(0) {
+                if let Some(id) = keyword_id.get(lid) {
+                    mark.execute([id]).map_err(error)?;
+                }
+            }
+        }
+    }
     if readable.keywords {
         state_save(&tx, "keyword", &state_keywords).map_err(error)?;
     } else {
@@ -1496,18 +1559,10 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
     // collections new in this import (all Lightroom assignments go in)
     let mut new_collections: HashSet<i64> = HashSet::new();
     let old_collections = state_load(&tx, "collection").map_err(error)?;
-    // the set for collections at the top level of the catalog (found by name at the top level, otherwise created)
+    // the set for collections at the top level of the catalog: the one remembered for this name (also after moving or
+    // renaming it in graineo), else one of this name, else created at the top level
     let top_set: Option<i64> = match opts.collection_set.as_deref().map(str::trim).filter(|n| !n.is_empty() && readable.collections) {
-        Some(name) => {
-            let found: Option<i64> = tx.query_row("SELECT id FROM collection WHERE kind=1 AND parent IS NULL AND name=?1 ORDER BY id LIMIT 1", [name], |r| r.get(0)).optional().map_err(error)?;
-            Some(match found {
-                Some(id) => id,
-                None => {
-                    tx.execute("INSERT INTO collection(name, parent, kind) VALUES(?1, NULL, 1)", [name]).map_err(error)?;
-                    tx.last_insert_rowid()
-                }
-            })
-        }
+        Some(name) => Some(crate::collection_order::find_or_create_set(&tx, name).map_err(error)?),
         None => None,
     };
     let mut state_collections: Vec<(i64, serde_json::Value)> = Vec::with_capacity(collections.len());
@@ -1539,7 +1594,12 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
                     let parent = top(parent);
                     let old_parent = old.and_then(|v| v.get(1)).map(|p| top(p.as_i64().and_then(|p| collection_id.get(&p).copied())));
                     let (n, k1) = merge(own_name, old_name, name.clone());
-                    let (p, k2) = merge(own_parent, old_parent, parent);
+                    let (mut p, mut k2) = merge(own_parent, old_parent, parent);
+                    if p != own_parent && creates_cycle(&tx, "collection", id, p).map_err(error)? {
+                        p = own_parent;
+                        k2 = true;
+                        b.cycles_avoided += 1;
+                    }
                     b.own_kept += usize::from(k1 || k2);
                     upd.execute(params![id, n, p, kind_n, rules]).map_err(error)?;
                     id

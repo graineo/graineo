@@ -154,7 +154,9 @@ fn source_of(events: &[egui::Event]) -> Option<bool> {
 /// What a scroll/pinch does in the single image of Develop (and the darkroom):
 /// - pinch (and ⌘ + scrolling, which egui reports as `zoom_delta`): zoom steplessly around the fingers;
 /// - real mouse wheel: zoom as before;
-/// - trackpad two-finger swipe: pan as soon as the photo is no longer fitted; fitted, it zooms as before.
+/// - trackpad two-finger swipe: pans once the photo is zoomed in; fitted, it does nothing (no zoom, no pan:
+///   a swipe over a fitted photo must not change the zoom level by a percent or two);
+/// - ⌥ + swipe zooms finely, also on a trackpad.
 ///
 /// Returns (zoom factor, pan delta). Never anything else: panning/zooming only moves the view.
 pub fn develop_gesture(pinch: f32, swipe: Vec2, trackpad: bool, alt: bool, zoomed: bool) -> (f32, Vec2) {
@@ -162,8 +164,9 @@ pub fn develop_gesture(pinch: f32, swipe: Vec2, trackpad: bool, alt: bool, zoome
     if swipe == Vec2::ZERO {
         return (factor, Vec2::ZERO);
     }
-    if trackpad && zoomed && !alt {
-        return (factor, swipe);
+    if trackpad && !alt {
+        // zoomed in: pan; fitted: ignore the swipe completely
+        return if zoomed { (factor, swipe) } else { (factor, Vec2::ZERO) };
     }
     factor *= 1.0 + (swipe.y + swipe.x) * if alt { 0.002 } else { 0.004 };
     (factor, Vec2::ZERO)
@@ -293,9 +296,11 @@ mod tests {
         let swipe = Vec2::new(0.0, 20.0);
         // trackpad, zoomed in: pan, no zoom
         assert_eq!(develop_gesture(1.0, swipe, true, false, true), (1.0, swipe));
-        // trackpad, fitted: zooms as before
-        let (f, p) = develop_gesture(1.0, swipe, true, false, false);
-        assert!(f > 1.0 && p == Vec2::ZERO);
+        // trackpad, fitted: the swipe does nothing, neither zoom nor pan
+        assert_eq!(develop_gesture(1.0, swipe, true, false, false), (1.0, Vec2::ZERO));
+        assert_eq!(develop_gesture(1.0, Vec2::new(15.0, -30.0), true, false, false), (1.0, Vec2::ZERO));
+        // trackpad, fitted: a pinch in the same frame still zooms by exactly its factor
+        assert_eq!(develop_gesture(1.1, swipe, true, false, false), (1.1, Vec2::ZERO));
         // real mouse wheel: always zooms, also when zoomed in
         let (f, p) = develop_gesture(1.0, swipe, false, false, true);
         assert!(f > 1.0 && p == Vec2::ZERO);

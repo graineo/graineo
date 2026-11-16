@@ -1588,6 +1588,19 @@ pub(crate) fn merge_rows(tx: &rusqlite::Transaction, s: i64, t: i64) -> Result<(
     // `s` are newer; Lightroom data only where `t` has none.
     tx.execute("UPDATE OR IGNORE develop_state SET file = ?2 WHERE file = ?1 AND copy <> ''", params![s, t]).map_err(f)?;
     let t_has: bool = tx.query_row("SELECT count(*) FROM develop_state WHERE file = ?1 AND copy = ''", [t], |r| r.get::<_, i64>(0)).map_err(f)? > 0;
+    // the develop history goes with the develop state it belongs to
+    let s_wins: bool = !t_has
+        || tx
+            .query_row(
+                "SELECT count(*) FROM develop_state a JOIN develop_state b ON b.file = ?2 AND b.copy = ''
+                 WHERE a.file = ?1 AND a.copy = '' AND a.settings IS NOT NULL
+                   AND (b.settings IS NULL OR coalesce(a.settings_time, 0) > coalesce(b.settings_time, 0))",
+                params![s, t],
+                |r| r.get::<_, i64>(0),
+            )
+            .map_err(f)?
+            > 0;
+    crate::develop_history::merge_file(tx, s, t, s_wins).map_err(f)?;
     if !t_has {
         tx.execute("UPDATE develop_state SET file = ?2 WHERE file = ?1 AND copy = ''", params![s, t]).map_err(f)?;
     } else {
@@ -1636,12 +1649,16 @@ mod merge_tests {
         db.conn.execute("INSERT INTO image(file, copy) VALUES(?1, 'Kopie 1')", [s]).unwrap();
         db.conn.execute("INSERT INTO develop_state(file, copy, settings, settings_time) VALUES(?1, '', '{\"own\":1}', 100), (?1, 'Kopie 1', '{\"copy\":1}', 100)", [s]).unwrap();
         db.conn.execute("INSERT INTO develop_state(file, copy, lr_develop) VALUES(?1, '', 'lr')", [t]).unwrap();
+        db.conn.execute("INSERT INTO develop_step(file, copy, seq, time, kind, patch) VALUES(?1, '', 0, 1, 'start', '{}'), (?1, 'Kopie 1', 0, 1, 'start', '{}')", [s]).unwrap();
         let tx = db.conn.unchecked_transaction().unwrap();
         merge_rows(&tx, s, t).unwrap();
         tx.commit().unwrap();
         let get = |copy: &str| db.conn.query_row("SELECT settings, lr_develop FROM develop_state WHERE file = ?1 AND copy = ?2", params![t, copy], |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?))).unwrap();
         assert_eq!(get(""), (Some("{\"own\":1}".into()), Some("lr".into())));
         assert_eq!(get("Kopie 1").0.as_deref(), Some("{\"copy\":1}"));
+        // the histories go with the develop states
+        let steps: i64 = db.conn.query_row("SELECT count(*) FROM develop_step WHERE file = ?1", [t], |r| r.get(0)).unwrap();
+        assert_eq!(steps, 2);
         drop(db);
         for x in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{x}", p.display()));

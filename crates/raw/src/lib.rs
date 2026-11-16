@@ -13,6 +13,7 @@
 //! header of the respective module.
 
 pub mod picture_style;
+pub mod focus;
 pub mod development;
 pub mod color;
 pub mod film_profile;

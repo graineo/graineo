@@ -295,6 +295,68 @@ pub fn create_backup(db: &Db) -> Result<(PathBuf, u64), String> {
     let dir = target(db);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let target = dir.join(format!("library-{}{PACKED}", today()));
+    write_packed(db, &dir, &target)?;
+    drop_superseded(&target);
+    prune(&dir);
+    let n = std::fs::metadata(&target).map_or(0, |m| m.len());
+    if let Err(e) = copy_to_second(db, &target) {
+        eprintln!("second backup target: {e}");
+    }
+    Ok((target, n))
+}
+
+/// Folder (below the backup target) of the backups made before large actions.
+pub const ACTION_DIR: &str = "before-action";
+/// Backups before an action of one kind older than this are removed (the newest of each kind always stays).
+const ACTION_KEEP_SECS: u64 = 7 * 86_400;
+
+/// Backup before an action that changes many photos at once (merging, deleting keywords, applying suggestions):
+/// its own file `before-action/library-before-<kind>-YYYY-MM-DD-HHMMSS.sqlite.zst` below the backup target. It never
+/// replaces the daily backup (a second action of the day would otherwise overwrite the state before the first) and
+/// is never counted or removed with the daily ones. Backups of the same kind older than 7 days are removed, the
+/// newest of each kind always stays. Checked and packed like the daily backup.
+pub fn create_action_backup(db: &Db, kind: &str) -> Result<(PathBuf, u64), String> {
+    crate::backup_view::refuse()?;
+    crate::platform::background_priority();
+    let kind: String = kind.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect();
+    let dir = target(db).join(ACTION_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let t = crate::platform::local_time(crate::now());
+    let stamp = format!("{:04}-{:02}-{:02}-{:02}{:02}{:02}", t.year, t.month, t.tag, t.hour, t.minute, t.second);
+    // never over an existing file (two actions within one second)
+    let mut target = dir.join(format!("library-before-{kind}-{stamp}{PACKED}"));
+    let mut nr = 1;
+    while target.exists() {
+        nr += 1;
+        target = dir.join(format!("library-before-{kind}-{stamp}-{nr}{PACKED}"));
+    }
+    write_packed(db, &dir, &target)?;
+    prune_actions(&dir, &kind, &target);
+    let n = std::fs::metadata(&target).map_or(0, |m| m.len());
+    Ok((target, n))
+}
+
+/// Remove backups before actions of `kind` older than [`ACTION_KEEP_SECS`]; `newest` (just written) always stays.
+fn prune_actions(dir: &Path, kind: &str, newest: &Path) {
+    let prefix = format!("library-before-{kind}-");
+    let Ok(rd) = std::fs::read_dir(dir) else { return };
+    let now = std::time::SystemTime::now();
+    for p in rd.flatten().map(|e| e.path()) {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        // only this kind: "library-before-merge-2026-…" (a kind continuing with a letter is another kind)
+        let Some(rest) = name.strip_prefix(&prefix) else { continue };
+        if !rest.starts_with(|c: char| c.is_ascii_digit()) || !name.ends_with(PACKED) || p == newest {
+            continue;
+        }
+        let old = std::fs::metadata(&p).and_then(|m| m.modified()).ok().and_then(|m| now.duration_since(m).ok()).is_some_and(|a| a.as_secs() > ACTION_KEEP_SECS);
+        if old {
+            let _ = std::fs::remove_file(&p);
+        }
+    }
+}
+
+/// Write a checked, packed snapshot of the library to `target` (in `dir`): via a temporary file, renamed at the end.
+fn write_packed(db: &Db, dir: &Path, target: &Path) -> Result<(), String> {
     // the snapshot next to the library (local), only the packed file goes to the target (possibly the NAS)
     // own names per run: the daily backup and "Jetzt sichern" may meet
     static NR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -319,20 +381,14 @@ pub fn create_backup(db: &Db) -> Result<(PathBuf, u64), String> {
         };
         let size = std::fs::metadata(&raw).map_or(0, |m| m.len());
         pack(&raw, &tmp, &json!({"app": crate::APP, "images": images, "schema": schema, "size": size}))?;
-        std::fs::rename(&tmp, &target).map_err(|e| e.to_string())
+        std::fs::rename(&tmp, target).map_err(|e| e.to_string())
     })();
     let _ = std::fs::remove_file(&raw);
     if let Err(e) = r {
         let _ = std::fs::remove_file(&tmp);
         return Err(e);
     }
-    drop_superseded(&target);
-    prune(&dir);
-    let n = std::fs::metadata(&target).map_or(0, |m| m.len());
-    if let Err(e) = copy_to_second(db, &target) {
-        eprintln!("second backup target: {e}");
-    }
-    Ok((target, n))
+    Ok(())
 }
 
 /// What a backup holds (checked before restoring it).
@@ -666,6 +722,41 @@ mod tests {
         assert!(db.conn.query_row("SELECT count(*) FROM search_word", [], |r| r.get::<_, i64>(0)).is_ok());
         let kept: Vec<_> = std::fs::read_dir(&d).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("library-before-restore-")).collect();
         assert!(!kept.is_empty(), "the library before the restore is kept");
+        drop(db);
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    /// Regression (review 1.2.0, M2): the backup before a large action has its own name and never replaces the daily
+    /// backup of the day; two actions give two backups; older ones of the same kind go after 7 days, the newest stays.
+    #[test]
+    fn action_backup_never_replaces_the_daily_one() {
+        let d = tmp();
+        let db = Db::open(&d.join("library.sqlite")).unwrap();
+        db.conn.execute_batch("INSERT INTO root_folder(id, path, name, origin) VALUES(1, '/fotos/', 'fotos', 'own'); INSERT INTO folder(id, root, path) VALUES(1, 1, ''); INSERT INTO file(id, folder, name, format) VALUES(10, 1, 'a.jpg', 'JPG'); INSERT INTO image(id, file) VALUES(20, 10);").unwrap();
+        let (daily, _) = create_backup(&db).unwrap();
+        let before = std::fs::read(&daily).unwrap();
+        db.conn.execute("INSERT INTO file(id, folder, name, format) VALUES(11, 1, 'b.jpg', 'JPG')", []).unwrap();
+        db.conn.execute("INSERT INTO image(id, file) VALUES(21, 11)", []).unwrap();
+        let (a, _) = create_action_backup(&db, "merge").unwrap();
+        let (b, _) = create_action_backup(&db, "merge").unwrap();
+        assert_ne!(a, b, "one backup per action");
+        assert!(a.starts_with(d.join("backups").join(ACTION_DIR)), "{}", a.display());
+        assert!(a.file_name().unwrap().to_string_lossy().starts_with("library-before-merge-"));
+        assert_eq!(std::fs::read(&daily).unwrap(), before, "the daily backup stays as it was");
+        assert_eq!(list(&d.join("backups")), vec![daily.clone()], "not counted as a daily backup");
+        assert_eq!(check_backup(&a).unwrap().images, 2);
+        // older than 7 days: removed with the next backup of the same kind, another kind stays
+        let old = |p: &Path| std::fs::File::options().write(true).open(p).unwrap().set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(8 * 86_400)).unwrap();
+        old(&a);
+        let (other, _) = create_action_backup(&db, "delete-keywords").unwrap();
+        old(&other);
+        let (c, _) = create_action_backup(&db, "merge").unwrap();
+        assert!(!a.exists() && b.exists() && c.exists() && other.exists());
+        // only the backups older than 7 days go
+        old(&c);
+        old(&b);
+        let (e, _) = create_action_backup(&db, "merge").unwrap();
+        assert!(e.exists() && !b.exists() && !c.exists());
         drop(db);
         std::fs::remove_dir_all(d).unwrap();
     }

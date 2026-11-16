@@ -22,10 +22,10 @@ fn f(e: rusqlite::Error) -> String {
 // ───────────────────────────────────────────── Snapshot and undo
 
 #[derive(Clone, Debug)]
-struct TableRows {
-    table: String,
-    columns: Vec<String>,
-    rows: Vec<Vec<Value>>,
+pub(crate) struct TableRows {
+    pub(crate) table: String,
+    pub(crate) columns: Vec<String>,
+    pub(crate) rows: Vec<Vec<Value>>,
 }
 
 /// A reference that is not deleted with its parent but set to NULL (or would block the delete): its old value.
@@ -41,22 +41,80 @@ struct Nulled {
 /// All rows a removal takes along, in the order they have to be put back (parents first).
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
-    tables: Vec<TableRows>,
+    pub(crate) tables: Vec<TableRows>,
     nulled: Vec<Nulled>,
     /// exclusions this removal added (⌘Z lifts them again)
     excluded: Vec<(i64, String)>,
     /// Lightroom files remembered as removed (⌘Z forgets them again)
     lr_removed: Vec<i64>,
     /// renames/moves: (table, id, column, old value)
-    changed: Vec<(String, i64, String, Value)>,
-    /// rows the change added (merging keywords): ⌘Z deletes them again
-    added: Vec<TableRows>,
+    pub(crate) changed: Vec<(String, i64, String, Value)>,
+    /// rows the change added (merging keywords, own order of collections): ⌘Z deletes them again
+    pub(crate) added: Vec<TableRows>,
+    /// follow-up steps that failed after the change was committed (keyword times, sidecars, search index, smart
+    /// rules): the change itself stands and ⌘Z works, the interface shows them as a warning
+    pub(crate) warnings: Vec<String>,
+    /// smart collections whose rule followed the change (renaming, merging keywords)
+    pub(crate) smart_changed: usize,
+    /// smart collections left unchanged because a term naming the keyword also finds other keywords
+    pub(crate) smart_kept: Vec<String>,
 }
 
 impl Snapshot {
     /// Number of rows of a table in the snapshot (tests, messages).
     pub fn rows_of(&self, table: &str) -> usize {
         self.tables.iter().filter(|t| t.table == table).map(|t| t.rows.len()).sum()
+    }
+    /// Rows the snapshot holds (for the limit of the ⌘Z stack).
+    pub fn size(&self) -> usize {
+        self.tables.iter().chain(self.added.iter()).map(|t| t.rows.len()).sum::<usize>() + self.nulled.len() + self.changed.len() + self.excluded.len()
+    }
+    /// Keywords the change created (⌘Z deletes them again).
+    pub(crate) fn add_created_keywords(&mut self, ids: &[i64]) {
+        if !ids.is_empty() {
+            self.added.push(TableRows { table: "keyword".into(), columns: vec!["id".into()], rows: ids.iter().map(|i| vec![Value::Integer(*i)]).collect() });
+        }
+    }
+    /// Rows the change added (⌘Z deletes them) and rows it removed (⌘Z puts them back), any table.
+    pub(crate) fn add_rows(&mut self, table: &str, columns: &[&str], added: Vec<Vec<Value>>, removed: Vec<Vec<Value>>) {
+        let columns: Vec<String> = columns.iter().map(|c| c.to_string()).collect();
+        if !added.is_empty() {
+            self.added.push(TableRows { table: table.into(), columns: columns.clone(), rows: added });
+        }
+        if !removed.is_empty() {
+            self.tables.push(TableRows { table: table.into(), columns, rows: removed });
+        }
+    }
+    /// Old values of changed rows (renames, moves).
+    pub(crate) fn add_changed(&mut self, table: &str, id: i64, column: &str, old: Value) {
+        self.changed.push((table.to_string(), id, column.to_string(), old));
+    }
+    /// Follow-up steps that failed after the change was committed (the change stands; shown as a warning).
+    pub fn warnings(&self) -> &[String] {
+        &self.warnings
+    }
+    /// Smart collections whose rule followed the change.
+    pub fn smart_changed(&self) -> usize {
+        self.smart_changed
+    }
+    /// Names of smart collections left unchanged (a term naming the keyword was ambiguous).
+    pub fn smart_kept(&self) -> &[String] {
+        &self.smart_kept
+    }
+    /// Note a failed follow-up step (after the commit): kept on the snapshot and logged, never an error.
+    pub(crate) fn warn<T>(&mut self, step: &str, r: R<T>) -> Option<T> {
+        match r {
+            Ok(v) => Some(v),
+            Err(e) => {
+                // once per step (a failing search index would otherwise give one line per photo)
+                let head = format!("{step}: ");
+                if !self.warnings.iter().any(|w| w.starts_with(&head)) {
+                    eprintln!("keyword change: {step} failed after commit: {e}");
+                    self.warnings.push(format!("{head}{e}"));
+                }
+                None
+            }
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.tables.is_empty() && self.nulled.is_empty() && self.excluded.is_empty() && self.changed.is_empty() && self.added.is_empty()
@@ -69,6 +127,9 @@ impl Snapshot {
         self.lr_removed.extend(o.lr_removed);
         self.changed.extend(o.changed);
         self.added.extend(o.added);
+        self.warnings.extend(o.warnings);
+        self.smart_changed += o.smart_changed;
+        self.smart_kept.extend(o.smart_kept);
     }
 }
 
@@ -173,9 +234,16 @@ impl Collector<'_> {
 }
 
 /// Take the snapshot of `table` rows with `column` in `values` and delete them (in one transaction).
-fn remove_rows(conn: &Connection, table: &str, column: &str, values: &[Value], mut snap: Snapshot) -> R<Snapshot> {
+pub(crate) fn remove_rows(conn: &Connection, table: &str, column: &str, values: &[Value], snap: Snapshot) -> R<Snapshot> {
     let tx = conn.unchecked_transaction().map_err(f)?;
-    let mut c = Collector { conn: &tx, fks: foreign_keys(&tx)?, seen: HashMap::new(), snap: Snapshot::default() };
+    let snap = remove_rows_in(&tx, table, column, values, snap)?;
+    tx.commit().map_err(f)?;
+    Ok(snap)
+}
+
+/// [`remove_rows`] inside a transaction the caller holds (and commits).
+pub(crate) fn remove_rows_in(tx: &Connection, table: &str, column: &str, values: &[Value], mut snap: Snapshot) -> R<Snapshot> {
+    let mut c = Collector { conn: tx, fks: foreign_keys(tx)?, seen: HashMap::new(), snap: Snapshot::default() };
     c.collect(table, column, values)?;
     let taken = c.snap;
     for n in &taken.nulled {
@@ -191,23 +259,34 @@ fn remove_rows(conn: &Connection, table: &str, column: &str, values: &[Value], m
     for id in &snap.lr_removed {
         tx.execute("INSERT OR IGNORE INTO removed_lr_file(lr_id, path, time) VALUES(?1, NULL, ?2)", params![id, crate::now()]).map_err(f)?;
     }
-    tx.commit().map_err(f)?;
     snap.tables = taken.tables;
     snap.nulled = taken.nulled;
     Ok(snap)
 }
 
+/// Tables whose rows a change replaces under the same primary key (see [`undo`]).
+const REPLACED_BY_KEY: [&str; 2] = ["collection_order", "keyword_option"];
+
+/// Delete exactly the rows a change added to a table.
+fn delete_added(tx: &rusqlite::Transaction, t: &TableRows) -> R<()> {
+    let cond: Vec<String> = t.columns.iter().enumerate().map(|(i, c)| format!("{} = ?{}", quote(c), i + 1)).collect();
+    let sql = format!("DELETE FROM {} WHERE {}", quote(&t.table), cond.join(" AND "));
+    let mut st = tx.prepare(&sql).map_err(f)?;
+    for r in t.rows.iter().rev() {
+        st.execute(params_from_iter(r.iter())).map_err(f)?;
+    }
+    Ok(())
+}
+
 /// Put back what a removal took (⌘Z); renames and moves get their old values. Rows that exist again in the
-/// meantime stay as they are.
+/// meantime stay as they are. Order: removed rows back, references and old values back, then the rows the change
+/// added go (a new parent term is deleted only after its children hang below their old parents again).
 pub fn undo(db: &Db, snap: &Snapshot) -> R<()> {
     let tx = db.conn.unchecked_transaction().map_err(f)?;
-    for t in &snap.added {
-        let cond: Vec<String> = t.columns.iter().enumerate().map(|(i, c)| format!("{} = ?{}", quote(c), i + 1)).collect();
-        let sql = format!("DELETE FROM {} WHERE {}", quote(&t.table), cond.join(" AND "));
-        let mut st = tx.prepare(&sql).map_err(f)?;
-        for r in &t.rows {
-            st.execute(params_from_iter(r.iter())).map_err(f)?;
-        }
+    // Tables whose rows a change replaces under the same key (the order of collections): the new row has to go
+    // before the old one is put back, otherwise "INSERT OR IGNORE" keeps the new row and the old one is lost.
+    for t in snap.added.iter().rev().filter(|t| REPLACED_BY_KEY.contains(&t.table.as_str())) {
+        delete_added(&tx, t)?;
     }
     for t in &snap.tables {
         let cols: Vec<String> = t.columns.iter().map(|c| quote(c)).collect();
@@ -223,6 +302,9 @@ pub fn undo(db: &Db, snap: &Snapshot) -> R<()> {
     }
     for (table, id, column, old) in snap.changed.iter().rev() {
         tx.execute(&format!("UPDATE {} SET {} = ?1 WHERE id = ?2", quote(table), quote(column)), params![old, id]).map_err(f)?;
+    }
+    for t in snap.added.iter().rev().filter(|t| !REPLACED_BY_KEY.contains(&t.table.as_str())) {
+        delete_added(&tx, t)?;
     }
     for (root, rel) in &snap.excluded {
         tx.execute("DELETE FROM excluded_path WHERE root = ?1 AND rel = ?2", params![root, rel]).map_err(f)?;
@@ -446,13 +528,13 @@ pub const COLLECTION: i64 = 0;
 pub const SET: i64 = 1;
 pub const SMART: i64 = 2;
 
-fn changed(db: &Db, table: &str, id: i64, column: &str, new: Value) -> R<Snapshot> {
+pub(crate) fn changed(db: &Db, table: &str, id: i64, column: &str, new: Value) -> R<Snapshot> {
     let old: Value = db.conn.query_row(&format!("SELECT {} FROM {} WHERE id = ?1", quote(column), quote(table)), [id], |r| r.get(0)).map_err(f)?;
     db.conn.execute(&format!("UPDATE {} SET {} = ?1 WHERE id = ?2", quote(table), quote(column)), params![new, id]).map_err(f)?;
     Ok(Snapshot { changed: vec![(table.to_string(), id, column.to_string(), old)], ..Snapshot::default() })
 }
 
-fn clean_name(name: &str) -> R<String> {
+pub(crate) fn clean_name(name: &str) -> R<String> {
     let n = name.trim();
     if n.is_empty() {
         return Err("Der Name darf nicht leer sein.".into());
@@ -468,7 +550,7 @@ pub fn rename_collection(db: &Db, id: i64, name: &str) -> R<Snapshot> {
 /// Ids of a collection and everything below it.
 fn collection_tree(conn: &Connection, id: i64) -> R<Vec<i64>> {
     let mut st = conn
-        .prepare("WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM collection s JOIN t ON s.parent = t.id) SELECT id FROM t")
+        .prepare("WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM collection s JOIN t ON s.parent = t.id) SELECT id FROM t")
         .map_err(f)?;
     let v = st.query_map([id], |r| r.get(0)).map_err(f)?.collect::<rusqlite::Result<Vec<_>>>().map_err(f)?;
     Ok(v)
@@ -487,24 +569,23 @@ pub fn delete_collection(db: &Db, id: i64) -> R<Snapshot> {
     remove_rows(&db.conn, "collection", "id", &[Value::Integer(id)], Snapshot::default())
 }
 
-/// Move a collection into a set (`None`: top level). Never into itself or below itself, only into sets.
+/// Move a collection into a set (`None`: top level), at the end of its new level. Never into itself or below itself,
+/// only into sets, albums of Apple Photos never out of their set (`crate::collection_order::place`).
 pub fn move_collection(db: &Db, id: i64, parent: Option<i64>) -> R<Snapshot> {
-    if let Some(p) = parent {
-        let kind: Option<i64> = db.conn.query_row("SELECT kind FROM collection WHERE id = ?1", [p], |r| r.get(0)).optional().map_err(f)?;
-        if kind != Some(SET) {
-            return Err("Ziel ist kein Sammlungssatz.".into());
-        }
-        if collection_tree(&db.conn, id)?.contains(&p) {
-            return Err("Ein Satz kann nicht in sich selbst liegen.".into());
-        }
-    }
-    changed(db, "collection", id, "parent", parent.map_or(Value::Null, Value::Integer))
+    crate::collection_order::place(db, id, parent, None)
 }
 
 /// New collection, set or smart collection (`search` for smart collections), optionally in a set; the name is
 /// made unique within its set. Returns the new id.
 pub fn create_collection(db: &Db, kind: i64, name: &str, parent: Option<i64>, search: Option<&str>) -> R<i64> {
     let base = clean_name(name)?;
+    if let Some(p) = parent {
+        // the set "Apple Fotos" mirrors Apple Photos: nothing else goes in
+        let apple: bool = db.conn.query_row("SELECT coalesce(rules, '') = ?2 FROM collection WHERE id = ?1", params![p, crate::apple_photos::COLLECTION_MARKER], |r| r.get(0)).optional().map_err(f)?.unwrap_or(false);
+        if apple {
+            return Err(crate::collection_order::Blocked::AppleSet.message().into());
+        }
+    }
     let mut new = base.clone();
     let mut n = 2;
     while db.conn.query_row("SELECT count(*) FROM collection WHERE name = ?1 AND parent IS ?2 AND kind = ?3", params![&new, parent, kind], |r| r.get::<_, i64>(0)).map_err(f)? > 0 {
@@ -519,9 +600,15 @@ pub fn create_collection(db: &Db, kind: i64, name: &str, parent: Option<i64>, se
 
 /// Add photos to a plain collection (drag and drop, new collection with the selection). Returns: newly added and
 /// the snapshot for ⌘Z (only the new assignments).
+/// Why photos cannot be put into an album of Apple Photos (shown as it is; translated in the app).
+pub const APPLE_ALBUM: &str = "Alben aus Apple Fotos lassen sich hier nicht füllen – der nächste Abgleich würde die Zuordnung wieder überschreiben.";
+
 pub fn add_to_collection(db: &Db, collection: i64, images: &[i64]) -> R<(usize, Snapshot)> {
-    let kind: Option<i64> = db.conn.query_row("SELECT kind FROM collection WHERE id = ?1", [collection], |r| r.get(0)).optional().map_err(f)?;
-    if !matches!(kind, Some(COLLECTION) | Some(3)) {
+    let row: Option<(i64, Option<String>)> = db.conn.query_row("SELECT kind, rules FROM collection WHERE id = ?1", [collection], |r| Ok((r.get(0)?, r.get(1)?))).optional().map_err(f)?;
+    if row.as_ref().is_some_and(|(_, rules)| rules.as_deref() == Some(crate::apple_photos::COLLECTION_MARKER)) {
+        return Err(APPLE_ALBUM.into());
+    }
+    if !matches!(row.map(|r| r.0), Some(COLLECTION) | Some(3)) {
         return Err("Fotos lassen sich nur in eine einfache Sammlung legen.".into());
     }
     let tx = db.conn.unchecked_transaction().map_err(f)?;
@@ -577,10 +664,10 @@ pub fn undo_add(db: &Db, snap: &Snapshot) -> R<()> {
 // ───────────────────────────────────────────── Keywords and people
 
 /// Photos whose keywords change with this keyword (it and everything below): their sidecars are rewritten.
-fn keyword_images(conn: &Connection, id: i64) -> R<Vec<i64>> {
+pub(crate) fn keyword_images(conn: &Connection, id: i64) -> R<Vec<i64>> {
     let mut st = conn
         .prepare(
-            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
+            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
              SELECT DISTINCT b.file FROM image_keyword bs JOIN image b ON b.id = bs.image WHERE bs.keyword IN (SELECT id FROM t)",
         )
         .map_err(f)?;
@@ -588,14 +675,77 @@ fn keyword_images(conn: &Connection, id: i64) -> R<Vec<i64>> {
     Ok(v)
 }
 
-/// Mark the keywords of the photos as an own change (Lightroom import keeps them) and queue their sidecars.
-fn touch_keywords(conn: &Connection, files: &[i64]) -> R<()> {
+/// The keyword paths of these photos changed (a keyword was moved, renamed, merged or deleted): note the time
+/// (the newer state wins when sidecars are read in) and queue their sidecars. Not marked as an own change of the
+/// assignments: the Lightroom import keeps moved and renamed keywords by itself (three-way merge of name and
+/// parent) and never brings back deleted or merged ones, so marking every photo of a large branch would only stop
+/// later Lightroom updates of all their other keywords.
+pub(crate) fn touch_keywords(conn: &Connection, files: &[i64]) -> R<()> {
     let t = crate::now();
+    // every photo is tried (one failure does not leave the rest behind); the first error and the count come back
+    let mut first: Option<String> = None;
+    let mut failed = 0usize;
     for d in files {
-        conn.execute("UPDATE image SET keywords_time = ?2, keywords_changed = ?2, changed = ?2 WHERE file = ?1", params![d, t]).map_err(f)?;
-        crate::store::queue_sidecar(conn, *d)?;
+        let r = conn.execute("UPDATE image SET keywords_time = ?2 WHERE file = ?1", params![d, t]).map_err(f).and_then(|_| crate::store::queue_sidecar(conn, *d));
+        if let Err(e) = r {
+            failed += 1;
+            first.get_or_insert(e);
+        }
     }
-    Ok(())
+    match first {
+        None => Ok(()),
+        Some(e) => Err(format!("{failed} of {} photos: {e}", files.len())),
+    }
+}
+
+/// After a committed keyword change: keyword times and sidecars of `files`, search entries of `images`. A failure
+/// here only goes onto the snapshot as a warning: the change stands, and an error would lose its ⌘Z step.
+pub(crate) fn follow_up(db: &Db, snap: &mut Snapshot, files: &[i64], images: &[i64]) {
+    snap.warn("keyword times and sidecars", touch_keywords(&db.conn, files));
+    snap.warn("search index", crate::keyword_arrange::renew_search(db, images));
+}
+
+/// Photo files and images below keyword `id` (for [`follow_up`]); a failed lookup is a warning on `snap`.
+pub(crate) fn below_for_follow_up(db: &Db, snap: &mut Snapshot, ids: &[i64]) -> (Vec<i64>, Vec<i64>) {
+    let mut files = Vec::new();
+    for &id in ids {
+        files.extend(snap.warn("keyword times and sidecars", keyword_images(&db.conn, id)).unwrap_or_default());
+    }
+    files.sort_unstable();
+    files.dedup();
+    let images = snap.warn("search index", crate::keyword_arrange::images_below(&db.conn, ids)).unwrap_or_default();
+    (files, images)
+}
+
+/// Mark the assignments of these photos as changed in graineo (a Lightroom import keeps them) and return the old
+/// marks for ⌘Z.
+fn mark_assignments_changed(conn: &Connection, images: &[i64]) -> R<Vec<(String, i64, String, Value)>> {
+    let t = crate::now();
+    let mut old = Vec::with_capacity(images.len());
+    let mut get = conn.prepare_cached("SELECT keywords_changed FROM image WHERE id = ?1").map_err(f)?;
+    let mut set = conn.prepare_cached("UPDATE image SET keywords_changed = ?2 WHERE id = ?1").map_err(f)?;
+    for &b in images {
+        let Some(v) = get.query_row([b], |r| r.get::<_, Value>(0)).optional().map_err(f)? else { continue };
+        set.execute(params![b, t]).map_err(f)?;
+        old.push(("image".to_string(), b, "keywords_changed".to_string(), v));
+    }
+    Ok(old)
+}
+
+/// Snapshot of assignments changed by hand ([`crate::keywords::change`]): `added` and `removed` (image, keyword),
+/// the old "changed in graineo" marks per image. ⌘Z: [`undo`] + [`after_keyword_undo`].
+pub(crate) fn assignment_snapshot(added: Vec<(i64, i64)>, removed: Vec<(i64, i64)>, marks: Vec<(i64, Value)>) -> Snapshot {
+    let rows = |v: Vec<(i64, i64)>| v.into_iter().map(|(b, k)| vec![Value::Integer(b), Value::Integer(k)]).collect::<Vec<_>>();
+    let columns = vec!["image".to_string(), "keyword".to_string()];
+    let mut snap = Snapshot::default();
+    if !added.is_empty() {
+        snap.added.push(TableRows { table: "image_keyword".into(), columns: columns.clone(), rows: rows(added) });
+    }
+    if !removed.is_empty() {
+        snap.tables.push(TableRows { table: "image_keyword".into(), columns, rows: rows(removed) });
+    }
+    snap.changed = marks.into_iter().map(|(b, v)| ("image".to_string(), b, "keywords_changed".to_string(), v)).collect();
+    snap
 }
 
 /// Number of photos with this keyword (or one below it).
@@ -603,7 +753,7 @@ pub fn keyword_loss(db: &Db, id: i64) -> R<usize> {
     let n: i64 = db
         .conn
         .query_row(
-            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
+            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM keyword s JOIN t ON s.parent = t.id)
              SELECT count(DISTINCT image) FROM image_keyword WHERE keyword IN (SELECT id FROM t)",
             [id],
             |r| r.get(0),
@@ -617,23 +767,27 @@ pub fn keyword_loss(db: &Db, id: i64) -> R<usize> {
 pub fn keyword_clash(db: &Db, id: i64, name: &str) -> R<Option<i64>> {
     let name = clean_name(name)?;
     let parent: Option<i64> = db.conn.query_row("SELECT parent FROM keyword WHERE id = ?1", [id], |r| r.get(0)).map_err(f)?;
-    db.conn
-        .query_row("SELECT id FROM keyword WHERE parent IS ?1 AND name = ?2 AND id <> ?3 ORDER BY id LIMIT 1", params![parent, &name, id], |r| r.get(0))
-        .optional()
-        .map_err(f)
+    crate::keywords::sibling_named(&db.conn, parent, &name, Some(id))
+}
+
+/// Keyword of the same name (ignoring case) already below `parent` (`None`: top level): moving `id` there would
+/// make two of them at one place – the interface offers merging into it instead ([`merge_keyword`]).
+pub fn move_clash(db: &Db, id: i64, parent: Option<i64>) -> R<Option<i64>> {
+    let name: String = db.conn.query_row("SELECT name FROM keyword WHERE id = ?1", [id], |r| r.get(0)).map_err(f)?;
+    crate::keywords::sibling_named(&db.conn, parent, &name, Some(id))
 }
 
 /// Rename a keyword (also a person). A keyword of the same name at the same place is not merged: error
 /// (the interface offers [`merge_keyword`] instead).
 pub fn rename_keyword(db: &Db, id: i64, name: &str) -> R<Snapshot> {
     let name = clean_name(name)?;
-    let parent: Option<i64> = db.conn.query_row("SELECT parent FROM keyword WHERE id = ?1", [id], |r| r.get(0)).map_err(f)?;
-    let clash: i64 = db.conn.query_row("SELECT count(*) FROM keyword WHERE parent IS ?1 AND name = ?2 AND id <> ?3", params![parent, &name, id], |r| r.get(0)).map_err(f)?;
-    if clash > 0 {
+    if keyword_clash(db, id, &name)?.is_some() {
         return Err("Ein Stichwort mit diesem Namen gibt es dort schon.".into());
     }
-    let snap = changed(db, "keyword", id, "name", Value::Text(name))?;
-    touch_keywords(&db.conn, &keyword_images(&db.conn, id)?)?;
+    let mut snap = changed(db, "keyword", id, "name", Value::Text(name))?;
+    // committed: what follows only warns
+    let (files, images) = below_for_follow_up(db, &mut snap, &[id]);
+    follow_up(db, &mut snap, &files, &images);
     Ok(snap)
 }
 
@@ -655,14 +809,14 @@ pub fn merge_keyword(db: &Db, from: i64, into: i64) -> R<Snapshot> {
         Ok(v)
     };
     let (children, target_children) = (below(from)?, below(into)?);
-    if let Some((_, n)) = children.iter().find(|(_, n)| target_children.iter().any(|(_, t)| t == n)) {
+    if let Some((_, n)) = children.iter().find(|(_, n)| target_children.iter().any(|(_, t)| t.to_lowercase() == n.to_lowercase())) {
         return Err(format!("Unter beiden Stichwörtern gibt es „{n}“. Bitte zuerst eines davon umbenennen oder zusammenführen."));
     }
     // `into` must not lie below `from` (it would be deleted with it)
     let inside: i64 = db
         .conn
         .query_row(
-            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM keyword s JOIN t ON s.parent = t.id) SELECT count(*) FROM t WHERE id = ?2",
+            "WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM keyword s JOIN t ON s.parent = t.id) SELECT count(*) FROM t WHERE id = ?2",
             params![from, into],
             |r| r.get(0),
         )
@@ -698,12 +852,18 @@ pub fn merge_keyword(db: &Db, from: i64, into: i64) -> R<Snapshot> {
             changes.push(("face".into(), g, "person".into(), Value::Integer(from)));
         }
     }
+    // 3. only the photos that newly got `into` have a different list of assignments: marked as changed in graineo
+    //    (otherwise a Lightroom import would take `into` away again, `from` no longer existing there)
+    let newly: Vec<i64> = added.iter().filter_map(|r| if let Value::Integer(b) = r[0] { Some(b) } else { None }).collect();
+    changes.extend(mark_assignments_changed(&tx, &newly)?);
+    // 4. delete `from` (snapshot of its row and its remaining assignments), in the same transaction: either the
+    //    whole merge or nothing
+    let mut snap = remove_rows_in(&tx, "keyword", "id", &[Value::Integer(from)], Snapshot::default())?;
     tx.commit().map_err(f)?;
-    // 3. delete `from` (snapshot of its row and its remaining assignments)
-    let mut snap = remove_rows(&db.conn, "keyword", "id", &[Value::Integer(from)], Snapshot::default())?;
     snap.changed = changes;
     snap.added = vec![TableRows { table: "image_keyword".into(), columns: vec!["image".into(), "keyword".into()], rows: added }];
-    touch_keywords(&db.conn, &files)?;
+    // committed: what follows only warns (the search entries are renewed by the caller)
+    snap.warn("keyword times and sidecars", touch_keywords(&db.conn, &files));
     Ok(snap)
 }
 
@@ -711,18 +871,20 @@ pub fn merge_keyword(db: &Db, from: i64, into: i64) -> R<Snapshot> {
 /// person become unnamed.
 pub fn delete_keyword(db: &Db, id: i64) -> R<Snapshot> {
     let files = keyword_images(&db.conn, id)?;
-    let snap = remove_rows(&db.conn, "keyword", "id", &[Value::Integer(id)], Snapshot::default())?;
-    touch_keywords(&db.conn, &files)?;
+    let mut snap = remove_rows(&db.conn, "keyword", "id", &[Value::Integer(id)], Snapshot::default())?;
+    // committed: what follows only warns (the search entries are renewed by the caller)
+    snap.warn("keyword times and sidecars", touch_keywords(&db.conn, &files));
     Ok(snap)
 }
 
-/// Move a keyword below another (`None`: top level); never below itself.
+/// Move a keyword below another (`None`: top level); never below itself, never beside a keyword of the same name
+/// (error; [`move_clash`] names it, the interface asks to merge).
 pub fn move_keyword(db: &Db, id: i64, parent: Option<i64>) -> R<Snapshot> {
     if let Some(p) = parent {
         let below: i64 = db
             .conn
             .query_row(
-                "WITH RECURSIVE t(id) AS (SELECT ?1 UNION ALL SELECT s.id FROM keyword s JOIN t ON s.parent = t.id) SELECT count(*) FROM t WHERE id = ?2",
+                "WITH RECURSIVE t(id) AS (SELECT ?1 UNION SELECT s.id FROM keyword s JOIN t ON s.parent = t.id) SELECT count(*) FROM t WHERE id = ?2",
                 params![id, p],
                 |r| r.get(0),
             )
@@ -731,8 +893,13 @@ pub fn move_keyword(db: &Db, id: i64, parent: Option<i64>) -> R<Snapshot> {
             return Err("Ein Stichwort kann nicht unter sich selbst liegen.".into());
         }
     }
-    let snap = changed(db, "keyword", id, "parent", parent.map_or(Value::Null, Value::Integer))?;
-    touch_keywords(&db.conn, &keyword_images(&db.conn, id)?)?;
+    if move_clash(db, id, parent)?.is_some() {
+        return Err("Ein Stichwort mit diesem Namen gibt es dort schon.".into());
+    }
+    let mut snap = changed(db, "keyword", id, "parent", parent.map_or(Value::Null, Value::Integer))?;
+    // committed: what follows only warns
+    let (files, images) = below_for_follow_up(db, &mut snap, &[id]);
+    follow_up(db, &mut snap, &files, &images);
     Ok(snap)
 }
 
@@ -743,20 +910,34 @@ pub fn after_keyword_undo(db: &Db, snap: &Snapshot) -> R<()> {
         ids.extend(t.rows.iter().filter_map(|r| if let Value::Integer(i) = r[0] { Some(i) } else { None }));
     }
     let mut files = Vec::new();
+    let mut tree_images: Vec<i64> = Vec::new();
     for id in ids {
         files.extend(keyword_images(&db.conn, id)?);
+        tree_images.extend(crate::keyword_arrange::images_below(&db.conn, &[id])?);
     }
-    // photos that lost an assignment added by the change (merge)
-    for t in snap.added.iter().filter(|t| t.table == "image_keyword") {
+    // photos that lost an assignment added by the change (merge, adding by hand) or got one back (removing by hand)
+    let mut images: Vec<i64> = Vec::new();
+    for t in snap.added.iter().chain(snap.tables.iter()).filter(|t| t.table == "image_keyword") {
         for r in &t.rows {
-            if let Some(d) = db.conn.query_row("SELECT file FROM image WHERE id = ?1", [&r[0]], |r| r.get::<_, i64>(0)).optional().map_err(f)? {
-                files.push(d);
+            if let Value::Integer(b) = r[0] {
+                images.push(b);
             }
+        }
+    }
+    images.sort_unstable();
+    images.dedup();
+    for b in &images {
+        if let Some(d) = db.conn.query_row("SELECT file FROM image WHERE id = ?1", [b], |r| r.get::<_, i64>(0)).optional().map_err(f)? {
+            files.push(d);
         }
     }
     files.sort_unstable();
     files.dedup();
-    touch_keywords(&db.conn, &files)
+    touch_keywords(&db.conn, &files)?;
+    // their search entries follow (the index holds the whole chain of every keyword)
+    images.extend(tree_images);
+    crate::keyword_arrange::renew_search(db, &images)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -807,6 +988,18 @@ mod tests {
                 let _ = std::fs::remove_dir_all(&self.0);
             }
         }
+    }
+
+    /// Albums mirrored from Apple Photos take no photos by hand (the next sync would overwrite them); plain
+    /// collections still do.
+    #[test]
+    fn apple_albums_take_no_photos() {
+        let (_d, db) = library();
+        db.conn.execute_batch("INSERT INTO collection(id, name, kind, rules) VALUES(60, 'Apple Fotos', 1, 'apple-photos'); INSERT INTO collection(id, name, kind, parent, rules) VALUES(61, 'Urlaub', 0, 60, 'apple-photos');").unwrap();
+        assert_eq!(add_to_collection(&db, 61, &[20, 22]).err().as_deref(), Some(APPLE_ALBUM));
+        assert_eq!(count(&db, "SELECT count(*) FROM collection_image WHERE collection = 61"), 0);
+        assert!(add_to_collection(&db, 60, &[20]).is_err());
+        assert_eq!(add_to_collection(&db, 41, &[22]).unwrap().0, 1);
     }
 
     #[test]
@@ -962,17 +1155,25 @@ mod tests {
     #[test]
     fn keywords_rename_move_delete_and_undo() {
         let (_d, db) = library();
-        assert!(rename_keyword(&db, 31, "Urlaub").is_ok(), "same name at another place is fine");
+        let s = rename_keyword(&db, 31, "Urlaub").unwrap();
+        // same name at another place is fine – but moving it next to the other "Urlaub" is not (merging instead)
+        assert!(move_keyword(&db, 31, None).is_err());
+        undo(&db, &s).unwrap();
         let s = rename_keyword(&db, 31, "See").unwrap();
-        assert!(count(&db, "SELECT count(*) FROM image WHERE id = 21 AND keywords_changed IS NOT NULL") == 1);
+        // (e) renaming and moving change no assignment: the photos are not marked as changed in graineo (that
+        // would stop later Lightroom updates of all their keywords), only their time and sidecars follow
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE keywords_changed IS NOT NULL"), 0);
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE id = 21 AND keywords_time IS NOT NULL"), 1);
         undo(&db, &s).unwrap();
         let s = move_keyword(&db, 31, None).unwrap();
         assert_eq!(count(&db, "SELECT count(*) FROM keyword WHERE parent IS NULL"), 3);
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE keywords_changed IS NOT NULL"), 0);
         undo(&db, &s).unwrap();
         assert!(move_keyword(&db, 30, Some(31)).is_err());
         assert_eq!(keyword_loss(&db, 30).unwrap(), 2);
         let s = delete_keyword(&db, 30).unwrap();
         assert_eq!(count(&db, "SELECT count(*) FROM image_keyword"), 1);
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE keywords_changed IS NOT NULL"), 0, "a deleted keyword does not come back from Lightroom anyway");
         undo(&db, &s).unwrap();
         assert_eq!(count(&db, "SELECT count(*) FROM image_keyword"), 3);
         // deleting a person: the face stays, unnamed; ⌘Z names it again
@@ -980,6 +1181,26 @@ mod tests {
         assert_eq!(count(&db, "SELECT count(*) FROM face WHERE person IS NULL"), 1);
         undo(&db, &s).unwrap();
         assert_eq!(count(&db, "SELECT count(*) FROM face WHERE person = 32"), 1);
+    }
+
+    /// (d) Moving next to a keyword of the same name (ignoring case) is refused and names the one to merge into;
+    /// renaming checks the same way.
+    #[test]
+    fn moving_onto_a_sibling_of_the_same_name_is_refused() {
+        let (_d, db) = library();
+        db.conn.execute_batch("INSERT INTO keyword(id, name) VALUES(36, 'meer');").unwrap();
+        assert_eq!(move_clash(&db, 31, None).unwrap(), Some(36));
+        assert!(move_keyword(&db, 31, None).is_err());
+        assert_eq!(count(&db, "SELECT parent FROM keyword WHERE id = 31"), 30, "nothing moved");
+        assert_eq!(count(&db, "SELECT count(*) FROM keyword WHERE lower(name) = 'meer' AND parent IS NULL"), 1, "no second one at the top");
+        // the interface merges instead; ⌘Z puts everything back
+        let s = merge_keyword(&db, 31, 36).unwrap();
+        assert_eq!(count(&db, "SELECT count(*) FROM image_keyword WHERE image = 21 AND keyword = 36"), 1);
+        undo(&db, &s).unwrap();
+        after_keyword_undo(&db, &s).unwrap();
+        assert_eq!(count(&db, "SELECT count(*) FROM image_keyword WHERE image = 21 AND keyword = 31"), 1);
+        assert_eq!(keyword_clash(&db, 36, "URLAUB").unwrap(), Some(30), "renaming ignores case too");
+        assert_eq!(move_clash(&db, 31, Some(30)).unwrap(), None, "its own place is fine");
     }
 
     #[test]
@@ -1008,9 +1229,11 @@ mod tests {
         assert_eq!(count(&db, "SELECT count(*) FROM image_keyword WHERE keyword = 30 AND image IN (20, 22)"), 2, "both photos have the target");
         assert_eq!(count(&db, "SELECT parent FROM keyword WHERE id = 34"), 30, "the child moved below the target");
         assert_eq!(count(&db, "SELECT count(*) FROM image WHERE id = 20 AND keywords_changed IS NOT NULL"), 1);
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE keywords_changed IS NOT NULL"), 1, "only photo 20 got a new assignment (22 had both)");
         undo(&db, &s).unwrap();
         after_keyword_undo(&db, &s).unwrap();
         assert_eq!(before, pairs(&db), "⌘Z restores every assignment");
+        assert_eq!(count(&db, "SELECT count(*) FROM image WHERE keywords_changed IS NOT NULL"), 0, "⌘Z takes the mark back too");
         assert_eq!(count(&db, "SELECT parent FROM keyword WHERE id = 34"), 33);
         // people: faces follow the merge
         db.conn.execute_batch("INSERT INTO keyword(id, name, person) VALUES(35, 'Anna B.', 1);").unwrap();

@@ -38,6 +38,8 @@ pub enum BeforeSource {
     Binning,
     /// the settings held by "Jetzigen Stand festhalten" (this photo / version, this session)
     Snapshot,
+    /// a step of the develop history ("Mit aktuellem Stand vergleichen", `history_panel.rs`)
+    HistoryStep,
 }
 
 /// The photo (path and virtual copy) a snapshot belongs to.
@@ -451,6 +453,9 @@ impl App {
         if let Some((_, at)) = self.before.snapshots.get(&self.snap_key(index)) {
             v.push((BeforeSource::Snapshot, crate::trf!("Momentaufnahme · {a}", a = clock(at))));
         }
+        if let Some((_, label)) = self.history.compare_for(&self.history_key(index)) {
+            v.push((BeforeSource::HistoryStep, label));
+        }
         // Quattro at high ISO: the same photo with the other binning
         if let Some((_, label)) = crate::binning_ui::alt_settings(&c.loaded, &self.entries[index].settings) {
             v.push((BeforeSource::Binning, label));
@@ -478,6 +483,10 @@ impl App {
             BeforeSource::Snapshot => {
                 let key = self.current.as_ref().map(|c| self.snap_key(c.index));
                 key.and_then(|k| self.before.snapshots.get(&k).map(|(s, _)| s.clone())).map_or(PaneImage::Settings(Settings::default()), PaneImage::Settings)
+            }
+            BeforeSource::HistoryStep => {
+                let key = self.current.as_ref().map(|c| self.history_key(c.index));
+                key.and_then(|k| self.history.compare_for(&k)).map_or(PaneImage::Settings(Settings::default()), |(s, _)| PaneImage::Settings(s))
             }
             BeforeSource::Binning => {
                 let alt = self.current.as_ref().and_then(|c| crate::binning_ui::alt_settings(&c.loaded, &self.entries[c.index].settings));
@@ -605,14 +614,32 @@ impl App {
         }
         let max_zoom = one.max(1.0) * crate::zoom::maximum_factor(self.tab == crate::Tab::Sensor, self.darkroom.active);
         let mut center_u = Vec2::new(0.5, 0.5) - self.pan / (self.fit_size * self.zoom).max(Vec2::splat(1.0));
+        let mut pan_swipe = Vec2::ZERO;
         if resp.hovered() && !self.before.menu_open {
-            let scroll = ui.input(|i| i.zoom_delta() * (1.0 + i.smooth_scroll_delta.y * 0.002));
+            let (pinch, swipe, alt) = ui.input(|i| (i.zoom_delta(), i.smooth_scroll_delta, i.modifiers.alt));
+            if let Some(t) = crate::zoom::scroll_source(ui.ctx()) {
+                self.scroll_trackpad = t;
+            }
+            // as in Develop: a trackpad swipe pans a zoomed view and does nothing on a fitted one; the mouse wheel
+            // (and ⌥ + swipe) zooms
+            let scroll = if self.scroll_trackpad && !alt {
+                if self.zoom > 1.01 {
+                    pan_swipe = swipe;
+                }
+                pinch
+            } else {
+                pinch * (1.0 + swipe.y * 0.002)
+            };
             if scroll != 1.0 {
                 self.zoom = (self.zoom * scroll).clamp(1.0, max_zoom);
                 self.view_changed_at = now;
             }
         }
         let pane_size = s * pane_fit * self.zoom;
+        if pan_swipe != Vec2::ZERO {
+            center_u -= pan_swipe / pane_size;
+            self.view_changed_at = now;
+        }
         if resp.dragged() && clicks {
             center_u -= resp.drag_delta() / pane_size;
             self.view_changed_at = now;

@@ -357,6 +357,13 @@
     "symbol": "exclamationmark.bubble"
   },
   {
+    "action": "PerfReport",
+    "text_id": "menu-perf-report",
+    "de": "Leistungsbericht erstellen …",
+    "shortcut": null,
+    "symbol": "speedometer"
+  },
+  {
     "action": "NewCollection",
     "text_id": "menu-new-collection",
     "de": "Neue Sammlung …",
@@ -383,6 +390,13 @@
     "de": "Importe verwalten …",
     "shortcut": null,
     "symbol": "tray.full"
+  },
+  {
+    "action": "ArrangeKeywords",
+    "text_id": "menu-arrange-keywords",
+    "de": "Stichwörter ordnen …",
+    "shortcut": "arrange_keywords",
+    "symbol": "tag"
   },
   {
     "action": "ProofFull",

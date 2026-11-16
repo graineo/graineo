@@ -381,6 +381,10 @@ impl LibraryView {
     /// The metadata panel below row 1 over the full width (columns as before; built in the background).
     fn facets_panel(&mut self, ui: &mut egui::Ui) {
         self.facets_ready();
+        if let (None, Some(job)) = (&self.facets, &self.facets_job) {
+            // someone is waiting for the lists now
+            job.hurry();
+        }
         if self.facets.is_none() {
             // being built in the background: the frame stays, nothing jumps when the lists appear
             ui.add_space(6.0);

@@ -809,8 +809,11 @@ impl App {
                 crate::log(&format!("look comparison: tile {key} picked/removed"));
                 self.toggle_compare_pick(crate::compare_view::Pick { key, name, choice });
             }
-            _ => {
+            (_, picked) => {
                 if let Some(mut t) = apply {
+                    if let Some((_, name, choice)) = &picked {
+                        crate::history::hint(index, crate::history::Hint::film(name, !matches!(choice, Choice::Film(_) | Choice::Recipe(_))));
+                    }
                     rawdev::film_profiles::remember_reference(&mut t);
                     self.entries[index].settings = t;
                 }
