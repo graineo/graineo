@@ -60,6 +60,18 @@ pub struct Hold {
     pub note: String,
 }
 
+/// The word mark (Syne Medium, coloured aperture in the "o") as a texture, loaded once per context: wherever the
+/// name stands as a title (empty library), not set in the interface font.
+pub fn wordmark(ctx: &egui::Context) -> Option<TextureHandle> {
+    let id = egui::Id::unique("brand-wordmark-shared");
+    if let Some(t) = ctx.data(|d| d.get_temp::<TextureHandle>(id)) {
+        return Some(t);
+    }
+    let t = decode(WORDMARK_PNG).map(|i| ctx.load_texture("brand-wordmark-shared", i, TextureOptions::LINEAR))?;
+    ctx.data_mut(|d| d.insert_temp(id, t.clone()));
+    Some(t)
+}
+
 fn decode(bytes: &[u8]) -> Option<ColorImage> {
     let img = image::load_from_memory(bytes).ok()?.to_rgba8();
     let size = [img.width() as usize, img.height() as usize];
@@ -417,6 +429,7 @@ impl Brand {
                             line(ui, &crate::tr("Filmdaten: CC BY-SA 4.0"));
                             line(ui, &crate::tr("RAW-Dekodierung: rawler (LGPL-2.1)"));
                             line(ui, &crate::tr("Objektivdaten: lensfun (CC BY-SA 3.0)"));
+                            line(ui, &crate::tr("Gesichter finden: YuNet, Shiqi Yu (MIT)"));
                             line(ui, &crate::tr("Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm"));
                             head(ui, &crate::tr("Schriften und Symbole"));
                             line(ui, "IBM Plex Mono, Syne (OFL)");

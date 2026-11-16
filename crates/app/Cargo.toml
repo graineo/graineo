@@ -40,7 +40,6 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 trash = "5"
-muda = "0.17"
 # Embedded, purely local UI language catalogs (MIT/Apache-2.0).
 fluent-bundle = "0.16"
 unic-langid = "0.9"
@@ -55,6 +54,10 @@ block2 = "0.6"
 objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "CALayer", "CAMetalLayer", "objc2-core-graphics", "objc2-core-foundation"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGImage"] }
+
+# Native menu bar (macOS, Windows). Not on Linux: muda would pull in the GTK3 bindings (glib 0.18, GHSA-wrw7-89jp-8q8g)
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+muda = "0.17"
 
 # Windows: menu bar on the window (HWND)
 [target.'cfg(windows)'.dependencies]

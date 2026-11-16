@@ -718,8 +718,10 @@ fn pipeline(film: &str, paper: &str, tone: f32, filter: &str, strength: f32, par
         eprintln!("film: calibrated pipeline {film}/{paper} in {:.1?}", t.elapsed());
     }
     let mut cache = CACHE.lock().unwrap();
-    // enough for all films (contact sheet) plus a few slider positions
-    if cache.len() >= 48 {
+    // all films twice over (film tiles of "Film & Look" and the darkroom shelf, contact sheet, test strip) plus slider
+    // positions: with 48 the tiles of the first photo pushed each other out and every further photo calibrated all
+    // films again (≈ 50–500 ms each, measured 16.11.2026); a pipeline is small (no measurable RSS for 40 of them)
+    if cache.len() >= 128 {
         cache.remove(0);
     }
     cache.push((key, pipe.clone()));
@@ -1099,7 +1101,8 @@ pub fn correction(fs: &FilmSettings) -> Result<Correction, String> {
         eprintln!("film: neutral balance in {:.1?}", t_total.elapsed());
     }
     let mut cache = CACHE.lock().unwrap();
-    if cache.len() >= 64 {
+    // one entry per film and settings state; room for all film tiles and the open film's slider positions
+    if cache.len() >= 128 {
         cache.remove(0);
     }
     cache.push((key, c));

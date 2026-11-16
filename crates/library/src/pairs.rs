@@ -505,11 +505,12 @@ pub fn verify(db: &Db, p: &Pair) -> R<(PathBuf, Vec<PathBuf>)> {
     if !jm.is_file() {
         return Err("JPEG ist keine normale Datei".into());
     }
-    let (cj, cr) = (jpath.canonicalize().map_err(|e| e.to_string())?, jroot.canonicalize().map_err(|e| e.to_string())?);
+    // comparison only (the files are opened by their normal paths)
+    let (cj, cr) = (sysdirs::simplify(&jpath.canonicalize().map_err(|e| e.to_string())?), sysdirs::simplify(&jroot.canonicalize().map_err(|e| e.to_string())?));
     if !cj.starts_with(&cr) {
         return Err("JPEG liegt außerhalb des Stammordners".into());
     }
-    if rpath.canonicalize().ok().as_deref() == Some(cj.as_path()) {
+    if rpath.canonicalize().ok().map(|p| sysdirs::simplify(&p)).as_deref() == Some(cj.as_path()) {
         return Err("RAW und JPEG sind dieselbe Datei".into());
     }
     // sidecar of the JPEG: only "NAME.JPG.xmp" – never "NAME.xmp", that belongs to the RAW of the same name

@@ -145,7 +145,7 @@ pub fn held_dialog(ctx: &eframe::egui::Context) {
         crate::tr("Apple Fotos: viele Fotos verschwunden"),
         420.0,
         |ui| {
-            crate::dialog::text(ui, &crate::trf!("{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Mediathek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.", n = gone, k = known));
+            crate::dialog::text(ui, &crate::trf!("{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Bibliothek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.", n = gone, k = known));
             crate::dialog::hint(ui, crate::tr("Der Abgleich wurde angehalten, in graineo ist nichts entfernt. Beim Abgleichen werden diese Fotos samt Sternen, Stichwörtern und Bearbeitung aus der Bibliothek entfernt."));
         },
         crate::dialog::Buttons::destructive(crate::tr("Trotzdem abgleichen"), true),

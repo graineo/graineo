@@ -892,3 +892,74 @@ fn migration_16_removes_offloading_and_keeps_adopted_raw_in_its_folder() {
     assert_eq!(count_rows(&db, "SELECT status FROM file WHERE id = 3"), 1, "offloaded counts as missing");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// "Prüfen" in the Lightroom dialog: what an import would bring, read without writing (library and catalog unchanged).
+#[test]
+fn preview_counts_without_writing() {
+    let dir = tmp("preview");
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(&photos).unwrap();
+    disk(&photos);
+    let cat = dir.join("Test.lrcat");
+    catalog(&cat, &photos);
+    let cat_before = std::fs::read(&cat).unwrap();
+    let db = Db::open(&dir.join("library.sqlite")).unwrap();
+    let images_before = count_rows(&db, "SELECT count(*) FROM image");
+
+    let p = lightroom::preview(&db, &cat).unwrap();
+    assert_eq!((p.images, p.new_images, p.virtual_copies), (9, 9, 2));
+    // the quick collection is not counted as a collection (it becomes graineo's quick collection)
+    assert_eq!((p.collections, p.collection_sets, p.smart_collections, p.keywords), (1, 1, 1, 5));
+    assert_eq!(p.roots, 2);
+    assert_eq!(p.roots_unreachable, vec!["/Volumes/GibtEsNicht-x3f/Bilder/".to_string()]);
+    // nothing written: neither the library nor the catalog (no -wal/-shm)
+    assert_eq!(count_rows(&db, "SELECT count(*) FROM image"), images_before);
+    assert_eq!(std::fs::read(&cat).unwrap(), cat_before);
+    assert!(!dir.join("Test.lrcat-wal").exists() && !dir.join("Test.lrcat-shm").exists());
+
+    // after the import nothing is new any more
+    lightroom::import(&db, &cat, &|_| {}).unwrap();
+    let p2 = lightroom::preview(&db, &cat).unwrap();
+    assert_eq!((p2.images, p2.new_images), (9, 0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Unreadable file: the preview says so (the dialog shows it) instead of failing silently.
+#[test]
+fn preview_of_a_file_that_is_no_catalog() {
+    let dir = tmp("preview-broken");
+    let cat = dir.join("Kaputt.lrcat");
+    std::fs::write(&cat, b"this is not a database at all, just some text that is long enough").unwrap();
+    let db = Db::open(&dir.join("library.sqlite")).unwrap();
+    let e = lightroom::preview(&db, &cat).unwrap_err();
+    assert!(e.starts_with("Katalog nicht lesbar"), "{e}");
+    let missing = lightroom::preview(&db, &dir.join("Fehlt.lrcat")).unwrap_err();
+    assert!(missing.starts_with("Katalog nicht lesbar"), "{missing}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Collections at the top level of the catalog go into the chosen set; the quick collection stays at the top level,
+/// a set in the catalog keeps its own collections; a second import neither moves nor counts them as "own changes".
+#[test]
+fn import_into_a_collection_set() {
+    let dir = tmp("import-set");
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(&photos).unwrap();
+    disk(&photos);
+    let cat = dir.join("Test.lrcat");
+    catalog(&cat, &photos);
+    let db = Db::open(&dir.join("library.sqlite")).unwrap();
+    let opts = lightroom::Options { collection_set: Some("Test".into()) };
+    lightroom::import_with(&db, &cat, &opts, &|_| {}).unwrap();
+    let set: i64 = db.conn.query_row("SELECT id FROM collection WHERE name='Test' AND kind=1 AND parent IS NULL", [], |r| r.get(0)).unwrap();
+    let parent = |name: &str| -> Option<i64> { db.conn.query_row("SELECT parent FROM collection WHERE name=?1", [name], |r| r.get(0)).unwrap() };
+    assert_eq!(parent("Reisen"), Some(set));
+    assert_eq!(parent("Fünf Sterne"), Some(set));
+    assert_ne!(parent("Rom 2024"), Some(set), "inside its own set");
+    assert_eq!(parent("Schnellsammlung"), None, "the quick collection stays at the top level");
+    let r = lightroom::import_with(&db, &cat, &opts, &|_| {}).unwrap();
+    assert_eq!(r.own_kept, 0, "{r:?}");
+    assert_eq!(parent("Reisen"), Some(set));
+    assert_eq!(count_rows(&db, "SELECT count(*) FROM collection WHERE name='Test'"), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

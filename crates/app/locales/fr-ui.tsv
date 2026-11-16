@@ -827,8 +827,8 @@ Lokaler Weißwert	Blanc local
 Ältere lokale Helligkeit	Ancienne luminosité locale
 Verknüpfung der Teilmasken	Combinaison des sous-masques
 Weitere nicht unterstützte Maskendaten	Autres données de masque non prises en charge
-MEDIATHEK	BIBLIOTHÈQUE
-Mediathek: Fotos finden und auswählen · G	Bibliothèque : trouver et sélectionner des photos · G
+BIBLIOTHEK	BIBLIOTHÈQUE
+Bibliothek: Fotos finden und auswählen · G	Bibliothèque : trouver et sélectionner des photos · G
 ENTWICKELN	DÉVELOPPEMENT
 Entwickeln: das Foto digital entwickeln · D	Développement : développer la photo numériquement · D
 DUNKELKAMMER	CHAMBRE NOIRE
@@ -1071,7 +1071,7 @@ rechte Leiste ein/aus	afficher/masquer la barre de droite
 Einfachklick ins Bild	Simple clic sur l'image
 Einpassen ↔ 100 % an dieser Stelle (ohne aktives Werkzeug)	Ajuster ↔ 100 % à cet endroit (sans outil actif)
 Doppelklick ins Bild	Double-clic sur l'image
-zurück zur Mediathek (ohne aktives Werkzeug)	retour à la bibliothèque (sans outil actif)
+zurück zur Bibliothek (ohne aktives Werkzeug)	retour à la bibliothèque (sans outil actif)
 Zwei Finger wischen / Mausrad	Balayage à deux doigts / molette
 vergrößertes Bild verschieben	déplacer l'image agrandie
 Zusammenziehen / ⌘ oder ⌥ + Scrollen	Pincer / ⌘ ou ⌥ + molette
@@ -2106,7 +2106,7 @@ Prüfsumme von {path} stimmt nicht – Datei verworfen	La somme de contrôle de 
 Moduldatei nicht prüfbar: {e}	Fichier de module non vérifiable : {e}
  (doppeltes Bild zusammengeführt)	 (image en double fusionnée)
 Katalog nicht lesbar: {e}	Catalogue illisible : {e}
-{} Bilder übernehmen …	Import de {} images…
+{} Fotos übernehmen …	Import de {} photos…
 Modellkopf zu groß	En-tête du modèle trop grand
 Ungültige Modelldimension oder Datenposition	Dimension du modèle ou position des données invalide
 Modelldimension zu groß	Dimension du modèle trop grande
@@ -2229,6 +2229,8 @@ weicht von den übrigen Aufnahmen dieser Brennweite ab (Motiv ohne durchgehend g
 nicht verwendet: {a} – {b}	non utilisé : {a} – {b}
 Wirkt vor allen anderen Profilen; im Papierkorb wiederherstellbar	Prioritaire sur tous les autres profils ; récupérable depuis la corbeille
 Metadaten-Filter	Filtre de métadonnées
+Metadaten-Filter zurücksetzen	Réinitialiser les filtres de métadonnées
+Metadaten-Filter: {a}	Filtres de métadonnées : {a}
 Zusammen (ein Foto)	Ensemble (une photo)
 Einzeln (zwei Fotos)	Séparé (deux photos)
 Sortierung:	Tri :
@@ -2265,7 +2267,8 @@ Namen prüfen …	Vérifier les noms…
 Gesichter: {} von {} Fotos	Visages : {} sur {} photos
 Personen	Personnes
 Gesichter automatisch erkennen	Détecter les visages automatiquement
-Läuft im Hintergrund mit niedriger Priorität; beim ersten Mal wird ein Gesichtsmodell (39 MB) geladen. Wirkt ab dem nächsten Start	S'exécute en arrière-plan avec une faible priorité ; la première fois, un modèle de visages (39 Mo) est téléchargé. Prend effet au prochain démarrage
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Wirkt ab dem nächsten Start	S'exécute en arrière-plan avec une faible priorité ; graineo demande avant de télécharger une seule fois le modèle de visages (39 Mo). Prend effet au prochain démarrage
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Auf diesem System rechnet graineo die Gesichtserkennung selbst; das kann länger dauern. Wirkt ab dem nächsten Start	S'exécute en arrière-plan avec une faible priorité ; graineo demande avant de télécharger une seule fois le modèle de visages (39 Mo). Sur ce système, graineo calcule lui-même la détection des visages ; cela peut prendre plus de temps. Prend effet au prochain démarrage
 Anderer Name …	Autre nom…
 Übernehmen	Appliquer
 Namen prüfen ({a})	Vérifier les noms ({a})
@@ -2390,8 +2393,8 @@ aus	désactivé
 Klicken zum Schließen	Cliquer pour fermer
 Foto aus Apple Fotos – dort löschen	Photo d'Apple Photos – supprimez-la là-bas
 Apple Fotos	Apple Photos
-Mediathek von Apple Fotos einbinden	Intégrer la photothèque d'Apple Photos
-Keine Mediathek von Apple Fotos gefunden	Aucune photothèque d'Apple Photos trouvée
+Bibliothek von Apple Fotos einbinden	Intégrer la photothèque d'Apple Photos
+Keine Bibliothek von Apple Fotos gefunden	Aucune photothèque d'Apple Photos trouvée
 {p} · wird nur gelesen; Fotos, Alben und Favoriten erscheinen in der Bibliothek, Einstellungen bleiben bei graineo	{p} · lecture seule ; photos, albums et favoris apparaissent dans la bibliothèque, les réglages restent dans graineo
 Abgleich	Synchronisation
 Jetzt abgleichen	Synchroniser maintenant
@@ -2403,7 +2406,7 @@ Versionen	Versions
 Eine virtuelle Kopie hat eigene Einstellungen, die Datei bleibt dieselbe.	Une copie virtuelle a ses propres réglages, le fichier reste le même.
 Zum Beispiel ein anderer Film oder ein anderer Ausschnitt desselben Fotos, ohne die Datei zu verdoppeln.\n\n### Löschen\nKopie wählen, dann Entf.	Par exemple un autre film ou un autre cadrage de la même photo, sans dupliquer le fichier.\n\n### Supprimer\nChoisir la copie, puis appuyer sur Suppr.
 Apple Fotos: viele Fotos verschwunden	Apple Photos : nombreuses photos disparues
-{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Mediathek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{n} photos sur {k} ont soudain disparu d'Apple Photos (y compris de « Supprimés récemment »). Il peut s'agir d'une photothèque qu'Apple Photos répare ou reconstruit depuis iCloud.
+{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Bibliothek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{n} photos sur {k} ont soudain disparu d'Apple Photos (y compris de « Supprimés récemment »). Il peut s'agir d'une photothèque qu'Apple Photos répare ou reconstruit depuis iCloud.
 Der Abgleich wurde angehalten, in graineo ist nichts entfernt. Beim Abgleichen werden diese Fotos samt Sternen, Stichwörtern und Bearbeitung aus der Bibliothek entfernt.	La synchronisation a été arrêtée, rien n'a été retiré de graineo. La synchronisation retirerait ces photos de la bibliothèque, avec leurs étoiles, mots-clés et retouches.
 Trotzdem abgleichen	Synchroniser quand même
 Apple Fotos: Abgleich angehalten – {n} von {k} Fotos wären entfernt worden	Apple Photos : synchronisation arrêtée – {n} photos sur {k} auraient été retirées
@@ -2525,7 +2528,7 @@ Filter: unmarkierte zeigen	Filtre : afficher les non marquées
 Filter: abgelehnte zeigen	Filtre : afficher les rejetées
 {a} · {b} Fotos	{a} · {b} photos
 {a} gelöscht	{a} supprimé
-{a} aus der Mediathek → Papierkorb	{a} de la photothèque → Corbeille
+{a} aus der Bibliothek → Papierkorb	{a} de la photothèque → Corbeille
 {a} aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	{a} d'Apple Photos → « Supprimés récemment » (30 jours)
 aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	d'Apple Photos → « Supprimés récemment » (30 jours)
 in den Papierkorb	mettre à la corbeille
@@ -2648,8 +2651,8 @@ Ziel ohne Dateiname	Destination sans nom de fichier
 Abgleich mit den Begleitdateien …	Synchronisation avec les fichiers annexes…
 kein Quellordner gewählt	aucun dossier source choisi
 kein erreichbarer Stammordner	aucun dossier racine accessible
-nie in die Mediathek von Apple Fotos schreiben	ne jamais écrire dans la photothèque d'Apple Photos
-Nie in die Mediathek von Apple Fotos verschieben	Ne jamais déplacer dans la photothèque d'Apple Photos
+nie in die Bibliothek von Apple Fotos schreiben	ne jamais écrire dans la photothèque d'Apple Photos
+Nie in die Bibliothek von Apple Fotos verschieben	Ne jamais déplacer dans la photothèque d'Apple Photos
 Bibliothek hat ein älteres Schema ({v}) – erst mit graineo öffnen	La bibliothèque a un schéma plus ancien ({v}) – l'ouvrir d'abord avec graineo
 kein Dateiname	aucun nom de fichier
 keine freie Nebendatei	aucun nom libre pour un fichier associé
@@ -2683,7 +2686,7 @@ Stichwort nicht angelegt	Mot-clé non créé
 Rahmen zu klein	Cadre trop petit
 Ordner unbekannt	Dossier inconnu
 Leser abgestürzt	Plantage du lecteur
-Mediathek nicht gefunden	Photothèque introuvable
+Bibliothek nicht gefunden	Photothèque introuvable
 keine Kennung	aucun identifiant
 keine lokale Vorschau in Apple Fotos	aucun aperçu local dans Apple Photos
 ImageIO kann die Datei nicht lesen	ImageIO ne peut pas lire le fichier
@@ -2691,13 +2694,13 @@ Bildgröße passt nicht	La taille de l'image ne correspond pas
 Änderungen eintragen …	Enregistrement des modifications…
 {p}: Begleitdatei {} aus der Bibliothek neu geschrieben	{p} : fichier annexe {} réécrit depuis la bibliothèque
 {p}: {g} in die Begleitdatei geschrieben (Bibliothek neuer){}	{p} : {g} écrit dans le fichier annexe (bibliothèque plus récente){}
-Die Mediathek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	La photothèque d'Apple Photos s'ajoute via Réglages → Bibliothèque, pas comme dossier
+Die Bibliothek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	La photothèque d'Apple Photos s'ajoute via Réglages → Bibliothèque, pas comme dossier
 Ziel existiert schon: {}	La destination existe déjà : {}
 Datei unbekannt	Fichier inconnu
 Fotos aus Apple Fotos lassen sich hier nicht verschieben oder umbenennen	Les photos d'Apple Photos ne peuvent pas être déplacées ni renommées ici
 {n} Foto(s) nach {}	{n} photo(s) vers {}
 ungültiger Ordnername	nom de dossier non valide
-Ordner der Mediathek von Apple Fotos werden nicht umbenannt	Les dossiers de la photothèque d'Apple Photos ne sont pas renommés
+Ordner der Bibliothek von Apple Fotos werden nicht umbenannt	Les dossiers de la photothèque d'Apple Photos ne sont pas renommés
 Ordner umbenennen in {}	Renommer le dossier en {}
 {} fehlt	{} est manquant
 Modellkopf zu kurz	En-tête du modèle trop court
@@ -2992,7 +2995,7 @@ Der Stammordner {a} fehlt – bitte zuerst ihn suchen	Le dossier racine {a} est 
 Die Bibliothek kennt in diesem Ordner keine Fotos – nichts zu verknüpfen	La bibliothèque ne connaît aucune photo dans ce dossier – rien à relier
 Die Bibliothek hat sich inzwischen geändert – bitte noch einmal suchen	La bibliothèque a changé entre-temps – veuillez relancer la recherche
 {a}. Der gewählte Ordner ist schon in der Bibliothek – bitte dort die Einträge prüfen oder einen anderen Ordner wählen.	{a}. Le dossier choisi est déjà dans la bibliothèque – vérifiez-y les entrées ou choisissez un autre dossier.
-Ordner der Mediathek von Apple Fotos werden nicht neu verknüpft	Les dossiers de la photothèque d'Apple Photos ne sont pas reliés à nouveau
+Ordner der Bibliothek von Apple Fotos werden nicht neu verknüpft	Les dossiers de la photothèque d'Apple Photos ne sont pas reliés à nouveau
 1 Foto ist dort nicht – es bleibt als fehlend markiert.	1 photo n'y est pas – elle reste marquée comme manquante.
 1 Datei heißt gleich, ist aber anders groß – sie bleibt als fehlend markiert, bis der Abgleich sie prüft.	1 fichier porte le même nom mais n'a pas la même taille – il reste marqué comme manquant jusqu'à ce que la synchronisation le vérifie.
 1 Foto mit gleicher Größe, aber anderer Änderungszeit wird mit verknüpft.	1 photo de même taille mais de date de modification différente est également reliée.
@@ -3085,7 +3088,7 @@ Ohne Vorschau (Datei nicht lesbar): {a}	Sans aperçu (fichier illisible) : {a}
 ohne Vorschau: {a}	sans aperçu : {a}
 Ordner zusammengeführt	Dossier fusionné
 Ordner {a} von {b} · Datei {c} von {d} · {e} von {f}	Dossier {a} sur {b} · fichier {c} sur {d} · {e} sur {f}
-Bleiben liegen (Lightroom-Katalog, Mediathek von Apple Fotos, Pakete anderer Programme): {a}	Laissés en place (catalogue Lightroom, photothèque d'Apple Photos, paquets d'autres programmes) : {a}
+Bleiben liegen (Lightroom-Katalog, Bibliothek von Apple Fotos, Pakete anderer Programme): {a}	Laissés en place (catalogue Lightroom, photothèque d'Apple Photos, paquets d'autres programmes) : {a}
 {a} Katalogdateien	{a} fichiers de catalogue
 Verschieben vorbereiten	Préparation du déplacement
 Ordner und Ziel werden verglichen …	Comparaison du dossier et de la destination…
@@ -3698,7 +3701,7 @@ Ziel nicht verwendet	Destination non utilisée
 Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben.	Le fichier tel quel, copié avec vérification (SHA-256) ; rien n'est écrasé.
 Begleitdatei (XMP) mit Bewertung und Entwicklung	Fichier annexe (XMP) avec note et retouches
 Kamera-JPEG der RAW+JPEG-Paare	JPEG de l'appareil des paires RAW+JPEG
-Ziel liegt in „{a}“ – in die Mediathek oder das Paket eines anderen Programms schreibt graineo nicht	La destination se trouve dans « {a} » – graineo n'écrit jamais dans la photothèque ou le paquet d'un autre programme
+Ziel liegt in „{a}“ – in die Bibliothek oder das Paket eines anderen Programms schreibt graineo nicht	La destination se trouve dans « {a} » – graineo n'écrit jamais dans la photothèque ou le paquet d'un autre programme
 {a}: gibt es schon – nichts wird überschrieben	{a} : existe déjà – rien n'est écrasé
 Fotos löschen	Suppression de photos
 Kontaktabzug wird berechnet	Calcul du tirage contact
@@ -3855,7 +3858,7 @@ Gruppe von Reglern zu einem Thema.	Groupe de curseurs sur un même thème.
 Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.	L'en-tête déplie et replie la section. Dès qu'un réglage y est modifié, l'interrupteur et le bouton de réinitialisation apparaissent à droite de l'en-tête.
 Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral	Chaque roue fixe une nuance (direction) et son intensité (distance au centre) ; la luminosité reste la même. Classique : ombres froides, hautes lumières chaudes – ou sépia et sélénium pour le noir et blanc.\n\n### Utilisation\nGlisser une roue : teinte et intensité · ⇧ en glissant : intensité seule · double-clic : neutre
 Entwickeln zeigt die Farben ohne Beschneiden auf sRGB, wenn der Bildschirm mehr kann (MacBook Pro, EIZO): eingepasst, vergrößert, Lupe und Vergleich. Gilt für Foveon und alle anderen Formate, nicht für Film, Schwarzweiß und ältere Foveon-Kameras (DP1, DP2, SD15 …)	Développement affiche les couleurs sans les limiter à sRGB quand l'écran le permet (MacBook Pro, EIZO) : en mode ajusté, agrandi, loupe et comparaison. S'applique à Foveon et à tous les autres formats, mais pas au film, au noir et blanc ni aux anciens appareils Foveon (DP1, DP2, SD15…)
-• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Mediathek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **Épreuvage écran** – Affichage → Épreuvage écran : gamut complet, sRGB, Display P3, Adobe RGB ou ProPhoto. Les couleurs hors de l'espace choisi sont ramenées à sa limite. ⌘Y bascule entre le gamut complet et le dernier espace choisi.\n• **Avertissement de gamut** – ⇧⌘Y colore en magenta les pixels situés hors de l'espace d'épreuvage.\n\nS'applique partout où Développement montre la photo : ajustée, agrandie, dans la loupe, le navigateur et en comparaison, y compris en chambre noire. Les miniatures (Bibliothèque, bande de film) ainsi que le film et le noir et blanc sont des images sRGB ; elles tiennent dans tout espace d'épreuvage, l'épreuvage n'y change donc rien. Le choix vaut jusqu'à la fermeture de l'app ; ce réglage définit l'espace utilisé au démarrage de graineo.
+• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Bibliothek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **Épreuvage écran** – Affichage → Épreuvage écran : gamut complet, sRGB, Display P3, Adobe RGB ou ProPhoto. Les couleurs hors de l'espace choisi sont ramenées à sa limite. ⌘Y bascule entre le gamut complet et le dernier espace choisi.\n• **Avertissement de gamut** – ⇧⌘Y colore en magenta les pixels situés hors de l'espace d'épreuvage.\n\nS'applique partout où Développement montre la photo : ajustée, agrandie, dans la loupe, le navigateur et en comparaison, y compris en chambre noire. Les miniatures (Bibliothèque, bande de film) ainsi que le film et le noir et blanc sont des images sRGB ; elles tiennent dans tout espace d'épreuvage, l'épreuvage n'y change donc rien. Le choix vaut jusqu'à la fermeture de l'app ; ce réglage définit l'espace utilisé au démarrage de graineo.
 Voller Umfang	Gamut complet
 Farbproof beim Start	Épreuvage écran au démarrage
 Farbproof	Épreuvage écran
@@ -3916,7 +3919,7 @@ Abschnitt einschalten	Activer la section
 Abschnitt vorübergehend ausschalten	Désactiver temporairement la section
 Blendenstufen der hellsten 0,1 % jeder Schicht bis zur Sättigung	IL entre les 0,1 % les plus clairs de chaque couche et la saturation
 Kachelgröße	Taille des vignettes
-Suchfeld der Mediathek	Champ de recherche de la bibliothèque
+Suchfeld der Bibliothek	Champ de recherche de la bibliothèque
 Aufsteigend sortiert · Klick kehrt um	Tri croissant · cliquer pour inverser
 Absteigend sortiert · Klick kehrt um	Tri décroissant · cliquer pour inverser
 Metadaten-Filter: Kamera, Objektiv, ISO …	Filtre de métadonnées : appareil, objectif, ISO…
@@ -3926,7 +3929,7 @@ Nur abgelehnte	Rejetées uniquement
 Suchen, auch nach Feldern wie iso:200	Rechercher, y compris par champ, p. ex. iso:200
 Eigene Einstellungen, dieselbe Datei	Réglages distincts, même fichier
 Info: Metadaten, Stichwörter, Bewertung	Infos : métadonnées, mots-clés, note
-Mediathek: Fotos finden und auswählen	Bibliothèque : trouver et sélectionner des photos
+Bibliothek: Fotos finden und auswählen	Bibliothèque : trouver et sélectionner des photos
 Entwickeln: das Foto digital entwickeln	Développement : développer la photo numériquement
 Dunkelkammer: Film entwickeln und auf Papier abziehen	Chambre noire : développer le film et le tirer sur papier
 Neue virtuelle Kopie, um einen anderen Film auszuprobieren	Nouvelle copie virtuelle pour essayer un autre film
@@ -4277,7 +4280,7 @@ Nicht in der Bibliothek · wird gesucht …	Hors bibliothèque · recherche…
 Name klingt nach Papierkorb	le nom évoque une corbeille
 Name klingt nach Export	le nom évoque un export
 Name klingt nach Sicherung oder Kopie	le nom évoque une sauvegarde ou une copie
-Photo-Booth-Mediathek	Photothèque Photo Booth
+Photo-Booth-Bibliothek	Photothèque Photo Booth
 Picasa-Ordner	Dossier Picasa
 {a} vermutlich schon in der Bibliothek (gleicher Name und Größe)	{a} probablement déjà dans la bibliothèque (même nom et taille)
 Datei fehlt oder Laufwerk nicht verbunden	fichier manquant ou lecteur non connecté
@@ -4349,7 +4352,7 @@ Eigenes Profil wählen	Choisir un profil personnalisé
 Größe, Aufnahmezeit, Prüfsumme	taille, heure de prise de vue, somme de contrôle
 nicht erreichbar, nichts wird entfernt	inaccessible, rien n’est supprimé
 Bild {a} % gleich, gleicher Tag, nur von Hand	image identique à {a} %, même jour, manuellement uniquement
-Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner an Ort und Stelle in die Bibliothek auf (wie „Importieren …“ mit „An Ort und Stelle“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur vorübergehend zum Entwickeln, ohne Aufnahme	Un arbre par dossier racine, avec le nombre d'images. graineo ne copie, ne déplace ni ne renomme rien.\n\n## Gris, barré\nEmplacement inaccessible. Les photos restent visibles grâce aux aperçus ; notes, mots-clés et personnes restent modifiables. Développement, export et suppression exigent l'original.\n\n## Ajouter des dossiers\n• **+** à droite de l'en-tête – ajoute un dossier à la bibliothèque là où il se trouve (comme « Importer… » avec « Sur place »)\n• **Afficher le dossier…** (⌘O, menu Fichier) – seulement temporairement, pour développer, sans l'ajouter
+Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner in die Bibliothek auf; die Fotos bleiben, wo sie sind (wie „Fotos importieren …“ mit „Hinzufügen“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur ansehen, ohne Import; verändert nichts	Un arbre par dossier racine, avec le nombre d'images. graineo ne copie, ne déplace ni ne renomme rien.\n\n## Gris, barré\nEmplacement inaccessible. Les photos restent visibles grâce aux aperçus ; notes, mots-clés et personnes restent modifiables. Développement, export et suppression exigent l'original.\n\n## Ajouter des dossiers\n• **+** à droite de l'en-tête – ajoute un dossier à la bibliothèque ; les photos restent où elles sont (comme « Importer des photos… » avec « Ajouter »)\n• **Afficher le dossier…** (⌘O, menu Fichier) – seulement afficher, sans importer ; ne modifie rien
 Rückgängig: Einstellungen ({n} Fotos)	Annulé : réglages ({n} photos)
 Wiederholt: Einstellungen ({n} Fotos)	Rétabli : réglages ({n} photos)
 Ähnlich zu: {a}	Similaire à : {a}
@@ -4618,7 +4621,7 @@ Blendenbereich	Plage d’ouverture
 Defektpixel	Pixels défectueux
 Bildstil	Style d’image
 Stichwörter des Fotos.	Mots-clés de la photo.
-Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Mediathek, Spalte „Stichwort“.	Le champ ajoute un mot-clé (à toutes les photos sélectionnées s’il y en a plusieurs). Le filtrage par mots-clés et leur gestion (renommer, déplacer, supprimer par clic droit) se font dans le filtre de métadonnées de la bibliothèque, colonne « Mot-clé ».
+Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Bibliothek, Spalte „Stichwort“.	Le champ ajoute un mot-clé (à toutes les photos sélectionnées s’il y en a plusieurs). Le filtrage par mots-clés et leur gestion (renommer, déplacer, supprimer par clic droit) se font dans le filtre de métadonnées de la bibliothèque, colonne « Mot-clé ».
 Import wartet auf das Laufwerk	Import en attente du disque
 {a} hinzufügen	Ajouter {a}
 Im Hintergrund weiter	Continuer en arrière-plan
@@ -4696,7 +4699,7 @@ Rest importieren	Importer le reste
 Fenster zeigen	Afficher la fenêtre
 Bringt Fotos von einer Karte oder aus einem Ordner in die Bibliothek.	Importe dans la bibliothèque les photos d’une carte ou d’un dossier.
 • **Hinzufügen** – die Fotos bleiben, wo sie sind; ihre Ordner kommen in die Bibliothek (abgehakt wird je Ordner)\n• **Kopieren** – jede Datei wird ins Ziel kopiert, danach vom Ziel zurückgelesen (am Zwischenspeicher des Macs vorbei) und mit SHA-256 verglichen; erst dann gilt sie als importiert. Die Quelle bleibt unverändert\n• **Verschieben** – wie Kopieren; die Originale eines Fotos kommen erst in den Papierkorb, wenn alle seine Kopien (RAW, JPEG, XMP, zweite Kopie) geprüft sind\n\n### Marken\n• **schon da** – dieselbe Datei (gleicher Inhalt, Name egal) ist schon in der Bibliothek; sie wird übersprungen\n• **vermutlich da** – gleiche Größe und gleicher Name oder Aufnahmezeit wie ein Foto, dessen Laufwerk gerade nicht verbunden ist; nicht angehakt, du entscheidest\n• **identisch** – bytegleiche Kopie eines anderen Fotos in derselben Quelle; nur das erste wird importiert\n\n### Im Hintergrund weiter\nSchließt das Fenster, der Import läuft weiter und graineo bleibt bedienbar. Die Statusanzeige oben zeigt den Fortschritt, ein Klick darauf holt das Fenster zurück. Fehlt unterwegs das Ziel oder die Karte, wartet der Import, bis sie wieder da sind.	• **Ajouter** – les photos restent en place ; leurs dossiers entrent dans la bibliothèque (coché par dossier)\n• **Copier** – chaque fichier est copié vers la destination, puis relu depuis celle-ci (sans passer par le cache du Mac) et comparé par SHA-256 ; ce n’est qu’ensuite qu’il compte comme importé. La source reste inchangée\n• **Déplacer** – comme Copier ; les originaux d’une photo ne vont à la corbeille qu’une fois toutes ses copies vérifiées (RAW, JPEG, XMP, deuxième copie)\n\n### Marques\n• **déjà présente** – le même fichier (même contenu, nom quelconque) est déjà dans la bibliothèque ; il est ignoré\n• **probablement présente** – même taille et même nom ou heure de prise de vue qu’une photo dont le disque n’est pas connecté ; non cochée, à vous de décider\n• **identique** – copie identique octet par octet d’une autre photo de la même source ; seule la première est importée\n\n### Continuer en arrière-plan\nFerme la fenêtre ; l’import continue et graineo reste utilisable. L’indicateur d’état en haut montre la progression, un clic dessus rouvre la fenêtre. Si la destination ou la carte disparaît en cours de route, l’import attend son retour.
-In der Mediathek zeigen	Afficher dans la bibliothèque
+In der Bibliothek zeigen	Afficher dans la bibliothèque
 angeschlossen – zum Lesen anklicken	connecté – cliquer pour lire
 verbindet …	connexion…
 liest die Dateiliste … {p} %	lecture de la liste des fichiers… {p} %
@@ -4776,7 +4779,7 @@ Foto öffnen	Ouvrir la photo
 Alle sehr wahrscheinlichen bestätigen ({n})	Confirmer les très probables ({n})
 Bestätigt die Vorschläge „sehr wahrscheinlich“ der aktuellen Auswahl in den Spalten (⌘Z nimmt es zurück)	Confirme les suggestions « très probables » de la sélection actuelle des colonnes (⌘Z pour annuler)
 Name entfernen, das Gesicht bleibt ohne Namen	Retirer le nom, le visage reste sans nom
-Alle Fotos dieser Person in der Mediathek zeigen	Afficher toutes les photos de cette personne dans la bibliothèque
+Alle Fotos dieser Person in der Bibliothek zeigen	Afficher toutes les photos de cette personne dans la bibliothèque
 Nicht angezeigte Personen bekommen keine Vorschläge und stehen nur in der Personenspalte	Les personnes masquées ne reçoivent pas de suggestions et n’apparaissent que dans la colonne des personnes
 Die neuen Vorschläge übernehmen (die Ansicht ändert sich nicht von allein)	Appliquer les nouvelles suggestions (la vue ne change pas d’elle-même)
 Die Vorschläge wurden im Hintergrund neu berechnet.	Les suggestions ont été recalculées en arrière-plan.
@@ -4864,13 +4867,14 @@ Film: spektrafilm, A. Volpato (GPL-3.0)	Film : spektrafilm, A. Volpato (GPL-3.0
 Filmdaten: CC BY-SA 4.0	Données de films : CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	Décodage RAW : rawler (LGPL-2.1)
 Objektivdaten: lensfun (CC BY-SA 3.0)	Données d'objectifs : lensfun (CC BY-SA 3.0)
+Gesichter finden: YuNet, Shiqi Yu (MIT)	Détection des visages : YuNet, Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	Idées d'outils : loupe de grain, pré-flashage, diffusion et points lumineux d'après spektrafilm
 Schriften und Symbole	Polices et icônes
 Marken	Marques
 Foveon und Sigma sind Marken der Sigma Corporation; graineo ist nicht mit Sigma verbunden.	Foveon et Sigma sont des marques de Sigma Corporation ; graineo n'est pas affilié à Sigma.
 ← Personen	← Personnes
 Rahmen	Cadres
-Alle Fotos von {a} in der Mediathek zeigen	Afficher toutes les photos de {a} dans la bibliothèque
+Alle Fotos von {a} in der Bibliothek zeigen	Afficher toutes les photos de {a} dans la bibliothèque
 Einblenden	Afficher
 {a} wieder einblenden: bekommt wieder Vorschläge	Afficher à nouveau {a} : recevra de nouveau des suggestions
 {a} ausblenden: keine Vorschläge mehr, nur noch in der Spalte PERSON zu finden	Masquer {a} : plus de suggestions, uniquement dans la colonne PERSONNE
@@ -5107,3 +5111,141 @@ Aufnahmedaten: Kamera, Objektiv, Blende, Zeit, ISO, Datum, Urheber	Données de p
 Alles: zusätzlich Stichwörter, Beschreibung, Sterne, Etikett	Tout : en plus mots-clés, description, étoiles, étiquette
 Standort (GPS) mitschreiben	Inclure la position (GPS)
 Nur wenn das Original einen Standort hat	Seulement si l'original a une position
+Filter werden geladen …	Chargement des filtres…
+Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.	En ajoutant, le dossier entier entre dans la bibliothèque.
+Wähle zuerst, wohin die Fotos kommen.	Choisissez d’abord où vont les photos.
+Neuer Ordner in der Bibliothek:	Nouveau dossier dans la bibliothèque :
+{a} kopieren	Copier {a}
+{a} verschieben	Déplacer {a}
+Karte oder Kamera	Carte ou appareil
+{a} verschoben und geprüft ({b}, {c})	{a} déplacés et vérifiés ({b}, {c})
+Bewertungen als Begleitdatei (XMP) neben die Fotos schreiben	Écrire les notes à côté des photos en fichiers annexes (XMP)
+Zur Bibliothek hinzufügen …	Ajouter à la bibliothèque…
+Wie möchtest du anfangen?	Par quoi voulez-vous commencer ?
+Von Karte, Kamera oder aus einem Ordner.	Depuis une carte, un appareil ou un dossier.
+Du wählst, ob die Fotos bleiben, kopiert oder verschoben werden.	Vous choisissez si les photos restent, sont copiées ou déplacées.
+Aus Lightroom importieren	Importer depuis Lightroom
+Aus Lightroom importieren …	Importer depuis Lightroom…
+Fotos, Sterne, Sammlungen und Bearbeitungen.	Photos, étoiles, collections et retouches.
+Der Katalog wird nur gelesen.	Le catalogue est seulement lu.
+Ordner nur ansehen	Seulement afficher un dossier
+Fotos durchblättern, ohne Import.	Parcourir des photos sans importer.
+Verändert nichts.	Ne modifie rien.
+Ordner und Fotos kannst du auch hierher ziehen.	Vous pouvez aussi glisser des dossiers et des photos ici.
+Du nutzt Apple Fotos? Bibliothek verbinden …	Vous utilisez Apple Photos ? Connecter la bibliothèque…
+Öffnet Einstellungen › Bibliothek › Apple Fotos	Ouvre Réglages › Bibliothèque › Apple Photos
+graineo liest deinen Lightroom-Katalog nur. Lightroom und deine Fotos bleiben unverändert.	graineo ne fait que lire votre catalogue Lightroom. Lightroom et vos photos restent inchangés.
+In „{a}“ ist keiner.	Aucun dans « {a} ».
+Sucht nach Katalogen …	Recherche de catalogues…
+Lightroom ist geöffnet. Am besten vorher beenden, sonst fehlen die neuesten Änderungen.	Lightroom est ouvert. Mieux vaut le quitter d’abord, sinon les dernières modifications manqueront.
+Lightroom vorher beenden (sonst fehlen die neuesten Änderungen).	Quittez d’abord Lightroom (sinon les dernières modifications manquent).
+Importieren geht erst mit einem lesbaren Katalog. Wähle einen anderen oder prüfe ihn erneut.	L’import nécessite un catalogue lisible. Choisissez-en un autre ou vérifiez-le à nouveau.
+Liest den Katalog …	Lecture du catalogue…
+{a}, davon {b} neu	{a}, dont {b} nouvelles
+{a} bearbeitet	{a} retouchées
+Sammlungssatz	Ensemble de collections
+Sammlungssätze	Ensembles de collections
+{a} gerade nicht erreichbar: {b}	{a} actuellement inaccessible(s) : {b}
+Die Bearbeitungen kommen gleich mit. Erst „Importieren“ schreibt in die Bibliothek.	Les retouches suivent. Seul « Importer » écrit dans la bibliothèque.
+Erneut prüfen	Vérifier à nouveau
+Bearbeitungen: abgebrochen am {d} · {n} übernommen	Retouches : interrompu le {d} · {n} reprises
+Bearbeitungen: {n} übernommen · {d}	Retouches : {n} reprises · {d}
+Bearbeitungen: noch nicht übernommen	Retouches : pas encore reprises
+„Prüfen“ liest den Katalog und zeigt, was kommt. Geschrieben wird erst beim Importieren; die Bearbeitungen kommen gleich mit.	« Vérifier » lit le catalogue et montre ce qui arrivera. Rien n’est écrit avant l’import ; les retouches suivent.
+leer: ganz oben	vide : au premier niveau
+Die Sammlungen aus Lightroom kommen in diesen Sammlungssatz	Les collections de Lightroom vont dans cet ensemble
+{n} Bearbeitungen übernommen	{n} retouches reprises
+Im Hintergrund fortsetzen	Continuer en arrière-plan
+„{a}“ ist nicht da. Ist das Laufwerk verbunden?	« {a} » est introuvable. Le disque est-il connecté ?
+„{a}“ ist nicht da. Wurde der Katalog verschoben oder umbenannt?	« {a} » est introuvable. Le catalogue a-t-il été déplacé ou renommé ?
+Diese Datei ist kein Lightroom-Katalog oder ist beschädigt.	Ce fichier n’est pas un catalogue Lightroom ou il est endommagé.
+Der Katalog lässt sich nicht öffnen. Hat graineo Zugriff auf den Ordner?	Impossible d’ouvrir le catalogue. graineo a-t-il accès au dossier ?
+Lightroom schreibt gerade in den Katalog. Beende Lightroom und prüfe noch einmal.	Lightroom écrit dans le catalogue. Quittez Lightroom et vérifiez à nouveau.
+Der Katalog lässt sich nicht lesen.	Impossible de lire le catalogue.
+{p} · graineo liest deine Bibliothek nur. In Apple Fotos ändert sich nichts.	{p} · graineo ne fait que lire votre bibliothèque. Rien ne change dans Apple Photos.
+Bibliothek von Apple Fotos verbinden	Connecter la bibliothèque d’Apple Photos
+Ordner ansehen, ohne zu importieren	Afficher un dossier sans importer
+Was passiert	Ce qui se passe
+Anderen wählen …	En choisir un autre…
+Die Fotos bleiben an ihrem Ort und werden nur eingetragen.	Les photos restent à leur place et sont seulement inscrites.
+Die Fotos werden geprüft kopiert; die Originale bleiben.	Les photos sont copiées et vérifiées ; les originaux restent.
+Nach der geprüften Kopie kommen die Originale in den Papierkorb.	Après la copie vérifiée, les originaux vont à la corbeille.
+Von der Kamera wird immer geprüft kopiert. Auf der Kamera ändert sich nichts.	Depuis un appareil, les photos sont toujours copiées et vérifiées. Rien ne change sur l’appareil.
+Wähle zuerst eine Quelle: Karte, Kamera oder Ordner	Choisissez d’abord une source : carte, appareil ou dossier
+Liest die Fotos …	Lecture des photos…
+In dieser Quelle sind keine Fotos	Aucune photo dans cette source
+Wähle mindestens einen Ordner	Choisissez au moins un dossier
+Wähle zuerst einen Zielordner	Choisissez d’abord un dossier de destination
+Der Zielordner ist gerade nicht erreichbar	Le dossier de destination est actuellement inaccessible
+Wähle mindestens ein Foto	Choisissez au moins une photo
+Gib der neuen Sammlung einen Namen	Donnez un nom à la nouvelle collection
+Zum Bewerten zur Bibliothek hinzufügen oder den Schalter „Bewertungen als Begleitdatei (XMP)“ einschalten	Pour noter, ajoutez à la bibliothèque ou activez « Notes en fichiers annexes (XMP) »
+Holt Fotos, Bewertungen, Stichwörter, Sammlungen, Gesichter und Bearbeitungen aus dem Lightroom-Katalog in die Bibliothek.	Importe photos, notes, mots-clés, collections, visages et retouches du catalogue Lightroom dans la bibliothèque.
+Der Katalog wird nur gelesen; Lightroom und die Fotos bleiben unverändert.\n• **Prüfen** – liest den Katalog und zeigt, was kommt; geschrieben wird noch nichts\n• **Importieren** – schreibt in die Bibliothek; die Bearbeitungen kommen im selben Lauf mit\n• **Erneut prüfen** – holt spätere Änderungen aus Lightroom nach; was du seither in graineo geändert hast, bleibt\n• **Sammlungssatz** – die Sammlungen des Katalogs kommen in diesen Satz; leer: ganz oben\n• **Smart-Sammlungen** – kommen nur mit ihrem Namen\n\n### Tipp\nLightroom vorher beenden, sonst fehlen die neuesten Änderungen.	Le catalogue est seulement lu ; Lightroom et les photos restent inchangés.\n• **Vérifier** – lit le catalogue et montre ce qui arrivera ; rien n’est encore écrit\n• **Importer** – écrit dans la bibliothèque ; les retouches suivent dans le même passage\n• **Vérifier à nouveau** – récupère les modifications ultérieures de Lightroom ; ce que vous avez modifié depuis dans graineo est conservé\n• **Ensemble de collections** – les collections du catalogue vont dans cet ensemble ; vide : au premier niveau\n• **Collections intelligentes** – reprises avec leur nom seulement\n\n### Astuce\nQuittez d’abord Lightroom, sinon les dernières modifications manqueront.
+Willkommen bei	Bienvenue dans
+Gefunden in deinem Lightroom-Ordner:	Trouvé dans votre dossier Lightroom :
+Noch nichts gewählt	Rien de choisi pour l’instant
+Gesichtserkennung vorbereiten	Préparer la reconnaissance des visages
+graineo lädt einmalig {a} MB für die Gesichtserkennung. Danach arbeitet sie ohne Internet.	graineo télécharge une seule fois {a} Mo pour la reconnaissance des visages. Ensuite, elle fonctionne sans internet.
+Mit „Später“ wird nichts geladen; die Frage kommt beim nächsten Start wieder. Abschalten: Einstellungen → Entwickeln → Personen → „Gesichter automatisch erkennen“.	« Plus tard » ne télécharge rien ; la question revient au prochain démarrage. Pour désactiver : Réglages → Développement → Personnes → « Détecter les visages automatiquement ».
+Laden	Télécharger
+Gesichtsmodell fehlt – es wird erst nach Bestätigung geladen	Le modèle de visages est absent – il n'est téléchargé qu'après confirmation
+Zielordner nicht beschreibbar: {}	Le dossier de destination n'est pas accessible en écriture : {}
+Zielordner nicht gefunden: {}	Dossier de destination introuvable : {}
+„{a}“ lässt sich nicht als Regel sichern: wähle links „Alle Fotos“	« {a} » ne peut pas être enregistré comme règle : choisis « Toutes les photos » à gauche
+Metadaten-Filter werden noch geladen	Les filtres de métadonnées sont encore en cours de chargement
+Diese Fotos als Smart-Sammlung sichern	Enregistrer ces photos comme collection intelligente
+Als Smart-Sammlung sichern	Enregistrer comme collection intelligente
+Sichert die Filter als Regel: neue passende Fotos kommen von selbst hinzu	Enregistre les filtres comme règle : les nouvelles photos correspondantes s’ajoutent d’elles-mêmes
+Fotos/Videos bleibt eine Einstellung der Ansicht, keine Regel	Photos/vidéos reste un réglage de l’affichage, pas une règle
+Titel	Titre
+GPS-Position	Position GPS
+Im Katalog fehlt: {a}. Diese Angaben bleiben leer.	Absent du catalogue : {a}. Ces informations restent vides.
+{n} übernommen	repris : {n}
+Nicht übernommen: {a}	Non repris : {a}
+bearbeitetes Foto	photo retouchée
+bearbeitete Fotos	photos retouchées
+Neueres Katalogformat als getestet ({a}, getestet: {b}). graineo importiert trotzdem; was fehlt, steht im Bericht.	Format de catalogue plus récent que celui testé ({a}, testé : {b}). graineo l’importe quand même ; ce qui manque figure dans le rapport.
+KI-Maske	masque IA
+KI-Masken	masques IA
+Bereichsmaske	masque de plage
+Bereichsmasken	masques de plage
+Maske mit Subtraktion	masque avec soustraction
+Masken mit Subtraktion	masques avec soustraction
+andere Maske	autre masque
+andere Masken	autres masques
+Punktfarbe	couleur ponctuelle
+Punktfarben	couleurs ponctuelles
+Entfernen-Punkt	point de suppression
+Entfernen-Punkte	points de suppression
+Stichwort-Synonym	synonyme de mot-clé
+Stichwort-Synonyme	synonymes de mots-clés
+Stapel	pile
+Etikett ohne Farbe (nur Text)	étiquette sans couleur (texte seul)
+Etiketten ohne Farbe (nur Text)	étiquettes sans couleur (texte seul)
+KI-Daten des Katalogs fehlen (Ordner „.lrcat-data“)	Données IA du catalogue absentes (dossier « .lrcat-data »)
+Titel · GPS	Titre · GPS
+{a} mit Titel · {b} mit GPS-Position	{a} avec titre · {b} avec position GPS
+Etiketten ohne Farbe	Étiquettes sans couleur
+ – neuer als getestet ({a})	 – plus récent que testé ({a})
+Katalogformat	Format du catalogue
+Im Katalog fehlt	Absent du catalogue
+Bearbeitet (in Lightroom)	Retouché (dans Lightroom)
+Nicht übernommen	Non repris
+Bedienfelder einblenden	Afficher les panneaux
+Bedienfelder ausblenden	Masquer les panneaux
+Licht aus: nur in der Einzelansicht	Lumière éteinte : vue simple uniquement
+Licht dimmen	Tamiser la lumière
+Licht ganz aus	Éteindre complètement la lumière
+Licht wieder an	Rallumer la lumière
+Alles wieder einblenden	Tout réafficher
+„(ohne)“ lässt sich nicht als Regel sichern	« (aucun) » ne peut pas être enregistré comme règle
+„{a}“ enthält ein Anführungszeichen und lässt sich nicht als Regel sichern	« {a} » contient un guillemet et ne peut pas être enregistré comme règle
+{a} im Netzwerk, nicht geprüft: {b}	{a} sur le réseau, non vérifié(s) : {b}
+Die Bibliothek wurde aus einem anderen Lightroom-Katalog übernommen. Ein zweiter Katalog würde Fotos vertauschen, deshalb bleibt alles, wie es ist.	La bibliothèque a été importée depuis un autre catalogue Lightroom. Un second catalogue mélangerait les photos, rien n’est donc modifié.
+Der Name ist schon vergeben, gesichert wird als „{n}“.	Ce nom est déjà pris ; enregistrement sous « {n} ».
+Nur ansehen – Originale unverändert	Affichage seul – tes originaux restent intacts
+Änderungen (Entwicklung) werden als Begleitdatei (XMP) neben das Foto gespeichert, sobald du etwas änderst. Zur Bibliothek hinzufügen speichert sie stattdessen in der Bibliothek.	Les modifications (développement) sont enregistrées dans un fichier annexe (XMP) à côté de la photo dès que tu changes quelque chose. Ajouter à la bibliothèque les enregistre dans la bibliothèque.
+Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	Ne concerne que les notes. Les développements sont toujours enregistrés dans un fichier annexe à côté de la photo.
+Zielordner wird geprüft …	Vérification du dossier de destination …
+Zielordner antwortet nicht: {}	Le dossier de destination ne répond pas : {}

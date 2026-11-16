@@ -1,8 +1,8 @@
 //! Import from a Lightroom Classic catalog (`.lrcat`, SQLite).
 //!
 //! The catalog is opened **strictly read-only** (`mode=ro` plus `PRAGMA query_only = 1`).
-//! If the WAL file is empty (Lightroom closed), additionally `immutable=1`: SQLite then creates neither
-//! locks nor side files. If Lightroom is running and changes are in the WAL, reading goes without `immutable`
+//! If the WAL file is empty or holds only its 32-byte header (Lightroom closed), additionally `immutable=1`: SQLite
+//! then creates neither locks nor side files, and neither the catalog nor its folder is touched. If Lightroom is running and changes are in the WAL, reading goes without `immutable`
 //! through the normal locks and the WAL – otherwise those changes would be missing, and reading
 //! during a checkpoint would yield "database disk image is malformed". If that fails (e.g. an
 //! orphaned WAL without `-shm`), fall back to `immutable`: then only the most recent changes are missing.
@@ -12,7 +12,7 @@
 //!
 //! **Own changes stay.** A new import adds and updates what comes from
 //! Lightroom and never takes back what was added or changed in graineo:
-//! - Values (stars, flag, label each on its own; caption; names and places of collections and keywords;
+//! - Values (stars, flag, label each on its own; caption, title, GPS position; names and places of collections and keywords;
 //!   face boxes; places of root folders, folders and files): the Lightroom value is taken only if the
 //!   graineo value is still the one Lightroom had at the last import (`lr_import_state`, for ratings
 //!   `image.lr_state`). Changed on both sides: the own value stays, the report names the conflict. Without
@@ -136,7 +136,18 @@ pub struct Report {
     pub flagged: usize,
     pub rejected: usize,
     pub with_label: usize,
+    /// label texts without a known color (custom label sets of Lightroom; the catalog stores only the text): kept as
+    /// text (`image.label_lr`, searchable), no color
     pub unknown_labels: BTreeMap<String, usize>,
+    /// photos with a title / a GPS position after the import
+    pub with_title: usize,
+    pub with_position: usize,
+    /// catalog format (`Adobe_DBVersion`)
+    pub catalog_version: Option<i64>,
+    /// tables or columns the catalog lacks (read as empty), and sections that could not be read
+    pub catalog_gaps: Vec<String>,
+    /// what the catalog has and graineo does not take over (synonyms, stacks)
+    pub not_taken: NotTaken,
     /// rating changed in Lightroom and in graineo – the own value stays
     pub conflicts: Vec<String>,
     /// own changes the import left as they were although Lightroom has something else (values, places, names)
@@ -153,6 +164,11 @@ pub struct Report {
 }
 
 impl Report {
+    /// Newer catalog format than tested ([`TESTED_DB_VERSION`]): read all the same, with a note.
+    pub fn newer_format(&self) -> bool {
+        self.catalog_version.is_some_and(|v| v > TESTED_DB_VERSION)
+    }
+
     pub fn json(&self) -> serde_json::Value {
         json!({
             "catalog": self.catalog,
@@ -175,6 +191,17 @@ impl Report {
             "rejected": self.rejected,
             "with_label": self.with_label,
             "unknown_labels": self.unknown_labels,
+            "with_title": self.with_title,
+            "with_position": self.with_position,
+            "catalog_version": self.catalog_version,
+            "newer_format": self.newer_format(),
+            "catalog_gaps": self.catalog_gaps,
+            "not_taken": {
+                "synonyms": self.not_taken.synonyms,
+                "stacks": self.not_taken.stacks,
+                "stacked_photos": self.not_taken.stacked_photos,
+                "unknown_labels": self.unknown_labels.values().sum::<usize>(),
+            },
             "conflicts": self.conflicts,
             "own_kept": self.own_kept,
             "no_longer_in_catalog": self.no_longer_in_catalog,
@@ -199,12 +226,107 @@ pub(crate) fn file_uri(path: &Path) -> String {
     uri
 }
 
+/// Start of the error text when a catalog is not the one the library was imported from (see [`check_same_catalog`]).
+pub const OTHER_CATALOG: &str = "Anderer Lightroom-Katalog";
+
+/// Is `catalog` the catalog the library's Lightroom data came from? Lightroom numbers every catalog from the start,
+/// so the ids (`lr_id`) of a second catalog collide with those of the first: importing it (or handing over its
+/// edits) would relink root folders, files, ratings and settings of the first catalog to photos of the second.
+/// Checked with what both know by id: a file, and the file of an image, has the name the catalog gives it (the
+/// library's name or the one of the last import). The same catalog matches almost everywhere (also after an upgrade or a few renames), another one almost nowhere.
+/// `files`: catalog file id → file name; `images`: catalog image id → file id. Reads only.
+pub(crate) fn check_same_catalog(conn: &Connection, files: &HashMap<i64, String>, images: &HashMap<i64, i64>) -> Result<(), String> {
+    let error = |e: rusqlite::Error| e.to_string();
+    let fold = |t: &str| crate::nfc(t).to_lowercase();
+    // names of the last import (the table is missing before the first import)
+    let mut state_names: HashMap<i64, String> = HashMap::new();
+    if let Ok(mut st) = conn.prepare("SELECT lr_id, value FROM lr_import_state WHERE kind = 'file'") {
+        let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).map_err(error)?;
+        for (id, v) in rows.flatten() {
+            if let Some(n) = serde_json::from_str::<serde_json::Value>(&v).ok().and_then(|v| Some(v.get(1)?.as_str()?.to_string())) {
+                state_names.insert(id, fold(&n));
+            }
+        }
+    }
+    let (mut overlap, mut matches) = (0usize, 0usize);
+    {
+        let mut st = conn.prepare("SELECT lr_id, name FROM file WHERE lr_id IS NOT NULL").map_err(error)?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).map_err(error)?;
+        for (id, name) in rows.flatten() {
+            let Some(c) = files.get(&id).map(|c| fold(c)) else { continue };
+            overlap += 1;
+            matches += usize::from(fold(&name) == c || state_names.get(&id) == Some(&c));
+        }
+    }
+    {
+        // by name as well: the ids alone can line up in two catalogs built the same way
+        let mut st = conn.prepare("SELECT i.lr_id, d.name, d.lr_id FROM image i JOIN file d ON d.id = i.file WHERE i.lr_id IS NOT NULL").map_err(error)?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, Option<i64>>(2)?))).map_err(error)?;
+        for (image, name, file) in rows.flatten() {
+            let Some(c) = images.get(&image).and_then(|f| files.get(f)).map(|c| fold(c)) else { continue };
+            overlap += 1;
+            matches += usize::from(fold(&name) == c || file.and_then(|f| state_names.get(&f)) == Some(&c));
+        }
+    }
+    if overlap > 0 && matches * 5 < overlap {
+        return Err(format!(
+            "{OTHER_CATALOG}: die Bibliothek wurde aus einem anderen Katalog übernommen ({} von {overlap} Einträgen passen nicht) – ein zweiter Katalog würde Fotos vertauschen, nichts geändert",
+            overlap - matches
+        ));
+    }
+    Ok(())
+}
+
+/// Size of a WAL file header: a WAL of at most this size holds no frames (no change that is not in the catalog yet).
+pub const WAL_HEADER: u64 = 32;
+
+/// The catalog's `-wal` file holds no changes (missing, empty, or only its header): reading the main file alone is
+/// complete, so it can be opened `immutable` (no locks, no side files).
+pub fn wal_without_changes(catalog: &Path) -> bool {
+    let mut wal = catalog.as_os_str().to_owned();
+    wal.push("-wal");
+    std::fs::metadata(&wal).map_or(true, |m| m.len() <= WAL_HEADER)
+}
+
+/// Lightroom seems to have this catalog open: a lock file next to it, or changes waiting in the WAL. Only file
+/// metadata is read.
+pub fn catalog_in_use(catalog: &Path) -> bool {
+    let mut lock = catalog.as_os_str().to_owned();
+    lock.push(".lock");
+    Path::new(&lock).exists() || !wal_without_changes(catalog)
+}
+
+/// Lightroom catalogs (`*.lrcat`) in `dir` and its direct subfolders, newest first. Only lists folders; nothing is
+/// opened. Backups (`Backups` folders) and Lightroom's own packages (`.lrdata`) are skipped.
+pub fn find_catalogs(dir: &Path) -> Vec<std::path::PathBuf> {
+    let is_catalog = |p: &Path| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("lrcat"));
+    let mut found: Vec<(std::time::SystemTime, std::path::PathBuf)> = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = e.file_name().to_string_lossy().to_lowercase();
+        if name.starts_with('.') {
+            continue;
+        }
+        if is_catalog(&p) {
+            found.push((e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH), p));
+        } else if p.is_dir() && name != "backups" && !name.ends_with(".lrdata") {
+            for f in std::fs::read_dir(&p).into_iter().flatten().flatten() {
+                let q = f.path();
+                if is_catalog(&q) && !f.file_name().to_string_lossy().starts_with('.') {
+                    found.push((f.metadata().and_then(|m| m.modified()).unwrap_or(std::time::UNIX_EPOCH), q));
+                }
+            }
+        }
+    }
+    found.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    found.into_iter().map(|(_, p)| p).collect()
+}
+
 /// Open the catalog read-only (see module docs).
 pub fn open_catalog(path: &Path) -> rusqlite::Result<Connection> {
     let uri = file_uri(path);
-    let mut wal = path.as_os_str().to_owned();
-    wal.push("-wal");
-    let wal_empty = std::fs::metadata(&wal).map_or(true, |m| m.len() == 0);
+    let wal_empty = wal_without_changes(path);
     let open = |suffix_part: &str| -> rusqlite::Result<Connection> {
         let conn = Connection::open_with_flags(format!("{uri}{suffix_part}"), OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
         conn.pragma_update(None, "query_only", 1)?;
@@ -218,6 +340,177 @@ pub fn open_catalog(path: &Path) -> rusqlite::Result<Connection> {
         return open("?mode=ro&immutable=1");
     }
     open("?mode=ro").or_else(|_| open("?mode=ro&immutable=1"))
+}
+
+/// `Adobe_DBVersion` of the catalogs this import was tested with: Lightroom Classic 13 up to 15.1 all write 1500000
+/// (no new or dropped table or column between them). A higher value is read all the same, with a note.
+pub const TESTED_DB_VERSION: i64 = 1_500_000;
+
+/// Catalog format (`Adobe_DBVersion` in `Adobe_variablesTable`; the highest value if it is listed twice, as in
+/// catalogs upgraded over the years). `None` if the table or the value is missing.
+pub fn catalog_version(conn: &Connection) -> Option<i64> {
+    conn.query_row("SELECT max(CAST(value AS REAL)) FROM Adobe_variablesTable WHERE name = 'Adobe_DBVersion'", [], |r| r.get::<_, Option<f64>>(0))
+        .ok()
+        .flatten()
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .map(|v| v as i64)
+}
+
+/// Tables and columns of a catalog (`PRAGMA table_info`). The import builds its queries from them: a table or column
+/// that another Lightroom version lacks is read as NULL (or the section is skipped) instead of failing with "no such
+/// column"; what was missing is collected for the report.
+pub struct CatalogSchema {
+    /// table (lower case) → columns (lower case)
+    tables: HashMap<String, HashSet<String>>,
+    missing: std::cell::RefCell<std::collections::BTreeSet<String>>,
+}
+
+impl CatalogSchema {
+    pub fn read(conn: &Connection) -> rusqlite::Result<CatalogSchema> {
+        let names: Vec<String> = {
+            let mut st = conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")?;
+            let v = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+            v
+        };
+        let mut tables = HashMap::new();
+        let mut st = conn.prepare("SELECT name FROM pragma_table_info(?1)")?;
+        for t in names {
+            let cols: HashSet<String> = st.query_map([&t], |r| r.get::<_, String>(0))?.filter_map(|c| c.ok()).map(|c| c.to_lowercase()).collect();
+            tables.insert(t.to_lowercase(), cols);
+        }
+        Ok(CatalogSchema { tables, missing: Default::default() })
+    }
+
+    pub fn has_table(&self, table: &str) -> bool {
+        self.tables.contains_key(&table.to_lowercase())
+    }
+
+    pub fn has(&self, table: &str, column: &str) -> bool {
+        self.tables.get(&table.to_lowercase()).is_some_and(|c| c.contains(&column.to_lowercase()))
+    }
+
+    /// The table is there; otherwise it is noted as missing.
+    pub fn table(&self, table: &str) -> bool {
+        let ok = self.has_table(table);
+        if !ok {
+            self.missing.borrow_mut().insert(table.to_string());
+        }
+        ok
+    }
+
+    /// `alias.column` if the column is there, otherwise `NULL` (noted as missing).
+    pub fn col(&self, table: &str, alias: &str, column: &str) -> String {
+        if self.has(table, column) {
+            format!("{alias}.{column}")
+        } else {
+            self.missing.borrow_mut().insert(if self.has_table(table) { format!("{table}.{column}") } else { table.to_string() });
+            "NULL".to_string()
+        }
+    }
+
+    /// Columns without which a section cannot be read: `Err` naming what is missing (also noted).
+    pub fn require(&self, table: &str, columns: &[&str]) -> Result<(), String> {
+        if !self.table(table) {
+            return Err(table.to_string());
+        }
+        let gone: Vec<String> = columns.iter().filter(|c| !self.has(table, c)).map(|c| format!("{table}.{c}")).collect();
+        if gone.is_empty() {
+            return Ok(());
+        }
+        self.missing.borrow_mut().extend(gone.iter().cloned());
+        Err(gone.join(", "))
+    }
+
+    /// Tables and columns found missing so far (sorted).
+    pub fn missing(&self) -> Vec<String> {
+        self.missing.borrow().iter().cloned().collect()
+    }
+}
+
+/// Largest XMP packet of one image read from a catalog (unpacked). Lightroom's packets are a few kilobytes.
+const CATALOG_XMP_MAX: u64 = 4 << 20;
+
+/// The XMP packet Lightroom keeps per image (`Adobe_AdditionalMetadata.xmp`): a 4-byte length and zlib data, in old
+/// catalogs plain text. A packet that unpacks to more than [`CATALOG_XMP_MAX`] bytes is skipped (a damaged or
+/// crafted catalog must not exhaust the memory with a few kilobytes of zlib data).
+fn catalog_xmp(v: rusqlite::types::Value) -> Option<String> {
+    use std::io::Read;
+    match v {
+        rusqlite::types::Value::Text(t) => Some(t).filter(|t| t.len() as u64 <= CATALOG_XMP_MAX),
+        rusqlite::types::Value::Blob(b) if b.first() == Some(&b'<') => String::from_utf8(b).ok().filter(|t| t.len() as u64 <= CATALOG_XMP_MAX),
+        rusqlite::types::Value::Blob(b) if b.len() > 4 => {
+            let mut raw = Vec::new();
+            // one byte more than allowed: tells "exactly at the limit" from "too large"
+            flate2::read::ZlibDecoder::new(&b[4..]).take(CATALOG_XMP_MAX + 1).read_to_end(&mut raw).ok()?;
+            if raw.len() as u64 > CATALOG_XMP_MAX {
+                return None;
+            }
+            String::from_utf8(raw).ok()
+        }
+        _ => None,
+    }
+}
+
+/// Titles of the catalog's images (from their XMP packets; Lightroom keeps the title nowhere else).
+fn read_titles(lr: &Connection, schema: &CatalogSchema) -> HashMap<i64, String> {
+    if schema.require("Adobe_AdditionalMetadata", &["image", "xmp"]).is_err() {
+        return HashMap::new();
+    }
+    let mut out = HashMap::new();
+    let Ok(mut st) = lr.prepare("SELECT image, xmp FROM Adobe_AdditionalMetadata WHERE image IS NOT NULL") else { return out };
+    let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, rusqlite::types::Value>(1)?))) else { return out };
+    for (image, xmp) in rows.flatten() {
+        if let Some(t) = catalog_xmp(xmp).filter(|t| t.contains("dc:title")).and_then(|t| crate::xmp::title(&t)) {
+            out.insert(image, t);
+        }
+    }
+    out
+}
+
+/// GPS position from Lightroom's EXIF values; `None` without a usable position.
+fn position(has: Option<f64>, lat: Option<f64>, lon: Option<f64>) -> Option<(f64, f64)> {
+    let (lat, lon) = (lat?, lon?);
+    (has.is_none_or(|h| h > 0.0) && lat.is_finite() && lon.is_finite() && lat.abs() <= 90.0 && lon.abs() <= 180.0 && (lat, lon) != (0.0, 0.0)).then_some((lat, lon))
+}
+
+/// What a Lightroom catalog has that graineo does not take over (counted for the report).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct NotTaken {
+    /// keyword synonyms
+    pub synonyms: usize,
+    /// stacks of different photos (Lightroom also stacks virtual copies with their original: those are not counted)
+    pub stacks: usize,
+    pub stacked_photos: usize,
+}
+
+impl NotTaken {
+    fn read(lr: &Connection, schema: &CatalogSchema) -> NotTaken {
+        let count = |sql: &str| -> (usize, usize) { lr.query_row(sql, [], |r| Ok((r.get::<_, Option<i64>>(0)?.unwrap_or(0).max(0) as usize, r.get::<_, Option<i64>>(1)?.unwrap_or(0).max(0) as usize))).unwrap_or((0, 0)) };
+        let mut n = NotTaken::default();
+        if schema.has_table("AgLibraryKeywordSynonym") {
+            n.synonyms = count("SELECT count(*), 0 FROM AgLibraryKeywordSynonym").0;
+        }
+        if schema.has("AgLibraryFolderStackImage", "stack") && schema.has("AgLibraryFolderStackImage", "image") && schema.has("Adobe_images", "rootFile") {
+            (n.stacks, n.stacked_photos) = count(
+                "SELECT count(*), sum(n) FROM (SELECT count(*) AS n, count(DISTINCT i.rootFile) AS files FROM AgLibraryFolderStackImage s
+                 JOIN Adobe_images i ON i.id_local = s.image GROUP BY s.stack HAVING files > 1)",
+            );
+        }
+        n
+    }
+}
+
+/// Which parts the catalog could be read for (see `import_with`): a part it lacks leaves the library's values alone.
+struct Known {
+    /// stars, flag and label (`rating`, `pick`, `colorLabels`)
+    ratings: bool,
+    caption: bool,
+    title: bool,
+    position: bool,
+    keywords: bool,
+    keyword_images: bool,
+    collections: bool,
+    collection_images: bool,
 }
 
 struct LrImage {
@@ -244,6 +537,9 @@ struct LrImage {
     extra_text: Option<String>,
     /// last change in Lightroom (`touchTime`, Unix seconds)
     touch: Option<i64>,
+    /// GPS position (latitude, longitude in degrees)
+    position: Option<(f64, f64)>,
+    title: Option<String>,
 }
 
 struct LrFile {
@@ -285,8 +581,161 @@ fn time(t: Option<String>) -> Option<String> {
     Some(s.replace(' ', "T"))
 }
 
+/// What an import would bring, read without writing anything ("Prüfen" in the Lightroom dialog).
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Preview {
+    /// photos in the catalog (with virtual copies)
+    pub images: usize,
+    /// of these, not in the library yet
+    pub new_images: usize,
+    pub virtual_copies: usize,
+    pub collections: usize,
+    pub collection_sets: usize,
+    pub smart_collections: usize,
+    pub keywords: usize,
+    /// photos (originals and virtual copies) Lightroom marks as edited (`hasDevelopAdjustmentsEx`): their edits come
+    /// along. Counts everything the catalog marks; the handover ([`crate::lr_handover::Report::edited`]) counts only
+    /// the photos whose file is in the library and whose settings arrived, so it shows fewer when files are missing.
+    pub edited: usize,
+    pub roots: usize,
+    /// root folders whose place cannot be reached right now (drive not connected): paths
+    pub roots_unreachable: Vec<String>,
+    /// root folders on a network path (`\\\\server\\share`): not checked, because looking at them would already
+    /// connect to that server (a foreign catalog could name any server)
+    pub roots_network: Vec<String>,
+    /// catalog format (`Adobe_DBVersion`)
+    pub catalog_version: Option<i64>,
+    /// tables or columns the catalog lacks (read as empty)
+    pub catalog_gaps: Vec<String>,
+}
+
+impl Preview {
+    /// Newer catalog format than tested ([`TESTED_DB_VERSION`]): read all the same, with a note.
+    pub fn newer_format(&self) -> bool {
+        self.catalog_version.is_some_and(|v| v > TESTED_DB_VERSION)
+    }
+
+    pub fn json(&self) -> serde_json::Value {
+        json!({
+            "images": self.images,
+            "new_images": self.new_images,
+            "virtual_copies": self.virtual_copies,
+            "collections": self.collections,
+            "collection_sets": self.collection_sets,
+            "smart_collections": self.smart_collections,
+            "keywords": self.keywords,
+            "edited": self.edited,
+            "roots": self.roots,
+            "roots_unreachable": self.roots_unreachable,
+            "roots_network": self.roots_network,
+            "catalog_version": self.catalog_version,
+            "newer_format": self.newer_format(),
+            "catalog_gaps": self.catalog_gaps,
+        })
+    }
+}
+
+/// Read the catalog (read-only, see [`open_catalog`]) and compare it with the library without writing to either.
+pub fn preview(db: &Db, catalog: &Path) -> Result<Preview, String> {
+    let lr = open_catalog(catalog).map_err(|e| format!("Katalog nicht lesbar: {e}"))?;
+    let error = |e: rusqlite::Error| format!("Katalog nicht lesbar: {e}");
+    let schema = CatalogSchema::read(&lr).map_err(error)?;
+    schema.require("Adobe_images", &["id_local"]).map_err(|m| format!("Katalog nicht lesbar: {m} fehlt"))?;
+    let count = |sql: &str| -> Result<usize, String> { lr.query_row(sql, [], |r| r.get::<_, i64>(0)).map(|n| n.max(0) as usize).map_err(error) };
+    // a section whose table or columns are missing counts 0 (named in `catalog_gaps`)
+    let count_if = |table: &str, columns: &[&str], sql: &str| -> Result<usize, String> {
+        match schema.require(table, columns) {
+            Ok(()) => count(sql),
+            Err(_) => Ok(0),
+        }
+    };
+    let system_only = schema.col("AgLibraryCollection", "c", "systemOnly");
+    let mut p = Preview {
+        images: count("SELECT count(*) FROM Adobe_images")?,
+        virtual_copies: count_if("Adobe_images", &["masterImage"], "SELECT count(*) FROM Adobe_images WHERE masterImage IS NOT NULL")?,
+        collections: count_if(
+            "AgLibraryCollection",
+            &["creationId", "name"],
+            &format!("SELECT count(*) FROM AgLibraryCollection c WHERE creationId = 'com.adobe.ag.library.collection' AND NOT (name = 'quick collection' AND coalesce({system_only}, '') LIKE '1%')"),
+        )?,
+        collection_sets: count_if("AgLibraryCollection", &["creationId"], "SELECT count(*) FROM AgLibraryCollection WHERE creationId = 'com.adobe.ag.library.group'")?,
+        smart_collections: count_if("AgLibraryCollection", &["creationId"], "SELECT count(*) FROM AgLibraryCollection WHERE creationId = 'com.adobe.ag.library.smart_collection'")?,
+        keywords: count_if("AgLibraryKeyword", &["parent"], "SELECT count(*) FROM AgLibraryKeyword WHERE parent IS NOT NULL")?,
+        // older or trimmed catalogs may lack the column: then nothing counts as edited
+        edited: count_if(
+            "Adobe_imageDevelopSettings",
+            &["image", "hasDevelopAdjustmentsEx"],
+            "SELECT count(DISTINCT d.image) FROM Adobe_imageDevelopSettings d JOIN Adobe_images i ON i.id_local = d.image WHERE CAST(coalesce(d.hasDevelopAdjustmentsEx, 0) AS REAL) > 0",
+        )
+        .unwrap_or(0),
+        catalog_version: catalog_version(&lr),
+        ..Default::default()
+    };
+    let roots: Vec<String> = if schema.require("AgLibraryRootFolder", &["absolutePath"]).is_ok() {
+        let mut st = lr.prepare("SELECT absolutePath FROM AgLibraryRootFolder WHERE absolutePath IS NOT NULL").map_err(error)?;
+        let r = st.query_map([], |r| r.get::<_, String>(0)).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+        r
+    } else {
+        Vec::new()
+    };
+    p.roots = roots.len();
+    // a network path is never touched here: on Windows a mere `is_dir` connects to the server and sends the login
+    let (network, local): (Vec<String>, Vec<String>) = roots.into_iter().partition(|r| sysdirs::is_network_path(r));
+    p.roots_network = network;
+    p.roots_unreachable = local.into_iter().filter(|r| !Path::new(r).is_dir()).collect();
+    // another catalog than the one already imported: the check says so (the import refuses it as well)
+    {
+        let name = if schema.has("AgLibraryFile", "idx_filename") { "coalesce(nullif(idx_filename, ''), baseName || '.' || extension)" } else { "baseName || '.' || coalesce(extension, '')" };
+        let files: HashMap<i64, String> = if schema.has("AgLibraryFile", "baseName") && schema.has("AgLibraryFile", "extension") {
+            let mut st = lr.prepare(&format!("SELECT id_local, {name} FROM AgLibraryFile")).map_err(error)?;
+            let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, text(r.get(1)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
+            r
+        } else {
+            HashMap::new()
+        };
+        let images: HashMap<i64, i64> = if schema.has("Adobe_images", "rootFile") {
+            let mut st = lr.prepare("SELECT id_local, rootFile FROM Adobe_images WHERE rootFile IS NOT NULL").map_err(error)?;
+            let r = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
+            r
+        } else {
+            HashMap::new()
+        };
+        check_same_catalog(&db.conn, &files, &images)?;
+    }
+    // new: neither linked in the library nor removed there since the last import (those stay removed)
+    let known: HashSet<i64> = {
+        let mut st = db.conn.prepare("SELECT lr_id FROM image WHERE lr_id IS NOT NULL").map_err(|e| e.to_string())?;
+        let r = st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<rusqlite::Result<HashSet<i64>>>().map_err(|e| e.to_string())?;
+        r
+    };
+    let horizon = horizon(&db.conn);
+    let mut st = lr.prepare("SELECT id_local FROM Adobe_images").map_err(error)?;
+    let ids = st.query_map([], |r| r.get::<_, i64>(0)).map_err(error)?;
+    for id in ids {
+        let id = id.map_err(error)?;
+        if !known.contains(&id) && id > horizon {
+            p.new_images += 1;
+        }
+    }
+    p.catalog_gaps = schema.missing();
+    Ok(p)
+}
+
+/// Choices of an import.
+#[derive(Debug, Default, Clone)]
+pub struct Options {
+    /// collections new at the top level of the catalog go into a collection set of this name (found or created at
+    /// the top level); `None`: at the top level as in Lightroom
+    pub collection_set: Option<String>,
+}
+
 /// Run the import. `progress` receives short status messages.
 pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report, String> {
+    import_with(db, catalog, &Options::default(), progress)
+}
+
+/// [`import`] with choices.
+pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&str)) -> Result<Report, String> {
     let error = |e: rusqlite::Error| e.to_string();
     let mut b = Report { catalog: catalog.display().to_string(), ..Default::default() };
     if crate::move_job::active() {
@@ -296,24 +745,34 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     progress("Lightroom-Katalog lesen …");
     let lr = open_catalog(catalog).map_err(|e| format!("Katalog nicht lesbar: {e}"))?;
 
-    // ── Reading ──
+    // ── Reading ── (queries built from the catalog's own tables and columns: what another Lightroom version lacks
+    // reads as NULL or the section stays empty, named in the report; only the core tables are required)
+    let schema = CatalogSchema::read(&lr).map_err(error)?;
+    b.catalog_version = catalog_version(&lr);
+    let core = |table: &str, columns: &[&str]| schema.require(table, columns).map_err(|m| format!("Katalog nicht lesbar: {m} fehlt"));
+    core("AgLibraryRootFolder", &["id_local", "absolutePath"])?;
+    core("AgLibraryFolder", &["id_local", "rootFolder", "pathFromRoot"])?;
+    core("AgLibraryFile", &["id_local", "folder", "baseName"])?;
+    core("Adobe_images", &["id_local", "rootFile"])?;
+    let rows = |sql: &str| lr.prepare(sql).map_err(error);
     let root_rows: Vec<(i64, String, String)> = {
-        let mut st = lr.prepare("SELECT id_local, absolutePath, name FROM AgLibraryRootFolder").map_err(error)?;
-        let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+        let mut st = rows(&format!("SELECT r.id_local, r.absolutePath, {} FROM AgLibraryRootFolder r WHERE r.absolutePath IS NOT NULL", schema.col("AgLibraryRootFolder", "r", "name")))?;
+        let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, text(r.get(2)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         r
     };
     let folder: Vec<(i64, i64, String)> = {
-        let mut st = lr.prepare("SELECT id_local, rootFolder, pathFromRoot FROM AgLibraryFolder").map_err(error)?;
+        let mut st = rows("SELECT id_local, rootFolder, coalesce(pathFromRoot, '') FROM AgLibraryFolder WHERE rootFolder IS NOT NULL")?;
         let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         r
     };
     let files: Vec<LrFile> = {
-        let mut st = lr.prepare("SELECT id_local, folder, idx_filename, baseName, extension, sidecarExtensions FROM AgLibraryFile").map_err(error)?;
+        let (idx, ext, side) = (schema.col("AgLibraryFile", "f", "idx_filename"), schema.col("AgLibraryFile", "f", "extension"), schema.col("AgLibraryFile", "f", "sidecarExtensions"));
+        let mut st = rows(&format!("SELECT f.id_local, f.folder, {idx}, f.baseName, {ext}, {side} FROM AgLibraryFile f WHERE f.folder IS NOT NULL"))?;
         let r = st
             .query_map([], |r| {
-                let idx: Option<String> = r.get(2)?;
-                let base: String = r.get(3)?;
-                let ext: String = r.get(4)?;
+                let idx = text(r.get(2)?);
+                let base = text(r.get(3)?).unwrap_or_default();
+                let ext = text(r.get(4)?).unwrap_or_default();
                 let name = idx.filter(|s| !s.is_empty()).unwrap_or_else(|| if ext.is_empty() { base.clone() } else { format!("{base}.{ext}") });
                 Ok(LrFile { id: r.get(0)?, folder: r.get(1)?, name: crate::nfc(&name), sidecar: text(r.get(5)?).filter(|s| !s.is_empty()) })
             })
@@ -322,10 +781,21 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             .map_err(error)?;
         r
     };
+    let titles = read_titles(&lr, &schema);
     let images: Vec<LrImage> = {
+        let i = |c: &str| schema.col("Adobe_images", "i", c);
+        // shooting data: without the table (or a column) the values stay empty
+        let exif = schema.table("AgHarvestedExifMetadata") && schema.has("AgHarvestedExifMetadata", "image");
+        let e = |c: &str| if exif { schema.col("AgHarvestedExifMetadata", "e", c) } else { "NULL".to_string() };
+        let interned = |table: &str, reference: &str| exif && schema.has("AgHarvestedExifMetadata", reference) && schema.require(table, &["id_local", "value"]).is_ok();
+        let (camera_join, camera) = if interned("AgInternedExifCameraModel", "cameraModelRef") { ("LEFT JOIN AgInternedExifCameraModel cm ON cm.id_local = e.cameraModelRef", "cm.value") } else { ("", "NULL") };
+        let (lens_join, lens) = if interned("AgInternedExifLens", "lensRef") { ("LEFT JOIN AgInternedExifLens l ON l.id_local = e.lensRef", "l.value") } else { ("", "NULL") };
+        let exif_join = if exif { "LEFT JOIN AgHarvestedExifMetadata e ON e.image = i.id_local" } else { "" };
         // locations, creator, copyright: not present in every (older or trimmed) catalog
-        let has = |t: &str| lr.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1", [t], |r| r.get::<_, i64>(0)).unwrap_or(0) > 0;
-        let place = if ["AgHarvestedIptcMetadata", "AgInternedIptcLocation", "AgInternedIptcCity", "AgInternedIptcState", "AgInternedIptcCountry"].iter().all(|t| has(t)) {
+        let has = |t: &str| schema.has_table(t);
+        let place = if ["AgHarvestedIptcMetadata", "AgInternedIptcLocation", "AgInternedIptcCity", "AgInternedIptcState", "AgInternedIptcCountry"].iter().all(|t| has(t))
+            && ["locationRef", "cityRef", "stateRef", "countryRef", "image"].iter().all(|c| schema.has("AgHarvestedIptcMetadata", c))
+        {
             "(SELECT trim(coalesce(loc.value,'') || ' ' || coalesce(city.value,'') || ' ' || coalesce(st.value,'') || ' ' || coalesce(co.value,''))
                            FROM AgHarvestedIptcMetadata h
                            LEFT JOIN AgInternedIptcLocation loc ON loc.id_local = h.locationRef
@@ -333,38 +803,65 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                            LEFT JOIN AgInternedIptcState st ON st.id_local = h.stateRef
                            LEFT JOIN AgInternedIptcCountry co ON co.id_local = h.countryRef
                           WHERE h.image = i.id_local LIMIT 1)"
+                .to_string()
         } else {
-            "NULL"
+            "NULL".to_string()
         };
-        let creator = if has("AgLibraryIPTC") {
-            "(SELECT trim(coalesce(t.altTextAccessibility,'') || ' ' || coalesce(t.extDescrAccessibility,'')) FROM AgLibraryIPTC t WHERE t.image = i.id_local LIMIT 1)"
+        let iptc = schema.table("AgLibraryIPTC") && schema.has("AgLibraryIPTC", "image");
+        let creator = if iptc {
+            format!(
+                "(SELECT trim(coalesce({},'') || ' ' || coalesce({},'')) FROM AgLibraryIPTC t WHERE t.image = i.id_local LIMIT 1)",
+                schema.col("AgLibraryIPTC", "t", "altTextAccessibility"),
+                schema.col("AgLibraryIPTC", "t", "extDescrAccessibility")
+            )
         } else {
-            "NULL"
+            "NULL".to_string()
         };
-        let mut st = lr
-            .prepare(&format!(
-                "SELECT i.id_local, i.rootFile, i.captureTime, i.rating, i.pick, i.colorLabels, i.orientation, i.masterImage, i.copyName,
-                        i.fileWidth, i.fileHeight, cm.value, i.fileFormat,
-                        e.aperture, e.focalLength, e.isoSpeedRating, e.shutterSpeed, l.value,
-                        (SELECT caption FROM AgLibraryIPTC t WHERE t.image = i.id_local AND t.caption <> '' LIMIT 1), i.touchTime,
-                        {place}, {creator}
-                 FROM Adobe_images i
-                 LEFT JOIN AgHarvestedExifMetadata e ON e.image = i.id_local
-                 LEFT JOIN AgInternedExifCameraModel cm ON cm.id_local = e.cameraModelRef
-                 LEFT JOIN AgInternedExifLens l ON l.id_local = e.lensRef"
-            ))
-            .map_err(error)?;
+        let caption = if iptc && schema.col("AgLibraryIPTC", "t", "caption") != "NULL" {
+            "(SELECT caption FROM AgLibraryIPTC t WHERE t.image = i.id_local AND t.caption <> '' LIMIT 1)".to_string()
+        } else {
+            "NULL".to_string()
+        };
+        let mut st = rows(&format!(
+            "SELECT i.id_local, i.rootFile, {}, {}, {}, {}, {}, {}, {},
+                    {}, {}, {camera}, {},
+                    {}, {}, {}, {}, {lens},
+                    {caption}, {},
+                    {place}, {creator},
+                    {}, {}, {}
+             FROM Adobe_images i
+             {exif_join} {camera_join} {lens_join}",
+            i("captureTime"),
+            i("rating"),
+            i("pick"),
+            i("colorLabels"),
+            i("orientation"),
+            i("masterImage"),
+            i("copyName"),
+            i("fileWidth"),
+            i("fileHeight"),
+            i("fileFormat"),
+            e("aperture"),
+            e("focalLength"),
+            e("isoSpeedRating"),
+            e("shutterSpeed"),
+            i("touchTime"),
+            e("hasGPS"),
+            e("gpsLatitude"),
+            e("gpsLongitude"),
+        ))?;
         let r = st
             .query_map([], |r| {
+                let id: i64 = r.get(0)?;
                 Ok(LrImage {
-                    id: r.get(0)?,
+                    id,
                     file: r.get(1)?,
                     capture: time(text(r.get(2)?)),
                     stars: number(r.get(3)?).unwrap_or(0.0).clamp(0.0, 5.0) as u8,
                     flag: number(r.get(4)?).unwrap_or(0.0).clamp(-1.0, 1.0) as i8,
                     label_text: text(r.get(5)?).unwrap_or_default(),
                     orientation: text(r.get(6)?),
-                    master: r.get(7)?,
+                    master: number(r.get(7)?).map(|v| v as i64),
                     copy: text(r.get(8)?).filter(|s| !s.is_empty()),
                     width: number(r.get(9)?).map(|v| v as i64),
                     height: number(r.get(10)?).map(|v| v as i64),
@@ -384,6 +881,8 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                         let b = text(r.get(21)?).unwrap_or_default();
                         Some(format!("{a} {b}").trim().to_string()).filter(|s| !s.is_empty())
                     },
+                    position: position(number(r.get(22)?), number(r.get(23)?), number(r.get(24)?)),
+                    title: titles.get(&id).cloned(),
                 })
             })
             .map_err(error)?
@@ -391,40 +890,92 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             .map_err(error)?;
         r
     };
-    let keywords: Vec<(i64, Option<String>, Option<i64>, String, Option<String>)> = {
-        let mut st = lr.prepare("SELECT id_local, name, parent, genealogy, keywordType FROM AgLibraryKeyword ORDER BY length(genealogy), id_local").map_err(error)?;
-        let r = st.query_map([], |r| Ok((r.get(0)?, text(r.get(1)?), r.get(2)?, r.get(3)?, text(r.get(4)?)))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
+    let keywords: Vec<(i64, Option<String>, Option<i64>, Option<String>, Option<String>)> = if schema.require("AgLibraryKeyword", &["id_local", "name"]).is_ok() {
+        let k = |c: &str| schema.col("AgLibraryKeyword", "k", c);
+        let (parent, genealogy) = (k("parent"), k("genealogy"));
+        let mut st = rows(&format!("SELECT k.id_local, k.name, {parent}, {genealogy}, {} FROM AgLibraryKeyword k ORDER BY length({genealogy}), k.id_local", k("keywordType")))?;
+        let r = st
+            .query_map([], |r| Ok((r.get(0)?, text(r.get(1)?), number(r.get(2)?).map(|v| v as i64), text(r.get(3)?), text(r.get(4)?))))
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(error)?;
         r
+    } else {
+        Vec::new()
     };
-    let keyword_image: Vec<(i64, i64)> = {
-        let mut st = lr.prepare("SELECT image, tag FROM AgLibraryKeywordImage").map_err(error)?;
+    let keyword_image: Vec<(i64, i64)> = if schema.require("AgLibraryKeywordImage", &["image", "tag"]).is_ok() {
+        let mut st = rows("SELECT image, tag FROM AgLibraryKeywordImage WHERE image IS NOT NULL AND tag IS NOT NULL")?;
         let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         r
+    } else {
+        Vec::new()
     };
-    let collections: Vec<(i64, String, Option<i64>, String, String)> = {
-        let mut st = lr
-            .prepare(
-                "SELECT id_local, name, parent, creationId, systemOnly FROM AgLibraryCollection
-                 WHERE creationId IN ('com.adobe.ag.library.collection','com.adobe.ag.library.group','com.adobe.ag.library.smart_collection')
-                 ORDER BY length(genealogy), id_local",
-            )
+    let collections: Vec<(i64, String, Option<i64>, String, String)> = if schema.require("AgLibraryCollection", &["id_local", "name", "creationId"]).is_ok() {
+        let c = |col: &str| schema.col("AgLibraryCollection", "c", col);
+        let mut st = rows(&format!(
+            "SELECT c.id_local, c.name, {}, c.creationId, {} FROM AgLibraryCollection c
+             WHERE c.creationId IN ('com.adobe.ag.library.collection','com.adobe.ag.library.group','com.adobe.ag.library.smart_collection')
+             ORDER BY length({}), c.id_local",
+            c("parent"),
+            c("systemOnly"),
+            c("genealogy")
+        ))?;
+        let r = st
+            .query_map([], |r| Ok((r.get(0)?, text(r.get(1)?).unwrap_or_default(), number(r.get(2)?).map(|v| v as i64), r.get(3)?, text(r.get(4)?).unwrap_or_default())))
+            .map_err(error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
             .map_err(error)?;
-        let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, text(r.get(4)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         r
+    } else {
+        Vec::new()
     };
     // (row id, collection, image, position)
-    let collection_image: Vec<(i64, i64, i64, Option<f64>)> = {
-        let mut st = lr.prepare("SELECT id_local, collection, image, positionInCollection FROM AgLibraryCollectionImage").map_err(error)?;
+    let collection_image: Vec<(i64, i64, i64, Option<f64>)> = if schema.require("AgLibraryCollectionImage", &["id_local", "collection", "image"]).is_ok() {
+        let mut st = rows(&format!(
+            "SELECT c.id_local, c.collection, c.image, {} FROM AgLibraryCollectionImage c WHERE c.collection IS NOT NULL AND c.image IS NOT NULL",
+            schema.col("AgLibraryCollectionImage", "c", "positionInCollection")
+        ))?;
         let r = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, number(r.get(3)?)))).map_err(error)?.collect::<rusqlite::Result<Vec<_>>>().map_err(error)?;
         r
+    } else {
+        Vec::new()
     };
-    let smart_rules: HashMap<i64, String> = {
-        let mut st = lr.prepare("SELECT collection, content FROM AgLibraryCollectionContent WHERE owningModule = 'ag.library.smart_collection'").map_err(error)?;
+    let smart_rules: HashMap<i64, String> = if schema.require("AgLibraryCollectionContent", &["collection", "content", "owningModule"]).is_ok() {
+        let mut st = rows("SELECT collection, content FROM AgLibraryCollectionContent WHERE owningModule = 'ag.library.smart_collection' AND collection IS NOT NULL")?;
         let r = st.query_map([], |r| Ok((r.get(0)?, text(r.get(1)?).unwrap_or_default()))).map_err(error)?.collect::<rusqlite::Result<HashMap<_, _>>>().map_err(error)?;
         r
+    } else {
+        HashMap::new()
     };
-    let lr_faces = crate::people::read_lightroom(&lr).unwrap_or_default();
+    // faces: only from a catalog that has both face tables (without them, names or boxes would read as removed)
+    let lr_faces: Option<Vec<_>> = if schema.has_table("AgLibraryFace") && schema.has_table("AgLibraryKeywordFace") {
+        match crate::people::read_lightroom(&lr) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                b.catalog_gaps.push(format!("Gesichter: {e}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    // What the catalog could not say (a table or column missing in another Lightroom version or a trimmed catalog) is
+    // "not known", never "removed in Lightroom": those values, assignments and their stored state stay as they are.
+    let readable = Known {
+        ratings: ["rating", "pick", "colorLabels"].iter().all(|c| schema.has("Adobe_images", c)),
+        caption: schema.has("AgLibraryIPTC", "caption") && schema.has("AgLibraryIPTC", "image"),
+        title: schema.has("Adobe_AdditionalMetadata", "image") && schema.has("Adobe_AdditionalMetadata", "xmp"),
+        position: schema.has("AgHarvestedExifMetadata", "image") && schema.has("AgHarvestedExifMetadata", "gpsLatitude") && schema.has("AgHarvestedExifMetadata", "gpsLongitude"),
+        keywords: schema.has("AgLibraryKeyword", "id_local") && schema.has("AgLibraryKeyword", "name"),
+        keyword_images: schema.has("AgLibraryKeywordImage", "image") && schema.has("AgLibraryKeywordImage", "tag"),
+        collections: ["id_local", "name", "creationId"].iter().all(|c| schema.has("AgLibraryCollection", c)),
+        collection_images: ["id_local", "collection", "image"].iter().all(|c| schema.has("AgLibraryCollectionImage", c)),
+    };
+    b.not_taken = NotTaken::read(&lr, &schema);
+    b.catalog_gaps.extend(schema.missing());
     drop(lr);
+    // never over the data of another catalog (its ids collide with the ones of the library)
+    check_same_catalog(&db.conn, &files.iter().map(|f| (f.id, f.name.clone())).collect(), &images.iter().map(|i| (i.id, i.file)).collect())?;
     b.read_duration_ms = t0.elapsed().as_millis();
     // highest id of this catalog: the horizon of the next import
     let new_horizon = [
@@ -435,7 +986,7 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
         keywords.iter().map(|r| r.0).max(),
         collections.iter().map(|r| r.0).max(),
         collection_image.iter().map(|r| r.0).max(),
-        lr_faces.iter().map(|r| r.0).max(),
+        lr_faces.iter().flatten().map(|r| r.0).max(),
     ]
     .into_iter()
     .flatten()
@@ -445,7 +996,7 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     // ── Writing (in blocks: the transaction is committed every few thousand rows and between the sections, so other
     // writers – develop settings, ratings, the sync – get their turn; the import is idempotent via `lr_id`) ──
     let t1 = Instant::now();
-    progress(&format!("{} Bilder übernehmen …", images.len()));
+    progress(&format!("{} Fotos übernehmen …", images.len()));
     let tx = db.conn.unchecked_transaction().map_err(error)?;
     let mut written = 0usize;
     let mut pause_point = |n: usize| -> Result<(), String> {
@@ -602,6 +1153,11 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     let mut new_images: HashSet<i64> = HashSet::new();
     let old_captions = state_load(&tx, "caption").map_err(error)?;
     let mut state_captions: Vec<(i64, serde_json::Value)> = Vec::with_capacity(images.len());
+    // title and position: only values are remembered (none in Lightroom = no row; the rule is the same)
+    let old_titles = state_load(&tx, "title").map_err(error)?;
+    let old_positions = state_load(&tx, "position").map_err(error)?;
+    let mut state_titles: Vec<(i64, serde_json::Value)> = Vec::new();
+    let mut state_positions: Vec<(i64, serde_json::Value)> = Vec::new();
     {
         type Found = (i64, i64, i64, i64, Option<String>, Option<String>);
         let found = |r: &rusqlite::Row| -> rusqlite::Result<Found> { Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)) };
@@ -610,8 +1166,16 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
         let mut new = tx
             .prepare_cached("INSERT INTO image(file, copy, stars, flag, label, label_lr, lr_id, lr_state, run) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)")
             .map_err(error)?;
-        let mut upd = tx.prepare_cached("UPDATE image SET file=?2, copy=?3, stars=?4, flag=?5, label=?6, label_lr=?7, lr_id=?8, lr_state=?9 WHERE id=?1").map_err(error)?;
+        // ?10: the catalog has no label column – the label text of the last import stays
+        let mut upd = tx
+            .prepare_cached("UPDATE image SET file=?2, copy=?3, stars=?4, flag=?5, label=?6, label_lr=CASE WHEN ?10 THEN label_lr ELSE ?7 END, lr_id=?8, lr_state=?9 WHERE id=?1")
+            .map_err(error)?;
         let mut set_text = tx.prepare_cached("UPDATE image SET caption=?2, lr_text=?3 WHERE id=?1").map_err(error)?;
+        let mut get_meta = tx.prepare_cached("SELECT title, latitude, longitude FROM image_meta WHERE image=?1").map_err(error)?;
+        let mut set_meta = tx
+            .prepare_cached("INSERT INTO image_meta(image, title, latitude, longitude) VALUES(?1,?2,?3,?4) ON CONFLICT(image) DO UPDATE SET title=excluded.title, latitude=excluded.latitude, longitude=excluded.longitude")
+            .map_err(error)?;
+        let mut clear_meta = tx.prepare_cached("DELETE FROM image_meta WHERE image=?1").map_err(error)?;
         let mut set_time = tx
             .prepare_cached("UPDATE image SET lr_touch=?2, rating_time=CASE WHEN ?3 AND (rating_time IS NULL OR changed IS NULL) THEN ?2 ELSE rating_time END, keywords_time=CASE WHEN keywords_changed IS NULL THEN ?2 ELSE keywords_time END WHERE id=?1")
             .map_err(error)?;
@@ -620,13 +1184,34 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             .map_err(error)?;
         let names = ["Sterne", "Markierung", "Etikett"];
         for i in &images {
-            state_captions.push((i.id, json!(i.image_text)));
+            // a part the catalog cannot say keeps the state of the last import
+            if readable.caption {
+                state_captions.push((i.id, json!(i.image_text)));
+            } else if let Some(v) = old_captions.get(&i.id) {
+                state_captions.push((i.id, v.clone()));
+            }
+            if !readable.title {
+                if let Some(v) = old_titles.get(&i.id) {
+                    state_titles.push((i.id, v.clone()));
+                }
+            } else if let Some(t) = &i.title {
+                state_titles.push((i.id, json!(t)));
+            }
+            if !readable.position {
+                if let Some(v) = old_positions.get(&i.id) {
+                    state_positions.push((i.id, v.clone()));
+                }
+            } else if let Some((lat, lon)) = i.position {
+                state_positions.push((i.id, json!([lat, lon])));
+            }
             let Some(&did) = file_id.get(&i.file) else { continue };
-            let label = match label::from_lightroom(&i.label_text) {
-                Some(e) => e,
+            // a label text of a custom label set: the catalog does not say which color it stands for, so no color is
+            // guessed; the text stays (`label_lr`, shown in Info) and becomes searchable (`lr_text`)
+            let (label, unknown_label) = match label::from_lightroom(&i.label_text) {
+                Some(e) => (e, None),
                 None => {
                     *b.unknown_labels.entry(i.label_text.clone()).or_default() += 1;
-                    0
+                    (0, Some(i.label_text.trim().to_string()))
                 }
             };
             let lr_values = [i64::from(i.stars), i64::from(i.flag), i64::from(label)];
@@ -648,6 +1233,8 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             }
             let values = match &existing {
                 None => lr_values,
+                // the catalog cannot say: the own values stay
+                Some((_, s, m, e, ..)) if !readable.ratings => [*s, *m, *e],
                 Some((_, s, m, e, old_state, _)) => {
                     let own = [*s, *m, *e];
                     let old = old_state.as_deref().and_then(|t| {
@@ -683,12 +1270,18 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                     }
                 }
             };
-            if existing.is_some() && values != lr_values {
+            if existing.is_some() && values != lr_values && readable.ratings {
                 b.own_kept += 1;
             }
+            // without the rating columns the state of the last import stays (it is what Lightroom had then)
+            let state: Option<String> = match &existing {
+                Some((.., old_state, _)) if !readable.ratings => old_state.clone(),
+                _ => Some(state),
+            };
             // caption: Lightroom's only if graineo still has the one of the last import (or none)
             let caption = match &existing {
                 None => i.image_text.clone(),
+                Some((.., own)) if !readable.caption => own.clone(),
                 Some((.., own)) => {
                     let own = own.clone().filter(|t| !t.trim().is_empty());
                     let old = old_captions.get(&i.id).map(|v| v.as_str().map(str::to_string));
@@ -702,9 +1295,48 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                     }
                 }
             };
+            // title and GPS position: the same rule as the caption
+            let existing_id = existing.as_ref().map(|e| e.0);
+            type Meta = (Option<String>, Option<f64>, Option<f64>);
+            let own_meta: Option<Meta> = match existing_id {
+                Some(eid) => get_meta.query_row([eid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).optional().map_err(error)?,
+                None => None,
+            };
+            let title = match existing_id {
+                None => i.title.clone(),
+                Some(_) if !readable.title => own_meta.as_ref().and_then(|m| m.0.clone()),
+                Some(_) => {
+                    let own = own_meta.as_ref().and_then(|m| m.0.clone()).filter(|t| !t.trim().is_empty());
+                    let old = old_titles.get(&i.id).map(|v| v.as_str().map(str::to_string));
+                    match old {
+                        None if own.is_none() => i.title.clone(),
+                        old => {
+                            let (t, kept) = merge(own, old, i.title.clone());
+                            b.own_kept += usize::from(kept);
+                            t
+                        }
+                    }
+                }
+            };
+            let position = match existing_id {
+                None => i.position,
+                Some(_) if !readable.position => own_meta.as_ref().and_then(|m| m.1.zip(m.2)),
+                Some(_) => {
+                    let own = own_meta.as_ref().and_then(|m| m.1.zip(m.2));
+                    let old = old_positions.get(&i.id).map(|v| v.get(0).and_then(|a| a.as_f64()).zip(v.get(1).and_then(|o| o.as_f64())));
+                    match old {
+                        None if own.is_none() => i.position,
+                        old => {
+                            let (p, kept) = merge(own, old, i.position);
+                            b.own_kept += usize::from(kept);
+                            p
+                        }
+                    }
+                }
+            };
             let id = match existing {
                 Some((id, ..)) => {
-                    upd.execute(params![id, did, copy, values[0], values[1], values[2], label_lr, i.id, state]).map_err(error)?;
+                    upd.execute(params![id, did, copy, values[0], values[1], values[2], label_lr, i.id, state, !readable.ratings]).map_err(error)?;
                     id
                 }
                 None => {
@@ -726,7 +1358,19 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             if values[2] > 0 {
                 b.with_label += 1;
             }
-            set_text.execute(params![id, caption, i.extra_text]).map_err(error)?;
+            let search_text: Vec<&str> = [i.extra_text.as_deref(), title.as_deref(), unknown_label.as_deref()].into_iter().flatten().filter(|t| !t.is_empty()).collect();
+            let search_text = (!search_text.is_empty()).then(|| search_text.join(" "));
+            set_text.execute(params![id, caption, search_text]).map_err(error)?;
+            let meta_now = (title.clone(), position.map(|p| p.0), position.map(|p| p.1));
+            if title.is_some() || position.is_some() {
+                if own_meta.as_ref() != Some(&meta_now) {
+                    set_meta.execute(params![id, meta_now.0, meta_now.1, meta_now.2]).map_err(error)?;
+                }
+                b.with_title += usize::from(title.is_some());
+                b.with_position += usize::from(position.is_some());
+            } else if own_meta.is_some() {
+                clear_meta.execute([id]).map_err(error)?;
+            }
             // timestamp of the values: if they come from Lightroom, Lightroom's modification time applies
             set_time.execute(params![id, i.touch, values == lr_values]).map_err(error)?;
             image_id.insert(i.id, id);
@@ -735,6 +1379,8 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     }
     b.images = image_id.len();
     state_save(&tx, "caption", &state_captions).map_err(error)?;
+    state_save(&tx, "title", &state_titles).map_err(error)?;
+    state_save(&tx, "position", &state_positions).map_err(error)?;
     pause_point(usize::MAX / 2)?;
     {
         let lr_ids: HashSet<i64> = images.iter().map(|i| i.id).collect();
@@ -786,7 +1432,14 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
         }
     }
     b.keywords = keyword_id.len();
-    state_save(&tx, "keyword", &state_keywords).map_err(error)?;
+    if readable.keywords {
+        state_save(&tx, "keyword", &state_keywords).map_err(error)?;
+    } else {
+        // the catalog has no keywords to say: the library's keywords from Lightroom stay, with their assignments
+        // (the faces below still find their people by them)
+        let mut st = tx.prepare("SELECT lr_id, id FROM keyword WHERE lr_id IS NOT NULL").map_err(error)?;
+        keyword_id = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
+    }
     pause_point(usize::MAX / 2)?;
     // replace keywords from Lightroom – except for images whose keywords were changed
     // in graineo (the own version stays; it is also in the sidecar)
@@ -795,8 +1448,8 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
         let r = st.query_map([], |r| r.get(0)).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
         r
     };
-    tx.execute("DELETE FROM image_keyword WHERE keyword IN (SELECT id FROM keyword WHERE lr_id IS NOT NULL) AND image NOT IN (SELECT id FROM image WHERE keywords_changed IS NOT NULL)", []).map_err(error)?;
-    {
+    if readable.keywords && readable.keyword_images {
+        tx.execute("DELETE FROM image_keyword WHERE keyword IN (SELECT id FROM keyword WHERE lr_id IS NOT NULL) AND image NOT IN (SELECT id FROM image WHERE keywords_changed IS NOT NULL)", []).map_err(error)?;
         let mut ins = tx.prepare_cached("INSERT OR IGNORE INTO image_keyword(image, keyword) VALUES(?1,?2)").map_err(error)?;
         for (img, tag) in &keyword_image {
             if image_id.get(img).is_some_and(|b| own_kw.contains(b)) {
@@ -808,7 +1461,7 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
         }
     }
     // remove keywords deleted in Lightroom (only those from Lightroom)
-    {
+    if readable.keywords {
         let valid: HashSet<i64> = keyword_id.keys().copied().collect();
         let mut st = tx.prepare("SELECT id, lr_id FROM keyword WHERE lr_id IS NOT NULL").map_err(error)?;
         let all: Vec<(i64, i64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
@@ -843,6 +1496,20 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     // collections new in this import (all Lightroom assignments go in)
     let mut new_collections: HashSet<i64> = HashSet::new();
     let old_collections = state_load(&tx, "collection").map_err(error)?;
+    // the set for collections at the top level of the catalog (found by name at the top level, otherwise created)
+    let top_set: Option<i64> = match opts.collection_set.as_deref().map(str::trim).filter(|n| !n.is_empty() && readable.collections) {
+        Some(name) => {
+            let found: Option<i64> = tx.query_row("SELECT id FROM collection WHERE kind=1 AND parent IS NULL AND name=?1 ORDER BY id LIMIT 1", [name], |r| r.get(0)).optional().map_err(error)?;
+            Some(match found {
+                Some(id) => id,
+                None => {
+                    tx.execute("INSERT INTO collection(name, parent, kind) VALUES(?1, NULL, 1)", [name]).map_err(error)?;
+                    tx.last_insert_rowid()
+                }
+            })
+        }
+        None => None,
+    };
     let mut state_collections: Vec<(i64, serde_json::Value)> = Vec::with_capacity(collections.len());
     {
         let mut find = tx.prepare_cached("SELECT id, name, parent FROM collection WHERE lr_id = ?1").map_err(error)?;
@@ -855,7 +1522,9 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                 "com.adobe.ag.library.smart_collection" => 2,
                 _ => 0,
             };
-            let name = if name == "quick collection" && system.starts_with('1') { "Schnellsammlung".to_string() } else { name.clone() };
+            // Lightroom's quick collection stays at the top level: there it becomes graineo's quick collection
+            let quick = name == "quick collection" && system.starts_with('1');
+            let name = if quick { "Schnellsammlung".to_string() } else { name.clone() };
             state_collections.push((*lid, json!([name, parent_lr])));
             let parent = parent_lr.and_then(|p| collection_id.get(&p).copied());
             let rules = smart_rules.get(lid).cloned();
@@ -865,7 +1534,10 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                     // renamed or moved in graineo since the last import: stays so
                     let old = old_collections.get(lid);
                     let old_name = old.and_then(|v| Some(v.get(0)?.as_str()?.to_string()));
-                    let old_parent = old.and_then(|v| v.get(1)).map(|p| p.as_i64().and_then(|p| collection_id.get(&p).copied()));
+                    // a top-level collection that sits in the chosen set counts as unmoved (the set stands for the top)
+                    let top = |p: Option<i64>| p.or(top_set.filter(|t| own_parent == Some(*t)));
+                    let parent = top(parent);
+                    let old_parent = old.and_then(|v| v.get(1)).map(|p| top(p.as_i64().and_then(|p| collection_id.get(&p).copied())));
                     let (n, k1) = merge(own_name, old_name, name.clone());
                     let (p, k2) = merge(own_parent, old_parent, parent);
                     b.own_kept += usize::from(k1 || k2);
@@ -878,7 +1550,7 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
                     continue;
                 }
                 None => {
-                    new.execute(params![name, parent, kind_n, rules, lid]).map_err(error)?;
+                    new.execute(params![name, if quick { parent } else { parent.or(top_set) }, kind_n, rules, lid]).map_err(error)?;
                     let id = tx.last_insert_rowid();
                     new_collections.insert(id);
                     id
@@ -909,7 +1581,8 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     // removed; removed in Lightroom → goes only if graineo still holds it as imported (same position)
     let old_items = state_load(&tx, "collection_image").map_err(error)?;
     let mut state_items: Vec<(i64, serde_json::Value)> = Vec::with_capacity(collection_image.len());
-    {
+    // only if the catalog can say which photos its collections hold (otherwise all would read as taken out)
+    if readable.collections && readable.collection_images {
         let mut get = tx.prepare_cached("SELECT position FROM collection_image WHERE collection=?1 AND image=?2").map_err(error)?;
         let mut ins = tx.prepare_cached("INSERT OR IGNORE INTO collection_image(collection, image, position) VALUES(?1,?2,?3)").map_err(error)?;
         let mut set_pos = tx.prepare_cached("UPDATE collection_image SET position=?3 WHERE collection=?1 AND image=?2").map_err(error)?;
@@ -959,10 +1632,14 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
             }
         }
     }
-    state_save(&tx, "collection", &state_collections).map_err(error)?;
-    state_save(&tx, "collection_image", &state_items).map_err(error)?;
+    if readable.collections {
+        state_save(&tx, "collection", &state_collections).map_err(error)?;
+    }
+    if readable.collections && readable.collection_images {
+        state_save(&tx, "collection_image", &state_items).map_err(error)?;
+    }
     // collections deleted in Lightroom stay in graineo with all their photos, as own collections
-    {
+    if readable.collections {
         let valid: HashSet<i64> = collections.iter().map(|c| c.0).collect();
         let mut st = tx.prepare("SELECT id, lr_id FROM collection WHERE lr_id IS NOT NULL").map_err(error)?;
         let all: Vec<(i64, i64)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).map_err(error)?.collect::<rusqlite::Result<_>>().map_err(error)?;
@@ -975,13 +1652,15 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     pause_point(usize::MAX / 2)?;
     // faces and people (only boxes and names; Lightroom's own face features stay untouched)
     progress("Gesichter übernehmen …");
-    match crate::people::import_lightroom_with(&tx, &lr_faces, &image_id, &keyword_id, known, &new_images) {
-        Ok((all, named, kept)) => {
+    // without readable face tables the faces of earlier imports stay as they are
+    match lr_faces.as_ref().map(|f| crate::people::import_lightroom_with(&tx, f, &image_id, &keyword_id, known, &new_images)) {
+        None => {}
+        Some(Ok((all, named, kept))) => {
             (b.faces, b.faces_confirmed) = (all, named);
             b.own_kept += kept;
             let _ = db.set_info("faces_lr", crate::people::LR_REVISION);
         }
-        Err(e) => b.conflicts.push(format!("Gesichter nicht übernommen: {e}")),
+        Some(Err(e)) => b.conflicts.push(format!("Gesichter nicht übernommen: {e}")),
     }
     // everything up to here existed in the catalog at this import (see `horizon`)
     tx.execute(
@@ -994,4 +1673,36 @@ pub fn import(db: &Db, catalog: &Path, progress: &dyn Fn(&str)) -> Result<Report
     db.set_info("lightroom_catalog", &catalog.display().to_string()).map_err(error)?;
     db.finish_run(run, b.new_images as i64, &b.json().to_string()).map_err(error)?;
     Ok(b)
+}
+
+#[cfg(test)]
+mod xmp_packet_tests {
+    use super::*;
+    use std::io::Write;
+
+    fn packed(text: &[u8]) -> rusqlite::types::Value {
+        let mut e = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+        e.write_all(text).unwrap();
+        let mut b = (text.len() as u32).to_be_bytes().to_vec();
+        b.extend(e.finish().unwrap());
+        rusqlite::types::Value::Blob(b)
+    }
+
+    #[test]
+    fn packed_packet_is_read() {
+        let x = "<x:xmpmeta><dc:title><rdf:Alt><rdf:li>Bergsee</rdf:li></rdf:Alt></dc:title></x:xmpmeta>";
+        assert_eq!(catalog_xmp(packed(x.as_bytes())).as_deref(), Some(x));
+    }
+
+    /// A zlib bomb (a few kilobytes that unpack to far more than any XMP packet) is skipped, not unpacked into memory.
+    #[test]
+    fn oversized_packet_is_skipped() {
+        let bomb = packed(&vec![b' '; (CATALOG_XMP_MAX as usize) * 4]);
+        if let rusqlite::types::Value::Blob(b) = &bomb {
+            assert!(b.len() < 100_000, "test data should be small packed: {}", b.len());
+        }
+        assert_eq!(catalog_xmp(bomb), None);
+        assert!(catalog_xmp(packed(&vec![b' '; CATALOG_XMP_MAX as usize])).is_some());
+        assert_eq!(catalog_xmp(rusqlite::types::Value::Text(" ".repeat(CATALOG_XMP_MAX as usize + 1))), None);
+    }
 }

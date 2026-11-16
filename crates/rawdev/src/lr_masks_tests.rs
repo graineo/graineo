@@ -242,3 +242,24 @@ fn modern_adjustments_override_legacy_values_even_when_neutral() {
     assert_eq!(d.layers[0].adjustments.exposure, 0.0);
     assert_eq!(d.layers[0].adjustments.contrast, 0.2);
 }
+
+#[test]
+fn not_taken_counts_ai_range_subtraction_point_color_and_remove_spots() {
+    // nothing to report: a plain gradient and an empty point color list (written by Lightroom 15 into every text)
+    let plain = not_taken(&GRADIENT.replacen("s = {", "s = { PointColors = {  },", 1));
+    assert!(plain.is_empty(), "{plain:?}");
+    let text = r#"s = { MaskGroupBasedCorrections = {
+        { CorrectionActive = true, LocalExposure2012 = .25, CorrectionMasks = {{ What = 'Mask/Image', MaskSubType = 2 }} },
+        { CorrectionActive = true, LocalExposure2012 = .25, CorrectionMasks = {{ What = 'Mask/RangeMask' }} },
+        { CorrectionActive = true, LocalExposure2012 = .25, CorrectionMasks = {{ What = 'Mask/Gradient', ZeroX = .2, ZeroY = .5, FullX = .8, FullY = .5, MaskBlendMode = 1 }} },
+        { CorrectionActive = true, LocalExposure2012 = .25, CorrectionMasks = {{ What = 'Mask/Gradient', ZeroX = .2, ZeroY = .5, FullX = .8, FullY = .5 }} } },
+      PointColors = { { HueShift = 0, RangeAmount = .5 } },
+      RetouchAreas = { { Method = 'heal' }, { Method = 'clone' } } }"#;
+    let n = not_taken(text);
+    assert_eq!(n.get(AI_MASKS), Some(&1));
+    assert_eq!(n.get(RANGE_MASKS), Some(&1));
+    assert_eq!(n.get(SUBTRACTIONS), Some(&1));
+    assert_eq!(n.get(POINT_COLOR), Some(&1));
+    assert_eq!(n.get(REMOVE_SPOTS), Some(&2));
+    assert_eq!(n.get(OTHER_MASKS), None);
+}

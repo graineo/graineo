@@ -412,7 +412,7 @@ impl MoveFolder {
                         if g.kept_folders.len() > 4 {
                             names.push_str(", …");
                         }
-                        dialog::hint(ui, &crate::trf!("Bleiben liegen (Lightroom-Katalog, Mediathek von Apple Fotos, Pakete anderer Programme): {a}", a = if names.is_empty() { crate::trf!("{a} Katalogdateien", a = dialog::number(g.kept_files)) } else { names }));
+                        dialog::hint(ui, &crate::trf!("Bleiben liegen (Lightroom-Katalog, Bibliothek von Apple Fotos, Pakete anderer Programme): {a}", a = if names.is_empty() { crate::trf!("{a} Katalogdateien", a = dialog::number(g.kept_files)) } else { names }));
                     }
                     if plan.offline {
                         dialog::hint(ui, &crate::trf!("Offline-Kopien vorbereiten: {a} Fotos ({b} RAWs entwickeln), etwa {c} auf diesem Mac", a = dialog::number(g.offline_missing), b = dialog::number(g.offline_develop), c = dialog::size(g.offline_bytes)));

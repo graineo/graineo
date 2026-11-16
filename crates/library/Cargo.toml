@@ -29,6 +29,8 @@ unicode-segmentation = "1"
 libc = "0.2"
 # checksum when moving across drives (copy → verify → delete)
 sha2 = "0.11"
+# XMP packets in the Lightroom catalog are zlib-compressed (titles)
+flate2 = "1"
 # packed library backups (`library-YYYY-MM-DD.sqlite.zst`), single-threaded (MIT/Apache-2.0, zstd itself BSD)
 zstd = { version = "0.13", default-features = false }
 # update check: Ed25519 signature of latest.json (BSD-3-Clause) and its base64 encoding

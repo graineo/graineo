@@ -163,9 +163,6 @@ impl App {
         if lr::icon_button_hint(ui, lr::Icon::CopySimple, false, &lr::with_shortcut("Neue virtuelle Kopie, um einen anderen Film auszuprobieren", "virtual_copy")) {
             self.create_virtual_copy(None);
         }
-        if lr::icon_button_hint(ui, lr::Icon::CornersOut, self.darkroom.image_only, &lr::with_shortcut("Nur Bild: alle Leisten ausblenden", "side_panels")) {
-            self.darkroom.image_only = !self.darkroom.image_only;
-        }
         self.darkroom_loupe_info(ui);
     }
 
@@ -189,9 +186,6 @@ impl App {
         }
         if item(ui, Some(lr::Icon::CopySimple), None, crate::tr("Neue Kopie"), false) {
             self.create_virtual_copy(None);
-        }
-        if item(ui, Some(lr::Icon::CornersOut), None, crate::tr("Nur Bild"), self.darkroom.image_only) {
-            self.darkroom.image_only = !self.darkroom.image_only;
         }
     }
 

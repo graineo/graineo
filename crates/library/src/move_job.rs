@@ -105,8 +105,9 @@ fn with_slash(p: &Path) -> String {
     format!("{}/", crate::nfc(p.to_string_lossy().trim_end_matches('/')))
 }
 
+/// Resolved path for comparing (without the Windows `\\?\` prefix, so resolved and unresolved paths compare equal).
 fn canon(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+    sysdirs::simplify(&std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf()))
 }
 
 /// Nearest existing folder (the target may not exist yet).
@@ -527,12 +528,13 @@ pub fn plan(db: &Db, folder: i64, dest: &Path, contents: bool, cache: Option<&Ca
         .map_err(f)?
         .ok_or("Ordner unbekannt")?;
     if origin == crate::apple_photos::ORIGIN || crate::apple_photos::in_photos_library(Path::new(&root_path)) {
-        return Err("Ordner der Mediathek von Apple Fotos werden nicht verschoben".into());
+        return Err("Ordner der Bibliothek von Apple Fotos werden nicht verschoben".into());
     }
     if crate::apple_photos::in_photos_library(dest) {
-        return Err("Nie in die Mediathek von Apple Fotos verschieben".into());
+        return Err("Nie in die Bibliothek von Apple Fotos verschieben".into());
     }
     crate::write_target::check(dest)?;
+    crate::write_target::probe(dest)?;
     let source = PathBuf::from(format!("{root_path}{rel}").trim_end_matches('/'));
     if !crate::location::root_reachable(&root_path) || !source.is_dir() {
         return Err(format!("{} ist nicht erreichbar – verschieben geht erst nach dem Verbinden", source.display()));
@@ -568,7 +570,7 @@ pub fn plan(db: &Db, folder: i64, dest: &Path, contents: bool, cache: Option<&Ca
     let target_root = roots.iter().filter(|r| target_s.starts_with(&r.path)).max_by_key(|r| r.path.len()).cloned();
     if let Some(b) = &target_root {
         if b.origin == crate::apple_photos::ORIGIN {
-            return Err("Nie in die Mediathek von Apple Fotos verschieben".into());
+            return Err("Nie in die Bibliothek von Apple Fotos verschieben".into());
         }
     }
     if let Some(r) = roots.iter().find(|r| r.path.starts_with(&target_s) && r.path != target_s && target_root.as_ref().is_none_or(|b| b.id != r.id)) {

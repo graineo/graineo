@@ -1,37 +1,12 @@
 //! Runs a small ONNX network (Conv, BatchNorm, PRelu, Gemm …) on the CPU. Compute core of the
-//! regular convolutions and the Gemm via Apple Accelerate (`cblas_sgemm`), the depthwise convolutions
+//! regular convolutions and the Gemm via [`crate::gemm`] (Apple Accelerate on macOS), the depthwise convolutions
 //! (`group = channels`) directly. Exactly the operators of SFace/MobileFaceNet, no more.
 
 use std::collections::HashMap;
 
 use crate::onnx::{Node, Model, Tensor};
 
-#[cfg(target_os = "macos")]
-#[link(name = "Accelerate", kind = "framework")]
-extern "C" {
-    fn cblas_sgemm(order: i32, ta: i32, tb: i32, m: i32, n: i32, k: i32, alpha: f32, a: *const f32, lda: i32, b: *const f32, ldb: i32, beta: f32, c: *mut f32, ldc: i32);
-}
-
-/// C[m×n] = A[m×k] · B[k×n] (all row-major).
-fn matmul(a: &[f32], b: &[f32], m: usize, k: usize, n: usize) -> Vec<f32> {
-    assert_eq!(a.len(), m * k);
-    assert_eq!(b.len(), k * n);
-    let mut c = vec![0f32; m * n];
-    #[cfg(target_os = "macos")]
-    unsafe {
-        cblas_sgemm(101, 111, 111, m as i32, n as i32, k as i32, 1.0, a.as_ptr(), k as i32, b.as_ptr(), n as i32, 0.0, c.as_mut_ptr(), n as i32);
-    }
-    #[cfg(not(target_os = "macos"))]
-    for i in 0..m {
-        for p in 0..k {
-            let x = a[i * k + p];
-            for j in 0..n {
-                c[i * n + j] += x * b[p * n + j];
-            }
-        }
-    }
-    c
-}
+use crate::gemm::matmul;
 
 /// Image/feature map: channels × height × width (one image, no batch).
 #[derive(Clone, Debug)]

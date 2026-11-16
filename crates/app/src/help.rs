@@ -160,7 +160,7 @@ static LIB_CATALOG: Card = card(
 );
 static LIB_FOLDERS: Card = card(
     "Die Ordner auf der Platte, genau wie sie sind.",
-    "Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner an Ort und Stelle in die Bibliothek auf (wie „Importieren …“ mit „An Ort und Stelle“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur vorübergehend zum Entwickeln, ohne Aufnahme",
+    "Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner in die Bibliothek auf; die Fotos bleiben, wo sie sind (wie „Fotos importieren …“ mit „Hinzufügen“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur ansehen, ohne Import; verändert nichts",
     None,
 );
 static LIB_COLLECTIONS: Card = card(
@@ -170,7 +170,7 @@ static LIB_COLLECTIONS: Card = card(
 );
 static LIB_KEYWORDS: Card = card(
     "Stichwörter des Fotos.",
-    "Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Mediathek, Spalte „Stichwort“.",
+    "Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Bibliothek, Spalte „Stichwort“.",
     None,
 );
 static LIB_RATING: Card = card(
@@ -227,7 +227,7 @@ pub static LIBRARY_CHECK: Card = card(
 );
 pub static PROOF: Card = card(
     "Zeigt das Bild so, wie es in einem kleineren Farbraum aussähe – nur die Anzeige, Bearbeitung und Export bleiben gleich.",
-    "• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Mediathek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.",
+    "• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Bibliothek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.",
     None,
 );
 
@@ -243,8 +243,8 @@ pub static IMPORT: Card = card(
     None,
 );
 pub static LR_IMPORT: Card = card(
-    "Holt Fotos, Bewertungen, Stichwörter, Sammlungen und Gesichter aus dem Lightroom-Katalog in die Bibliothek.",
-    "Der Katalog wird nur gelesen; Lightroom und die Fotos bleiben unverändert.\n• **Erneut importieren** – holt spätere Änderungen aus Lightroom nach; was du seither in graineo geändert hast, bleibt\n• **Smart-Sammlungen** – kommen nur mit ihrem Namen",
+    "Holt Fotos, Bewertungen, Stichwörter, Sammlungen, Gesichter und Bearbeitungen aus dem Lightroom-Katalog in die Bibliothek.",
+    "Der Katalog wird nur gelesen; Lightroom und die Fotos bleiben unverändert.\n• **Prüfen** – liest den Katalog und zeigt, was kommt; geschrieben wird noch nichts\n• **Importieren** – schreibt in die Bibliothek; die Bearbeitungen kommen im selben Lauf mit\n• **Erneut prüfen** – holt spätere Änderungen aus Lightroom nach; was du seither in graineo geändert hast, bleibt\n• **Sammlungssatz** – die Sammlungen des Katalogs kommen in diesen Satz; leer: ganz oben\n• **Smart-Sammlungen** – kommen nur mit ihrem Namen\n\n### Tipp\nLightroom vorher beenden, sonst fehlen die neuesten Änderungen.",
     None,
 );
 pub static LR_HANDOVER: Card = card(

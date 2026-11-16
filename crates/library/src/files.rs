@@ -23,7 +23,7 @@ pub fn write_atomic_no_sync(target: &Path, content: &[u8]) -> std::io::Result<()
 fn write_atomic_with(target: &Path, content: &[u8], sync: bool) -> std::io::Result<()> {
     // protection: never write into an Apple Photos library (sidecars are redirected by `xmp::path`)
     if crate::apple_photos::in_photos_library(target) {
-        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nie in die Mediathek von Apple Fotos schreiben"));
+        return Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nie in die Bibliothek von Apple Fotos schreiben"));
     }
     let dir = target.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     if target.starts_with(crate::apple_photos::sidecar_folder()) {

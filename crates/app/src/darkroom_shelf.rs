@@ -1,33 +1,25 @@
-//! Film shelf of the darkroom: a 100 % crop of the current photo per film row, a sign for the kind of film
+//! Film shelf of the darkroom: a small preview of the whole photo per film row, a sign for the kind of film
 //! (cartridge, roll film, sheet film, cine reel, photo paper; colour = genre, no maker colours or logos) and a short,
 //! instructive characterisation per film and paper.
 //!
-//! The crops show one telling place of the photo, chosen once per photo and crop ([`best_spot`] or the largest known
-//! face); they do not follow zooming or panning. The crops are computed in the background ([`crate::jobs::Job::FilmCrops`], lane "back", one job at a time) only
-//! for visible rows, once per settings state and crop position; until new ones arrive the old ones stay shown, and a
-//! row without any crop yet shows a grey placeholder with a small computing sign ([`paint_waiting`]).
+//! The previews are the same tiles as in "Film & Look" ([`crate::film_previews`]): one small whole image per photo,
+//! the film computed on it per row, visible rows first, the others quietly afterwards. Until a row's tile arrives it
+//! shows a grey placeholder with a small computing sign ([`paint_waiting`]); after a change of the settings the old
+//! tiles stay until the new ones are there.
 
-use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use develop::film::{Category, StockInfo};
 use eframe::egui;
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 
-use crate::App;
 
-/// Size of the crop field in a shelf row (points); at 100 % one image pixel per physical pixel.
+/// Size of the preview field in a shelf row (points); the whole photo is fitted into it.
 pub const FIELD: Vec2 = Vec2::new(64.0, 40.0);
 /// Height of a film row.
 pub const ROW_H: f32 = 48.0;
 /// Room for the sign on the right of a row.
 pub const SIGN_W: f32 = 34.0;
-/// Wait after the last change of settings or crop position before computing (no work while sliding or panning).
-const REST: f64 = 0.35;
-/// Retry when the full resolution was not ready yet.
-const RETRY: f64 = 1.5;
-
 /// Kind of film (shape of the sign).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
@@ -238,15 +230,13 @@ fn lighter(c: Color32) -> Color32 {
     Color32::from_rgb(m(c.r()), m(c.g()), m(c.b()))
 }
 
-/// Paint a crop texture 1:1 (one texel per physical pixel) centred in the field, aligned to the pixel grid.
-pub fn paint_crop(p: &egui::Painter, field: Rect, t: &TextureHandle, ppp: f32) {
-    let size = t.size_vec2() / ppp;
-    let snap = |v: f32| (v * ppp).round() / ppp;
-    let min = Pos2::new(snap(field.center().x - size.x / 2.0), snap(field.center().y - size.y / 2.0));
-    p.with_clip_rect(field.intersect(p.clip_rect())).image(t.id(), Rect::from_min_size(min, size), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+/// Paint a tile: the whole photo fitted into the field (aspect kept, centred).
+pub fn paint_tile(p: &egui::Painter, field: Rect, t: &TextureHandle, ppp: f32) {
+    let r = crate::film_previews::fit(field, t.size_vec2(), ppp);
+    p.image(t.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
 }
 
-/// Placeholder while a crop is being computed: a neutral mid grey (clearly not a dark crop) with three small dots
+/// Placeholder while a tile is being computed: a neutral mid grey (clearly not a dark photo) with three small dots
 /// lighting up one after the other at the bottom right.
 pub fn paint_waiting(p: &egui::Painter, field: Rect, time: f64) {
     p.rect_filled(field, 0.0, Color32::from_gray(0x2e));
@@ -266,374 +256,6 @@ pub fn test_scroll() -> Option<f32> {
     (!DONE.swap(true, Ordering::SeqCst)).then_some(y)
 }
 
-/// Crops of the films for the current photo, settings state and position.
-#[derive(Default)]
-pub struct Crops {
-    key: u64,
-    index: usize,
-    fresh: HashMap<String, TextureHandle>,
-    /// crops of the previous state of the same photo: shown until the new ones are there
-    stale: HashMap<String, TextureHandle>,
-    /// failed for this state: not requested again
-    failed: HashSet<String>,
-    /// key of the job on its way and when it was sent
-    pending: Option<u64>,
-    sent_at: f64,
-    retry_at: f64,
-    /// candidate key and since when it is unchanged
-    since: (u64, f64),
-    valid: Arc<AtomicU64>,
-    /// Lightness grid of the open photo (from its first developed view), for choosing the spot
-    grid: Option<(std::path::PathBuf, Arc<LumaGrid>)>,
-    /// Known faces of the photo (library image ID), read once in the background
-    faces: Option<(i64, Arc<std::sync::Mutex<Option<Vec<library::people::FaceInfo>>>>)>,
-    /// Chosen spot in sensor pixels for (photo, crop) and since when it is awaited
-    spot: Option<(u64, [f32; 2])>,
-    spot_wait: (u64, f64),
-}
-
-/// Lightness L* (0 … 100) of the developed photo on a coarse grid (sensor orientation, long side [`GRID`] cells).
-pub struct LumaGrid {
-    pub w: usize,
-    pub h: usize,
-    pub l: Vec<f32>,
-}
-
-/// Long side of the lightness grid.
-const GRID: usize = 192;
-
-/// Lightness grid from the developed view (sRGB, `w` × `h`): mean of a sparse sample of each cell, then L*. A few ms
-/// once per photo.
-pub fn luma_grid(w: usize, h: usize, rgb: &[u8]) -> LumaGrid {
-    let k = (w.max(h) as f32 / GRID as f32).max(1.0);
-    let (gw, gh) = (((w as f32 / k).round() as usize).max(1), ((h as f32 / k).round() as usize).max(1));
-    let mut l = vec![0.0; gw * gh];
-    for gy in 0..gh {
-        let (y0, y1) = (gy * h / gh, ((gy + 1) * h / gh).max(gy * h / gh + 1).min(h));
-        for gx in 0..gw {
-            let (x0, x1) = (gx * w / gw, ((gx + 1) * w / gw).max(gx * w / gw + 1).min(w));
-            let (mut sum, mut n) = ([0u32; 3], 0u32);
-            for y in (y0..y1).step_by(2) {
-                for x in (x0..x1).step_by(2) {
-                    let i = (y * w + x) * 3;
-                    if let Some(p) = rgb.get(i..i + 3) {
-                        sum[0] += p[0] as u32;
-                        sum[1] += p[1] as u32;
-                        sum[2] += p[2] as u32;
-                        n += 1;
-                    }
-                }
-            }
-            let n = n.max(1);
-            l[gy * gw + gx] = crate::darkroom_zones::lstar([(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8]);
-        }
-    }
-    LumaGrid { w: gw, h: gh, l }
-}
-
-/// Weight of a lightness for the spot: 1 for the middle tones (L* 25 … 75), falling to 0 at 10 and 90.
-fn mid_weight(l: f32) -> f32 {
-    if l < 25.0 {
-        ((l - 10.0) / 15.0).clamp(0.0, 1.0)
-    } else if l > 75.0 {
-        ((90.0 - l) / 15.0).clamp(0.0, 1.0)
-    } else {
-        1.0
-    }
-}
-
-/// A telling place for the 100 % crops: the window (`win`: size relative to the photo) inside `bounds` (x0, y0, x1,
-/// y1 relative; the kept crop) with the best mix of middle tones and structure (lightness gradients), away from the
-/// edges and slightly preferring the centre. Deterministic. Returns the centre relative to the photo.
-pub fn best_spot(g: &LumaGrid, bounds: [f32; 4], win: [f32; 2]) -> [f32; 2] {
-    let (w, h) = (g.w, g.h);
-    let centre = [(bounds[0] + bounds[2]) / 2.0, (bounds[1] + bounds[3]) / 2.0];
-    if w < 3 || h < 3 {
-        return centre;
-    }
-    // per cell: middle-tone weight and gradient energy; summed tables for window means
-    let mut mid = vec![0f64; (w + 1) * (h + 1)];
-    let mut grad = vec![0f64; (w + 1) * (h + 1)];
-    for y in 0..h {
-        for x in 0..w {
-            let v = g.l[y * w + x];
-            let gx = g.l[y * w + (x + 1).min(w - 1)] - g.l[y * w + x.saturating_sub(1)];
-            let gy = g.l[(y + 1).min(h - 1) * w + x] - g.l[y.saturating_sub(1) * w + x];
-            let i = (y + 1) * (w + 1) + x + 1;
-            mid[i] = mid_weight(v) as f64 + mid[i - 1] + mid[i - w - 1] - mid[i - w - 2];
-            // capped, so that a single hard edge (black against white) does not win
-            let e = (gx.abs() + gy.abs()).min(30.0) as f64;
-            grad[i] = e + grad[i - 1] + grad[i - w - 1] - grad[i - w - 2];
-        }
-    }
-    let sum = |t: &[f64], x0: usize, y0: usize, x1: usize, y1: usize| t[y1 * (w + 1) + x1] - t[y0 * (w + 1) + x1] - t[y1 * (w + 1) + x0] + t[y0 * (w + 1) + x0];
-    let ww = ((win[0] * w as f32).ceil() as usize).clamp(3, w);
-    let wh = ((win[1] * h as f32).ceil() as usize).clamp(3, h);
-    // centres only in the inner part of the kept crop (10 % margin on each side)
-    let (bx0, bx1) = (bounds[0] + 0.1 * (bounds[2] - bounds[0]), bounds[2] - 0.1 * (bounds[2] - bounds[0]));
-    let (by0, by1) = (bounds[1] + 0.1 * (bounds[3] - bounds[1]), bounds[3] - 0.1 * (bounds[3] - bounds[1]));
-    let half = [(bounds[2] - bounds[0]).max(1e-3) / 2.0, (bounds[3] - bounds[1]).max(1e-3) / 2.0];
-    let n = (ww * wh) as f64;
-    let mut best: Option<(f64, [f32; 2])> = None;
-    for y0 in 0..=(h - wh) {
-        for x0 in 0..=(w - ww) {
-            let c = [(x0 as f32 + ww as f32 / 2.0) / w as f32, (y0 as f32 + wh as f32 / 2.0) / h as f32];
-            if c[0] < bx0 || c[0] > bx1 || c[1] < by0 || c[1] > by1 {
-                continue;
-            }
-            let m = sum(&mid, x0, y0, x0 + ww, y0 + wh) / n;
-            let e = sum(&grad, x0, y0, x0 + ww, y0 + wh) / n;
-            let d = (((c[0] - centre[0]) / half[0]).powi(2) + ((c[1] - centre[1]) / half[1]).powi(2)).sqrt().min(1.0) as f64;
-            let score = m * m * e.sqrt() * (1.0 - 0.35 * d);
-            if best.is_none_or(|(b, _)| score > b) {
-                best = Some((score, c));
-            }
-        }
-    }
-    match best {
-        Some((score, c)) if score > 0.0 => c,
-        _ => centre,
-    }
-}
-
-/// Centre of a face for the crop: middle across, eye height (a good third from the top), in the upright photo
-/// relative 0 … 1 before the user's quarter turns.
-fn face_point(g: &library::people::FaceInfo) -> [f32; 2] {
-    [g.x + g.b / 2.0, g.y + 0.4 * g.h]
-}
-
-impl Crops {
-    /// Remember the lightness grid of the open photo from its developed view (once per photo; called with every
-    /// result of the preview development).
-    pub fn note_view(&mut self, path: &std::path::Path, w: usize, h: usize, rgb: &[u8]) {
-        if self.grid.as_ref().is_some_and(|(p, _)| p == path) {
-            return;
-        }
-        self.grid = Some((path.to_path_buf(), Arc::new(luma_grid(w, h, rgb))));
-    }
-
-    /// Films whose crop failed for the current state (no placeholder for them).
-    pub fn failed_ids(&self) -> HashSet<String> {
-        self.failed.clone()
-    }
-
-    /// Result of [`crate::jobs::Job::FilmCrops`].
-    pub fn receive(&mut self, ctx: &egui::Context, index: usize, key: u64, done: Vec<(String, Option<(usize, usize, Vec<u8>)>)>, not_ready: bool, end: bool) {
-        if end && self.pending == Some(key) {
-            self.pending = None;
-            if not_ready {
-                self.retry_at = ctx.input(|i| i.time) + RETRY;
-            }
-        }
-        if key != self.key || index != self.index {
-            return;
-        }
-        for (id, img) in done {
-            match img {
-                Some((w, h, rgb)) => {
-                    let img = egui::ColorImage::from_rgb([w, h], &rgb);
-                    match self.fresh.get_mut(&id) {
-                        Some(t) => t.set(img, egui::TextureOptions::NEAREST),
-                        None => {
-                            let t = ctx.load_texture(format!("film-crop-{id}"), img, egui::TextureOptions::NEAREST);
-                            self.fresh.insert(id, t);
-                        }
-                    }
-                }
-                None => {
-                    self.failed.insert(id);
-                }
-            }
-        }
-    }
-}
-
-/// Wait at most this long for the faces or the lightness grid before falling back to the centre.
-const SPOT_WAIT: f64 = 4.0;
-
-impl Crops {
-    /// The textures shown now (new ones over old ones), without requesting anything.
-    fn shown(&self) -> HashMap<String, TextureHandle> {
-        let mut out = self.stale.clone();
-        out.extend(self.fresh.iter().map(|(k, v)| (k.clone(), v.clone())));
-        out
-    }
-
-    /// Spot of the crops (sensor pixels) for the fitted photo, once per photo and crop: the largest known face lying
-    /// in the crop, else [`best_spot`] on the lightness grid. `None` while the faces (read once in the background)
-    /// or the grid (from the first developed view) are still on their way.
-    #[allow(clippy::too_many_arguments)]
-    fn spot_for(&mut self, ctx: &egui::Context, index: usize, image: i64, path: &std::path::Path, s: &develop::Settings, [fw, fh]: [usize; 2], cam: u8, ppp: f32, now: f64) -> Option<[f32; 2]> {
-        let frame = develop::geometry::Frame::from_settings(s, fw, fh, cam);
-        let key = {
-            use std::hash::{Hash, Hasher};
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            (index, path, image, s.rotate, fw, fh, cam).hash(&mut h);
-            for v in s.crop.iter().chain([&s.crop_angle]).chain(&[frame.pv, frame.ph]) {
-                v.to_bits().hash(&mut h);
-            }
-            h.finish().max(1)
-        };
-        if let Some((k, p)) = self.spot {
-            if k == key {
-                return Some(p);
-            }
-        }
-        if self.spot_wait.0 != key {
-            self.spot_wait = (key, now);
-        }
-        let late = now - self.spot_wait.1 > SPOT_WAIT;
-        let to_src = |p: [f32; 2]| frame.to_src(p);
-        // 1. faces from the library (only photos of the library; read once in the background, never while drawing)
-        let mut faces_known = image <= 0;
-        if image > 0 {
-            if self.faces.as_ref().is_none_or(|(i, _)| *i != image) {
-                let slot = Arc::new(std::sync::Mutex::new(None));
-                self.faces = Some((image, slot.clone()));
-                let ctx = ctx.clone();
-                std::thread::spawn(move || {
-                    let faces = library::db::Db::standard().map(|db| library::people::faces_to_image(&db.conn, image)).unwrap_or_default();
-                    *slot.lock().unwrap() = Some(faces);
-                    ctx.request_repaint();
-                });
-            }
-            if let Some((_, slot)) = &self.faces {
-                if let Some(faces) = slot.lock().unwrap().as_ref() {
-                    faces_known = true;
-                    let (ow, oh) = frame.oriented();
-                    let r = s.rotate % 4;
-                    let face = faces
-                        .iter()
-                        .map(|g| {
-                            let d = crate::face_frames::rotate_quarters(face_point(g), r);
-                            (g.b * g.h, frame.ori_to_persp([d[0] * ow, d[1] * oh]))
-                        })
-                        .filter(|(_, p)| {
-                            let u = frame.from_ori(*p);
-                            (0.0..=1.0).contains(&u[0]) && (0.0..=1.0).contains(&u[1])
-                        })
-                        .max_by(|a, b| a.0.total_cmp(&b.0));
-                    if let Some((_, p)) = face {
-                        let src = to_src(frame.from_ori(p));
-                        self.spot = Some((key, src));
-                        return Some(src);
-                    }
-                }
-            }
-        }
-        // 2. middle tones with structure on the grid of the developed view
-        let grid = self.grid.as_ref().filter(|(p, _)| p == path).map(|(_, g)| g.clone());
-        let p = match grid {
-            Some(g) if faces_known || late => {
-                let b = frame.bounds();
-                let bounds = [b[0] as f32 / fw as f32, b[1] as f32 / fh as f32, (b[0] + b[2]) as f32 / fw as f32, (b[1] + b[3]) as f32 / fh as f32];
-                let (pw, ph) = (FIELD.x * ppp, FIELD.y * ppp);
-                let (rw, rh) = if frame.q % 2 == 1 { (ph, pw) } else { (pw, ph) };
-                let c = best_spot(&g, bounds, [rw / fw as f32, rh / fh as f32]);
-                [c[0] * fw as f32, c[1] * fh as f32]
-            }
-            _ if late => to_src([0.5, 0.5]),
-            _ => return None,
-        };
-        if crate::env::var_os("GRAINEO_LOG").is_some() {
-            eprintln!("film shelf: spot {:.0},{:.0} of {fw}×{fh}", p[0], p[1]);
-        }
-        self.spot = Some((key, p));
-        Some(p)
-    }
-}
-
-impl App {
-    /// 100 % crops of the films for the shelf: returns the existing textures (new ones over old ones) and requests the
-    /// `requested` ones (the visible rows) that are missing, once the settings and the position have rested.
-    pub(crate) fn darkroom_shelf_crops(&mut self, ui: &egui::Ui, requested: &[String]) -> HashMap<String, TextureHandle> {
-        let Some(c) = &self.current else { return HashMap::new() };
-        let index = c.index;
-        let ppp = ui.ctx().pixels_per_point();
-        let [fw, fh] = c.loaded.full_size;
-        let now = ui.input(|i| i.time);
-        // always the telling place of the photo (face, else middle tones with structure), fixed per photo and crop:
-        // zooming and panning neither change the crops nor compute anything; not yet known: wait
-        let image = self.entries[index].image;
-        let path = self.entries[index].path.clone();
-        let settings = self.entries[index].settings.clone();
-        let cam = c.loaded.cal.orientation;
-        let q = develop::geometry::quarters(&settings, cam);
-        let Some(center) = self.darkroom.shelf.spot_for(ui.ctx(), index, image, &path, &settings, [fw, fh], cam, ppp, now) else {
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(150));
-            return self.darkroom.shelf.shown();
-        };
-        let Some(c) = &self.current else { return HashMap::new() };
-        // region in the sensor image: the field in pixels, turned with the image
-        let (pw, ph) = ((FIELD.x * ppp).round() as usize, (FIELD.y * ppp).round() as usize);
-        let (rw, rh) = if q % 2 == 1 { (ph, pw) } else { (pw, ph) };
-        let (rw, rh) = (rw.min(fw).max(1), rh.min(fh).max(1));
-        let x = (center[0] - rw as f32 / 2.0).round().clamp(0.0, (fw - rw) as f32) as usize;
-        let y = (center[1] - rh as f32 / 2.0).round().clamp(0.0, (fh - rh) as f32) as usize;
-        let region = [x, y, rw, rh];
-        let base = self.entries[index].settings.clone();
-        let key = {
-            use std::hash::{Hash, Hasher};
-            let mut b = base.clone();
-            b.film.stock.clear();
-            b.film.active = false;
-            b.film.paper = None;
-            b.film.film_dev = 0.0;
-            b.film.paper_grade = -1.0;
-            b.film.push = 0.0;
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            serde_json::to_string(&b).unwrap_or_default().hash(&mut h);
-            (index, region, q, raw::film_profile::generation()).hash(&mut h);
-            h.finish().max(1)
-        };
-        let st = &mut self.darkroom.shelf;
-        if st.since.0 != key {
-            st.since = (key, now);
-        }
-        if st.key != key && (now - st.since.1 >= REST || st.key == 0 || st.index != index) {
-            if st.index == index {
-                let fresh = std::mem::take(&mut st.fresh);
-                st.stale.extend(fresh);
-            } else {
-                st.stale.clear();
-                st.fresh.clear();
-            }
-            st.key = key;
-            st.index = index;
-            st.failed.clear();
-            st.retry_at = 0.0;
-            st.valid.store(key, Ordering::SeqCst);
-        }
-        let mut out = st.stale.clone();
-        out.extend(st.fresh.iter().map(|(k, v)| (k.clone(), v.clone())));
-        let mut missing: Vec<String> = requested.iter().filter(|id| !st.fresh.contains_key(*id) && !st.failed.contains(*id)).cloned().collect();
-        missing.dedup();
-        // safety: a job that never answered does not block the shelf for ever
-        if st.pending.is_some() && now - st.sent_at > 30.0 {
-            st.pending = None;
-        }
-        let resting = st.key == key && now - st.since.1 >= REST;
-        if !missing.is_empty() && st.pending.is_none() && resting && now >= st.retry_at {
-            let list: Vec<(String, develop::Settings)> = missing
-                .into_iter()
-                .map(|id| {
-                    let mut s = base.clone();
-                    crate::darkroom::set_film(&mut s, Some(id.clone()));
-                    (id, s)
-                })
-                .collect();
-            st.pending = Some(key);
-            st.sent_at = now;
-            self.worker.send(crate::jobs::Job::FilmCrops { index, session: c.loaded.session.clone(), foreign: c.loaded.previews.foreign.clone(), list, region, q, key, valid: st.valid.clone() });
-        }
-        let st = &self.darkroom.shelf;
-        if st.pending.is_some() || (!requested.is_empty() && requested.iter().any(|id| !st.fresh.contains_key(id) && !st.failed.contains(id))) {
-            ui.ctx().request_repaint_after(std::time::Duration::from_millis(150));
-        }
-        out
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,43 +270,6 @@ mod tests {
                 assert!(tsv.lines().any(|l| l.split('\t').next() == Some(t)), "{t:?} missing in {lang}");
             }
         }
-    }
-
-    /// Synthetic photo: a large dark centre (as the black trousers in DP2M5418), flat middle grey around it and a
-    /// structured middle-tone area at the top left: the spot lands in the structured area, not in the centre.
-    #[test]
-    fn spot_prefers_structured_middle_tones_over_a_dark_centre() {
-        let (w, h) = (1200usize, 800usize);
-        let mut rgb = vec![0u8; w * h * 3];
-        for y in 0..h {
-            for x in 0..w {
-                let v: u8 = if (x as i32 - 600).abs() < 250 && (y as i32 - 400).abs() < 180 {
-                    12
-                } else if (200..420).contains(&x) && (120..300).contains(&y) {
-                    if (x / 12 + y / 12) % 2 == 0 { 90 } else { 160 }
-                } else {
-                    120
-                };
-                rgb[(y * w + x) * 3..(y * w + x) * 3 + 3].fill(v);
-            }
-        }
-        let g = luma_grid(w, h, &rgb);
-        assert_eq!(g.w.max(g.h), GRID);
-        let c = best_spot(&g, [0.0, 0.0, 1.0, 1.0], [128.0 / w as f32, 80.0 / h as f32]);
-        let (x, y) = (c[0] * w as f32, c[1] * h as f32);
-        assert!((200.0..420.0).contains(&x) && (120.0..300.0).contains(&y), "spot {x},{y}");
-        // deterministic
-        assert_eq!(c, best_spot(&g, [0.0, 0.0, 1.0, 1.0], [128.0 / w as f32, 80.0 / h as f32]));
-        // within a crop that leaves out the structured area, the spot stays inside the crop
-        let c = best_spot(&g, [0.5, 0.5, 1.0, 1.0], [0.05, 0.05]);
-        assert!(c[0] >= 0.5 && c[1] >= 0.5, "{c:?}");
-    }
-
-    /// A photo without any structure (flat) keeps the centre of the crop.
-    #[test]
-    fn spot_of_a_flat_photo_is_the_centre() {
-        let g = LumaGrid { w: 30, h: 20, l: vec![50.0; 600] };
-        assert_eq!(best_spot(&g, [0.0, 0.0, 1.0, 1.0], [0.05, 0.05]), [0.5, 0.5]);
     }
 
     /// Cine stocks get the reel, papers the sheet of paper, the rest a still format.

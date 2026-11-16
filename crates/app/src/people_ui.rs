@@ -1467,8 +1467,8 @@ fn context_row(ui: &mut egui::Ui, z: &mut State) -> Option<Command> {
                 ui.label(egui::RichText::new(&name).font(lr::semibold(13.0)).color(lr::TEXT));
             }
             ui.add_space(4.0);
-            let b = ui.button(crate::tr("In der Mediathek zeigen"));
-            lr::hover_tip(ui, &b, &crate::trf!("Alle Fotos von {a} in der Mediathek zeigen", a = name));
+            let b = ui.button(crate::tr("In der Bibliothek zeigen"));
+            lr::hover_tip(ui, &b, &crate::trf!("Alle Fotos von {a} in der Bibliothek zeigen", a = name));
             if b.clicked() {
                 command = Some(Command::ShowPhotos(p));
             }

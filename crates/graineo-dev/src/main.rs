@@ -41,6 +41,7 @@ use tiff::encoder::{colortype, TiffEncoder};
 use x3f::{CamfEntry, MatrixData, X3fFile};
 
 mod classic_output;
+mod film_shelf;
 mod merrill_new;
 mod color_quality;
 mod pairs_bench;
@@ -149,6 +150,10 @@ fn main() -> Result<()> {
     // film simulation (spektrafilm), see film.rs; `film --list` without an image file
     if cmd == "film" {
         return film::run(&args[1..]);
+    }
+    // time per film of the small film previews (darkroom shelf, "Film & Look"), see film_shelf.rs
+    if cmd == "film-shelf" {
+        return film_shelf::run(&args[1..]);
     }
     // black-and-white film from the Foveon layers: scene dump, layer weights, see analog.rs
     if cmd == "analog" {

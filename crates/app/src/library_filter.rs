@@ -196,6 +196,9 @@ pub(crate) fn list_click(selection: &mut BTreeSet<u32>, order: &[u32], anchor: &
 /// Row height of the value lists.
 pub(crate) const ROW_H: f32 = 17.0;
 
+/// Selection captured by name ([`Facets::remember`]): columns, then number lists.
+pub type Remembered = (Vec<(usize, String)>, Vec<(usize, String)>);
+
 pub struct Facets {
     /// Value names per column (keyword: names of the keywords)
     names: [Vec<String>; N],
@@ -331,14 +334,18 @@ impl Facets {
         let mut bands: [Vec<Band>; 4] = Default::default();
         let mut band_rows = vec![[NO_VALUE; 4]; rows.len()];
         for k in 0..4 {
-            let mut keys: Vec<i64> = rows.iter().filter_map(|z| range_value(z, k)).filter(|v| v.is_finite() && *v > 0.0).map(|v| band_key(k, v)).collect();
-            keys.sort_by(|a, b| library::search::key_value(FIELDS[k], *a).total_cmp(&library::search::key_value(FIELDS[k], *b)));
+            // key per row once; only the distinct keys are sorted (with the field name resolved per comparison,
+            // sorting all rows took seconds on 65 000 photos)
+            let row_keys: Vec<Option<i64>> = rows.iter().map(|z| range_value(z, k).filter(|v| v.is_finite() && *v > 0.0).map(|v| band_key(k, v))).collect();
+            let mut keys: Vec<i64> = row_keys.iter().flatten().copied().collect();
+            keys.sort_unstable();
             keys.dedup();
+            keys.sort_by(|a, b| library::search::key_value(FIELDS[k], *a).total_cmp(&library::search::key_value(FIELDS[k], *b)));
             let index: HashMap<i64, u32> = keys.iter().enumerate().map(|(i, key)| (*key, i as u32)).collect();
             bands[k] = keys.iter().map(|key| band_of(k, *key)).collect();
-            for (z, b) in rows.iter().zip(band_rows.iter_mut()) {
-                if let Some(v) = range_value(z, k).filter(|v| v.is_finite() && *v > 0.0) {
-                    b[k] = index[&band_key(k, v)];
+            for (key, b) in row_keys.iter().zip(band_rows.iter_mut()) {
+                if let Some(key) = key {
+                    b[k] = index[key];
                 }
             }
         }
@@ -360,6 +367,11 @@ impl Facets {
             kw_parent,
             keyword_request: None,
         }
+    }
+
+    /// Number of rows these filters were built for (they only fit a list of exactly this length).
+    pub fn rows_len(&self) -> usize {
+        self.values.len()
     }
 
     /// A keyword action chosen in the keyword column since the last call.
@@ -385,7 +397,7 @@ impl Facets {
     }
 
     /// Capture selection and ranges by name (value IDs change on rebuild).
-    pub fn remember(&self) -> (Vec<(usize, String)>, Vec<(usize, String)>) {
+    pub fn remember(&self) -> Remembered {
         let mut v = Vec::new();
         for (k, a) in self.selection.iter().enumerate() {
             for &i in a {
@@ -406,7 +418,7 @@ impl Facets {
     }
 
     /// Restore the selection captured with [`Self::remember`] (names that no longer exist are dropped).
-    pub fn restore(&mut self, g: &(Vec<(usize, String)>, Vec<(usize, String)>)) {
+    pub fn restore(&mut self, g: &Remembered) {
         for (k, n) in &g.0 {
             if n == "\u{0}ohne" {
                 self.selection[*k].insert(NO_VALUE);
@@ -427,15 +439,62 @@ impl Facets {
         self.selection.iter().any(|a| !a.is_empty()) || self.band_selection.iter().any(|b| !b.is_empty())
     }
 
-    /// Number of columns and ranges currently filtering (for the badge on the filter button).
-    pub fn active_count(&self) -> usize {
-        self.selection.iter().filter(|a| !a.is_empty()).count() + self.band_selection.iter().filter(|b| !b.is_empty()).count()
-    }
-
     pub fn reset(&mut self) {
         self.selection = Default::default();
         self.band_selection = Default::default();
     }
+
+    /// The filtering columns for the filter button: (title as translation key, chosen values in display form).
+    /// Order: the columns shown in the panel from left to right, then the others in menu order.
+    pub fn active_columns(&self) -> Vec<(&'static str, String)> {
+        let mut order: Vec<Slot> = self.slots.clone();
+        order.extend(ALL_SLOTS.iter().copied().filter(|s| !self.slots.contains(s)));
+        order
+            .into_iter()
+            .filter(|s| self.slot_active(*s))
+            .map(|s| {
+                let values: Vec<String> = match s {
+                    Slot::Cat(k) => self.selection[k].iter().map(|v| self.display_name(k, *v)).collect(),
+                    Slot::Range(r) => self.band_selection[r].iter().map(|v| self.band_name(r, *v)).collect(),
+                };
+                (s.title(), values_text(values))
+            })
+            .collect()
+    }
+}
+
+/// Values of a column for a tooltip: at most eight, then "…".
+fn values_text(values: Vec<String>) -> String {
+    let more = values.len() > 8;
+    let mut t = values.into_iter().take(8).collect::<Vec<_>>().join(", ");
+    if more {
+        t.push_str(", …");
+    }
+    t
+}
+
+/// Like [`Facets::active_columns`] for a selection waiting for its rebuilt filters (the button keeps showing it).
+pub fn remembered_columns(r: &Remembered) -> Vec<(&'static str, String)> {
+    // number lists remember their search form (`iso:200`): the value after the field
+    let shown = |n: &str, band: bool| if n == "\u{0}ohne" { crate::tr("(ohne)").to_string() } else if band { n.split_once(':').map_or(n, |(_, v)| v).to_string() } else { n.to_string() };
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    let mut add = |title: &'static str, value: String| match out.iter_mut().find(|(t, _)| *t == title) {
+        Some((_, v)) => {
+            v.push_str(", ");
+            v.push_str(&value);
+        }
+        None => out.push((title, value)),
+    };
+    for (k, n) in &r.0 {
+        add(CATEGORIES[*k], shown(n, false));
+    }
+    for (k, n) in &r.1 {
+        add(RANGES[*k], shown(n, true));
+    }
+    out
+}
+
+impl Facets {
 
     /// Rows (indices) from `basis` that satisfy all columns; updates the counts of all lists.
     pub fn apply(&mut self, _rows: &[Row], basis: &[usize]) -> Vec<usize> {
@@ -596,40 +655,54 @@ impl Facets {
         }
     }
 
-    /// Selection as search text in the app's own syntax (for smart collections).
-    pub fn as_search(&self) -> String {
+    /// Selection as search text in the app's own syntax (for smart collections). Text columns (camera, lens, keyword,
+    /// format, person) are written as the exact comparison `field:="value"`, so the rule finds the same photos as the
+    /// filter (no partial matches: "Canon EOS R" is not "Canon EOS R5"). `Err`: the selection cannot be written as a
+    /// rule (the choice "(ohne)" has no counterpart in the search syntax; a name with a quotation mark cannot be quoted).
+    pub fn as_search(&self) -> Result<String, String> {
         let mut parts = Vec::new();
         // English base forms of the search fields
         let keys = ["camera", "lens", "year", "keyword", "ai", "format", "label", "rating", "person", "month", "day", "weekday", "time"];
+        const EXACT_COLS: [usize; 5] = [0, 1, KEYWORD_COL, 5, PERSON_COL];
         for k in 0..N {
-            let values: Vec<String> = self.selection[k]
-                .iter()
-                .filter(|w| **w != NO_VALUE)
-                .map(|w| {
-                    let n = self.name(k, *w);
-                    let n = match k {
-                        4 | 6 => n.to_lowercase(),
-                        7 if n == "ohne" => "0".into(),
-                        7 => n.chars().count().to_string(),
-                        9 | 10 => n.trim_start_matches('0').to_string(),
-                        TIME_COL => library::search_fields::TIME_OF_DAY.get(n.parse::<usize>().unwrap_or(9)).copied().unwrap_or("day").to_string(),
-                        _ => n,
-                    };
-                    let n = if n.contains(' ') { format!("\"{n}\"") } else { n };
-                    format!("{}:{n}", keys[k])
-                })
-                .collect();
+            if self.selection[k].contains(&NO_VALUE) {
+                return Err(crate::tr("„(ohne)“ lässt sich nicht als Regel sichern").to_string());
+            }
+            let mut values: Vec<String> = Vec::new();
+            for w in &self.selection[k] {
+                let n = self.name(k, *w);
+                let n = match k {
+                    4 | 6 => n.to_lowercase(),
+                    7 if n == "ohne" => "0".into(),
+                    7 => n.chars().count().to_string(),
+                    9 | 10 => n.trim_start_matches('0').to_string(),
+                    TIME_COL => library::search_fields::TIME_OF_DAY.get(n.parse::<usize>().unwrap_or(9)).copied().unwrap_or("day").to_string(),
+                    _ => n,
+                };
+                if EXACT_COLS.contains(&k) {
+                    if n.contains('"') {
+                        return Err(crate::trf!("„{a}“ enthält ein Anführungszeichen und lässt sich nicht als Regel sichern", a = n));
+                    }
+                    values.push(format!("{}:=\"{n}\"", keys[k]));
+                } else {
+                    let n = if n.chars().any(|c| c.is_whitespace() || c == '|' || c == '"') { format!("\"{}\"", n.replace('"', "")) } else { n };
+                    values.push(format!("{}:{n}", keys[k]));
+                }
+            }
             if !values.is_empty() {
                 parts.push(values.join(" | "));
             }
         }
         for (r, a) in self.band_selection.iter().enumerate() {
-            let values: Vec<&str> = a.iter().filter(|i| **i != NO_VALUE).map(|i| self.bands[r][*i as usize].search.as_str()).collect();
+            if a.contains(&NO_VALUE) {
+                return Err(crate::tr("„(ohne)“ lässt sich nicht als Regel sichern").to_string());
+            }
+            let values: Vec<&str> = a.iter().map(|i| self.bands[r][*i as usize].search.as_str()).collect();
             if !values.is_empty() {
                 parts.push(values.join(" | "));
             }
         }
-        parts.join(" ")
+        Ok(parts.join(" "))
     }
 
     fn slot_active(&self, slot: Slot) -> bool {
@@ -756,7 +829,11 @@ impl Facets {
             self.numbers[k].iter().copied().filter(|(w, _)| shown.contains(w)).collect()
         };
         // keywords indented below their parent term
-        let names: Vec<String> = numbers.iter().map(|(v, _)| if k == KEYWORD_COL && *v != NO_VALUE { format!("{}{}", "  ".repeat(self.kw_chain(*v).len() - 1), self.display_name(k, *v)) } else { self.display_name(k, *v) }).collect();
+        // (only the rows in view are named: up to 5000 keywords per frame took milliseconds)
+        let name_of = |i: usize| -> String {
+            let v = numbers[i].0;
+            if k == KEYWORD_COL && v != NO_VALUE { format!("{}{}", "  ".repeat(self.kw_chain(v).len() - 1), self.display_name(k, v)) } else { self.display_name(k, v) }
+        };
         // keywords: rename, move, delete in the context menu of a row
         let kw_ids = if k == KEYWORD_COL { self.kw_ids.clone() } else { Vec::new() };
         let mut request = None;
@@ -778,7 +855,7 @@ impl Facets {
                 }
             });
         };
-        let clicked = list_rows(ui, ("bib-facette", k), &numbers, &names, &self.selection[k], if k == KEYWORD_COL { Some(&mut menu) } else { None });
+        let clicked = list_rows(ui, ("bib-facette", k), &numbers, &name_of, &self.selection[k], if k == KEYWORD_COL { Some(&mut menu) } else { None });
         if request.is_some() {
             self.keyword_request = request;
         }
@@ -804,8 +881,8 @@ impl Facets {
         let g = ui.painter().layout_no_wrap(text, font, color);
         ui.painter().with_clip_rect(header).galley(egui::pos2(header.left() + 4.0, header.center().y - g.size().y / 2.0), g, color);
         let numbers = self.band_numbers[r].clone();
-        let names: Vec<String> = numbers.iter().map(|(v, _)| self.band_name(r, *v)).collect();
-        let clicked = list_rows(ui, ("bib-zahlen", r), &numbers, &names, &self.band_selection[r], None);
+        let name_of = |i: usize| self.band_name(r, numbers[i].0);
+        let clicked = list_rows(ui, ("bib-zahlen", r), &numbers, &name_of, &self.band_selection[r], None);
         let Some((value, mods)) = clicked else { return false };
         let order: Vec<u32> = numbers.iter().map(|x| x.0).collect();
         list_click(&mut self.band_selection[r], &order, &mut self.anchor[N + r], value, mods);
@@ -847,9 +924,12 @@ pub fn time_of_day_name(t: u8) -> &'static str {
 }
 
 /// Rows of a list column (shared by all columns): name on the left, count on the right. Scrolls up and down only, fixed row height. Returns: clicked value and the modifiers held.
-fn list_rows(ui: &mut egui::Ui, salt: (&str, usize), numbers: &[(u32, usize)], names: &[String], selection: &BTreeSet<u32>, menu: Option<&mut dyn FnMut(&egui::Response, u32)>) -> Option<(u32, egui::Modifiers)> {
-    let rows: Vec<ListRow> = numbers.iter().zip(names).map(|(&(value, n), name)| ListRow { value, name: name.clone(), count: crate::library_ui::thousands(n), dim: n == 0 }).collect();
-    list_rows_labeled(ui, salt, &rows, selection, menu)
+fn list_rows(ui: &mut egui::Ui, salt: (&str, usize), numbers: &[(u32, usize)], name_of: &dyn Fn(usize) -> String, selection: &BTreeSet<u32>, menu: Option<&mut dyn FnMut(&egui::Response, u32)>) -> Option<(u32, egui::Modifiers)> {
+    let row_at = |i: usize| {
+        let (value, n) = numbers[i];
+        ListRow { value, name: name_of(i), count: crate::library_ui::thousands(n), dim: n == 0 }
+    };
+    list_rows_with(ui, salt, numbers.len(), &row_at, selection, menu)
 }
 
 /// A row of a list column with a ready count text (e.g. "1 234 · 312").
@@ -862,10 +942,17 @@ pub(crate) struct ListRow {
 }
 
 /// Like [`list_rows`] with ready count texts (the people view uses it for its columns).
-pub(crate) fn list_rows_labeled(ui: &mut egui::Ui, salt: (&str, usize), rows: &[ListRow], selection: &BTreeSet<u32>, mut menu: Option<&mut dyn FnMut(&egui::Response, u32)>) -> Option<(u32, egui::Modifiers)> {
+pub(crate) fn list_rows_labeled(ui: &mut egui::Ui, salt: (&str, usize), rows: &[ListRow], selection: &BTreeSet<u32>, menu: Option<&mut dyn FnMut(&egui::Response, u32)>) -> Option<(u32, egui::Modifiers)> {
+    let row_at = |i: usize| ListRow { value: rows[i].value, name: rows[i].name.clone(), count: rows[i].count.clone(), dim: rows[i].dim };
+    list_rows_with(ui, salt, rows.len(), &row_at, selection, menu)
+}
+
+/// The list itself: a row is only made (`row_at`) when it is in view.
+fn list_rows_with(ui: &mut egui::Ui, salt: (&str, usize), len: usize, row_at: &dyn Fn(usize) -> ListRow, selection: &BTreeSet<u32>, mut menu: Option<&mut dyn FnMut(&egui::Response, u32)>) -> Option<(u32, egui::Modifiers)> {
     let mut clicked = None;
-    egui::ScrollArea::vertical().id_salt(salt).auto_shrink([false; 2]).show_rows(ui, ROW_H, rows.len(), |ui, range| {
-        for row in &rows[range] {
+    egui::ScrollArea::vertical().id_salt(salt).auto_shrink([false; 2]).show_rows(ui, ROW_H, len, |ui, range| {
+        for i in range {
+            let row = &row_at(i);
             let value = row.value;
             let is_on = selection.contains(&value);
             let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
@@ -895,7 +982,7 @@ pub(crate) fn list_rows_labeled(ui: &mut egui::Ui, salt: (&str, usize), rows: &[
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Click alone selects only this row (again: clears), ⌘ adds/removes, ⇧ selects the range from the last click.
@@ -940,6 +1027,32 @@ mod tests {
         assert_eq!(value_text(0, 5.6), "f/5,6");
     }
 
+    /// Rows with a few cameras (every third "Canon"), for tests of the background build.
+    pub(crate) fn test_rows(n: usize) -> Vec<Row> {
+        (0..n)
+            .map(|i| {
+                let mut r = row(35.0 + (i % 7) as f64, 0.01, 100 + (i % 5) as u32 * 100, 2.0 + (i % 4) as f64);
+                r.camera = Some(if i % 3 == 0 { "Canon" } else { "Sony" }.to_string());
+                r.image = i as i64;
+                r
+            })
+            .collect()
+    }
+
+    /// The number lists hold each value once, ascending (sorted by value, not by key text), and every row points to its own.
+    #[test]
+    fn number_lists_are_ascending_and_distinct() {
+        let rows = test_rows(500);
+        let f = Facets::build(&rows, &[], &HashMap::new());
+        let texts: Vec<&str> = f.bands[0].iter().map(|b| b.text.as_str()).collect();
+        assert_eq!(texts, ["f/2", "f/3", "f/4", "f/5"]);
+        let iso: Vec<&str> = f.bands[2].iter().map(|b| b.text.as_str()).collect();
+        assert_eq!(iso, ["100", "200", "300", "400", "500"]);
+        for (i, z) in rows.iter().enumerate() {
+            assert_eq!(f.bands[0][f.band_rows[i][0] as usize].text, format!("f/{}", z.aperture.unwrap()));
+        }
+    }
+
     fn row(focal: f64, time: f64, iso: u32, aperture: f64) -> Row {
         Row {
             image: 1, file: 1, folder: 1, name: "a.jpg".into(), format: "JPG".into(), copy: None, stars: 0, flag: 0, label: 0, status: 0, camera: None, capture: None,
@@ -981,7 +1094,7 @@ mod tests {
         f.reset();
         f.choose_name(KEYWORD_COL, "Rom");
         assert_eq!(f.apply(&rows, &all), vec![0]);
-        assert_eq!(f.as_search(), "keyword:Rom");
+        assert_eq!(f.as_search().unwrap(), "keyword:=\"Rom\"");
     }
 
     #[test]
@@ -995,7 +1108,7 @@ mod tests {
         facets.choose_name(9, "07");
         facets.choose_name(10, "15");
         assert_eq!(facets.apply(&rows, &[0, 1, 2, 3]), vec![0]);
-        let query = facets.as_search();
+        let query = facets.as_search().unwrap();
         assert_eq!(query, "month:7 day:15");
         let found: Vec<_> = rows.iter().enumerate().filter(|(_, r)| matches_search(&query, r)).map(|(i, _)| i).collect();
         assert_eq!(found, vec![0]);
@@ -1023,7 +1136,7 @@ mod tests {
         facets.choose_name(WEEKDAY_COL, "6");
         facets.choose_name(TIME_COL, "3");
         assert_eq!(facets.apply(&rows, &[0, 1, 2]), vec![0]);
-        let query = facets.as_search();
+        let query = facets.as_search().unwrap();
         assert_eq!(query, "weekday:6 time:evening");
         let db = library::db::Db::open(std::path::Path::new(":memory:")).unwrap();
         let folders = HashMap::new();
@@ -1075,18 +1188,18 @@ mod tests {
         // search text finds the same photos
         f.reset();
         f.band_selection[3].extend([0, 3]);
-        let q = f.as_search();
+        let q = f.as_search().unwrap();
         assert_eq!(q, "shutter:1/900 | shutter:1/3");
         let found: Vec<usize> = (0..rows.len()).filter(|i| matches_search(&q, &rows[*i])).collect();
         assert_eq!(found, vec![0, 1]);
         let mut g = Facets::build(&rows, &[], &HashMap::new());
         g.band_selection[1].extend([1, 2]);
         g.band_selection[3].insert(4);
-        let q = g.as_search();
+        let q = g.as_search().unwrap();
         assert_eq!(q, "focal:35 | focal:35.5 shutter:0.8");
         assert!((0..rows.len()).all(|i| !matches_search(&q, &rows[i])));
         g.band_selection[3].clear();
-        let q = g.as_search();
+        let q = g.as_search().unwrap();
         let found: Vec<usize> = (0..rows.len()).filter(|i| matches_search(&q, &rows[*i])).collect();
         assert_eq!(found, vec![0, 1]);
         // remember/restore after a rebuild
@@ -1094,6 +1207,59 @@ mod tests {
         let mut h = Facets::build(&rows, &[], &HashMap::new());
         h.restore(&r);
         assert_eq!(h.band_selection[3], BTreeSet::from([0, 3]));
+    }
+
+    /// Regression (review M2): the rule saved from the filter finds exactly the photos of the filter, not those whose
+    /// camera/lens/keyword only contains the name ("Canon EOS R" and "Canon EOS R5").
+    #[test]
+    fn saved_rule_finds_exactly_the_filter_photos() {
+        let mut rows = vec![row(35.0, 0.01, 100, 2.0); 4];
+        for (z, c) in rows.iter_mut().zip(["Canon EOS R", "Canon EOS R5", "Canon EOS RP", "Canon EOS R"]) {
+            z.camera = Some(c.into());
+        }
+        rows[1].image = 2;
+        rows[2].image = 3;
+        rows[3].image = 4;
+        let mut f = Facets::build(&rows, &[], &HashMap::new());
+        f.choose_name(0, "Canon EOS R");
+        let basis: Vec<usize> = (0..rows.len()).collect();
+        assert_eq!(f.apply(&rows, &basis), vec![0, 3]);
+        let q = f.as_search().unwrap();
+        assert_eq!(q, "camera:=\"Canon EOS R\"");
+        let db = library::db::Db::open(std::path::Path::new(":memory:")).unwrap();
+        let folders = HashMap::new();
+        let context = library::search::Context { db: &db, rows: &rows, folder_paths: &folders };
+        assert_eq!(library::search::evaluate(&context, &library::search::parse(&q)), vec![true, false, false, true]);
+        // the old "contains" writing keeps working
+        assert_eq!(library::search::evaluate(&context, &library::search::parse("camera:\"canon eos r\"")), vec![true, true, true, true]);
+    }
+
+    /// Review M3/N3: "(ohne)" and names with a quotation mark are no rule (never silently left out); a name with
+    /// `|` or spaces stays one value.
+    #[test]
+    fn unsaveable_selection_is_an_error_and_special_names_stay_whole() {
+        let mut rows = vec![row(35.0, 0.01, 100, 2.0); 2];
+        rows[0].camera = Some("A|B x".into());
+        rows[1].image = 2;
+        let mut f = Facets::build(&rows, &[], &HashMap::new());
+        f.selection[1].insert(NO_VALUE);
+        assert!(f.as_search().is_err(), "no-value choice of a column");
+        f.reset();
+        f.band_selection[0].insert(NO_VALUE);
+        assert!(f.as_search().is_err(), "no-value choice of a list");
+        f.reset();
+        f.choose_name(0, "A|B x");
+        let q = f.as_search().unwrap();
+        assert_eq!(q, "camera:=\"A|B x\"");
+        let db = library::db::Db::open(std::path::Path::new(":memory:")).unwrap();
+        let folders = HashMap::new();
+        let context = library::search::Context { db: &db, rows: &rows, folder_paths: &folders };
+        let parsed = library::search::parse(&format!("{q} year:2020"));
+        assert_eq!(parsed.clauses.len(), 2, "no accidental or: {parsed:?}");
+        assert_eq!(library::search::evaluate(&context, &library::search::parse(&q)), vec![true, false]);
+        let mut g = Facets::build(&[{ let mut z = row(35.0, 0.01, 100, 2.0); z.camera = Some("Say \"x\"".into()); z }], &[], &HashMap::new());
+        g.choose_name(0, "Say \"x\"");
+        assert!(g.as_search().is_err(), "quotation mark");
     }
 
     /// Evaluate a search text against the number fields of a row (only the clauses of number fields).

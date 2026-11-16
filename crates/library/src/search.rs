@@ -210,6 +210,8 @@ pub fn update_image(db: &Db, image: i64) -> Result<bool, String> {
 pub enum Cmp {
     /// contains (folded)
     Text(String),
+    /// exactly this value (folded), written `field:="value"`; only for the text fields of [`EXACT_FIELDS`]
+    Exact(String),
     Number(&'static str, f64),
     Between(f64, f64),
 }
@@ -356,6 +358,12 @@ fn compare(field: &str, value: &str) -> Cmp {
             if let Some(r) = value.strip_prefix(op) {
                 return Cmp::Text(format!("{op}{r}"));
             }
+        }
+    }
+    // exact comparison of a text field: `camera:="Canon EOS R"` (the quotes only keep the spaces together)
+    if EXACT_FIELDS.contains(&field) {
+        if let Some(r) = value.strip_prefix('=') {
+            return Cmp::Exact(fold_text(r.trim()));
         }
     }
     Cmp::Text(fold_text(value))
@@ -594,7 +602,7 @@ fn number_ok(v: Option<f64>, cmp: &Cmp, field: &str) -> bool {
         Cmp::Number(">", z) => v > *z + eps,
         Cmp::Number(_, z) => (v - z).abs() <= eps,
         Cmp::Between(a, b) => v >= a - eps && v <= b + eps,
-        Cmp::Text(_) => false,
+        Cmp::Text(_) | Cmp::Exact(_) => false,
     }
 }
 
@@ -606,19 +614,38 @@ fn only_alnum(s: &str) -> String {
 fn text_ok(v: Option<&str>, cmp: &Cmp) -> bool {
     match (v, cmp) {
         (Some(v), Cmp::Text(t)) => fold_text(v).contains(t.as_str()),
+        (Some(v), Cmp::Exact(t)) => fold_text(v) == *t,
         _ => false,
+    }
+}
+
+/// Name test of the keyword, person, place and album fields: contains (`exact` false) or equals (folded).
+fn name_ok(name: &str, t: &str, exact: bool) -> bool {
+    let n = fold_text(name);
+    if exact { n == t } else { n.contains(t) }
+}
+
+/// Text fields that know the exact comparison `field:="value"` (the others only know "contains").
+pub const EXACT_FIELDS: [&str; 9] = ["camera", "lens", "format", "keyword", "person", "place", "album", "folder", "name"];
+
+/// The value of a text comparison and whether it has to match exactly.
+fn text_of(cmp: &Cmp) -> Option<(&str, bool)> {
+    match cmp {
+        Cmp::Text(t) => Some((t, false)),
+        Cmp::Exact(t) => Some((t, true)),
+        _ => None,
     }
 }
 
 /// Images with a confirmed face of a person whose name contains `t` (folded), or with that person as keyword
 /// (people from Lightroom are keywords marked as person).
-fn person_images(db: &Db, t: &str) -> HashSet<i64> {
+fn person_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     // the few people first (names folded once), then only their photos (formerly every assignment of
     // every person was read and folded, for each search word)
     let mut ids: Vec<i64> = Vec::new();
     if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword WHERE person = 1") {
         if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
-            ids = rows.flatten().filter(|(_, n)| fold_text(n).contains(t)).map(|(i, _)| i).collect();
+            ids = rows.flatten().filter(|(_, n)| name_ok(n, t, exact)).map(|(i, _)| i).collect();
         }
     }
     let mut out = HashSet::new();
@@ -635,11 +662,11 @@ fn person_images(db: &Db, t: &str) -> HashSet<i64> {
 }
 
 /// Images with a keyword (name contains `t`, folded) or one below it.
-fn keyword_images(db: &Db, t: &str) -> HashSet<i64> {
+fn keyword_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     let mut ids: Vec<i64> = Vec::new();
     if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword") {
         if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
-            ids = rows.flatten().filter(|(_, n)| fold_text(n).contains(t)).map(|(i, _)| i).collect();
+            ids = rows.flatten().filter(|(_, n)| name_ok(n, t, exact)).map(|(i, _)| i).collect();
         }
     }
     let mut out = HashSet::new();
@@ -652,12 +679,12 @@ fn keyword_images(db: &Db, t: &str) -> HashSet<i64> {
 }
 
 /// Images with a place keyword (name contains `t`, folded) or one below it.
-fn place_images(db: &Db, t: &str) -> HashSet<i64> {
+fn place_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     let places = place_keywords(db);
     let mut out = HashSet::new();
     if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword") {
         if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
-            for (id, _) in rows.flatten().filter(|(id, n)| places.contains(id) && fold_text(n).contains(t)) {
+            for (id, _) in rows.flatten().filter(|(id, n)| places.contains(id) && name_ok(n, t, exact)) {
                 if let Ok(v) = db.images_with_keyword(id) {
                     out.extend(v);
                 }
@@ -668,12 +695,12 @@ fn place_images(db: &Db, t: &str) -> HashSet<i64> {
 }
 
 /// Images in a collection whose name contains `t` (folded).
-fn collection_images(db: &Db, t: &str) -> HashSet<i64> {
+fn collection_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     let mut out = HashSet::new();
     if let Ok(mut st) = db.conn.prepare_cached("SELECT sb.image, s.name FROM collection_image sb JOIN collection s ON s.id = sb.collection") {
         if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
             for (image, name) in rows.flatten() {
-                if fold_text(&name).contains(t) {
+                if name_ok(&name, t, exact) {
                     out.insert(image);
                 }
             }
@@ -712,7 +739,7 @@ fn eval_term(k: &Context, kind: &Kind, index: &HashMap<i64, usize>) -> Vec<bool>
             let folded = fold_text(text);
             let folded = folded.trim();
             if folded.chars().count() >= 3 {
-                for b in person_images(k.db, folded) {
+                for b in person_images(k.db, folded, false) {
                     if let Some(&i) = index.get(&b) {
                         v[i] = true;
                     }
@@ -730,22 +757,22 @@ fn eval_term(k: &Context, kind: &Kind, index: &HashMap<i64, usize>) -> Vec<bool>
             v
         }
         Kind::Field(f, cmp) => match f.as_str() {
-            "keyword" => match cmp {
-                Cmp::Text(t) => from_set(keyword_images(k.db, t)),
-                _ => vec![false; n],
+            "keyword" => match text_of(cmp) {
+                Some((t, exact)) => from_set(keyword_images(k.db, t, exact)),
+                None => vec![false; n],
             },
-            "person" => match cmp {
-                // photos with a confirmed face of this person (name contains …)
-                Cmp::Text(t) => from_set(person_images(k.db, t)),
-                _ => vec![false; n],
+            "person" => match text_of(cmp) {
+                // photos with a confirmed face of this person (name contains … / equals … with `person:="…"`)
+                Some((t, exact)) => from_set(person_images(k.db, t, exact)),
+                None => vec![false; n],
             },
-            "place" => match cmp {
-                Cmp::Text(t) => from_set(place_images(k.db, t)),
-                _ => vec![false; n],
+            "place" => match text_of(cmp) {
+                Some((t, exact)) => from_set(place_images(k.db, t, exact)),
+                None => vec![false; n],
             },
-            "album" => match cmp {
-                Cmp::Text(t) => from_set(collection_images(k.db, t)),
-                _ => vec![false; n],
+            "album" => match text_of(cmp) {
+                Some((t, exact)) => from_set(collection_images(k.db, t, exact)),
+                None => vec![false; n],
             },
             "no" | "has" => {
                 // "has:person" / "no:person": photos with/without a named (confirmed) face; any name of the person
@@ -863,7 +890,7 @@ pub fn value_understood(field: &str, cmp: &Cmp) -> bool {
         ("has" | "no", Cmp::Text(t)) => !t.is_empty(),
         ("edited" | "imported", Cmp::Text(t)) => old_state(t).is_some(),
         ("date", Cmp::Text(t)) => t.trim_start_matches(['<', '>', '=']).starts_with(|c: char| c.is_ascii_digit()),
-        (_, Cmp::Text(t)) => matches!(def.kind, FieldKind::Text) && !t.is_empty(),
+        (_, Cmp::Text(t) | Cmp::Exact(t)) => matches!(def.kind, FieldKind::Text) && !t.is_empty(),
     }
 }
 
@@ -922,7 +949,7 @@ pub fn evaluate_with(k: &Context, a: &Query, cancelled: &dyn Fn() -> bool) -> Op
     if plain.len() == clauses.len() && plain.len() >= 2 {
         let whole = fold_text(&plain.join(" "));
         if whole.chars().count() >= 3 {
-            for b in person_images(k.db, whole.trim()) {
+            for b in person_images(k.db, whole.trim(), false) {
                 if let Some(&i) = index.get(&b) {
                     result[i] = true;
                 }

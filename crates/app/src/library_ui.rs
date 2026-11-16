@@ -20,6 +20,10 @@ use egui::{Color32, TextureHandle};
 mod not_in_catalog_ui;
 #[path = "import_ui.rs"]
 mod import_ui;
+#[path = "library_facets_job.rs"]
+mod library_facets_job;
+#[path = "library_filter_bar.rs"]
+mod library_filter_bar;
 #[path = "library_load.rs"]
 mod library_load;
 #[path = "library_manage.rs"]
@@ -75,7 +79,7 @@ pub enum Action {
     PasteSettings,
     /// turn the selected photos by 90° (buttons above the grid; `true` = clockwise)
     Turn(bool),
-    /// "Ordner" in the Info panel clicked: Mediathek, source = the photo's folder, the photo active and in view
+    /// "Ordner" in the Info panel clicked: Bibliothek, source = the photo's folder, the photo active and in view
     ShowFolder(i64),
     /// import: render the grid previews of these photos again (image, file, path, settings)
     Redevelop(Vec<(i64, i64, PathBuf, develop::Settings)>),
@@ -164,6 +168,18 @@ enum QuickQuery {
 
 /// Folder ID of the "View folder" rows (not in the database).
 const VIEW_FOLDER: i64 = -1;
+
+/// Setting: ratings in a folder only being viewed are written next to the photos as sidecars (XMP). Default off: then
+/// rating there is refused with the reason. It covers ratings only: a develop edit of such a photo is always saved
+/// as a sidecar next to it (otherwise the edit would be lost silently); the originals are never touched.
+const VIEW_SIDECARS_KEY: &str = "viewFolderSidecars";
+
+pub fn view_folder_sidecars() -> bool {
+    library::settings::value(VIEW_SIDECARS_KEY).as_bool().unwrap_or(false)
+}
+
+/// Why rating is refused in a viewed folder (status line, tooltips).
+pub const RATING_REFUSED: &str = "Zum Bewerten zur Bibliothek hinzufügen oder den Schalter „Bewertungen als Begleitdatei (XMP)“ einschalten";
 
 /// ID for a photo of a viewed folder (not in the library): negative and unique for the whole session. Numbered per
 /// folder (−2, −3 …) the photos of two viewed folders shared their IDs – the app then took the first folder's loaded
@@ -373,6 +389,8 @@ pub struct LibraryView {
     query_matches: Option<Vec<bool>>,
     search_time_ms: f64,
     facets: Option<Facets>,
+    /// column filters being built in the background (see `library_facets_job`)
+    facets_job: Option<library_facets_job::FacetsJob>,
     columns_open: bool,
     /// search only in the selected folder/collection (default: whole library)
     search_in_source: bool,
@@ -380,6 +398,9 @@ pub struct LibraryView {
     people_status: Arc<Mutex<String>>,
     people_cancel: Arc<std::sync::atomic::AtomicBool>,
     people_started: bool,
+    /// Notice before the first model download (face recognition): shown / answered "Later" for this session
+    face_model_notice: bool,
+    face_model_later: bool,
     /// number of names a human should review (refreshed every 10 s)
     review_n: usize,
     /// number of name suggestions
@@ -514,8 +535,23 @@ pub struct LibraryView {
     pub lr_window: bool,
     /// state of the Lightroom dialog (catalog, last import, last handover) – read when opening and after each run
     lr_state: Option<crate::lightroom_state::LrState>,
+    /// "Prüfen" of the Lightroom dialog: (catalog, state of the read-only check)
+    lr_check: Arc<Mutex<Option<(PathBuf, crate::lightroom_state::Check)>>>,
+    /// the last Lightroom run could not read this catalog (catalog, error)
+    lr_failed: Option<(PathBuf, String)>,
+    /// catalog of the Lightroom run going on (for its error)
+    lr_job_catalog: Option<PathBuf>,
+    /// catalogs found in Lightroom's folder (`None` while still looking), looked for once
+    lr_found: Arc<Mutex<Option<Vec<PathBuf>>>>,
+    lr_search_started: bool,
+    /// Lightroom has the catalog open (catalog, open, looked at)
+    lr_in_use: Option<(PathBuf, bool, std::time::Instant)>,
+    /// collection set the catalog's collections go into (`None`: not set yet, the catalog's name)
+    lr_set_name: Option<String>,
     /// confirmation "Rebuild library?" open
     rebuild_confirm: bool,
+    /// a rating in a viewed folder was refused (the app says why)
+    rating_refused: bool,
     /// confirmation "remove missing entries?" ("Missing photos" view) and result of the background run
     missing_confirm: bool,
     missing_result: Arc<Mutex<Option<Result<usize, String>>>>,
@@ -637,7 +673,7 @@ pub fn request_lightroom() {
 static MAINTENANCE_REQUEST: Mutex<Option<&'static str>> = Mutex::new(None);
 
 pub fn request_maintenance(kind: &'static str) {
-    *MAINTENANCE_REQUEST.lock().unwrap() = Some(kind);
+    *MAINTENANCE_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = Some(kind);
 }
 
 /// Small windows of the library.
@@ -714,7 +750,7 @@ fn reload_test_due() -> bool {
         crate::env::var("GRAINEO_RELOAD_TEST").ok()?.parse::<f64>().ok().filter(|s| *s > 0.0)
     });
     let Some(every) = every else { return false };
-    let mut last = LAST.lock().unwrap();
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
     let now = std::time::Instant::now();
     match *last {
         Some(t) if (now - t).as_secs_f64() < *every => false,
@@ -778,11 +814,14 @@ impl LibraryView {
             query_matches: None,
             search_time_ms: 0.0,
             facets: None,
+            facets_job: None,
             columns_open: false,
             search_in_source: false,
             people_status: Arc::new(Mutex::new(String::new())),
             people_cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             people_started: false,
+            face_model_notice: false,
+            face_model_later: false,
             review_n: 0,
             suggestion_n: 0,
             review_checked: None,
@@ -869,7 +908,15 @@ impl LibraryView {
             work: Arc::new(Mutex::new(Work::default())),
             lr_window: false,
             lr_state: None,
+            lr_check: Arc::new(Mutex::new(None)),
+            lr_failed: None,
+            lr_job_catalog: None,
+            lr_found: Arc::new(Mutex::new(None)),
+            lr_search_started: false,
+            lr_in_use: None,
+            lr_set_name: None,
             rebuild_confirm: false,
+            rating_refused: false,
             missing_confirm: false,
             missing_result: Arc::new(Mutex::new(None)),
             quick: HashSet::new(),
@@ -1037,7 +1084,7 @@ impl LibraryView {
                 "sort" => self.sort_order = match v { "name" => SortOrder::Name, "stars" => SortOrder::Stars, _ => SortOrder::CaptureTime },
                 "lens" | "camera" => {
                     let k = if k == "lens" { 1 } else { 0 };
-                    self.facets_ready();
+                    self.facets_now();
                     if let Some(f) = &mut self.facets {
                         f.choose_name(k, v);
                     }
@@ -1045,7 +1092,7 @@ impl LibraryView {
                 }
                 "aperture" | "focal" | "iso" => {
                     let r = ["aperture", "focal", "iso"].iter().position(|x| *x == k).unwrap_or(0);
-                    self.facets_ready();
+                    self.facets_now();
                     if let (Some(f), Some((a, e))) = (&mut self.facets, v.split_once('-')) {
                         f.choose_range(&self.rows, r, a.parse().unwrap_or(1.0), e.parse().unwrap_or(32.0));
                     }
@@ -1107,6 +1154,11 @@ impl LibraryView {
                     }
                 }
                 "duplicates" => self.show_duplicates(),
+                // like "Save these photos as a smart collection" in the status row (dialog with the proposed name)
+                "smartsave" => {
+                    self.smart_name = self.smart_name_proposal();
+                    self.smart_window = true;
+                }
                 // add a folder to the library like "+" in FOLDERS (test libraries under /private/tmp)
                 "add" => self.start_job(&ctx, "folder", Some(PathBuf::from(v))),
                 // "Similar photos" of the active photo (chip test); `active=<n>` before it picks the photo
@@ -1123,20 +1175,66 @@ impl LibraryView {
         self.refilter = true;
     }
 
-    /// Build the column filters when needed (reads all keyword assignments once, ~0.1 s).
+    /// Start building the column filters when needed (background thread, never waits): until they are there the filter
+    /// bar shows its frame with a note ([`Self::poll_facets`] takes the result).
     fn facets_ready(&mut self) {
+        if self.facets.is_some() || self.facets_job.is_some() {
+            return;
+        }
+        let Some(path) = self.db.as_ref().map(|d| d.path.clone()) else { return };
+        self.start_facets(Default::default(), library_facets_job::Assignments::FromDb(path));
+    }
+
+    /// Start (or restart) the background build; `remembered` is restored on the result.
+    fn start_facets(&mut self, remembered: crate::library_filter::Remembered, source: library_facets_job::Assignments) {
+        self.facets = None;
+        self.facets_job = library_facets_job::FacetsJob::start(self.rows.clone(), self.keywords.clone(), source, remembered, self.quick_ctx.clone());
+    }
+
+    /// The selection of the column filters (also while they are being rebuilt) for a rebuild: the filters are taken
+    /// away; `None` if they are not in use at all.
+    fn take_facets_state(&mut self) -> Option<crate::library_filter::Remembered> {
+        match self.facets.take() {
+            Some(f) => {
+                self.facets_job = None;
+                Some(f.remember())
+            }
+            None => self.facets_job.take().map(|j| j.remembered),
+        }
+    }
+
+    /// Every frame: take the finished column filters (restores the selection, then the grid is filtered again).
+    fn poll_facets(&mut self) {
+        let Some(job) = &mut self.facets_job else { return };
+        match job.poll() {
+            library_facets_job::Poll::Pending => {}
+            library_facets_job::Poll::Ready(mut f) => {
+                let Some(job) = self.facets_job.take() else { return };
+                if job.rows_len != self.rows.len() {
+                    // the list changed meanwhile: build again for the current one
+                    let source = library_facets_job::Assignments::FromDb(self.db.as_ref().map(|d| d.path.clone()).unwrap_or_default());
+                    self.start_facets(job.remembered, source);
+                    return;
+                }
+                f.restore(&job.remembered);
+                self.facets = Some(*f);
+                self.refilter = true;
+            }
+            library_facets_job::Poll::Lost => {
+                self.facets_job = None;
+                self.refilter = true;
+            }
+        }
+    }
+
+    /// Test setup only: the column filters right now (the rows must be loaded).
+    fn facets_now(&mut self) {
         if self.facets.is_some() {
             return;
         }
         let Some(db) = &self.db else { return };
-        let mut keywords: HashMap<i64, Vec<i64>> = HashMap::new();
-        if let Ok(mut st) = db.conn.prepare("SELECT image, keyword FROM image_keyword") {
-            if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))) {
-                for (b, k) in rows.flatten() {
-                    keywords.entry(b).or_default().push(k);
-                }
-            }
-        }
+        let keywords = library_facets_job::read_assignments(db);
+        self.facets_job = None;
         self.facets = Some(Facets::build(&self.rows, &self.keywords, &keywords));
         self.refilter = true;
     }
@@ -1446,6 +1544,10 @@ impl LibraryView {
         if !self.refilter {
             return;
         }
+        // column filters with a selection are being rebuilt: wait for them (the grid would flash unfiltered)
+        if self.facets.is_none() && self.facets_job.as_ref().is_some_and(|j| j.selection_active()) {
+            return;
+        }
         self.refilter = false;
         let _t = crate::frame_watch::section("library: filter");
         // re-evaluate the search query (full text + fields) only when the text changed
@@ -1544,7 +1646,7 @@ impl LibraryView {
         drop(t_loop);
         let t_order = crate::frame_watch::section("filter: columns");
         // column filters (count even when there is no selection – for the display)
-        if let Some(f) = &mut self.facets {
+        if let Some(f) = self.facets.as_mut().filter(|f| f.rows_len() == self.rows.len()) {
             if f.active() || self.columns_open {
                 v = f.apply(&self.rows, &v);
             }
@@ -1582,7 +1684,7 @@ impl LibraryView {
             v.reverse();
         }
         // part 2: semantic hits (column filters apply here too), sorted by meaning
-        if let Some(f) = &mut self.facets {
+        if let Some(f) = self.facets.as_mut().filter(|f| f.rows_len() == self.rows.len()) {
             if f.active() && !v2.is_empty() {
                 v2 = f.apply(&self.rows, &v2);
             }
@@ -1654,7 +1756,7 @@ impl LibraryView {
         let Some(&i) = self.active.and_then(|a| self.index.get(&a)) else { return };
         let file = self.rows[i].file;
         self.similar_state = None;
-        let loaded = self.vectors.lock().unwrap().as_ref().map(|r| r.as_ref().map(|v| v.has_real(file)).map_err(|e| e.clone()));
+        let loaded = self.vectors.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|r| r.as_ref().map(|v| v.has_real(file)).map_err(|e| e.clone()));
         match loaded {
             None => {
                 if !self.vectors_running {
@@ -1663,7 +1765,7 @@ impl LibraryView {
                     let c = ctx.clone();
                     std::thread::spawn(move || {
                         let r = Db::standard().map_err(|e| e.to_string()).and_then(|db| Vectors::load(&db));
-                        *target.lock().unwrap() = Some(r);
+                        *target.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                         c.request_repaint();
                     });
                 }
@@ -1672,7 +1774,7 @@ impl LibraryView {
             Some(Err(e)) => self.similar_state = Some((file, SimilarState::Error(e))),
             Some(Ok(false)) => self.compute_image_vector(file, ctx),
             Some(Ok(true)) => {
-                let list = self.vectors.lock().unwrap().as_ref().and_then(|r| r.as_ref().ok()).map(|v| v.similar_items(file, 300)).unwrap_or_default();
+                let list = self.vectors.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|r| r.as_ref().ok()).map(|v| v.similar_items(file, 300)).unwrap_or_default();
                 self.similar_order = std::iter::once(file).chain(list.iter().map(|(d, _)| *d)).enumerate().map(|(r, d)| (d, r)).collect();
                 self.enter_special_source();
                 self.source = Source::Similar(file);
@@ -1703,7 +1805,7 @@ impl LibraryView {
                 let _ = library::similar::save(&db, file, &v);
                 Ok(v)
             })();
-            *target.lock().unwrap() = Some((file, r));
+            *target.lock().unwrap_or_else(|e| e.into_inner()) = Some((file, r));
             c.request_repaint();
         });
     }
@@ -1719,15 +1821,15 @@ impl LibraryView {
         }
         match state {
             SimilarState::Load => {
-                if self.vectors.lock().unwrap().is_some() {
+                if self.vectors.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
                     self.show_similar(ctx);
                 } else {
                     ctx.request_repaint_after(std::time::Duration::from_millis(200));
                 }
             }
-            SimilarState::Computing => match { let r = self.similar_result.lock().unwrap().take(); r } {
+            SimilarState::Computing => match { let r = self.similar_result.lock().unwrap_or_else(|e| e.into_inner()).take(); r } {
                 Some((d, Ok(v))) if d == file => {
-                    if let Some(Ok(vectors)) = self.vectors.lock().unwrap().as_mut() {
+                    if let Some(Ok(vectors)) = self.vectors.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
                         vectors.insert_into(file, &v);
                     }
                     if v.iter().any(|x| x.abs() > 1e-6) {
@@ -1818,8 +1920,14 @@ impl LibraryView {
         if let Some(e) = self.db.as_ref().and_then(|d| d.conn.query_row("SELECT label_lr FROM image WHERE id=?1", [z.image], |r| r.get::<_, Option<String>>(0)).ok().flatten()) {
             rows.push((crate::tr("LR-Etikett"), e));
         }
+        if let Some(t) = self.db.as_ref().and_then(|d| d.title_of(z.image)) {
+            rows.push((crate::tr("Titel"), t));
+        }
         if let Some(t) = self.db.as_ref().and_then(|d| d.image_text_of(z.image)) {
             rows.push(("Bildtext", t));
+        }
+        if let Some((lat, lon)) = self.db.as_ref().and_then(|d| d.position_of(z.image)) {
+            rows.push((crate::tr("GPS-Position"), format!("{lat:.5}, {lon:.5}")));
         }
         if let Some(c) = self.db.as_ref().and_then(|d| d.copyright_of(z.image)) { rows.push((crate::tr("Copyright"), c)); } // copyright from the import
         rows
@@ -2101,7 +2209,7 @@ impl LibraryView {
 
     fn start_job(&mut self, ctx: &egui::Context, kind: &'static str, arg: Option<PathBuf>) {
         {
-            let mut a = self.work.lock().unwrap();
+            let mut a = self.work.lock().unwrap_or_else(|e| e.into_inner());
             if a.running {
                 return;
             }
@@ -2109,12 +2217,17 @@ impl LibraryView {
         }
         let work = self.work.clone();
         let c = ctx.clone();
+        if matches!(kind, "lightroom" | "lr_handover") {
+            self.lr_job_catalog = arg.clone();
+        }
+        // the catalog's collections go into this set (empty: at the top level as in Lightroom)
+        let lr_options = library::lightroom::Options { collection_set: self.lr_set_name.clone().filter(|n| !n.trim().is_empty()) };
         std::thread::spawn(move || {
             // automatic syncs nobody waits for: lowest priority (efficiency cores), they pause while the user works;
             // what the user started runs at "utility"
             library::platform::set_priority(if automatic(kind) { library::platform::Priority::Background } else { library::platform::Priority::Utility });
             let step = |fraction: Option<f32>, s: &str| {
-                let mut a = work.lock().unwrap();
+                let mut a = work.lock().unwrap_or_else(|e| e.into_inner());
                 a.message = s.to_string();
                 a.fraction = fraction;
                 a.handover_seen |= fraction.is_some();
@@ -2123,11 +2236,11 @@ impl LibraryView {
             let report = |s: &str| step(None, s);
             // sync: text of the step without resetting the share, and the share of the folders done
             let sync_text = |s: &str| {
-                work.lock().unwrap().message = s.to_string();
+                work.lock().unwrap_or_else(|e| e.into_inner()).message = s.to_string();
                 c.request_repaint();
             };
             let sync_count = |done: usize, total: usize| {
-                work.lock().unwrap().fraction = Some(done as f32 / total.max(1) as f32);
+                work.lock().unwrap_or_else(|e| e.into_inner()).fraction = Some(done as f32 / total.max(1) as f32);
                 c.request_repaint();
             };
             let sync_pause = || {
@@ -2138,7 +2251,7 @@ impl LibraryView {
                 crate::move_folder_ui::wait_for_resume();
             }
             if automatic(kind) || kind == "check" {
-                work.lock().unwrap().last = crate::lightroom_state::newest_sync_duration(&library::data_dir().join("reports"));
+                work.lock().unwrap_or_else(|e| e.into_inner()).last = crate::lightroom_state::newest_sync_duration(&library::data_dir().join("reports"));
             }
             let outcome = (|| -> Result<serde_json::Value, String> {
                 let db = Db::standard().map_err(|e| e.to_string())?;
@@ -2146,7 +2259,7 @@ impl LibraryView {
                     "lightroom" => {
                         let k = arg.ok_or_else(|| crate::tr("Kein Lightroom-Katalog gewählt").to_string())?;
                         let t = std::time::Instant::now();
-                        let b = library::lightroom::import(&db, &k, &report)?;
+                        let b = library::lightroom::import_with(&db, &k, &lr_options, &report)?;
                         let ti = t.elapsed().as_millis();
                         let a = library::reconcile::reconcile(&db, None, &report)?;
                         let mut v = serde_json::json!({"kind": "lightroom", "import": b.json(), "sync": a.json(), "import_duration_ms": ti});
@@ -2205,7 +2318,7 @@ impl LibraryView {
                     }
                     report("Aufnahmedaten lesen …");
                     let _ = library::exif::backfill_with(&db, 100_000, &std::sync::atomic::AtomicBool::new(false), &|_| {
-                        work.lock().unwrap().interim = true;
+                        work.lock().unwrap_or_else(|e| e.into_inner()).interim = true;
                         c.request_repaint();
                     });
                     report(crate::tr("Texte in den Dateien lesen …"));
@@ -2231,7 +2344,7 @@ impl LibraryView {
                 let name = format!("{}-{}.json", v["kind"].as_str().unwrap_or("run"), library::now());
                 let _ = std::fs::write(dir.join(name), serde_json::to_string_pretty(v).unwrap_or_default());
             }
-            let mut a = work.lock().unwrap();
+            let mut a = work.lock().unwrap_or_else(|e| e.into_inner());
             a.running = false;
             a.outcome = Some(outcome);
             c.request_repaint();
@@ -2239,10 +2352,19 @@ impl LibraryView {
     }
 
     fn check_work(&mut self) -> Option<Action> {
-        let (finished, interim) = {
-            let mut a = self.work.lock().unwrap();
-            (a.outcome.take(), std::mem::take(&mut a.interim))
+        let (finished, interim, kind) = {
+            let mut a = self.work.lock().unwrap_or_else(|e| e.into_inner());
+            (a.outcome.take(), std::mem::take(&mut a.interim), a.kind)
         };
+        // a Lightroom run that could not read the catalog: the dialog shows it (with the path and the reason) and
+        // keeps its import button disabled, instead of only a status line
+        if let (Some(Err(e)), true) = (&finished, matches!(kind, "lightroom" | "lr_handover")) {
+            if let Some(k) = self.lr_job_catalog.clone().filter(|_| e.contains("Katalog nicht lesbar") || e.contains("not a database") || e.contains("no such table")) {
+                self.lr_failed = Some((k, e.clone()));
+                self.lr_state = None;
+                self.lr_window = true;
+            }
+        }
         // interim state of the capture dates: reload at most every 5 s
         if interim && finished.is_none() && self.interim_loaded.is_none_or(|t| t.elapsed().as_secs() >= 5) {
             self.interim_loaded = Some(std::time::Instant::now());
@@ -2277,12 +2399,15 @@ impl LibraryView {
                     let handover = v["kind"] == "lr_handover";
                     self.report = Some(v);
                     self.lr_state = None;
+                    self.lr_failed = None;
+                    // the check described the state before the run: done now
+                    *self.lr_check.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     self.lr_window = true;
-                    if handover { crate::tr("Lightroom-Bearbeitungen übernommen").to_string() } else { "Bibliothek aktualisiert".to_string() }
+                    if handover { crate::tr("Lightroom-Bearbeitungen übernommen").to_string() } else { crate::tr("Bibliothek aktualisiert").to_string() }
                 } else {
                     // check of the library, added folder: result in its own dialog
                     self.dialog = Some(sync_outcome(if v["kind"] == "check" { crate::tr("Bibliothek geprüft") } else { crate::tr("Bibliothek aktualisiert") }, &v));
-                    "Bibliothek aktualisiert".to_string()
+                    crate::tr("Bibliothek aktualisiert").to_string()
                 };
                 Some(Action::Status(text))
             }
@@ -2306,6 +2431,9 @@ impl LibraryView {
     fn rate(&mut self, stars: Option<u8>, flag: Option<i8>, label: Option<u8>, actions: &mut Vec<Action>) {
         let target = self.target();
         let new = self.rate_images(&target, stars, flag, label);
+        if self.take_rating_refused() {
+            actions.push(Action::Status(crate::tr(RATING_REFUSED).to_string()));
+        }
         if !new.is_empty() {
             actions.push(Action::Rated(new));
         }
@@ -2332,6 +2460,11 @@ impl LibraryView {
                     target.push(b);
                 }
             }
+        }
+        // a viewed folder is only looked at: ratings there only with the switch (sidecars next to the photos)
+        if !view_folder_sidecars() && target.iter().any(|b| self.index.get(b).is_some_and(|&i| self.rows[i].folder == VIEW_FOLDER)) {
+            self.rating_refused = true;
+            return Vec::new();
         }
         let (mut old, mut new) = (Vec::new(), Vec::new());
         for b in &target {
@@ -2416,6 +2549,10 @@ impl LibraryView {
             let Some(&i) = self.index.get(&w.0) else { continue };
             let z = &self.rows[i];
             if z.folder == VIEW_FOLDER {
+                // nothing next to the photos of a folder only being viewed unless the switch allows it
+                if !view_folder_sidecars() {
+                    continue;
+                }
                 let a = Task::File { image: w.0, path: self.path_of(z), format: z.format.clone(), copy: z.copy.clone(), value: (w.1, w.2, w.3) };
                 self.writer.send(a);
                 continue;
@@ -2615,7 +2752,7 @@ impl LibraryView {
             if p(egui::Key::Z) && !shift {
                 match self.undo_rating_change() {
                     Some(old) => {
-                        actions.push(Action::Status(crate::trf!("Rückgängig: Bewertung ({a} {b})", a = old.len(), b = if old.len() == 1 { crate::tr("Bild") } else { crate::tr("Bilder") })));
+                        actions.push(Action::Status(crate::trf!("Rückgängig: Bewertung ({a} {b})", a = old.len(), b = if old.len() == 1 { crate::tr("Foto") } else { crate::tr("Fotos") })));
                         actions.push(Action::Rated(old));
                     }
                     None => self.undo(actions),
@@ -2668,10 +2805,10 @@ impl LibraryView {
             self.lr_window = true;
         }
         *JOB_NOW.lock().unwrap_or_else(|e| e.into_inner()) = self.running();
-        let request = MAINTENANCE_REQUEST.lock().unwrap().take();
+        let request = MAINTENANCE_REQUEST.lock().unwrap_or_else(|e| e.into_inner()).take();
         match request {
             // a job is running: the check starts right after it (instead of being dropped)
-            Some("check") if self.work.lock().unwrap().running => *MAINTENANCE_REQUEST.lock().unwrap() = request,
+            Some("check") if self.work.lock().unwrap_or_else(|e| e.into_inner()).running => *MAINTENANCE_REQUEST.lock().unwrap_or_else(|e| e.into_inner()) = request,
             Some("check") => self.start_job(ctx, "check", None),
             Some("rebuild") => self.rebuild_confirm = true,
             _ => {}
@@ -2681,6 +2818,7 @@ impl LibraryView {
             finished(self, &mut actions);
         }
         self.poll_load(&mut actions);
+        self.poll_facets();
         {
             let _t = crate::frame_watch::section("library: textures");
             self.results(ctx);
@@ -2866,9 +3004,6 @@ impl LibraryView {
         }
         self.not_in_catalog_banner(ui);
         self.dupes_banner(ui);
-        if self.visible.is_empty() && !self.refilter && !self.first_loading() && self.db.is_some() && (self.filter != Filter::default() || self.facets.as_ref().is_some_and(|f| f.active())) {
-            self.no_matches(ui);
-        }
         {
             let _t = crate::frame_watch::section("library: grid");
             self.raster(ui, &mut actions);
@@ -2885,6 +3020,7 @@ impl LibraryView {
         self.quick_dialogs(ctx);
         self.smart_dialog(ctx);
         self.kw_set_dialog(ctx);
+        self.face_model_dialog(ctx);
         self.dialogs(ctx, &mut actions);
         self.manage_dialogs(ctx, &mut actions);
         self.pairs_dialogs(ctx, &mut actions);
@@ -2924,7 +3060,7 @@ impl LibraryView {
             self.reload();
             // sync the root folder: photos still missing, new ones in the folder
             if let Some(p) = r.sync_root.filter(|_| crate::env::var_os("GRAINEO_LIBRARY_NO_SYNC").is_none()) {
-                if self.work.lock().unwrap().running {
+                if self.work.lock().unwrap_or_else(|e| e.into_inner()).running {
                     self.changed_since.get_or_insert(std::time::Instant::now());
                     self.changed_roots.insert(Some(p));
                 } else {
@@ -3080,8 +3216,8 @@ impl LibraryView {
     }
 
     fn left_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        // fixed at the bottom: Import (also "Add folder": there "In place"). Importing from Lightroom is
-        // rare and lives in the settings (Library → Lightroom Classic).
+        // fixed at the bottom: Import (also "Add folder": there "Hinzufügen"). Importing from Lightroom is in the menu
+        // (File → Import from Lightroom …), on the tiles of the empty library and in the settings (Library).
         egui::Panel::bottom("bib-links-unten").resizable(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 8))).show(ui, |ui| {
             // Import (the one gold button) and Export side by side, equally wide
             let w = ((ui.available_width() - 6.0) / 2.0).floor();
@@ -3120,17 +3256,24 @@ impl LibraryView {
             if let Some(f) = &self.error {
                 ui.label(egui::RichText::new(crate::menu::i18n::tr_msg(f)).color(Color32::from_rgb(230, 120, 100)));
             }
+            // an empty library shows only what already means something (no rows of zeros); the fixed places return
+            // with the first photo
+            let empty = self.library_is_empty();
+            let n_all = self.library_photo_count();
             lr::section(ui, "Bibliothek", true, |ui| {
                 for (q, icon, name, n) in [
-                    (Source::All, lr::Icon::SquaresFour, crate::tr("Alle Fotos"), self.rows.len()),
+                    (Source::All, lr::Icon::SquaresFour, crate::tr("Alle Fotos"), n_all),
                     (Source::Quick, lr::Icon::PlusCircle, crate::tr("Schnellsammlung +"), self.quick.len()),
                     (Source::Recent, lr::Icon::TrayArrowDown, crate::tr("Zuletzt importiert"), n_recent),
                     (Source::Missing, lr::Icon::ImageBroken, crate::tr("Fehlende Fotos"), n_missing),
                     (Source::Offline, lr::Icon::LinkBreak, crate::tr("Nicht verbunden"), n_offline),
                 ] {
+                    if empty && matches!(q, Source::Missing | Source::Offline) {
+                        continue;
+                    }
                     let active = self.source_marked(&q);
                     let is_quick = q == Source::Quick;
-                    let (click, _, resp) = Self::special_row(ui, icon, name, Some(n), active, false);
+                    let (click, _, resp) = Self::special_row(ui, icon, name, Some(n).filter(|_| !empty), active, false);
                     if is_quick {
                         resp.context_menu(|ui| self.quick_context(ui));
                         if let Some(images) = Self::drop_target(ui, &resp, true) {
@@ -3149,7 +3292,10 @@ impl LibraryView {
                         self.set_source(q);
                     }
                 }
-                let n_dup = self.dup.lock().unwrap().as_ref().map(|g| g.iter().map(|x| x.files.len()).sum::<usize>());
+                if empty {
+                    return;
+                }
+                let n_dup = self.dup.lock().unwrap_or_else(|e| e.into_inner()).as_ref().map(|g| g.iter().map(|x| x.files.len()).sum::<usize>());
                 if Self::special_row(ui, lr::Icon::Copy, crate::tr("Duplikate"), n_dup, self.source_marked(&Source::Duplicates), false).0 {
                     self.show_duplicates();
                 }
@@ -3179,7 +3325,9 @@ impl LibraryView {
                     self.not_in_catalog.trigger_research();
                 }
             });
-            lr::section(ui, "Nach Datum", false, |ui| self.date_list(ui));
+            if !empty {
+                lr::section(ui, "Nach Datum", false, |ui| self.date_list(ui));
+            }
             // "+" on the right of the ORDNER header: add a folder to the library (library_views.rs)
             let (folders_top, folders_right) = (ui.cursor().min.y, ui.max_rect().right());
             lr::section(ui, "Ordner", true, |ui| {
@@ -3262,7 +3410,7 @@ impl LibraryView {
                 // groups: show – file commands – remove (destructive last)
                 if lr::menu_item(ui, crate::tr("Im Finder zeigen"), "", true) {
                     if let Some(s) = self.roots.iter().find(|x| x.id == root) {
-                        crate::system::open(format!("{}{}", s.path, path));
+                        crate::system::show(format!("{}{}", s.path, path));
                     }
                 }
                 ui.separator();
@@ -3379,502 +3527,154 @@ impl LibraryView {
         });
     }
 
-    /// Empty library (first start): what to do, with a plain button (the gold one is "Importieren …" on the left).
-    fn library_empty(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(60.0);
+    /// "Ordner nur ansehen": a quiet bar above the grid of a viewed folder – originals are never changed, edits go
+    /// to sidecars (XMP) next to the photo; the way into the library and back; and the switch whether ratings may
+    /// go next to the photos as sidecars as well (default off).
+    fn view_folder_bar(&mut self, ui: &mut egui::Ui) {
+        let Source::Browse(dir) = self.source.clone() else { return };
         let ctx = ui.ctx().clone();
-        ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Noch keine Fotos")).size(16.0).color(lr::TEXT));
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new(crate::tr("Importiere Fotos von einer Karte oder füge einen Ordner hinzu – die Fotos bleiben, wo sie sind, wenn du „An Ort und Stelle“ wählst.")).color(lr::TEXT_DIM));
-            ui.add_space(12.0);
-            if ui.button(crate::tr("Fotos importieren …")).clicked() {
-                self.open_import(&ctx);
-            }
-        });
-    }
-
-    /// Empty state with an active filter: says what is filtering and offers the way out.
-    fn no_matches(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(36.0);
-        ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Keine Treffer")).size(16.0).color(lr::TEXT));
-            ui.add_space(6.0);
-            let mut reasons: Vec<String> = Vec::new();
-            if !self.filter.text.trim().is_empty() {
-                let where_text = if self.search_global() || matches!(self.source, Source::All) { crate::tr("in der gesamten Bibliothek").to_string() } else { crate::menu::i18n::fill_names(crate::tr("in „{a}“"), &[("a", &self.source_name())]) };
-                reasons.push(crate::trf!("Suche „{a}“ {b}", a = self.filter.text.trim(), b = where_text));
-            }
-            if self.filter.flags != 0 {
-                reasons.push(flags_text(self.filter.flags));
-            }
-            if self.filter.stars_min != 0 {
-                reasons.push(format!("≥ {}", "★".repeat(self.filter.stars_min as usize)));
-            }
-            if self.filter.labels != 0 {
-                reasons.push(crate::trf!("Etikett: {a}", a = labels_text(self.filter.labels)));
-            }
-            if self.facets.as_ref().is_some_and(|f| f.active()) {
-                reasons.push(crate::tr("Metadaten-Auswahl").to_string());
-            }
-            ui.label(egui::RichText::new(reasons.join("  ·  ")).color(lr::TEXT_DIM));
-            ui.add_space(12.0);
+        let (mut add, mut close) = (false, false);
+        egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(10, 5)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
-                let w = 150.0 + if self.search_in_source { 190.0 } else { 0.0 };
-                ui.add_space(((ui.available_width() - w) / 2.0).max(0.0));
-                if ui.button(crate::tr("Alle Filter zurücksetzen")).clicked() {
-                    self.reset_all_filters();
+                ui.set_height(24.0);
+                let lead = ui.label(egui::RichText::new(crate::tr("Nur ansehen – Originale unverändert")).color(lr::TEXT));
+                lr::hover_tip(ui, &lead, crate::tr("Änderungen (Entwicklung) werden als Begleitdatei (XMP) neben das Foto gespeichert, sobald du etwas änderst. Zur Bibliothek hinzufügen speichert sie stattdessen in der Bibliothek."));
+                ui.add_space(14.0);
+                let mut on = view_folder_sidecars();
+                if crate::dialog::toggle(ui, &mut on) {
+                    library::settings::set(VIEW_SIDECARS_KEY, serde_json::json!(on));
                 }
-                if self.search_in_source && ui.button(crate::tr("In der gesamten Bibliothek suchen")).clicked() {
-                    self.search_in_source = false;
-                    self.refilter = true;
-                }
-            });
-        });
-    }
-
-    /// Filter bar above the grid, two rows on a shared grid (all fields
-    /// [`lr::BAR_H`] high, same frames as the search field, 10 px between the groups, both
-    /// rows aligned with the search field): search at the top, on the right metadata filter (funnel with count),
-    /// sort order, direction and the "?" for the whole bar; below that the attributes as framed
-    /// groups (flags, at least n stars, labels, kind, RAW+JPEG). Below that, only with an
-    /// active filter, a row with all active filters as chips (× removes, "Reset"
-    /// clears all, "Save as smart collection" turns them into a rule) – so it never goes
-    /// unnoticed why something is missing.
-    /// Right part of the top row (from right to left): sort order with direction as one group, metadata filter.
-    fn filter_right(&mut self, ui: &mut egui::Ui) {
-        ui.spacing_mut().item_spacing.x = 0.0;
-        let (arrow, hint) = if self.sort_reversed { (lr::Icon::SortUp, "Aufsteigend sortiert · Klick kehrt um") } else { (lr::Icon::SortDown, "Absteigend sortiert · Klick kehrt um") };
-        if lr::cell_group(ui, "bib-sort-richtung", &[(lr::Cell::Symbol(arrow, lr::TEXT), false, hint)], 30.0).is_some() {
-            self.sort_reversed = !self.sort_reversed;
-            self.refilter = true;
-        }
-        let name = |m: SortOrder| match m {
-            SortOrder::CaptureTime => crate::tr("Aufnahme"),
-            SortOrder::Name => crate::tr("Dateiname"),
-            SortOrder::Stars => crate::tr("Sterne"),
-        };
-        ui.add_space(1.0);
-        ui.scope(|ui| {
-            lr::field_style(ui);
-            let r = egui::ComboBox::from_id_salt("bib-sort").selected_text(name(self.sort_order)).width(124.0).height(240.0).show_ui(ui, |ui| {
-                for m in [SortOrder::CaptureTime, SortOrder::Name, SortOrder::Stars] {
-                    ui.selectable_value(&mut self.sort_order, m, name(m));
-                }
-            });
-            let _ = r;
-        });
-        ui.add_space(8.0);
-        // metadata columns: funnel, the number names the active columns
-        let number = self.facets.as_ref().map_or(0, |f| f.active_count());
-        let on = self.columns_open;
-        let w = if number > 0 { 56.0 } else { 34.0 };
-        // with count: funnel on the left, mark to its right (drawn by hand so nothing overlaps)
-        let cell = if number > 0 { lr::Cell::Text("", 1.0, lr::TEXT) } else { lr::Cell::Symbol(lr::Icon::Funnel, lr::TEXT) };
-        let (click, rect) = lr::cell_group_rect(ui, "bib-spalten", &[(cell, on, "Metadaten-Filter: Kamera, Objektiv, ISO …")], w);
-        if click.is_some() {
-            self.columns_open = !on;
-            self.refilter = true;
-        }
-        if number > 0 {
-            let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 18.0, rect.center().y), egui::vec2(16.0, 16.0));
-            lr::paint_icon(ui.painter(), icon, lr::Icon::Funnel, if on { Color32::WHITE } else { lr::TEXT });
-            let m = egui::pos2(rect.right() - 16.0, rect.center().y);
-            ui.painter().circle_filled(m, 7.5, Color32::from_rgb(0x2e, 0x4c, 0x74));
-            ui.painter().text(m, egui::Align2::CENTER_CENTER, number.to_string(), egui::FontId::proportional(10.5), Color32::WHITE);
-        }
-    }
-
-    /// Bottom row of the filter bar over the full width: rating filters (flags, stars, labels) on the left, the kind
-    /// of the photos (photo/video, RAW+JPEG) on the right. Too narrow for both: the kind gets a second row of its own –
-    /// decided by the width alone, so nothing jumps while working. A second click removes a selection again.
-    fn attribute_row(&mut self, ui: &mut egui::Ui, width: f32) {
-        // Each control group keeps its real allocated width; egui moves whole groups to the next
-        // line when the remaining space is insufficient, including rotations and the jump button.
-        ui.scope(|ui| {
-            ui.set_max_width(width);
-            ui.spacing_mut().item_spacing = egui::vec2(10.0, 6.0);
-            ui.horizontal_wrapped(|ui| {
-                self.rating_filters(ui);
-                self.kind_filters(ui);
-            });
-        });
-    }
-
-    /// Flags, at least n stars, color labels (left part of the attribute row).
-    fn rating_filters(&mut self, ui: &mut egui::Ui) {
-        // flags (several can be combined)
-        let f = self.filter.flags;
-        let cells = [
-            (lr::Cell::Flag(1), f & FLAG_PICKED != 0, "Nur markierte"),
-            (lr::Cell::Flag(0), f & FLAG_NONE != 0, "Nur ohne Markierung"),
-            (lr::Cell::Flag(-1), f & FLAG_REJECTED != 0, "Nur abgelehnte"),
-        ];
-        if let Some(i) = lr::cell_group(ui, "bib-flaggen", &cells, 30.0) {
-            self.filter.flags ^= [FLAG_PICKED, FLAG_NONE, FLAG_REJECTED][i];
-        }
-        // at least n stars
-        let n = self.filter.stars_min;
-        let tips: Vec<String> = (1..=5).map(|k| if k == 1 { crate::tr("Mindestens 1 Stern").to_string() } else { crate::trf!("Mindestens {n} Sterne", n = k) }).collect();
-        let cells: Vec<_> = (1..=5u8)
-            .map(|k| {
-                let on = n >= k;
-                (lr::Cell::Text(if on { "★" } else { "☆" }, 14.0, if on { Color32::from_gray(0xee) } else { Color32::from_gray(0x8a) }), false, tips[k as usize - 1].as_str())
-            })
-            .collect();
-        if let Some(i) = lr::cell_group(ui, "bib-sterne", &cells, 22.0) {
-            let k = i as u8 + 1;
-            self.filter.stars_min = if n == k { 0 } else { k };
-        }
-        // color labels (several)
-        let names = [crate::tr("Etikett Rot"), crate::tr("Etikett Gelb"), crate::tr("Etikett Grün"), crate::tr("Etikett Blau"), crate::tr("Etikett Lila")];
-        let cells: Vec<_> = (1..=5u8)
-            .map(|e| {
-                let c = library::label::COLORS[e as usize];
-                (lr::Cell::Color(Color32::from_rgb(c[0], c[1], c[2])), self.filter.labels & (1 << e) != 0, names[e as usize - 1])
-            })
-            .collect();
-        if let Some(i) = lr::cell_group(ui, "bib-etiketten", &cells, 24.0) {
-            self.filter.labels ^= 1 << (i + 1);
-        }
-        self.turn_buttons(ui);
-        self.jump_button(ui);
-    }
-
-    /// Menu "Zur Auswahl springen": the active photo goes to the middle of the grid.
-    pub fn request_jump(&mut self) {
-        self.jump_request = true;
-    }
-
-    /// Is the active photo outside the visible part of the grid? (Only known once the grid has been drawn.)
-    fn active_outside_view(&self) -> bool {
-        let Some(active) = self.active else { return false };
-        if self.grid_cell <= 0.0 || self.grid_view_h <= 0.0 || self.columns == 0 {
-            return false;
-        }
-        let Some(pos) = self.visible.iter().position(|&i| self.rows[i].image == active) else { return false };
-        let first = self.sem_from.unwrap_or(self.visible.len());
-        let row = crate::grid_jump::row_of(pos, self.columns, first, self.sem_from.is_some());
-        let layout = crate::grid_jump::Rows::new(first, self.columns, self.sem_from.is_some(), self.grid_cell, 2.0);
-        !crate::grid_jump::in_view(layout.top(row), self.grid_cell - 2.0, self.grid_y, self.grid_view_h)
-    }
-
-    /// Button "Zur Auswahl springen": highlighted while the active photo is out of view, dimmed otherwise.
-    fn jump_button(&mut self, ui: &mut egui::Ui) {
-        let usable = !self.nothing_selected && self.active.is_some();
-        let outside = usable && self.active_outside_view();
-        let tip = lr::with_shortcut("Zur Auswahl springen", "jump_to_selection");
-        let cells = [(lr::Cell::Symbol(lr::Icon::Crosshair, lr::TEXT), outside, tip.as_str())];
-        let r = ui.allocate_ui_with_layout(egui::vec2(30.0, lr::BAR_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.add_enabled_ui(usable, |ui| {
-                if !outside { ui.multiply_opacity(0.35); }
-                lr::cell_group(ui, "bib-zur-auswahl", &cells, 30.0)
-            }).inner
-        });
-        if r.inner.is_some() {
-            self.jump_request = true;
-        }
-    }
-
-    /// Turn the selected photos by 90° (acts on all selected ones; dimmed while nothing is selected).
-    fn turn_buttons(&mut self, ui: &mut egui::Ui) {
-        let usable = !self.nothing_selected && self.active.is_some();
-        let (t_l, t_r) = (lr::with_shortcut("Nach links drehen", "rotate_left"), lr::with_shortcut("Nach rechts drehen", "rotate_right"));
-        let cells = [(lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT), false, t_l.as_str()), (lr::Cell::Symbol(lr::Icon::RotCw, lr::TEXT), false, t_r.as_str())];
-        let r = ui.allocate_ui_with_layout(egui::vec2(60.0, lr::BAR_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.add_enabled_ui(usable, |ui| {
-                if !usable { ui.multiply_opacity(0.35); }
-                lr::cell_group(ui, "bib-drehen", &cells, 30.0)
-            }).inner
-        });
-        if let Some(k) = r.inner {
-            self.turn_request = Some(k == 1);
-        }
-    }
-
-    /// Photos/videos and RAW+JPEG (right part of the attribute row; laid out right to left when it shares the row).
-    fn kind_filters(&mut self, ui: &mut egui::Ui) {
-        let right_to_left = ui.layout().prefer_right_to_left();
-        let stack_cell = |ui: &mut egui::Ui, this: &mut Self| {
-            let hint = if this.stack { "RAW+JPEG zusammen (ein Foto)" } else { "RAW+JPEG einzeln (zwei Fotos)" };
-            if lr::cell_group(ui, "bib-raw-jpeg", &[(lr::Cell::Symbol(lr::Icon::Stack, lr::TEXT), this.stack, hint)], 30.0).is_some() {
-                this.stack = !this.stack;
-                library::settings::set("rawJpegStacks", serde_json::json!(this.stack));
-                this.refilter = true;
-            }
-        };
-        if right_to_left {
-            stack_cell(ui, self);
-        }
-        // kind: exactly one
-        let cells = [
-            (lr::Cell::Symbol(lr::Icon::Image, lr::TEXT), self.kind == 0, "Nur Fotos"),
-            (lr::Cell::Symbol(lr::Icon::Video, lr::TEXT), self.kind == 1, "Nur Videos"),
-            (lr::Cell::Symbol(lr::Icon::Images, lr::TEXT), self.kind == 2, "Fotos und Videos"),
-        ];
-        if let Some(i) = lr::cell_group(ui, "bib-art", &cells, 30.0) {
-            if i as u8 != self.kind {
-                self.kind = i as u8;
-                library::settings::set("libraryKind", serde_json::json!(self.kind));
-                self.refilter = true;
-            }
-        }
-        if !right_to_left {
-            stack_cell(ui, self);
-        }
-    }
-
-    fn filter_bar(&mut self, ui: &mut egui::Ui) {
-        let before = self.filter.clone();
-        let sort_before = self.sort_order;
-        let id = egui::Id::unique("bib-suchfeld");
-        let width = self.centre_width.min(ui.available_width());
-        let facets_active = self.facets.as_ref().is_some_and(|f| f.active());
-        // ⌘F: into the search field
-        if crate::shortcuts::pressed(ui.ctx(), "search") || search_suggest::TEST_FOCUS.swap(false, Ordering::Relaxed) {
-            ui.memory_mut(|m| m.request_focus(id));
-        }
-        // top row from right to left: sorting and metadata filter keep their width, the search field takes the rest
-        ui.allocate_ui_with_layout(egui::vec2(width, 28.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.set_max_width(width);
-            self.filter_right(ui);
-            ui.add_space(8.0);
-            ui.spacing_mut().item_spacing.x = 8.0;
-            // Suggestions for the token under the cursor
-            let suggestions = if ui.memory(|m| m.has_focus(id)) {
-                let cursor = search_suggest::cursor_byte(ui.ctx(), id, &self.filter.text);
-                self.suggestions(&ui.ctx().clone(), cursor)
-            } else {
-                Vec::new()
-            };
-            if !suggestions.is_empty() {
-                ui.input_mut(|i| {
-                    if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
-                        self.suggestion = (self.suggestion + 1).min(suggestions.len());
-                    }
-                    if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
-                        self.suggestion = self.suggestion.saturating_sub(1);
-                    }
-                });
-            } else {
-                self.suggestion = 0;
-            }
-            // Syntax and suggestions explained in a card right of the field
-            crate::help::info(ui, "suche", "Suche", &crate::help::SEARCH);
-            // search field: magnifier on the left, × to clear on the right, placeholder just "Search"
-            let field_w = ui.available_width().max(170.0);
-            let (frame, frame_resp) = ui.allocate_exact_size(egui::vec2(field_w, 28.0), egui::Sense::hover());
-            let focus = ui.memory(|m| m.has_focus(id));
-            ui.painter().rect(frame, 0.0, Color32::from_gray(0x1c), egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { Color32::from_gray(0x4a) }), egui::StrokeKind::Inside);
-            let loupe = egui::pos2(frame.left() + 14.0, frame.center().y - 1.0);
-            let lf = egui::Stroke::new(1.4, if focus { lr::TEXT } else { lr::TEXT_DIM });
-            ui.painter().circle_stroke(loupe, 4.5, lf);
-            ui.painter().line_segment([loupe + egui::vec2(3.4, 3.4), loupe + egui::vec2(7.5, 7.5)], lf);
-            let empty = self.filter.text.is_empty();
-            let input = egui::Rect::from_min_max(frame.min + egui::vec2(28.0, 2.0), frame.max - egui::vec2(if empty { 8.0 } else { 26.0 }, 2.0));
-            let r = ui.put(
-                input,
-                egui::TextEdit::singleline(&mut self.filter.text)
-                    .id(id)
-                    .frame(egui::Frame::NONE)
-                    .font(egui::FontId::proportional(12.5))
-                    .text_color(lr::TEXT)
-                    .vertical_align(egui::Align::Center)
-                    .hint_text(egui::RichText::new(crate::tr("Suche")).color(lr::TEXT_DIM))
-                    // Tab takes a suggestion instead of moving the focus on
-                    .lock_focus(!suggestions.is_empty())
-                    .desired_width(input.width()),
-            );
-            if !empty && self.sem_view.busy(&self.sem_for) && library::settings::value("semanticSearch").as_bool().unwrap_or(true) {
-                crate::semantic_ui::busy_mark(ui, frame, true);
-            }
-            // The full-text search is running (thin strip at the lower edge)
-            if !empty && self.search_job.busy() {
-                search_motion::busy_strip(ui.painter(), frame, ui.input(|i| i.time));
-                ui.ctx().request_repaint_after(std::time::Duration::from_millis(33));
-            }
-            if !empty {
-                let cross = egui::Rect::from_center_size(egui::pos2(frame.right() - 14.0, frame.center().y), egui::vec2(18.0, 18.0));
-                let resp = ui.interact(cross, id.with("leeren"), egui::Sense::click());
-                let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
-                let c = cross.center();
-                ui.painter().line_segment([c + egui::vec2(-3.5, -3.5), c + egui::vec2(3.5, 3.5)], kf);
-                ui.painter().line_segment([c + egui::vec2(-3.5, 3.5), c + egui::vec2(3.5, -3.5)], kf);
-                if resp.clicked() {
-                    self.filter.text.clear();
-                    ui.memory_mut(|m| m.request_focus(id));
-                }
-            }
-            let mut take: Option<Suggestion> = None;
-            if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && self.suggestion > 0 {
-                take = suggestions.get(self.suggestion - 1).cloned();
-            }
-            // Tab: the highlighted suggestion, otherwise the first
-            if r.has_focus() && !suggestions.is_empty() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab)) {
-                take = suggestions.get(self.suggestion.max(1) - 1).cloned();
-            }
-            if !suggestions.is_empty() {
-                let pos = frame.left_bottom() + egui::vec2(0.0, 2.0);
-                egui::Area::new(id.with("vorschlaege")).order(egui::Order::Foreground).fixed_pos(pos).show(ui.ctx(), |ui| {
-                    // exactly as wide as the field (never over the "?" beside it); height follows the rows, at most
-                    // `ROWS` – an overlay, so nothing in the layout moves
-                    egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x4a))).show(ui, |ui| {
-                        ui.set_width((field_w - 10.0).max(0.0));
-                        ui.spacing_mut().item_spacing.y = 0.0;
-                        for (n, s) in suggestions.iter().enumerate() {
-                            if search_suggest::row(ui, s, self.suggestion == n + 1).clicked() {
-                                take = Some(s.clone());
-                            }
-                        }
-                    });
-                });
-            }
-            if let Some(s) = take {
-                let cursor = search_suggest::apply(&mut self.filter.text, &s);
-                search_suggest::set_cursor(ui.ctx(), id, cursor);
-                self.suggestion = 0;
-                // the field keeps the focus (Tab must not move on to the next control)
-                ui.memory_mut(|m| {
-                    m.request_focus(id);
-                    m.move_focus(egui::FocusDirection::None);
-                });
-            }
-            if self.filter.text.is_empty() && !focus {
-                lr::tip_key(ui, &frame_resp, "Suchen, auch nach Feldern wie iso:200", "search");
-            }
-        });
-        ui.add_space(6.0);
-        self.attribute_row(ui, width);
-        // active filters as chips; the row exists only while something filters
-        if self.filter != Filter::default() || facets_active || self.source_chip().is_some() {
-            ui.add_space(6.0);
-            ui.allocate_ui_with_layout(egui::vec2(width, 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.set_max_width(width);
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let buttons_w = 270.0;
-                // Where is searched? Only visible when a folder/collection is selected
-                if !self.filter.text.trim().is_empty() && matches!(self.source, Source::Folder(..) | Source::Collection(_) | Source::Keyword(_)) {
-                    let name = self.source_name();
-                    let short: String = if name.chars().count() > 26 { format!("{}…", name.chars().take(25).collect::<String>()) } else { name };
-                    let here = crate::menu::i18n::fill_names(crate::tr("Nur in „{a}“"), &[("a", &short)]);
-                    if lr::segmented(ui, &mut self.search_in_source, &[(false, crate::tr("Gesamte Bibliothek")), (true, here.as_str())]) {
-                        self.refilter = true;
-                    }
-                }
-                let (region, _) = ui.allocate_exact_size(egui::vec2((ui.available_width() - buttons_w - 8.0).max(80.0), 22.0), egui::Sense::hover());
-                // chip sources: search components, flag, metadata
-                enum ChipSource {
-                    Word(usize),
-                    Flags,
-                    Stars,
-                    Labels,
-                    Metadata,
-                }
-                let toks = raw_tokens(&self.filter.text);
-                let mut chips: Vec<(ChipSource, String, Color32)> = Vec::new();
-                for (n, t) in toks.iter().enumerate() {
-                    // a field still without value (`camera:""` while typing) is no filter yet
-                    if t == "|" || t == "ODER" || t.trim_start_matches('-').split_once([':', '：']).is_some_and(|(k, v)| v.trim_matches('"').is_empty() && library::search_fields::field_id(k).is_some()) {
-                        continue;
-                    }
-                    let (text, color) = chip_text(t);
-                    chips.push((ChipSource::Word(n), text, color));
-                }
-                if self.filter.flags != 0 {
-                    chips.push((ChipSource::Flags, flags_text(self.filter.flags), Color32::from_rgb(0x4a, 0x42, 0x2c)));
-                }
-                if self.filter.stars_min != 0 {
-                    chips.push((ChipSource::Stars, format!("≥ {}", "★".repeat(self.filter.stars_min as usize)), Color32::from_rgb(0x4a, 0x42, 0x2c)));
-                }
-                if self.filter.labels != 0 {
-                    chips.push((ChipSource::Labels, format!("{} {}", crate::tr("Etikett:"), labels_text(self.filter.labels)), Color32::from_rgb(0x4a, 0x42, 0x2c)));
-                }
-                if facets_active {
-                    chips.push((ChipSource::Metadata, crate::tr("Metadaten-Auswahl").to_string(), Color32::from_rgb(0x2e, 0x4c, 0x74)));
-                }
-                let clip = ui.painter().with_clip_rect(region);
-                let mut x = region.left();
-                // first the special source ("Similar to …", "Duplicates"): × leaves it (library_views.rs)
-                let mut leave = false;
-                if let Some((right, clicked)) = self.paint_source_chip(ui, region, x, id) {
-                    x = right;
-                    leave = clicked;
-                }
-                let mut remove: Option<usize> = None;
-                for (n, (_, text, color)) in chips.iter().enumerate() {
-                    let g = clip.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), Color32::WHITE);
-                    let r = egui::Rect::from_min_size(egui::pos2(x, region.top() + 1.0), egui::vec2(g.size().x + 28.0, 20.0));
-                    if r.left() > region.right() {
-                        break;
-                    }
-                    clip.rect_filled(r, 0.0, *color);
-                    clip.galley(r.left_center() + egui::vec2(9.0, -g.size().y / 2.0), g, Color32::WHITE);
-                    let cross = egui::Rect::from_center_size(egui::pos2(r.right() - 10.0, r.center().y), egui::vec2(14.0, 14.0));
-                    let resp = ui.interact(cross.intersect(region), id.with(("chip", n)), egui::Sense::click());
-                    clip.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xc4) });
-                    if resp.clicked() {
-                        remove = Some(n);
-                    }
-                    x = r.right() + 5.0;
-                }
-                if leave {
-                    self.leave_special_source();
-                }
-                if let Some(n) = remove {
-                    match chips[n].0 {
-                        ChipSource::Word(i) => {
-                            let mut t = toks.clone();
-                            t.remove(i);
-                            self.filter.text = t.iter().map(|x| if x.contains(' ') && !x.contains('"') { format!("\"{x}\"") } else { x.clone() }).collect::<Vec<_>>().join(" ");
-                        }
-                        ChipSource::Flags => self.filter.flags = 0,
-                        ChipSource::Stars => self.filter.stars_min = 0,
-                        ChipSource::Labels => self.filter.labels = 0,
-                        ChipSource::Metadata => {
-                            if let Some(f) = &mut self.facets {
-                                f.reset();
-                            }
-                            self.refilter = true;
-                        }
-                    }
-                }
+                let sw = ui.label(egui::RichText::new(crate::tr("Bewertungen als Begleitdatei (XMP) neben die Fotos schreiben")).small().color(lr::TEXT_DIM));
+                lr::hover_tip(ui, &sw, crate::tr("Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert."));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.x = 8.0;
-                    if lr::icon_button_hint(ui, lr::Icon::XSquare, false, crate::tr("Filter zurücksetzen")) {
-                        self.reset_all_filters();
+                    if ui.button(crate::tr("Schließen")).clicked() {
+                        close = true;
                     }
-                    // "Similar photos" and "Duplicates" are no search rule: nothing to save as a smart collection
-                    if self.source_chip().is_none() && lr::icon_button_hint(ui, lr::Icon::Stack, false, crate::tr("Als Smart-Sammlung sichern …")) {
-                        self.smart_window = true;
+                    if ui.button(crate::tr("Zur Bibliothek hinzufügen …")).clicked() {
+                        add = true;
                     }
                 });
             });
+        });
+        if add {
+            self.import_folder(&ctx, dir);
+        } else if close {
+            self.close_view_folder();
         }
-        if self.columns_open {
-            self.facets_ready();
-            if let Some(f) = &mut self.facets {
-                ui.add_space(6.0);
-                let changed = ui.allocate_ui(egui::vec2(ui.available_width(), crate::library_filter::HEIGHT + 26.0), |ui| f.ui(ui)).inner;
-                let request = f.take_keyword_request();
-                if changed {
-                    self.refilter = true;
+    }
+
+    /// Leave a viewed folder: its photos go out of the list, back to the library.
+    fn close_view_folder(&mut self) {
+        let all = Arc::make_mut(&mut self.rows);
+        all.retain(|z| z.folder != VIEW_FOLDER);
+        self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
+        self.viewed = None;
+        self.viewed_listing = None;
+        self.selection.clear();
+        self.active = None;
+        self.set_source(Source::All);
+        self.refilter = true;
+    }
+
+    /// Ratings in a viewed folder are refused (the switch is off): says so instead of silently doing nothing.
+    pub fn take_rating_refused(&mut self) -> bool {
+        std::mem::take(&mut self.rating_refused)
+    }
+
+    /// No photo in the library (the photos of a folder only being viewed do not count).
+    fn library_is_empty(&self) -> bool {
+        !self.rows.iter().any(|z| z.folder != VIEW_FOLDER)
+    }
+
+    /// Photos in the library ("Alle Fotos"): without those of a folder only being viewed.
+    fn library_photo_count(&self) -> usize {
+        self.rows.iter().filter(|z| z.folder != VIEW_FOLDER).count()
+    }
+
+    /// Empty library (first start): three equally large tiles for the three ways in – import photos, import from
+    /// Lightroom, only view a folder – and below them (Mac) a quiet line for Apple Photos. No gold here: the gold
+    /// button is "Importieren …" on the left.
+    fn library_empty(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        ui.add_space(48.0);
+        ui.vertical_centered(|ui| {
+            // "Willkommen bei" and the name as the word mark (brand font, aperture in the "o"), never in the UI font
+            ui.label(egui::RichText::new(crate::tr("Willkommen bei")).size(14.0).color(lr::TEXT_DIM));
+            ui.add_space(2.0);
+            match crate::brand::wordmark(ui.ctx()) {
+                Some(t) => {
+                    let w = 168.0;
+                    ui.add(egui::Image::new((t.id(), egui::vec2(w, w * t.size()[1] as f32 / t.size()[0] as f32))));
                 }
-                // Keywords are managed in the keyword column (formerly the left panel)
-                if let Some((id, action)) = request {
-                    self.keyword_action(id, action);
+                None => {
+                    ui.label(egui::RichText::new("graineo").font(lr::brand(30.0)).color(Color32::from_rgb(0xf2, 0xef, 0xe6)));
                 }
             }
-        }
-        if self.filter != before || self.sort_order != sort_before {
-            // Typing alone does not rebuild the grid, the search runs in the background
-            let only_text = Filter { text: self.filter.text.clone(), ..before.clone() } == self.filter && self.sort_order == sort_before;
-            if only_text {
-                self.search_typed();
-            } else {
-                self.refilter = true;
+            ui.add_space(6.0);
+            ui.label(egui::RichText::new(crate::tr("Wie möchtest du anfangen?")).color(lr::TEXT_DIM));
+        });
+        ui.add_space(18.0);
+        let tiles = [
+            (lr::Icon::TrayArrowDown, crate::tr("Fotos importieren"), crate::tr("Von Karte, Kamera oder aus einem Ordner."), crate::tr("Du wählst, ob die Fotos bleiben, kopiert oder verschoben werden."), "import"),
+            (lr::Icon::Images, crate::tr("Aus Lightroom importieren"), crate::tr("Fotos, Sterne, Sammlungen und Bearbeitungen."), crate::tr("Der Katalog wird nur gelesen."), ""),
+            (lr::Icon::FolderOpen, crate::tr("Ordner nur ansehen"), crate::tr("Fotos durchblättern, ohne Import."), crate::tr("Verändert nichts."), "open_folder"),
+        ];
+        let gap = 14.0;
+        let w = ((ui.available_width() - 2.0 * gap - 40.0) / 3.0).clamp(170.0, 250.0);
+        let h = 150.0;
+        let mut clicked = None;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
+            ui.add_space(((ui.available_width() - 3.0 * w - 2.0 * gap) / 2.0).max(0.0));
+            for (i, (icon, title, line, hint, key)) in tiles.iter().enumerate() {
+                let (rect, r) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click());
+                let p = ui.painter();
+                // test aid (screenshots): GRAINEO_TILE_HOVER=<n> shows tile n as hovered
+                let forced = crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_TILE_HOVER").ok().and_then(|v| v.parse::<usize>().ok()) == Some(i);
+                let hot = r.hovered() || forced;
+                // titles stay in the light text colour; the symbol in the app's blue marks the tile as clickable, on
+                // hover a blue frame and a slightly lighter ground (the Apple Photos line stays the only blue text)
+                p.rect_filled(rect, 0.0, if hot { Color32::from_gray(0x2a) } else { lr::GROUP_FILL });
+                p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, if hot { lr::BLUE } else { lr::FIELD_STROKE }), egui::StrokeKind::Inside);
+                let inner = rect.shrink2(egui::vec2(14.0, 14.0));
+                lr::paint_icon(p, egui::Rect::from_min_size(inner.min, egui::vec2(22.0, 22.0)), *icon, lr::BLUE_TEXT);
+                let mut y = inner.min.y + 32.0;
+                for (text, font, color) in [(*title, lr::semibold(13.0), lr::TEXT), (*line, egui::FontId::proportional(lr::UI_SIZE), lr::TEXT_DIM), (*hint, egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM)] {
+                    let g = p.layout(text.to_string(), font, color, inner.width());
+                    let gh = g.size().y;
+                    p.galley(egui::pos2(inner.min.x, y), g, color);
+                    y += gh + 5.0;
+                }
+                if !key.is_empty() {
+                    lr::tip_key(ui, &r, title, key);
+                }
+                if r.clicked() {
+                    clicked = Some(i);
+                }
             }
+        });
+        match clicked {
+            Some(0) => self.open_import(&ctx),
+            Some(1) => self.lr_window = true,
+            Some(2) => crate::file_dialog::folder(&ctx, "ordner-oeffnen", |d| d),
+            _ => {}
         }
-        ui.add_space(6.0);
+        ui.add_space(16.0);
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new(crate::tr("Ordner und Fotos kannst du auch hierher ziehen.")).small().color(lr::TEXT_DIM));
+            // Apple Photos: a quiet line, no tile; asking for access only after the click (in the settings)
+            #[cfg(target_os = "macos")]
+            {
+                ui.add_space(4.0);
+                // the app's blue (switch, progress), as a clickable line with an arrow – not a button, not gold
+                let r = lr::link_text(ui, egui::RichText::new(format!("{}  →", crate::tr("Du nutzt Apple Fotos? Bibliothek verbinden …"))), lr::BLUE_TEXT);
+                lr::hover_tip(ui, &r, "Öffnet Einstellungen › Bibliothek › Apple Fotos");
+                if r.clicked() {
+                    crate::prefs::open_section("Bibliothek");
+                }
+            }
+        });
     }
 
     /// Dialog "Save keyword set": enter a name; the keywords are shown as marks below.
@@ -3910,26 +3710,53 @@ impl LibraryView {
         }
     }
 
+    /// Notice before the one-time model download of the face recognition (in the app window, not a system dialog).
+    /// "Load" starts the download and the search, "Later" does nothing until the next start.
+    fn face_model_dialog(&mut self, ctx: &egui::Context) {
+        use crate::dialog;
+        if !self.face_model_notice {
+            return;
+        }
+        let mb = library::people::model_download_bytes().div_ceil(1_000_000) as usize;
+        let a = dialog::show(
+            ctx,
+            "gesichtsmodell",
+            crate::tr("Gesichtserkennung vorbereiten"),
+            dialog::WIDTH,
+            |ui| {
+                dialog::text(ui, &crate::trf!("graineo lädt einmalig {a} MB für die Gesichtserkennung. Danach arbeitet sie ohne Internet.", a = dialog::number(mb)));
+                dialog::text(ui, crate::tr("Mit „Später“ wird nichts geladen; die Frage kommt beim nächsten Start wieder. Abschalten: Einstellungen → Entwickeln → Personen → „Gesichter automatisch erkennen“."));
+            },
+            dialog::Buttons { cancel: "Später", primary: Some(("Laden", dialog::Style::Normal, true)) },
+        );
+        match a {
+            dialog::Answer::Primary => {
+                self.face_model_notice = false;
+                library::people::allow_download();
+                self.spawn_people_work(ctx, true);
+            }
+            dialog::Answer::Cancel => {
+                self.face_model_notice = false;
+                self.face_model_later = true;
+            }
+            dialog::Answer::Open => {}
+        }
+    }
+
     /// Window "Save as smart collection": enter a name, save search text + column selection.
     fn smart_dialog(&mut self, ctx: &egui::Context) {
         if !self.smart_window {
             return;
         }
-        let search_text = {
-            let f = self.facets.as_ref().map(|f| f.as_search()).unwrap_or_default();
-            let mut t = self.filter.text.trim().to_string();
-            if !f.is_empty() {
-                if !t.is_empty() {
-                    t.push(' ');
-                }
-                t.push_str(&f);
-            }
-            t
-        };
+        // all filters of the view as one rule (search, metadata columns, flags, stars, labels; library_filter_bar.rs)
+        let search_text = self.smart_rule().unwrap_or_default();
         let mut open = true;
         let n = self.visible.len();
         let title = crate::trf!("Smart-Sammlung mit {a} sichern", a = crate::dialog::count(n, crate::tr("Treffer"), crate::tr("Treffern")));
         let name_ok = !self.smart_name.trim().is_empty();
+        // an existing smart collection is never replaced from here: a taken name gets " (2)" etc.
+        let actual_name = if name_ok { self.db.as_ref().and_then(|d| d.unique_smart_name(self.smart_name.trim()).ok()) } else { None };
+        let renamed = actual_name.as_deref().filter(|n| *n != self.smart_name.trim()).map(str::to_string);
         let answer = crate::dialog::show(
             ctx,
             "smart",
@@ -3938,6 +3765,9 @@ impl LibraryView {
             |ui| {
                 crate::dialog::text(ui, crate::tr("Die Sammlung merkt sich die Regel, nicht die Fotos: neue passende Fotos kommen von selbst hinzu."));
                 crate::dialog::input(ui, crate::tr("Name"), &mut self.smart_name);
+                if let Some(n) = &renamed {
+                    crate::dialog::text(ui, &crate::trf!("Der Name ist schon vergeben, gesichert wird als „{n}“.", n = n));
+                }
                 ui.add_space(4.0);
                 ui.label(egui::RichText::new(crate::tr("Regel")).small().color(lr::TEXT_DIM));
                 crate::dialog::chip(ui, &search_text);
@@ -3952,7 +3782,7 @@ impl LibraryView {
             let name = self.smart_name.trim().to_string();
             let started = self.in_background(
                 move |db| {
-                    let id = db.save_smart(&name, &search_text).map_err(|e| e.to_string())?;
+                    let (id, _) = db.save_smart_new(&name, &search_text).map_err(|e| e.to_string())?;
                     // optional copy in the root folder (only with "write sidecars"); the library is the main store
                     if let Err(e) = library::collection_file::write_if_enabled(db) {
                         crate::log(&format!("Smart-Sammlungen nicht in Datei geschrieben: {e}"));
@@ -3997,7 +3827,7 @@ impl LibraryView {
                 7 => format!("{} {}", month_name(d), d.get(..4).unwrap_or(d)),
                 _ => format!("{} {} {}", tag_name(d), month_name(d.get(..7).unwrap_or(d)), d.get(..4).unwrap_or(d)),
             },
-            Source::Duplicates => match self.dup.lock().unwrap().as_ref() {
+            Source::Duplicates => match self.dup.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 Some(g) => crate::trf!("Duplikate · {a} gleich, {b} ähnlich (Gruppen)", a = g.iter().filter(|x| x.kind == library::duplicates::Kind::Identical).count(), b = g.iter().filter(|x| x.kind == library::duplicates::Kind::Similar).count()),
                 None => crate::tr("Duplikate · werden gesucht …").into(),
             },
@@ -4073,6 +3903,9 @@ impl LibraryView {
         let width = self.centre_width.min(ui.available_width());
         ui.allocate_ui_with_layout(egui::vec2(width, 20.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.set_max_width(width);
+            // turn and jump act on the selection: right of the size slider (library_filter_bar.rs)
+            self.selection_actions(ui);
+            ui.add_space(10.0);
             if !self.loupe {
                 ui.spacing_mut().slider_width = 110.0;
                 let r = ui.add(egui::Slider::new(&mut self.cell_size, 110.0..=380.0).show_value(false));
@@ -4087,23 +3920,22 @@ impl LibraryView {
                 self.missing_confirm = true;
             }
             // background work (sync, faces …) shows only in the title bar next to the logo (activity.rs)
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.add(egui::Label::new(egui::RichText::new(left_text).color(lr::TEXT_DIM)).truncate());
-            });
+            // count, and while something filters "Save these photos as a smart collection" (library_filter_bar.rs)
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| self.status_left(ui, left_text));
         });
         ui.add_space(4.0);
     }
 
     /// Is a sync/import of the library running right now? (Then states like "missing" may still be outdated.)
     pub fn work_running(&self) -> bool {
-        self.work.lock().unwrap().running
+        self.work.lock().unwrap_or_else(|e| e.into_inner()).running
     }
 
     /// The library's background work for the status in the title bar (activity.rs): sync/import (paths shortened to the
     /// name of the root folder), face search, previews with counter, import, moving a folder.
     /// The running job as dialogs show it when their buttons wait for it ([`crate::dialog::blocked`]).
     pub fn running(&self) -> Option<crate::dialog::Running> {
-        let a = self.work.lock().unwrap();
+        let a = self.work.lock().unwrap_or_else(|e| e.into_inner());
         if !a.running {
             return None;
         }
@@ -4136,7 +3968,7 @@ impl LibraryView {
             v.push(Task::new(Rank::Move, crate::move_folder_ui::status_text()));
         }
         {
-            let a = self.work.lock().unwrap();
+            let a = self.work.lock().unwrap_or_else(|e| e.into_inner());
             if a.running {
                 let roots: Vec<(&str, &str)> = self.roots.iter().map(|r| (r.path.as_str(), r.name.as_str())).collect();
                 let mut t = crate::activity::short_message(&a.message, &roots);
@@ -4150,15 +3982,15 @@ impl LibraryView {
         }
         v.extend(crate::prefs::cache_task());
         v.extend(crate::prefs_search_model::task());
-        if self.backup_status.lock().unwrap().as_deref() == Some(crate::tr("läuft")) {
+        if self.backup_status.lock().unwrap_or_else(|e| e.into_inner()).as_deref() == Some(crate::tr("läuft")) {
             v.push(Task::new(Rank::Backup, crate::tr("Sicherung der Bibliothek").to_string()));
         }
-        let st = self.people_status.lock().unwrap().clone();
+        let st = self.people_status.lock().unwrap_or_else(|e| e.into_inner()).clone();
         if !st.is_empty() {
             v.push(Task::new(Rank::Faces, crate::menu::i18n::tr_msg(&st).into_owned()));
         } else if self.people_follow {
             // open work that has not started yet (waiting time, or other work first): says what is still to do
-            let w = *self.people_work.lock().unwrap();
+            let w = *self.people_work.lock().unwrap_or_else(|e| e.into_inner());
             if w.photos > 0 {
                 v.push(Task::new(Rank::Faces, crate::trf!("Gesichter aktualisieren: noch {n}", n = thousands(w.photos))));
             } else if w.suggestions {
@@ -4186,13 +4018,18 @@ impl LibraryView {
     fn raster(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let t0 = std::time::Instant::now();
         self.header_row(ui);
+        self.view_folder_bar(ui);
         // "View folder" without photos: the reason below the header row (which keeps its place)
         if self.visible.is_empty() && !self.refilter && matches!(self.source, Source::Browse(_)) {
             self.browse_empty(ui);
         }
         // first start / empty library: a calm hint with the way in instead of an empty middle
-        if self.rows.is_empty() && self.db.is_some() && !self.refilter && !self.first_loading() && !matches!(self.source, Source::Browse(_)) {
+        if self.library_is_empty() && self.db.is_some() && !self.refilter && !self.first_loading() && !matches!(self.source, Source::Browse(_)) {
             self.library_empty(ui);
+        }
+        // a filter hides everything: centred in the empty grid, below the status row (library_filter_bar.rs)
+        if self.no_matches_shown() {
+            self.no_matches(ui);
         }
         if let Some(clockwise) = self.turn_request.take() {
             actions.push(Action::Turn(clockwise));
@@ -4729,7 +4566,13 @@ impl LibraryView {
                 return;
             };
             let z = self.rows[i].clone();
+            // a viewed folder: rating only with the switch of its bar; locked controls say why
+            let locked = z.folder == VIEW_FOLDER && !view_folder_sidecars();
             lr::section(ui, "Bewertung", true, |ui| {
+                if locked {
+                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(RATING_REFUSED)).small().color(lr::TEXT_DIM)).wrap());
+                }
+                ui.add_enabled_ui(!locked, |ui| {
                 ui.horizontal(|ui| {
                     lr::field_label(ui, crate::tr("Sterne"));
                     for n in 1..=5u8 {
@@ -4755,19 +4598,17 @@ impl LibraryView {
                 });
                 ui.horizontal(|ui| {
                     lr::field_label(ui, crate::tr("Etikett"));
-                    for e in 1..=5u8 {
+                    // the same rectangular cells as the filter bar and the import window
+                    let names = ["Etikett Rot", "Etikett Gelb", "Etikett Grün", "Etikett Blau", "Etikett Lila"];
+                    let tips: Vec<String> = (1..=5u8).map(|e| if e <= 4 { format!("{} ({})", crate::tr(names[e as usize - 1]), e + 5) } else { crate::tr(names[e as usize - 1]).to_string() }).collect();
+                    let cells: Vec<_> = (1..=5u8).map(|e| {
                         let c = library::label::COLORS[e as usize];
-                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(20.0, 18.0), egui::Sense::click());
-                        ui.painter().rect_filled(rect.shrink(3.0), 0.0, Color32::from_rgb(c[0], c[1], c[2]));
-                        let names = ["", "Etikett Rot", "Etikett Gelb", "Etikett Grün", "Etikett Blau", "Etikett Lila"];
-                        lr::hover_tip(ui, &resp, &if e <= 4 { format!("{} ({})", crate::tr(names[e as usize]), e + 5) } else { crate::tr(names[e as usize]).to_string() });
-                        if z.label == e {
-                            ui.painter().rect_stroke(rect.shrink(1.0), 0.0, egui::Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
-                        }
-                        if resp.clicked() {
-                            self.rate(None, None, Some(e), actions);
-                        }
+                        (lr::Cell::Color(Color32::from_rgb(c[0], c[1], c[2])), z.label == e, tips[e as usize - 1].as_str())
+                    }).collect();
+                    if let Some(i) = lr::cell_group_sized(ui, "info-etikett", &cells, 26.0, 22.0).0 {
+                        self.rate(None, None, Some(i as u8 + 1), actions);
                     }
+                });
                 });
             });
             lr::section(ui, "Metadaten", true, |ui| {
@@ -4781,10 +4622,10 @@ impl LibraryView {
                 }
                 let name_key = crate::tr("Dateiname");
                 let folder_key = crate::tr("Ordner");
-                // the folder leads to its photos in the Mediathek, only for photos in the library (a folder only
+                // the folder leads to its photos in the Bibliothek, only for photos in the library (a folder only
                 // viewed with ⌘O has no library folder)
                 let in_library = z.image > 0 && self.folder.iter().any(|o| o.id == z.folder);
-                let folder_tip = lr::with_shortcut("In der Mediathek zeigen", "show_in_library_folder");
+                let folder_tip = lr::with_shortcut("In der Bibliothek zeigen", "show_in_library_folder");
                 for (k, v) in rows {
                     let folder = k == folder_key && in_library && !differing.contains(k);
                     let clickable = k == name_key && !differing.contains(k) || folder;
@@ -5059,7 +4900,7 @@ impl LibraryView {
     /// Confirmation and background run "remove missing entries" ("Missing photos" view).
     fn missing_dialog(&mut self, ctx: &egui::Context) {
         // result of the background run "remove missing entries"
-        let finished = self.missing_result.lock().unwrap().take();
+        let finished = self.missing_result.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(r) = finished {
             if let Err(e) = &r {
                 eprintln!("Remove missing entries: {e}");
@@ -5085,7 +4926,7 @@ impl LibraryView {
                     let result = self.missing_result.clone();
                     std::thread::spawn(move || {
                         let r = Db::open(&library::db_path()).map_err(|e| e.to_string()).and_then(|db| db.remove_images(&ids, &[]).map_err(|e| e.to_string()));
-                        *result.lock().unwrap() = Some(r);
+                        *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                     });
                 }
                 crate::dialog::Answer::Cancel => self.missing_confirm = false,
@@ -5127,7 +4968,7 @@ impl LibraryView {
                         .map_err(|e| e.to_string())
                     });
                     open.fetch_sub(1, Ordering::SeqCst);
-                    feedback.lock().unwrap().push((new_collection && r.is_ok(), r.err()));
+                    feedback.lock().unwrap_or_else(|e| e.into_inner()).push((new_collection && r.is_ok(), r.err()));
                     if let Some(c) = &ctx {
                         c.request_repaint();
                     }
@@ -5145,7 +4986,7 @@ impl LibraryView {
         if self.quick_pending.load(std::sync::atomic::Ordering::SeqCst) > 0 {
             return;
         }
-        let feedback = std::mem::take(&mut *self.quick_feedback_queue.lock().unwrap());
+        let feedback = std::mem::take(&mut *self.quick_feedback_queue.lock().unwrap_or_else(|e| e.into_inner()));
         if feedback.is_empty() {
             return;
         }
@@ -5294,83 +5135,178 @@ impl LibraryView {
         }
     }
 
-    /// "Import from Lightroom": catalog, import (photos, ratings, keywords, collections) and the one-time handover
-    /// of the edits. The gold main button is always the action needed now ([`crate::lightroom_state::Next`]);
-    /// the other actions are normal buttons in their section. Library maintenance lives in the settings.
+    /// "Aus Lightroom importieren": one flow – choose the catalog (one found in the Pictures folder is suggested),
+    /// check it (reads only: what would come and what is already there), import (writes; the edits come along in the
+    /// same run). The gold main button is always the step needed now ([`crate::lightroom_state::Step`]); a catalog that
+    /// cannot be read says why in the dialog, and the import button stays disabled with the reason.
     fn lr_dialog(&mut self, ctx: &egui::Context) {
         use crate::dialog;
-        use crate::lightroom_state::{date, LrState, Next};
+        use crate::lightroom_state::{date, default_set_name, failure_text, Check, LrState, Step};
         if !self.lr_window {
             self.lr_state = None;
             return;
         }
         let (running, kind, message, fraction, handover_seen) = {
-            let a = self.work.lock().unwrap();
+            let a = self.work.lock().unwrap_or_else(|e| e.into_inner());
             (a.running, a.kind, a.message.clone(), a.fraction, a.handover_seen)
         };
         let handover_now = HANDOVER_RUNNING.load(std::sync::atomic::Ordering::SeqCst);
         let lr_running = running && matches!(kind, "lightroom" | "lr_handover");
         // other work blocks the buttons: what runs, why, for how long and how much longer
         let running_other = self.running().filter(|_| !lr_running);
-        // which section shows the progress: the import, from the handover on the edits
-        let running_section = lr_running.then(|| if kind == "lr_handover" || handover_now || handover_seen { 1 } else { 0 });
         // state once when opening and after every run (no file access per frame)
         let st = self.lr_state.get_or_insert_with(|| self.db.as_ref().map(LrState::read).unwrap_or_default()).clone();
-        let next = st.next();
-        let (mut choose, mut import, mut handover, mut show_report) = (false, false, false, false);
+        // without a chosen catalog: list Lightroom's folder once in the background (only names, nothing is opened)
+        if st.catalog.is_none() && !self.lr_search_started {
+            self.lr_search_started = true;
+            let (found, c) = (self.lr_found.clone(), ctx.clone());
+            std::thread::spawn(move || {
+                let v = crate::lightroom_state::search_dir().map(|d| library::lightroom::find_catalogs(&d)).unwrap_or_default();
+                *found.lock().unwrap_or_else(|e| e.into_inner()) = Some(v);
+                c.request_repaint();
+            });
+        }
+        let suggestion = self.lr_found.lock().unwrap_or_else(|e| e.into_inner()).as_ref().and_then(|v| v.first().cloned()).filter(|_| st.catalog.is_none());
+        let check: Option<Check> = self.lr_check.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|(k, _)| Some(k) == st.catalog.as_ref()).map(|(_, c)| c.clone());
+        let failed: Option<String> = self.lr_failed.as_ref().filter(|(k, _)| Some(k) == st.catalog.as_ref()).map(|(_, e)| e.clone());
+        let step = st.step(check.as_ref(), failed.is_some(), suggestion.is_some(), lr_running);
+        // Lightroom open (lock file, changes in the WAL): looked at every two seconds, only file metadata
+        if let Some(k) = st.catalog.as_ref().filter(|_| st.catalog_found) {
+            let stale = self.lr_in_use.as_ref().is_none_or(|(p, _, t)| p != k || t.elapsed().as_secs() >= 2);
+            if stale {
+                self.lr_in_use = Some((k.clone(), library::lightroom::catalog_in_use(k), std::time::Instant::now()));
+            }
+            ctx.request_repaint_after(std::time::Duration::from_secs(2));
+        }
+        let in_use = self.lr_in_use.as_ref().is_some_and(|(p, u, _)| Some(p) == st.catalog.as_ref() && *u);
+        if self.lr_set_name.is_none() {
+            if let Some(k) = st.catalog.as_ref().or(suggestion.as_ref()) {
+                self.lr_set_name = Some(default_set_name(k));
+            }
+        }
+        let (mut choose, mut check_now, mut import, mut handover, mut show_report) = (false, false, false, false, false);
         let report = self.report.clone().filter(|v| v["kind"] == "lightroom" || v["kind"] == "lr_handover");
+        let mut set_name = self.lr_set_name.clone().unwrap_or_default();
+        let set_before = set_name.clone();
         let answer = dialog::show(
             ctx,
             "lightroom",
-            crate::tr("Aus Lightroom übernehmen"),
+            crate::tr("Aus Lightroom importieren"),
             520.0,
             |ui| {
-                // ── Catalog
+                dialog::text(ui, crate::tr("graineo liest deinen Lightroom-Katalog nur. Lightroom und deine Fotos bleiben unverändert."));
+                ui.add_space(4.0);
+                // ── Catalog: the chosen (or found) catalog in its own field, the button to change it beside it
                 lr_section_head(ui, crate::tr("Katalog"), None);
-                lr_status_row(ui, if st.catalog_found { None } else { Some(dialog::Verdict::Yellow) }, &match &st.catalog {
-                    Some(k) if st.catalog_found => k.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                    Some(k) => crate::trf!("{a} · nicht gefunden", a = k.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
-                    None => crate::tr("Kein Katalog gewählt").to_string(),
-                }, |ui| {
-                    if next != Next::ChooseCatalog && ui.add_enabled(!running, egui::Button::new(crate::tr("Ändern …"))).clicked() {
-                        choose = true;
-                    }
-                });
-                lr_separator(ui);
-                // ── Import
-                lr_section_head(ui, crate::tr("Importieren"), Some(("lr-import", &crate::help::LR_IMPORT)));
-                if running_section == Some(0) {
-                    lr_progress(ui, fraction, &message, false);
-                } else {
-                    let (verdict, text) = match &st.import {
-                        Some(i) => (dialog::Verdict::Green, crate::trf!("Zuletzt importiert: {d} · {n}", d = date(i.time), n = dialog::count(i.photos, crate::tr("Foto"), crate::tr("Fotos")))),
-                        None => (dialog::Verdict::Yellow, crate::tr("Noch nicht importiert").to_string()),
-                    };
-                    lr_status_row(ui, Some(verdict).filter(|_| st.catalog_found), &text, |ui| {
-                        if next != Next::Import && st.catalog_found && ui.add_enabled(!running, egui::Button::new(crate::tr("Erneut importieren"))).clicked() {
-                            import = true;
+                match (&st.catalog, &suggestion) {
+                    (Some(k), _) if !st.catalog_found => lr_status_row(ui, Some(dialog::Verdict::Red), &failure_text("", k), |_| {}),
+                    (None, Some(_)) => dialog::hint(ui, crate::tr("Gefunden in deinem Lightroom-Ordner:")),
+                    _ => {}
+                }
+                let shown = st.catalog.as_ref().or(suggestion.as_ref()).map(|k| k.display().to_string());
+                let empty = if st.catalog.is_none() && suggestion.is_none() && self.lr_found.lock().unwrap_or_else(|e| e.into_inner()).is_none() { "Sucht nach Katalogen …" } else { "Noch nichts gewählt" };
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // the main button already chooses: no second button for the same
+                        if step != Step::Choose && ui.add_enabled(!lr_running, egui::Button::new(crate::tr(if st.catalog.is_some() { "Ändern …" } else { "Anderen wählen …" }))).clicked() {
+                            choose = true;
                         }
+                        lr::value_field(ui, shown.as_deref(), empty);
                     });
+                });
+                if st.catalog.is_none() && suggestion.is_none() && self.lr_found.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+                    let dir = crate::lightroom_state::search_dir().map(|d| d.display().to_string()).unwrap_or_default();
+                    dialog::hint(ui, &crate::trf!("In „{a}“ ist keiner.", a = dir));
+                }
+                if in_use {
+                    dialog::warning(ui, crate::tr("Lightroom ist geöffnet. Am besten vorher beenden, sonst fehlen die neuesten Änderungen."));
+                } else {
+                    dialog::hint(ui, crate::tr("Lightroom vorher beenden (sonst fehlen die neuesten Änderungen)."));
                 }
                 lr_separator(ui);
-                // ── Handover of the edits
-                lr_section_head(ui, crate::tr("Bearbeitungen übernehmen"), Some(("lr-uebergabe", &crate::help::LR_HANDOVER)));
-                if running_section == Some(1) {
-                    lr_progress(ui, fraction, &message, handover_now);
-                } else {
-                    let (verdict, mut text) = match &st.handover {
-                        Some(h) if h.cancelled => (dialog::Verdict::Yellow, crate::trf!("Abgebrochen am {d} · {n} übernommen", d = date(h.time), n = dialog::number(h.taken))),
-                        Some(h) if st.handover_due() => (dialog::Verdict::Yellow, crate::trf!("Übernommen: {n} · {d} · seither neu importiert", n = dialog::count(h.taken, crate::tr("Foto"), crate::tr("Fotos")), d = date(h.time))),
-                        Some(h) => (dialog::Verdict::Green, crate::trf!("Übernommen: {n} · {d}", n = dialog::count(h.taken, crate::tr("Foto"), crate::tr("Fotos")), d = date(h.time))),
-                        None => (dialog::Verdict::Yellow, crate::tr("Noch nicht übernommen").to_string()),
-                    };
-                    if let Some(u) = st.handover.as_ref().map(|h| h.unreachable).filter(|u| *u > 0) {
-                        text.push_str(&crate::trf!(" · {n} nicht erreichbar", n = dialog::number(u)));
-                    }
-                    lr_status_row(ui, Some(verdict).filter(|_| st.import.is_some()), &text, |ui| {
-                        if next != Next::Handover && st.catalog_found && st.import.is_some() && ui.add_enabled(!running, egui::Button::new(crate::tr("Erneut übernehmen"))).clicked() {
-                            handover = true;
+                // ── Import: check (reads only), then import; the edits come along
+                lr_section_head(ui, crate::tr("Importieren"), Some(("lr-import", &crate::help::LR_IMPORT)));
+                if lr_running {
+                    let cancellable = kind == "lr_handover" || handover_now || handover_seen;
+                    lr_progress(ui, fraction, &message, cancellable && handover_now);
+                } else if let (Some(e), Some(k)) = (failed.as_ref().or(match &check {
+                    Some(Check::Failed(e)) => Some(e),
+                    _ => None,
+                }), st.catalog.as_ref())
+                {
+                    lr_status_row(ui, Some(dialog::Verdict::Red), &failure_text(e, k), |ui| {
+                        if ui.add_enabled(!running, egui::Button::new(crate::tr("Erneut prüfen"))).clicked() {
+                            check_now = true;
                         }
+                    });
+                    dialog::hint(ui, crate::tr("Importieren geht erst mit einem lesbaren Katalog. Wähle einen anderen oder prüfe ihn erneut."));
+                    egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM)).id_salt("lr-fehler").default_open(false).show(ui, |ui| {
+                        dialog::hint(ui, e);
+                    });
+                } else {
+                    match &check {
+                        Some(Check::Running) => {
+                            ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), LR_ROW_H), egui::Layout::left_to_right(egui::Align::Center), |ui| dialog::pending(ui, crate::tr("Liest den Katalog …")));
+                        }
+                        Some(Check::Done(p)) => {
+                            let photos = |n: usize| dialog::count(n, crate::tr("Foto"), crate::tr("Fotos"));
+                            lr_status_row(ui, Some(dialog::Verdict::Green), &crate::trf!("{a}, davon {b} neu", a = photos(p.images), b = dialog::number(p.new_images)), |_| {});
+                            let mut parts = vec![
+                                dialog::count(p.collections + p.smart_collections, crate::tr("Sammlung"), crate::tr("Sammlungen")),
+                                dialog::count(p.keywords, crate::tr("Stichwort"), crate::tr("Stichwörter")),
+                                edited_photos(p.edited),
+                            ];
+                            if p.collection_sets > 0 {
+                                parts.insert(1, dialog::count(p.collection_sets, crate::tr("Sammlungssatz"), crate::tr("Sammlungssätze")));
+                            }
+                            dialog::text(ui, &parts.join(" · "));
+                            if let Some(v) = p.catalog_version.filter(|_| p.newer_format()) {
+                                dialog::warning(ui, &newer_format_text(v));
+                            }
+                            if !p.catalog_gaps.is_empty() {
+                                dialog::hint(ui, &crate::trf!("Im Katalog fehlt: {a}. Diese Angaben bleiben leer.", a = p.catalog_gaps.join(", ")));
+                            }
+                            if !p.roots_unreachable.is_empty() {
+                                dialog::warning(ui, &crate::trf!("{a} gerade nicht erreichbar: {b}", a = dialog::count(p.roots_unreachable.len(), crate::tr("Ordner"), crate::tr("Ordner")), b = p.roots_unreachable.join(", ")));
+                            }
+                            if !p.roots_network.is_empty() {
+                                dialog::hint(ui, &crate::trf!("{a} im Netzwerk, nicht geprüft: {b}", a = dialog::count(p.roots_network.len(), crate::tr("Ordner"), crate::tr("Ordner")), b = p.roots_network.join(", ")));
+                            }
+                            dialog::hint(ui, crate::tr("Die Bearbeitungen kommen gleich mit. Erst „Importieren“ schreibt in die Bibliothek."));
+                        }
+                        _ => {
+                            let (verdict, text) = match &st.import {
+                                Some(i) => (Some(dialog::Verdict::Green), crate::trf!("Zuletzt importiert: {d} · {n}", d = date(i.time), n = dialog::count(i.photos, crate::tr("Foto"), crate::tr("Fotos")))),
+                                None => (None, crate::tr("Noch nicht importiert").to_string()),
+                            };
+                            lr_status_row(ui, verdict.filter(|_| st.catalog_found), &text, |ui| {
+                                if st.import.is_some() && st.catalog_found && ui.add_enabled(!running, egui::Button::new(crate::tr("Erneut prüfen"))).clicked() {
+                                    check_now = true;
+                                }
+                            });
+                            if st.import.is_some() {
+                                // the edits came along; a cancelled handover can be continued
+                                let text = match &st.handover {
+                                    Some(h) if h.cancelled => crate::trf!("Bearbeitungen: abgebrochen am {d} · {n} übernommen", d = date(h.time), n = dialog::number(h.taken)),
+                                    Some(h) => crate::trf!("Bearbeitungen: {n} übernommen · {d}", n = dialog::number(h.taken), d = date(h.time)),
+                                    None => crate::tr("Bearbeitungen: noch nicht übernommen").to_string(),
+                                };
+                                dialog::hint(ui, &text);
+                            } else {
+                                dialog::hint(ui, crate::tr("„Prüfen“ liest den Katalog und zeigt, was kommt. Geschrieben wird erst beim Importieren; die Bearbeitungen kommen gleich mit."));
+                            }
+                        }
+                    }
+                }
+                // collection set: the catalog's collections go into one set (empty: at the top as in Lightroom)
+                if st.catalog_found || suggestion.is_some() {
+                    ui.add_space(4.0);
+                    ui.add_enabled_ui(!lr_running, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(crate::tr("Sammlungssatz")).color(lr::TEXT_DIM));
+                            let r = crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut set_name).hint_text(crate::tr("leer: ganz oben")).desired_width(240.0));
+                            lr::hover_tip(ui, &r, "Die Sammlungen aus Lightroom kommen in diesen Sammlungssatz");
+                        });
                     });
                 }
                 // ── Other work blocks the buttons: what runs, why, for how long and how much longer
@@ -5390,7 +5326,9 @@ impl LibraryView {
                         parts.push(crate::trf!("{n} neu importiert", n = dialog::count(i["new_images"].as_u64().unwrap_or(0) as usize, crate::tr("Foto"), crate::tr("Fotos"))));
                     }
                     if !u.is_null() {
-                        parts.push(crate::trf!("{n} Bearbeitungen geschrieben", n = dialog::number(u["written"].as_u64().unwrap_or(0) as usize)));
+                        // the same count as "bearbeitet" when checking: photos Lightroom marks as edited
+                        let edited = u["edited"].as_u64().or_else(|| u["written"].as_u64()).unwrap_or(0) as usize;
+                        parts.push(crate::trf!("{n} übernommen", n = edited_photos(edited)));
                     }
                     if let Some(e) = v["handover_error"].as_str() {
                         parts.push(crate::trf!("Bearbeitungen: {e}", e = e));
@@ -5399,7 +5337,13 @@ impl LibraryView {
                         parts.push(crate::trf!("{n} offen", n = conflicts as u64 + open));
                     }
                     let verdict = if conflicts as u64 + open > 0 || u["cancelled"] == true || !v["handover_error"].is_null() { dialog::Verdict::Yellow } else { dialog::Verdict::Green };
-                    dialog::outcome(ui, verdict, &format!("{}: {}", crate::tr("Letzter Lauf"), parts.join(" · ")), &[]);
+                    dialog::outcome(ui, verdict, &format!("{}: {}", crate::tr("Fertig"), parts.join(" · ")), &[]);
+                    if let Some(t) = not_taken_text(v) {
+                        dialog::hint(ui, &crate::trf!("Nicht übernommen: {a}", a = t));
+                    }
+                    if let Some(n) = i["catalog_version"].as_i64().filter(|_| i["newer_format"] == true) {
+                        dialog::warning(ui, &newer_format_text(n));
+                    }
                     egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM)).id_salt("lr-details").default_open(false).show(ui, |ui| {
                         report_table(ui, v);
                         if ui.button(crate::tr("Bericht im Finder zeigen")).clicked() {
@@ -5409,23 +5353,37 @@ impl LibraryView {
                 }
             },
             dialog::Buttons {
-                cancel: crate::tr("Schließen"),
-                primary: match next {
-                    _ if lr_running => None,
-                    Next::ChooseCatalog => Some((crate::tr("Katalog wählen …"), dialog::Style::Normal, !running)),
-                    Next::Import => Some((crate::tr("Importieren"), dialog::Style::Normal, !running)),
-                    Next::Handover => Some((crate::tr("Bearbeitungen übernehmen"), dialog::Style::Normal, !running)),
-                    Next::Done => None,
+                // running: closing does not stop the run (it goes on in the background); the handover has its own "Abbrechen"
+                cancel: if lr_running { crate::tr("Im Hintergrund fortsetzen") } else { crate::tr("Schließen") },
+                primary: match step {
+                    Step::Choose => Some((crate::tr("Katalog wählen …"), dialog::Style::Normal, !lr_running)),
+                    Step::CheckSuggestion | Step::Check => Some((crate::tr("Prüfen"), dialog::Style::Normal, !running)),
+                    Step::Import => Some((crate::tr("Importieren"), dialog::Style::Normal, !running)),
+                    Step::Handover => Some((crate::tr("Bearbeitungen übernehmen"), dialog::Style::Normal, !running)),
+                    // shown, but disabled: the dialog says why
+                    Step::Blocked => Some((crate::tr("Importieren"), dialog::Style::Normal, false)),
+                    Step::Wait if !lr_running => Some((crate::tr("Prüfen"), dialog::Style::Normal, false)),
+                    Step::Wait | Step::Done => None,
                 },
             },
         );
+        // still unset (no catalog known yet): stays unset, so the catalog's name comes in as soon as there is one
+        if self.lr_set_name.is_some() || set_name != set_before {
+            self.lr_set_name = Some(set_name);
+        }
         match answer {
             dialog::Answer::Cancel => self.lr_window = false,
-            dialog::Answer::Primary => match next {
-                Next::ChooseCatalog => choose = true,
-                Next::Import => import = true,
-                Next::Handover => handover = true,
-                Next::Done => {}
+            dialog::Answer::Primary => match step {
+                Step::Choose => choose = true,
+                Step::CheckSuggestion => {
+                    if let Some(s) = suggestion.clone() {
+                        self.lr_use_catalog(ctx, s);
+                    }
+                }
+                Step::Check => check_now = true,
+                Step::Import => import = true,
+                Step::Handover => handover = true,
+                Step::Blocked | Step::Wait | Step::Done => {}
             },
             dialog::Answer::Open => {}
         }
@@ -5433,15 +5391,22 @@ impl LibraryView {
             crate::file_dialog::file(ctx, "lr-katalog-wahl", |d| d.add_filter(crate::tr("Lightroom-Katalog"), &["lrcat"]));
         }
         if let Some(p) = crate::file_dialog::fetch_one("lr-katalog-wahl") {
-            // remembered in the background (never wait for the write lock in the UI); the state is read again afterwards
-            self.in_background(move |db| db.set_info("lightroom_catalog", &p.to_string_lossy()).map_err(|e| e.to_string()), |s, _, _| s.lr_state = None);
+            self.lr_set_name = None;
+            self.lr_use_catalog(ctx, p);
+        }
+        if check_now {
+            if let Some(k) = st.catalog.clone() {
+                self.lr_start_check(ctx, k);
+            }
         }
         if import {
             self.report = None;
+            self.lr_failed = None;
             self.start_job(ctx, "lightroom", st.catalog.clone());
         }
         if handover {
             self.report = None;
+            self.lr_failed = None;
             self.start_job(ctx, "lr_handover", st.catalog.clone());
         }
         if show_report {
@@ -5454,6 +5419,42 @@ impl LibraryView {
                 }
             });
         }
+    }
+
+    /// Take this catalog: remembered in the background (never wait for the write lock in the UI), then checked right
+    /// away (reads only).
+    fn lr_use_catalog(&mut self, ctx: &egui::Context, catalog: PathBuf) {
+        self.lr_failed = None;
+        let k = catalog.clone();
+        self.in_background(move |db| db.set_info("lightroom_catalog", &k.to_string_lossy()).map_err(|e| e.to_string()), |s, _, _| s.lr_state = None);
+        // shown as chosen right away (the state is read again once it is stored)
+        if let Some(st) = &mut self.lr_state {
+            st.catalog_found = catalog.exists();
+            st.catalog = Some(catalog.clone());
+        }
+        self.lr_start_check(ctx, catalog);
+    }
+
+    /// "Prüfen": read the catalog and compare it with the library, without writing to either.
+    fn lr_start_check(&mut self, ctx: &egui::Context, catalog: PathBuf) {
+        self.lr_failed = None;
+        *self.lr_check.lock().unwrap_or_else(|e| e.into_inner()) = Some((catalog.clone(), crate::lightroom_state::Check::Running));
+        let (slot, c) = (self.lr_check.clone(), ctx.clone());
+        std::thread::spawn(move || {
+            library::platform::set_priority(library::platform::Priority::Utility);
+            let r = Db::read_only(&library::db_path()).map_err(|e| e.to_string()).and_then(|db| library::lightroom::preview(&db, &catalog));
+            let v = match r {
+                Ok(p) => crate::lightroom_state::Check::Done(p),
+                Err(e) => crate::lightroom_state::Check::Failed(e),
+            };
+            let mut g = slot.lock().unwrap_or_else(|e| e.into_inner());
+            // a newer check (another catalog) replaces this one
+            if g.as_ref().is_some_and(|(k, _)| *k == catalog) {
+                *g = Some((catalog, v));
+            }
+            drop(g);
+            c.request_repaint();
+        });
     }
 
     /// Confirmation "Rebuild library?" (requested from the settings, Library → Maintenance).
@@ -5470,7 +5471,7 @@ impl LibraryView {
             crate::dialog::WIDTH,
             |ui| {
                 crate::dialog::text(ui, crate::tr("Erzeugt die Bibliothek frisch aus Ordnern, Begleitdateien und Lightroom-Katalog. Die bisherige Datei bleibt daneben liegen."));
-                crate::dialog::chip(ui, &crate::trf!("heute {a}", a = crate::dialog::count(n, crate::tr("Bild"), crate::tr("Bilder"))));
+                crate::dialog::chip(ui, &crate::trf!("heute {a}", a = crate::dialog::count(n, crate::tr("Foto"), crate::tr("Fotos"))));
                 if let Some(r) = &busy {
                     crate::dialog::blocked(ui, BLOCKED_WHY, r);
                 }
@@ -5578,14 +5579,66 @@ fn lightroom_handover(db: &Db, catalog: &std::path::Path, step: &dyn Fn(Option<f
     use std::sync::atomic::Ordering;
     HANDOVER_CANCEL.store(false, Ordering::SeqCst);
     HANDOVER_RUNNING.store(true, Ordering::SeqCst);
-    let r = library::lr_handover::run(db, catalog, true, &|done, total| step((total > 0).then(|| done as f32 / total as f32), &crate::trf!("Lightroom-Bearbeitungen übernehmen … {a} von {b}", a = thousands(done), b = thousands(total))), &HANDOVER_CANCEL);
+    let r = library::lr_handover::run_with(
+        db,
+        catalog,
+        true,
+        &|done, total| step((total > 0).then(|| done as f32 / total as f32), &crate::trf!("Lightroom-Bearbeitungen übernehmen … {a} von {b}", a = thousands(done), b = thousands(total))),
+        &HANDOVER_CANCEL,
+        &rawdev::lr_masks::not_taken,
+    );
     HANDOVER_RUNNING.store(false, Ordering::SeqCst);
     let r = r?;
     let mut v = r.json();
+    // Lightroom keeps AI edits beside the catalog (`NAME.lrcat-data`); a catalog copied without that folder has lost
+    // them in Lightroom itself as well
+    if r.not_taken.get(rawdev::lr_masks::AI_MASKS).is_some_and(|n| *n > 0) {
+        let mut data = catalog.as_os_str().to_owned();
+        data.push("-data");
+        v["ai_data_missing"] = (!std::path::Path::new(&data).is_dir()).into();
+    }
     if let Some(p) = library::lr_handover::save_protocol(&r) {
         v["log"] = serde_json::json!(p);
     }
     Ok(v)
+}
+
+/// "11 bearbeitete Fotos": photos (originals and virtual copies) Lightroom marks as edited – one term and one count
+/// when checking and after the handover.
+fn edited_photos(n: usize) -> String {
+    crate::dialog::count(n, crate::tr("bearbeitetes Foto"), crate::tr("bearbeitete Fotos"))
+}
+
+fn newer_format_text(version: i64) -> String {
+    crate::trf!(
+        "Neueres Katalogformat als getestet ({a}, getestet: {b}). graineo importiert trotzdem; was fehlt, steht im Bericht.",
+        a = version,
+        b = library::lightroom::TESTED_DB_VERSION
+    )
+}
+
+/// What the catalog has and graineo did not take over (import and handover of one run), as one line; `None` if
+/// nothing. Kinds of the develop settings: [`rawdev::lr_masks::not_taken`].
+fn not_taken_text(v: &serde_json::Value) -> Option<String> {
+    let i = &v["import"]["not_taken"];
+    let u = &v["handover"]["not_taken"];
+    let get = |x: &serde_json::Value, k: &str| x[k].as_u64().unwrap_or(0) as usize;
+    let kinds: [(usize, &str, &str); 9] = [
+        (get(u, rawdev::lr_masks::AI_MASKS), crate::tr("KI-Maske"), crate::tr("KI-Masken")),
+        (get(u, rawdev::lr_masks::RANGE_MASKS), crate::tr("Bereichsmaske"), crate::tr("Bereichsmasken")),
+        (get(u, rawdev::lr_masks::SUBTRACTIONS), crate::tr("Maske mit Subtraktion"), crate::tr("Masken mit Subtraktion")),
+        (get(u, rawdev::lr_masks::OTHER_MASKS), crate::tr("andere Maske"), crate::tr("andere Masken")),
+        (get(u, rawdev::lr_masks::POINT_COLOR), crate::tr("Punktfarbe"), crate::tr("Punktfarben")),
+        (get(u, rawdev::lr_masks::REMOVE_SPOTS), crate::tr("Entfernen-Punkt"), crate::tr("Entfernen-Punkte")),
+        (get(i, "synonyms"), crate::tr("Stichwort-Synonym"), crate::tr("Stichwort-Synonyme")),
+        (get(i, "stacks"), crate::tr("Stapel"), crate::tr("Stapel")),
+        (get(i, "unknown_labels"), crate::tr("Etikett ohne Farbe (nur Text)"), crate::tr("Etiketten ohne Farbe (nur Text)")),
+    ];
+    let mut parts: Vec<String> = kinds.iter().filter(|(n, ..)| *n > 0).map(|(n, one, many)| crate::dialog::count(*n, one, many)).collect();
+    if v["handover"]["ai_data_missing"] == true {
+        parts.push(crate::tr("KI-Daten des Katalogs fehlen (Ordner „.lrcat-data“)").to_string());
+    }
+    (!parts.is_empty()).then(|| parts.join(" · "))
 }
 
 fn report_table(ui: &mut egui::Ui, v: &serde_json::Value) {
@@ -5601,15 +5654,26 @@ fn report_table(ui: &mut egui::Ui, v: &serde_json::Value) {
             ui.end_row();
         };
         if !i.is_null() {
-            row(crate::tr("Bilder"), crate::trf!("{a} (davon {b} neu, {c} virtuelle Kopien)", a = n(&i["images"]), b = n(&i["new_images"]), c = n(&i["virtual_copies"])));
+            row(crate::tr("Fotos"), crate::trf!("{a} (davon {b} neu, {c} virtuelle Kopien)", a = n(&i["images"]), b = n(&i["new_images"]), c = n(&i["virtual_copies"])));
             let formats = i["per_format"].as_object().map(|o| o.iter().map(|(k, v)| format!("{k} {}", n(v))).collect::<Vec<_>>().join(" · ")).unwrap_or_default();
             row(crate::tr("Dateien"), format!("{} – {formats}", n(&i["files"])));
             row(crate::tr("Ordner"), crate::trf!("{a} in {b} Stammordnern", a = n(&i["folder"]), b = n(&i["roots"])));
             row(crate::tr("Bewertungen"), crate::trf!("{a} mit Sternen · {b} markiert · {c} abgelehnt · {d} mit Etikett", a = n(&i["with_stars"]), b = n(&i["flagged"]), c = n(&i["rejected"]), d = n(&i["with_label"])));
             row(crate::tr("Stichwörter"), crate::trf!("{a} ({b} Zuordnungen)", a = n(&i["keywords"]), b = n(&i["keyword_assignments"])));
             row(crate::tr("Sammlungen"), crate::trf!("{a} · {b} Sätze · {c} Smart (nur Name)", a = n(&i["collections"]), b = n(&i["collection_sets"]), c = n(&i["smart_collections"])));
+            row(crate::tr("Titel · GPS"), crate::trf!("{a} mit Titel · {b} mit GPS-Position", a = n(&i["with_title"]), b = n(&i["with_position"])));
+            if let Some(o) = i["unknown_labels"].as_object().filter(|o| !o.is_empty()) {
+                row(crate::tr("Etiketten ohne Farbe"), o.iter().map(|(k, v)| format!("„{k}“ {}", n(v))).collect::<Vec<_>>().join(" · "));
+            }
             let conflicts_n = i["conflicts"].as_array().map_or(0, |a| a.len());
             row(crate::tr("Konflikte"), conflicts_n.to_string());
+            if let Some(version) = i["catalog_version"].as_i64() {
+                let newer = if i["newer_format"] == true { crate::trf!(" – neuer als getestet ({a})", a = library::lightroom::TESTED_DB_VERSION) } else { String::new() };
+                row(crate::tr("Katalogformat"), format!("{version}{newer}"));
+            }
+            if let Some(g) = i["catalog_gaps"].as_array().filter(|g| !g.is_empty()) {
+                row(crate::tr("Im Katalog fehlt"), g.iter().filter_map(|x| x.as_str()).collect::<Vec<_>>().join(", "));
+            }
             row(crate::tr("Dauer"), format!("{} ms", n(&v["import_duration_ms"])));
         }
         let u = &v["handover"];
@@ -5625,7 +5689,11 @@ fn report_table(ui: &mut egui::Ui, v: &serde_json::Value) {
                 ),
             );
             row(crate::tr("Davon Kopien"), n(&u["copies"]));
+            row(crate::tr("Bearbeitet (in Lightroom)"), n(&u["edited"]));
             row(crate::tr("Fehler"), format!("{} · {}", n(&u["errors"]), crate::trf!("{a} Konflikte", a = n(&u["conflicts"]))));
+        }
+        if let Some(t) = not_taken_text(v) {
+            row(crate::tr("Nicht übernommen"), t);
         }
         if !a.is_null() {
             row(crate::tr("Vorhanden"), n(&a["existing"]));
@@ -6062,7 +6130,7 @@ impl LibraryView {
         self.source_ids = None;
         self.loupe = false;
         self.refilter = true;
-        if self.dup.lock().unwrap().is_some() || self.dup_running {
+        if self.dup.lock().unwrap_or_else(|e| e.into_inner()).is_some() || self.dup_running {
             self.build_dup_order();
             return;
         }
@@ -6073,13 +6141,13 @@ impl LibraryView {
                 let v = Vectors::load(&db).ok();
                 library::duplicates::find(&db, v.as_ref()).ok()
             });
-            *target.lock().unwrap() = Some(r.unwrap_or_default());
+            *target.lock().unwrap_or_else(|e| e.into_inner()) = Some(r.unwrap_or_default());
         });
     }
 
     fn build_dup_order(&mut self) {
         self.dup_order.clear();
-        if let Some(g) = self.dup.lock().unwrap().as_ref() {
+        if let Some(g) = self.dup.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
             for (gi, gr) in g.iter().enumerate() {
                 for (j, d) in gr.files.iter().enumerate() {
                     self.dup_order.entry(*d).or_insert((gi, j));
@@ -6092,7 +6160,7 @@ impl LibraryView {
     fn dialogs(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         use crate::dialog;
         // time correction done: re-read and show the result
-        let finished = self.time_result.lock().unwrap().take();
+        let finished = self.time_result.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(e) = finished {
             self.reload();
             self.dialog = Some(match e {
@@ -6212,7 +6280,7 @@ impl LibraryView {
                             _ => Err(crate::tr("Zeit nicht lesbar").into()),
                         }
                     });
-                    *outcome.lock().unwrap() = Some(e);
+                    *outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
                     c.request_repaint();
                 });
                 return;
@@ -6245,7 +6313,7 @@ impl LibraryView {
     /// names to review.
     fn people_maintenance(&mut self, ctx: &egui::Context) {
         let now = std::time::Instant::now();
-        if let Some((review, suggestions)) = self.people_counts.lock().unwrap().take() {
+        if let Some((review, suggestions)) = self.people_counts.lock().unwrap_or_else(|e| e.into_inner()).take() {
             self.review_n = review;
             self.suggestion_n = suggestions;
         }
@@ -6266,8 +6334,8 @@ impl LibraryView {
                     let counts = (library::people::check_count(&db.conn), library::people::suggestion_count(&db.conn));
                     // open work: count of photos without search (the exact list only when the cheap count changed)
                     static KNOWN: Mutex<Option<(usize, usize)>> = Mutex::new(None);
-                    *work.lock().unwrap() = library::people_state::measure(db, &mut KNOWN.lock().unwrap_or_else(|e| e.into_inner()));
-                    *out.lock().unwrap() = Some(counts);
+                    *work.lock().unwrap_or_else(|e| e.into_inner()) = library::people_state::measure(db, &mut KNOWN.lock().unwrap_or_else(|e| e.into_inner()));
+                    *out.lock().unwrap_or_else(|e| e.into_inner()) = Some(counts);
                     c.request_repaint();
                 }
                 running.store(false, Ordering::SeqCst);
@@ -6278,9 +6346,9 @@ impl LibraryView {
         }
         let forced = crate::env::var_os("GRAINEO_FACE_RUN").is_some();
         let env_ok = forced || (crate::env::var_os("GRAINEO_LIBRARY_NO_SYNC").is_none() && crate::env::var_os("GRAINEO_FACE_OFF").is_none());
-        let allowed = env_ok && (forced || library::settings::value("facesAutomatic").as_bool() != Some(false));
+        let allowed = env_ok && (forced || library::people::automatic_enabled());
         self.people_follow = allowed;
-        if self.db.is_none() || self.work.lock().unwrap().running {
+        if self.db.is_none() || self.work.lock().unwrap_or_else(|e| e.into_inner()).running {
             return;
         }
         if !allowed {
@@ -6318,7 +6386,7 @@ impl LibraryView {
             ctx.request_repaint_after(std::time::Duration::from_secs(10));
             return;
         }
-        let work = *self.people_work.lock().unwrap();
+        let work = *self.people_work.lock().unwrap_or_else(|e| e.into_inner());
         if self.people_active.load(Ordering::SeqCst) || work.none() {
             if work.none() {
                 self.people_waiting_since = None;
@@ -6326,7 +6394,7 @@ impl LibraryView {
             return;
         }
         let since = *self.people_waiting_since.get_or_insert(now);
-        let after_run = self.people_ended.lock().unwrap().is_none_or(|t| now.duration_since(t).as_secs() >= 60);
+        let after_run = self.people_ended.lock().unwrap_or_else(|e| e.into_inner()).is_none_or(|t| now.duration_since(t).as_secs() >= 60);
         let wait = if work.photos > 0 { 30 } else { 15 };
         ctx.request_repaint_after(std::time::Duration::from_secs(5));
         if now.duration_since(since).as_secs() >= wait && after_run {
@@ -6343,7 +6411,7 @@ impl LibraryView {
         let _ = std::thread::Builder::new().name("people-once".into()).spawn(move || {
             library::platform::background_priority();
             let report = |t: String| {
-                *status.lock().unwrap() = t;
+                *status.lock().unwrap_or_else(|e| e.into_inner()) = t;
                 c.request_repaint();
             };
             if let Ok(db) = library::db::Db::standard() {
@@ -6354,20 +6422,29 @@ impl LibraryView {
                 }
             }
             active.store(false, Ordering::SeqCst);
-            *ended.lock().unwrap() = Some(std::time::Instant::now());
+            *ended.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
             report(String::new());
         });
     }
 
     /// Background thread: `search` = face search of the open photos (then suggestions), otherwise only the suggestions.
     fn spawn_people_work(&mut self, ctx: &egui::Context, search: bool) {
+        // The search needs the face model: if it is not there yet, ask before the first download.
+        if search && !library::people::model_present() {
+            // only when there are photos to search (an empty library needs no model); later the follow-up asks
+            if !self.face_model_later && self.people_work.lock().unwrap_or_else(|e| e.into_inner()).photos > 0 {
+                self.face_model_notice = true;
+                ctx.request_repaint();
+            }
+            return;
+        }
         let (status, cancel, c) = (self.people_status.clone(), self.people_cancel.clone(), ctx.clone());
         let (active, ended) = (self.people_active.clone(), self.people_ended.clone());
         active.store(true, Ordering::SeqCst);
         report_start(&status, &c, search);
         std::thread::spawn(move || {
             let report = |t: String| {
-                *status.lock().unwrap() = t;
+                *status.lock().unwrap_or_else(|e| e.into_inner()) = t;
                 c.request_repaint();
             };
             if let Ok(db) = library::db::Db::standard() {
@@ -6386,7 +6463,7 @@ impl LibraryView {
                         Err(e) => {
                             crate::log(&format!("Gesichter: {e}"));
                             active.store(false, Ordering::SeqCst);
-                            *ended.lock().unwrap() = Some(std::time::Instant::now());
+                            *ended.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                             report(crate::trf!("Gesichter: {e}", e = e));
                             return;
                         }
@@ -6398,7 +6475,7 @@ impl LibraryView {
                 }
             }
             active.store(false, Ordering::SeqCst);
-            *ended.lock().unwrap() = Some(std::time::Instant::now());
+            *ended.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
             report(String::new());
         });
     }
@@ -6411,7 +6488,7 @@ impl LibraryView {
             self.pending_sidecars = self.db.as_ref().map_or(0, |db| library::store::sidecars_waiting(&db.conn));
         }
         self.update_not_in_catalog(ctx);
-        if self.dup_running && self.dup.lock().unwrap().is_some() {
+        if self.dup_running && self.dup.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
             self.dup_running = false;
             self.build_dup_order();
         }
@@ -6438,7 +6515,7 @@ impl LibraryView {
         // batched: sync 2 s after the first change
         // at most every minute: ongoing mass changes (e.g. archiving) shouldn't keep the database busy all the time
         let idle = self.last_auto_sync.is_none_or(|t| now.duration_since(t).as_secs() >= 60);
-        if self.changed_since.is_some_and(|t| now.duration_since(t).as_secs_f64() > 2.0) && idle && !self.work.lock().unwrap().running && !library::move_folder::busy() {
+        if self.changed_since.is_some_and(|t| now.duration_since(t).as_secs_f64() > 2.0) && idle && !self.work.lock().unwrap_or_else(|e| e.into_inner()).running && !library::move_folder::busy() {
             self.changed_since = None;
             self.last_auto_sync = Some(now);
             let roots = std::mem::take(&mut self.changed_roots);
@@ -6447,7 +6524,7 @@ impl LibraryView {
         }
         // once a day a full sync (every file's size and time), only while the user is away: the quick sync does not
         // notice files overwritten in place in an otherwise unchanged folder
-        if self.full_checked.is_none_or(|t| now.duration_since(t).as_secs() >= 60) && crate::jobs::idle() && !self.work.lock().unwrap().running && !library::move_folder::busy() {
+        if self.full_checked.is_none_or(|t| now.duration_since(t).as_secs() >= 60) && crate::jobs::idle() && !self.work.lock().unwrap_or_else(|e| e.into_inner()).running && !library::move_folder::busy() {
             self.full_checked = Some(now);
             if self.db.as_ref().is_some_and(library::reconcile::full_due) {
                 self.start_job(ctx, "sync_full", None);
@@ -6479,12 +6556,12 @@ impl LibraryView {
                 self.start_job(ctx, "sync", Some(p));
             }
             // daily backup (background, own connection)
-            if self.db.as_ref().is_some_and(library::backup::due) && self.backup_status.lock().unwrap().is_none() {
-                *self.backup_status.lock().unwrap() = Some(crate::tr("läuft").into());
+            if self.db.as_ref().is_some_and(library::backup::due) && self.backup_status.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+                *self.backup_status.lock().unwrap_or_else(|e| e.into_inner()) = Some(crate::tr("läuft").into());
                 let st = self.backup_status.clone();
                 std::thread::spawn(move || {
                     let r = Db::standard().map_err(|e| e.to_string()).and_then(|db| library::backup::create_backup(&db));
-                    *st.lock().unwrap() = Some(match r {
+                    *st.lock().unwrap_or_else(|e| e.into_inner()) = Some(match r {
                         Ok((p, n)) => format!("{} ({:.0} MB)", p.display(), n as f64 / 1e6),
                         Err(e) => crate::trf!("Fehler: {e}", e = e),
                     });
@@ -6557,6 +6634,13 @@ impl LibraryView {
                 self.smart_window = true;
             }
             "lightroom" => self.lr_window = true,
+            // the read-only check of the catalog of the (test) library, as after choosing it
+            "lr-check" => {
+                self.lr_window = true;
+                if let Some(k) = self.db.as_ref().and_then(library::lightroom_catalog) {
+                    self.lr_start_check(ctx, k);
+                }
+            }
             "rebuild" => self.rebuild_confirm = true,
             // start the import / the handover of the edits with the catalog of the (test) library
             "lr-import" | "lr-handover" => {
@@ -6567,10 +6651,10 @@ impl LibraryView {
             // screenshots of the progress (a tiny test catalog is done too fast): only the displayed state, no work
             "lr-running-import" | "lr-running-handover" => {
                 self.lr_window = true;
-                let mut a = self.work.lock().unwrap();
+                let mut a = self.work.lock().unwrap_or_else(|e| e.into_inner());
                 a.running = true;
                 if name == "lr-running-import" {
-                    (a.kind, a.message, a.fraction) = ("lightroom", "39 165 Bilder übernehmen …".into(), None);
+                    (a.kind, a.message, a.fraction) = ("lightroom", "39 165 Fotos übernehmen …".into(), None);
                 } else {
                     (a.kind, a.message, a.fraction) = ("lr_handover", "Lightroom-Bearbeitungen übernehmen … 1 600 von 39 165".into(), Some(1600.0 / 39165.0));
                     HANDOVER_RUNNING.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -6585,7 +6669,7 @@ impl LibraryView {
                     self.rebuild_confirm = true;
                 }
                 let root = self.roots.first().map(|r| r.path.clone()).unwrap_or_default();
-                let mut a = self.work.lock().unwrap();
+                let mut a = self.work.lock().unwrap_or_else(|e| e.into_inner());
                 a.running = true;
                 (a.kind, a.message, a.fraction) = ("sync", format!("Abgleich {root} …"), Some(0.42));
                 a.started = std::time::Instant::now().checked_sub(std::time::Duration::from_secs(75));
@@ -6699,7 +6783,7 @@ impl LibraryView {
                         }
                         Ok(std::sync::Arc::new(SemState { enc, image, text }))
                     })();
-                    *target.lock().unwrap() = Some(r);
+                    *target.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 });
             }
             return;
@@ -6726,7 +6810,7 @@ impl LibraryView {
         let round = library::search_model::round();
         if round != self.search_model_round {
             if self.search_model_round != u64::MAX && !self.sem_loading {
-                *self.semantic.lock().unwrap() = None;
+                *self.semantic.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 // the running query belongs to the old model: ask again with the new one
                 self.sem_view.clear();
                 self.sem_for.clear();
@@ -6743,7 +6827,7 @@ impl LibraryView {
         if round != self.text_model_round {
             self.text_model_round = round;
             if !self.sem_loading {
-                *self.semantic.lock().unwrap() = None;
+                *self.semantic.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 self.sem_view.clear();
                 self.sem_for.clear();
                 self.refilter = true;
@@ -6770,7 +6854,7 @@ impl LibraryView {
                 library::search_model::start(|| {});
                 if n > 0 {
                     // re-read the loaded vectors on the next search
-                    *sem.lock().unwrap() = None;
+                    *sem.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 }
                 crate::log(&format!("vectors: {n} recomputed"));
                 run.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -6998,11 +7082,9 @@ impl LibraryView {
     fn reload_keywords(&mut self) {
         let Some(db) = &self.db else { return };
         self.keywords = db.keywords().unwrap_or_default();
-        let remembered = self.facets.take().map(|f| f.remember());
-        if let Some(g) = &remembered {
-            self.facets_ready();
-            if let Some(f) = &mut self.facets {
-                f.restore(g);
+        if let Some(g) = self.take_facets_state() {
+            if let Some(path) = self.db.as_ref().map(|d| d.path.clone()) {
+                self.start_facets(g, library_facets_job::Assignments::FromDb(path));
             }
         }
         self.query_for = None;
@@ -7398,11 +7480,9 @@ impl LibraryView {
         self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
         self.viewed = Some((dir.to_path_buf(), rows));
         // column filters compute per row → rebuild (selection is kept via the names)
-        let remembered = self.facets.take().map(|f| f.remember());
-        if let Some(g) = &remembered {
-            self.facets_ready();
-            if let Some(f) = &mut self.facets {
-                f.restore(g);
+        if let Some(g) = self.take_facets_state() {
+            if let Some(path) = self.db.as_ref().map(|d| d.path.clone()) {
+                self.start_facets(g, library_facets_job::Assignments::FromDb(path));
             }
         }
         self.query_for = None;
@@ -7467,37 +7547,6 @@ impl LibraryView {
 #[cfg(test)]
 mod media_library_tests {
     use super::*;
-    #[test]
-    fn attribute_groups_do_not_overlap_at_narrow_widths() {
-        assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
-        let ctx = egui::Context::default();
-        lr::apply_theme(&ctx);
-        let mut library = LibraryView::new(&ctx);
-        for width in (180..=1600).step_by(20) {
-            let input = egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1800.0, 600.0))),
-                ..Default::default()
-            };
-            let output = crate::ui_test::run(&ctx, input, |ui| {
-                ui.allocate_ui(egui::vec2(width as f32, 400.0), |ui| {
-                    ui.set_width(width as f32);
-                    library.attribute_row(ui, width as f32);
-                });
-            });
-            let groups: Vec<_> = output.shapes.iter().filter_map(|shape| match &shape.shape {
-                egui::Shape::Rect(rect) if rect.fill == lr::GROUP_FILL || rect.fill == lr::GROUP_FILL.gamma_multiply(0.35) || rect.fill == Color32::from_rgba_premultiplied(6, 6, 6, 45) => Some(rect.rect),
-                _ => None,
-            }).collect();
-            assert_eq!(groups.len(), 7, "missing groups at width {width}: {groups:?}");
-            for (i, first) in groups.iter().enumerate() {
-                assert!(first.right() <= width as f32 + 0.1, "outside at width {width}: {first:?}");
-                for second in &groups[i + 1..] {
-                    assert!(!first.shrink(0.1).intersects(second.shrink(0.1)), "overlap at width {width}: {first:?} {second:?}");
-                }
-            }
-        }
-    }
-
     #[test]
     fn arrow_extension_keeps_main_photo_and_steps_from_head() {
         assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
@@ -7692,7 +7741,7 @@ mod media_library_tests {
         b.textures
             .insert((file, preview::small()), (texture.clone(), 0));
         b.quick.insert(ids[0]);
-        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 400.0));
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 440.0));
         let mut run = |time, events| {
             let mut actions = Vec::new();
             let out = crate::ui_test::run(&ctx,
@@ -8008,6 +8057,6 @@ fn offset_text(d: i64) -> String {
 
 /// Status text at the start of a background run (before its first report).
 fn report_start(status: &Arc<Mutex<String>>, ctx: &egui::Context, search: bool) {
-    *status.lock().unwrap() = if search { "Gesichter werden gesucht …" } else { "Namensvorschläge werden aktualisiert …" }.to_string();
+    *status.lock().unwrap_or_else(|e| e.into_inner()) = if search { "Gesichter werden gesucht …" } else { "Namensvorschläge werden aktualisiert …" }.to_string();
     ctx.request_repaint();
 }

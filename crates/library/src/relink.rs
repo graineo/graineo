@@ -207,10 +207,10 @@ fn folder_info(db: &Db, folder: i64) -> Result<(i64, String, String, String, Str
 pub fn plan(db: &Db, folder: i64, target: &Path) -> Result<Plan, String> {
     let (root, rel, root_path, root_name, origin, lr) = folder_info(db, folder)?;
     if origin == crate::apple_photos::ORIGIN || crate::apple_photos::in_photos_library(Path::new(&root_path)) {
-        return Err("Ordner der Mediathek von Apple Fotos werden nicht neu verknüpft".into());
+        return Err("Ordner der Bibliothek von Apple Fotos werden nicht neu verknüpft".into());
     }
     if crate::apple_photos::in_photos_library(target) {
-        return Err("Die Mediathek von Apple Fotos lässt sich nicht als Ordner verknüpfen".into());
+        return Err("Die Bibliothek von Apple Fotos lässt sich nicht als Ordner verknüpfen".into());
     }
     let old = PathBuf::from(format!("{root_path}{rel}").trim_end_matches('/'));
     if old.exists() {

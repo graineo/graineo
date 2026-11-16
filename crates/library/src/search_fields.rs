@@ -76,6 +76,10 @@ pub fn field_id(name: &str) -> Option<&'static str> {
 }
 
 pub fn field_def(name: &str) -> Option<&'static FieldDef> {
+    // Fast path: the base form itself (called per row by the column filters, folding costs microseconds)
+    if let Some(d) = FIELD_DEFS.iter().find(|d| d.id == name) {
+        return Some(d);
+    }
     let n = fold_text(name.trim());
     if n.is_empty() {
         return None;

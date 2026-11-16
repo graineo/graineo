@@ -71,8 +71,6 @@ pub struct State {
     pub top_gap: f32,
     /// Test hook (GRAINEO_DARKROOM_BORDER): paper border, bottom border, film border set on the first draw
     test_border_ui: Option<(f32, f32, f32)>,
-    /// 100 % crops of the films (darkroom_shelf.rs)
-    pub shelf: crate::darkroom_shelf::Crops,
 }
 
 impl State {
@@ -412,9 +410,9 @@ pub(crate) fn set_film(s: &mut develop::Settings, id: Option<String>) {
     }
 }
 
-/// Row in the film shelf: 100 % crop of the photo with this film, name, characterisation, sign of the kind of film
+/// Row in the film shelf: the whole photo small with this film, name, characterisation, sign of the kind of film
 /// (opens the info card). Returns: (clicked, sign clicked, visible, hovered).
-/// `waiting`: the crop of this film is still being computed (a placeholder instead of an empty, black field).
+/// `waiting`: the tile of this film is still being computed (a placeholder instead of an empty, black field).
 fn shelf_row(ui: &mut egui::Ui, stock: Option<&film::StockInfo>, id: &str, tex: Option<&egui::TextureHandle>, waiting: bool, name: &str, sub: &str, active: bool) -> (bool, bool, bool, bool) {
     use crate::darkroom_shelf::{FIELD, ROW_H, SIGN_W};
     let (r, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width() - LIST_SCROLL_GAP, ROW_H), egui::Sense::click());
@@ -427,7 +425,7 @@ fn shelf_row(ui: &mut egui::Ui, stock: Option<&film::StockInfo>, id: &str, tex: 
         let thumb_rect = Rect::from_min_size(Pos2::new(snap(r.left() + 4.0), snap(r.top() + (ROW_H - FIELD.y) / 2.0)), FIELD);
         p.rect_filled(thumb_rect, 0.0, lr::PANEL_DARK);
         if let Some(t) = tex {
-            crate::darkroom_shelf::paint_crop(p, thumb_rect, t, ppp);
+            crate::darkroom_shelf::paint_tile(p, thumb_rect, t, ppp);
         } else if waiting {
             crate::darkroom_shelf::paint_waiting(p, thumb_rect, ui.input(|i| i.time));
         }
@@ -565,8 +563,8 @@ impl App {
             self.contact_view_toggle();
         }
         // Tab is already intercepted by the app's input hook (Tab belongs to the panels)
-        if self.tab_pressed.take().is_some() {
-            self.darkroom.image_only = !self.darkroom.image_only;
+        if let Some(shift) = self.tab_pressed.take() {
+            self.toggle_panels(shift);
         }
         if self.crop_mode.is_none() && !self.measure && !self.wb_picker && ctx.input_mut(|i| i.consume_key(none_mods, egui::Key::Escape)) {
             // first the drawer and the contact sheet, then the darkroom
@@ -673,8 +671,8 @@ impl App {
         }
         ui.add_space(2.0);
         ui.separator();
-        let thumbs = self.darkroom_shelf_crops(ui, &[]);
-        let failed = self.darkroom.shelf.failed_ids();
+        let thumbs = self.film_previews_request(ui, &[], &[]);
+        let failed = self.film_previews.failed().clone();
         let subs: HashMap<String, String> = film::films().iter().map(|f| (f.id.clone(), self.darkroom.subtitle(f))).collect();
         let mut visible: Vec<String> = Vec::new();
         let mut hover: Option<String> = None;
@@ -715,7 +713,9 @@ impl App {
             }
             ui.add_space(6.0);
         }));
-        self.darkroom_shelf_crops(ui, &visible);
+        // visible rows first, then the other films quietly (the shelf is scrolled through)
+        let all: Vec<String> = GROUPS.iter().flat_map(|(cat, _)| film::films().iter().filter(move |f| f.category == *cat)).map(|f| f.id.clone()).collect();
+        self.film_previews_request(ui, &visible, &all);
         // Hovering a film: quick preview in the large image (as with presets) without selecting it
         match hover.filter(|_| pick.is_none()) {
             Some(id) => {

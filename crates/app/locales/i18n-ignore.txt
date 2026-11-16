@@ -5,8 +5,8 @@ library_load.rs:SELECT image, keyword FROM image_keyword
 library_ui.rs:SELECT image, keyword FROM image_keyword
 library_ui.rs:Stufen geändert
 library_ui.rs:SELECT label_lr FROM image WHERE id=?1
-library_ui.rs:ODER
-library_ui.rs:39 165 Bilder übernehmen …
+library_filter_bar.rs:ODER
+library_ui.rs:39 165 Fotos übernehmen …
 library_ui.rs:Lightroom-Bearbeitungen übernehmen … 1 600 von 39 165
 rating.rs:SELECT flag FROM image WHERE id=?1
 test_image.rs:test native key: egui gets {key:?} cmd={} shift={} alt={}

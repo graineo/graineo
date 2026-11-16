@@ -99,12 +99,10 @@ pub enum Job {
     HoverRender { index: usize, previews: Previews, cal: Arc<develop::Calibration>, settings: Settings, supersede: bool },
     /// Read the CAMF block for the inspector
     Camf { index: usize, path: PathBuf },
-    /// Small preview of the image in all films (image grid in the "Film" section); `key`
-    /// identifies the settings so that outdated results are detected
-    FilmThumbs { index: usize, previews: Previews, cal: Arc<develop::Calibration>, settings: Settings, key: u64, modes: Vec<String> },
-    /// 100 % crops of the darkroom's film shelf (`darkroom_shelf.rs`): one crop `region` (sensor pixels) per film
-    /// settings, turned upright by `q`; in the background, one film after the other, stops once `valid` != `key`.
-    FilmCrops { index: usize, session: Option<Arc<Mutex<Session>>>, foreign: Option<Arc<rawdev::RawDoc>>, list: Vec<(String, Settings)>, region: [usize; 4], q: u8, key: u64, valid: Arc<AtomicU64> },
+    /// Small whole-image previews of the photo per film, Sigma colour mode or camera look ("Film & Look" tiles and the
+    /// darkroom's film shelf, see `film_previews.rs`): one tile after the other, each sent at once; stops once
+    /// `valid` != `key`. `background`: the quiet fill of tiles not visible yet (lane "back").
+    FilmThumbs { index: usize, previews: Previews, cal: Arc<develop::Calibration>, settings: Settings, key: u64, modes: Vec<String>, valid: Arc<AtomicU64>, background: bool },
     /// Darkroom test strip: the same photo with several settings, one small image each
     Variants { index: usize, previews: Previews, cal: Arc<develop::Calibration>, list: Vec<(String, Settings)>, key: u64 },
     /// Darkroom contact sheet: the same photo with the settings of several rows, one
@@ -373,10 +371,8 @@ pub enum JobResult {
     /// A hover preview was replaced by a newer one or could not be computed: whoever waits for exactly these settings
     /// forgets the request (the newest one is still on its way)
     HoverSuperseded { index: usize, settings: Settings },
-    /// Film grid: one small image per film (profile ID)
-    FilmThumbs { index: usize, key: u64, thumbs: Vec<(String, usize, usize, Vec<u8>)> },
-    /// Crops of [`Job::FilmCrops`] (`None`: this film failed); `not_ready`: full resolution not there yet, `end`: job done.
-    FilmCrops { index: usize, key: u64, done: Vec<(String, Option<(usize, usize, Vec<u8>)>)>, not_ready: bool, end: bool },
+    /// Tiles of [`Job::FilmThumbs`] (`None`: this tile failed); `end`: the job is done.
+    FilmThumbs { index: usize, key: u64, thumbs: Vec<(String, Option<(usize, usize, Vec<u8>)>)>, end: bool, background: bool },
     /// Test strip: one small, upright image per variant (label)
     Variants { index: usize, key: u64, images: Vec<(String, usize, usize, Vec<u8>)> },
     /// Contact sheet: one finished row (number, per cell column and upright image); `end`: last row
@@ -423,7 +419,7 @@ impl Origin {
             | Job::ScanBounds { previews, .. }
             | Job::RenderWideSigma { previews, .. } => Some(previews.foreign.as_ref().map_or_else(|| data(&previews.raw), data)),
             Job::RenderWide { doc, .. } | Job::PrepareFull { doc, .. } => Some(data(doc)),
-            Job::RenderRegion { session, foreign, .. } | Job::RenderFull { session, foreign, .. } | Job::RenderDetailWide { session, foreign, .. } | Job::FilmCrops { session, foreign, .. } => match (foreign, session) {
+            Job::RenderRegion { session, foreign, .. } | Job::RenderFull { session, foreign, .. } | Job::RenderDetailWide { session, foreign, .. } => match (foreign, session) {
                 (Some(d), _) => Some(data(d)),
                 (None, Some(s)) => Some(data(s)),
                 _ => None,
@@ -501,9 +497,7 @@ impl JobResult {
             | JobResult::SceneDistribution { index, .. } => Some(index),
             // Contact previews check their unique image/render keys themselves.
             // A list change must not discard their completion prematurely.
-            // The film shelf's crops carry their own key (photo, settings, position); a dropped answer would leave
-            // their waiting state set.
-            JobResult::FilmCrops { .. } | JobResult::Contact { .. } | JobResult::Print { .. } | JobResult::PrintPreview { .. } | JobResult::Thumbnail { .. } | JobResult::ExportProgress { .. } | JobResult::LayersExported { .. } => None,
+            JobResult::Contact { .. } | JobResult::Print { .. } | JobResult::PrintPreview { .. } | JobResult::Thumbnail { .. } | JobResult::ExportProgress { .. } | JobResult::LayersExported { .. } => None,
         }
     }
 }
@@ -578,8 +572,7 @@ pub fn terminal_result(job: &Job) -> Option<JobResult> {
         Job::Print { key, .. } => Some(JobResult::Print { key: *key, nr: usize::MAX, image: None, end: true }),
         Job::Contact { index, key, target, .. } => Some(JobResult::Contact { index: *index, key: *key, row: 0, fields: Vec::new(), end: true, target: *target }),
         Job::Variants { index, key, .. } => Some(JobResult::Variants { index: *index, key: *key, images: Vec::new() }),
-        Job::FilmThumbs { index, key, .. } => Some(JobResult::FilmThumbs { index: *index, key: *key, thumbs: Vec::new() }),
-        Job::FilmCrops { index, key, .. } => Some(JobResult::FilmCrops { index: *index, key: *key, done: Vec::new(), not_ready: false, end: true }),
+        Job::FilmThumbs { index, key, background, .. } => Some(JobResult::FilmThumbs { index: *index, key: *key, thumbs: Vec::new(), end: true, background: *background }),
         Job::SceneDistribution { index, key, .. } => Some(JobResult::SceneDistribution { index: *index, key: *key, bins: Vec::new() }),
         Job::ScanBounds { key, image, path, .. } => Some(JobResult::ScanBounds { key: *key, image: *image, path: path.clone(), bounds: None }),
         Job::ToneCurve { key, .. } => Some(JobResult::ToneCurve { key: key.clone(), data: Err(cancelled()) }),
@@ -715,7 +708,9 @@ fn lane(job: &Job) -> crate::threads::Lane {
     match job {
         // the contact print is watched on screen, but its photos arrive one by one and nobody zooms into it meanwhile
         Job::PrepareFull { .. } | Job::Spp { prefetch: true, .. } | Job::Print { .. } => Lane::Ahead,
-        Job::Thumbnails { .. } | Job::FilmCrops { .. } => Lane::Back,
+        // film tiles: the visible ones stay in front (as "Visible" at the film gate, taking turns with the test strip;
+        // as "Soon" they waited behind it, measured 16.11.2026), the quiet fill of the others runs in the background
+        Job::Thumbnails { .. } | Job::FilmThumbs { background: true, .. } => Lane::Back,
         _ => Lane::Front,
     }
 }
@@ -1572,75 +1567,8 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
             let img = preview.render(&cal, &settings);
             send(JobResult::HoverRendered { index, settings, width: img.width, height: img.height, rgb: img.to_rgb8() });
         }
-        Job::FilmThumbs { index, previews, cal, settings, key, modes } => {
-            if let Some(doc) = &previews.foreign {
-                let q = doc.orientation;
-                let thumbs = crate::raw_app::profile_thumbnails(doc, &settings, &modes).into_iter().map(|(k, w, h, rgb)| upright(k, w, h, rgb, q)).collect();
-                send(JobResult::FilmThumbs { index, key, thumbs });
-                return;
-            }
-            let preview = match &previews.spp {
-                Some(spp) if Session::uses_spp(&settings) => spp,
-                _ => &previews.developed,
-            };
-            // Sigma's color modes: preview with the mode, downscaled (key "sigma:<mode>")
-            let mut thumbs: Vec<(String, usize, usize, Vec<u8>)> = Vec::new();
-            for mode in &modes {
-                let Some(m) = mode.strip_prefix("sigma:") else { continue };
-                let mut s = settings.clone();
-                s.film.active = false;
-                s.profile_amount = 1.0;
-                s.color_mode = if m.is_empty() { None } else { Some(m.to_string()) };
-                let img = preview.render(&cal, &s);
-                let (w, h, rgb) = shrink_rgb(&img.to_rgb8(), img.width, img.height, 240);
-                thumbs.push((format!("sigma:{m}"), w, h, rgb));
-            }
-            let ids: Vec<&str> = modes.iter().filter(|m| !m.starts_with("sigma:")).map(String::as_str).collect();
-            if !ids.is_empty() {
-                // as the main image with each film: layer exposure and grain balance per film (Sigma-Analog)
-                thumbs.extend(
-                    develop::analog::thumbnails(&cal, &settings, &ids, |s| preview.film_scene(&cal, s, 240))
-                        .into_iter()
-                        .filter_map(|t| t.image.ok().map(|img| (t.stock.id.clone(), img.width, img.height, img.to_rgb8()))),
-                );
-            }
-            // Orient thumbnails upright (camera orientation), otherwise portraits are upside down or sideways
-            let q = cal.orientation;
-            let thumbs = thumbs.into_iter().map(|(k, w, h, rgb)| upright(k, w, h, rgb, q)).collect();
-            send(JobResult::FilmThumbs { index, key, thumbs });
-        }
-        Job::FilmCrops { index, session, foreign, list, region, q, key, valid } => {
-            let t0 = std::time::Instant::now();
-            let mut not_ready = false;
-            let mut n = 0;
-            for (id, s) in list {
-                if valid.load(Ordering::SeqCst) != key {
-                    break;
-                }
-                match film_crop(&session, &foreign, &s, region) {
-                    None => {
-                        not_ready = true;
-                        break;
-                    }
-                    Some(Ok(img)) => {
-                        n += 1;
-                        let (w, h, rgb) = rotate_rgb(img.width, img.height, img.to_rgb8(), q);
-                        send(JobResult::FilmCrops { index, key, done: vec![(id, Some((w, h, rgb)))], not_ready: false, end: false });
-                    }
-                    Some(Err(e)) => {
-                        eprintln!("film shelf {id}: {e}");
-                        send(JobResult::FilmCrops { index, key, done: vec![(id, None)], not_ready: false, end: false });
-                    }
-                }
-            }
-            if not_ready && crate::env::var_os("GRAINEO_LOG").is_some() {
-                eprintln!("film shelf: full resolution not ready, {n} crops");
-            }
-            if n > 0 {
-                let ms = t0.elapsed().as_secs_f32() * 1000.0;
-                eprintln!("film shelf: {n} crops {}×{} in {ms:.0} ms ({:.0} ms each)", region[2], region[3], ms / n as f32);
-            }
-            send(JobResult::FilmCrops { index, key, done: Vec::new(), not_ready, end: true });
+        Job::FilmThumbs { index, previews, cal, settings, key, modes, valid, background } => {
+            crate::film_previews::compute(index, &previews, &cal, &settings, key, &modes, &valid, background, send);
         }
         Job::Variants { index, previews, cal, list, key } => {
             let mut images = Vec::new();
@@ -2044,25 +1972,6 @@ fn shrink_rgb(rgb: &[u8], w: usize, h: usize, edge: usize) -> (usize, usize, Vec
 
 /// One 100 % crop of the film shelf. `None`: the full resolution is not there yet (other cameras: the full detail
 /// stage; Sigma: the base or a free session) – nothing is computed ahead for the shelf, it waits for the whole image.
-fn film_crop(session: &Option<Arc<Mutex<Session>>>, foreign: &Option<Arc<rawdev::RawDoc>>, s: &Settings, region: [usize; 4]) -> Option<Result<develop::Rgb16, String>> {
-    if let Some(doc) = foreign {
-        return doc.full_ready(s).then(|| doc.render_region(s, region));
-    }
-    let session = session.as_ref()?;
-    let (cal, base) = {
-        let sess = session.try_lock().ok()?;
-        (sess.cal.clone(), sess.spp_snapshot())
-    };
-    if let Some(img) = base.and_then(|b| develop::session::region_from_base(&cal, &b, s, region)) {
-        return Some(Ok(img));
-    }
-    if Session::uses_spp(s) {
-        return None;
-    }
-    let mut sess = session.try_lock().ok()?;
-    Some(Ok(sess.render_region(s, region)))
-}
-
 /// Rotate a thumbnail (key, width, height, RGB) into camera orientation.
 fn upright(k: String, w: usize, h: usize, rgb: Vec<u8>, q: u8) -> (String, usize, usize, Vec<u8>) {
     let (w, h, rgb) = rotate_rgb(w, h, rgb, q);
@@ -2071,7 +1980,7 @@ fn upright(k: String, w: usize, h: usize, rgb: Vec<u8>, q: u8) -> (String, usize
 
 /// Metadata into the exported file as chosen in the export dialog ([`develop::export::Metadata`]):
 /// shooting data of the original (for X3F from the X3F properties) and the copyright given at import;
-/// with "All" also stars, label, keywords (without names of people) and caption from the library (read only);
+/// with "All" also stars, label, keywords (without names of people), title and caption from the library (read only);
 /// the location only with `options.gps`. Never serial numbers.
 fn write_export_metadata(out: &std::path::Path, original: &std::path::Path, image: i64, meta: &crate::sidecar::Meta, options: &develop::export::Options, shot: Option<library::export_meta::Shot>) -> String {
     use develop::export::Metadata;
@@ -2085,6 +1994,7 @@ fn write_export_metadata(out: &std::path::Path, original: &std::path::Path, imag
             if f.personal {
                 f.keywords = db.keywords_without_people(image).unwrap_or_default();
                 f.description = db.image_text_of(image).filter(|t| !t.trim().is_empty());
+                f.title = db.title_of(image);
             }
         }
     }
@@ -2694,7 +2604,7 @@ mod gate_tests {
             (Job::Prepare { index: 2, session: session.clone(), settings: s.clone() }, |r| matches!(r, JobResult::PrepareFailed { index: 2, .. })),
             (Job::HoverRender { index: 2, previews: previews.clone(), cal: cal.clone(), settings: s.clone(), supersede: true }, |r| matches!(r, JobResult::HoverSuperseded { index: 2, .. })),
             (Job::SppInstall { index: 2, session: session.clone(), mode: s.spp_key_class(false), counts: previews.developed.lin.clone(), seconds: 0.0 }, |r| matches!(r, JobResult::SppFailed { index: 2, prefetch: false, .. })),
-            (Job::FilmThumbs { index: 2, previews: previews.clone(), cal: cal.clone(), settings: s.clone(), key: 7, modes: vec![] }, |r| matches!(r, JobResult::FilmThumbs { key: 7, .. })),
+            (Job::FilmThumbs { index: 2, previews: previews.clone(), cal: cal.clone(), settings: s.clone(), key: 7, modes: vec![], valid: Arc::new(AtomicU64::new(7)), background: false }, |r| matches!(r, JobResult::FilmThumbs { key: 7, end: true, .. })),
             (Job::Variants { index: 2, previews: previews.clone(), cal: cal.clone(), list: vec![], key: 7 }, |r| matches!(r, JobResult::Variants { key: 7, .. })),
             (Job::Contact { index: 2, previews: previews.clone(), cal: cal.clone(), rows: vec![], key: 7, target: ContactTarget::Paper }, |r| matches!(r, JobResult::Contact { key: 7, end: true, .. })),
             (Job::SceneDistribution { index: 2, previews: previews.clone(), cal: cal.clone(), settings: s.clone(), key: 7 }, |r| matches!(r, JobResult::SceneDistribution { key: 7, .. })),

@@ -151,9 +151,11 @@ pub fn input(ctx: &egui::Context, raw: &mut egui::RawInput) {
                 raw.events.push(egui::Event::ModifiersChanged(egui::Modifiers { shift, mac_cmd: command && cfg!(target_os = "macos"), command, ..Default::default() }));
             }
             Some(("key", k)) => {
+                // "shift+Tab": with ⇧ held for this key
+                let (k, modifiers) = k.strip_prefix("shift+").map_or((k, egui::Modifiers::NONE), |k| (k, egui::Modifiers::SHIFT));
                 if let Some(key) = egui::Key::from_name(k) {
-                    raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: egui::Modifiers::NONE });
-                    raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: egui::Modifiers::NONE });
+                    raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers });
+                    raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers });
                 }
             }
             Some(("click", xy)) => {

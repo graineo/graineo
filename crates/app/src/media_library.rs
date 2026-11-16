@@ -129,9 +129,9 @@ impl App {
         let unreachable = self.active_unreachable();
         let darkroom = self.darkroom_active();
         let media_library = self.in_grid();
-        let (t_lib, t_dev, t_dark) = (lr::with_shortcut("Mediathek: Fotos finden und auswählen", "grid"), lr::with_shortcut("Entwickeln: das Foto digital entwickeln", "single_photo_d"), lr::with_shortcut("Dunkelkammer: Film entwickeln und auf Papier abziehen", "darkroom"));
+        let (t_lib, t_dev, t_dark) = (lr::with_shortcut("Bibliothek: Fotos finden und auswählen", "grid"), lr::with_shortcut("Entwickeln: das Foto digital entwickeln", "single_photo_d"), lr::with_shortcut("Dunkelkammer: Film entwickeln und auf Papier abziehen", "darkroom"));
         let bar_entries = [
-            lr::BarEntry { text: crate::tr("MEDIATHEK"), active: media_library, enabled: true, hover_tip: t_lib.as_str() },
+            lr::BarEntry { text: crate::tr("BIBLIOTHEK"), active: media_library, enabled: true, hover_tip: t_lib.as_str() },
             lr::BarEntry { text: crate::tr("ENTWICKELN"), active: !media_library && !darkroom, enabled: has_image, hover_tip: t_dev.as_str() },
             lr::BarEntry {
                 text: crate::tr("DUNKELKAMMER"),

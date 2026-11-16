@@ -1,6 +1,6 @@
 [package]
 name = "faces"
-description = "Faces in photos: detect (Apple Vision), recognize (SFace, computed in-house), assign and group, without database or UI"
+description = "Faces in photos: detect (Apple Vision or YuNet), recognize (SFace, computed in-house), assign and group, without database or UI"
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 rayon = "1"
+# portable matrix product with AVX/FMA and NEON kernels (MIT OR Apache-2.0)
+matrixmultiply = { version = "0.3", default-features = false, features = ["std"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

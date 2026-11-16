@@ -44,7 +44,7 @@ pub fn write(db: &Db) -> Result<PathBuf, String> {
     let root = main_root(db).ok_or("kein erreichbarer Stammordner")?;
     let target = root.join(FILE);
     if crate::apple_photos::in_photos_library(&target) {
-        return Err("nie in die Mediathek von Apple Fotos schreiben".into());
+        return Err("nie in die Bibliothek von Apple Fotos schreiben".into());
     }
     let content = json!({
         "app": crate::APP,

@@ -264,7 +264,7 @@ impl LibraryView {
         }
         ui.separator();
         if crate::lr::menu_item(ui, crate::tr("Im Finder zeigen"), "", true) {
-            crate::system::open(e.path());
+            crate::system::show(e.path());
         }
         ui.separator();
         if crate::lr::menu_item(ui, crate::tr("Nicht mehr anzeigen"), "", true) {
@@ -585,7 +585,7 @@ impl LibraryView {
                             }
                             ui.separator();
                             if crate::lr::menu_item(ui, crate::tr("Im Finder zeigen"), "", true) {
-                                crate::system::open(e.path());
+                                crate::system::show(e.path());
                             }
                             ui.separator();
                             if crate::lr::menu_item(ui, crate::tr("Nicht mehr anzeigen"), "", true) {
@@ -658,7 +658,7 @@ fn row_hints(e: &Entry) -> String {
                 Hint::Trash => crate::tr("Name klingt nach Papierkorb"),
                 Hint::Export => crate::tr("Name klingt nach Export"),
                 Hint::Backup => crate::tr("Name klingt nach Sicherung oder Kopie"),
-                Hint::PhotoBooth => crate::tr("Photo-Booth-Mediathek"),
+                Hint::PhotoBooth => crate::tr("Photo-Booth-Bibliothek"),
                 Hint::Picasa => crate::tr("Picasa-Ordner"),
             }
             .to_string(),

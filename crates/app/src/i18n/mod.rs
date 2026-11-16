@@ -193,7 +193,7 @@ pub fn text_in(language: Language, key: Text) -> &'static str {
         let mut values = HashMap::new();
         for language in Language::ALL {
             for &key in Text::ALL {
-                values.insert((language, key), catalogs().format(language, key.id(), None));
+                values.insert((language, key), catalogs().format(language, key.platform_id(), None));
             }
         }
         values
@@ -308,6 +308,19 @@ mod tests {
             }
         }
     }
+    /// The Windows words of the menu exist in every language.
+    #[test]
+    fn windows_menu_words_resolve() {
+        let c = Catalogs::new().unwrap();
+        for &key in Text::ALL {
+            for language in Language::ALL {
+                assert!(c.resolve(language, key.id_on(true), None).is_some(), "{:?} {}", language, key.id_on(true));
+            }
+        }
+        assert_eq!(c.format(Language::De, Text::NativeFile.id_on(true), None), "Datei");
+        assert_eq!(c.format(Language::De, Text::MenuShowInFinder.id_on(true), None), "Im Explorer zeigen");
+    }
+
     #[test]
     fn every_language_has_the_same_catalog_keys() {
         fn keys(source: &str) -> HashSet<&str> {

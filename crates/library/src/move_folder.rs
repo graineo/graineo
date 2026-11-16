@@ -208,12 +208,13 @@ pub fn plan(db: &Db, folder: i64, dest: &Path) -> Result<Plan, String> {
         .map_err(f)?
         .ok_or("Ordner unbekannt")?;
     if origin == crate::apple_photos::ORIGIN || crate::apple_photos::in_photos_library(Path::new(&root_path)) {
-        return Err("Ordner der Mediathek von Apple Fotos werden nicht verschoben".into());
+        return Err("Ordner der Bibliothek von Apple Fotos werden nicht verschoben".into());
     }
     if crate::apple_photos::in_photos_library(dest) {
-        return Err("Nie in die Mediathek von Apple Fotos verschieben".into());
+        return Err("Nie in die Bibliothek von Apple Fotos verschieben".into());
     }
     crate::write_target::check(dest)?;
+    crate::write_target::probe(dest)?;
     let source = PathBuf::from(format!("{root_path}{rel}").trim_end_matches('/'));
     if !crate::location::root_reachable(&root_path) || !source.is_dir() {
         return Err(format!("{} ist nicht erreichbar – verschieben geht erst nach dem Verbinden", source.display()));
@@ -274,7 +275,7 @@ pub(crate) fn library_changes(db: &Db, root: i64, rel: &str, root_path: &str, ro
     let into = roots.iter().find(|r| target_s.starts_with(&r.path)).cloned();
     if let Some(b) = &into {
         if b.origin == crate::apple_photos::ORIGIN {
-            return Err("Nie in die Mediathek von Apple Fotos verschieben".into());
+            return Err("Nie in die Bibliothek von Apple Fotos verschieben".into());
         }
         let rel_b = &target_s[b.path.len()..];
         let n: i64 = db.conn.query_row("SELECT count(*) FROM folder WHERE root = ?1 AND substr(path, 1, length(?2)) = ?2", params![b.id, rel_b], |r| r.get(0)).map_err(f)?;

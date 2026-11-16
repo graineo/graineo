@@ -1,5 +1,5 @@
 //! State of the dialog "Import from Lightroom": catalog, last import, last handover of the edits, and which
-//! action is needed next (that one becomes the gold main button).
+//! step is needed next (that one becomes the gold main button, [`LrState::step`]).
 
 use std::path::PathBuf;
 
@@ -16,7 +16,8 @@ pub struct Import {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Handover {
     pub time: i64,
-    /// photos whose Lightroom edits are in the sidecar (written now or already before)
+    /// photos Lightroom marks as edited whose edits are in the library (written now or already before); older reports
+    /// lack that count: there all photos with settings (written + already)
     pub taken: usize,
     pub cancelled: bool,
     /// sidecar folder not reachable (drive not connected)
@@ -29,16 +30,6 @@ pub struct LrState {
     pub catalog_found: bool,
     pub import: Option<Import>,
     pub handover: Option<Handover>,
-}
-
-/// The action the dialog offers as the gold main button.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Next {
-    ChooseCatalog,
-    Import,
-    Handover,
-    /// everything done: no main button
-    Done,
 }
 
 impl LrState {
@@ -63,18 +54,6 @@ impl LrState {
             (None, _) => false,
             (Some(_), None) => true,
             (Some(i), Some(h)) => h.cancelled || h.time < i.time,
-        }
-    }
-
-    pub fn next(&self) -> Next {
-        if !self.catalog_found {
-            Next::ChooseCatalog
-        } else if self.import.is_none() {
-            Next::Import
-        } else if self.handover_due() {
-            Next::Handover
-        } else {
-            Next::Done
         }
     }
 }
@@ -109,7 +88,7 @@ pub fn newest_handover(dir: &std::path::Path) -> Option<Handover> {
     let text = std::fs::read_to_string(path).ok()?;
     let v: serde_json::Value = serde_json::Deserializer::from_str(&text).into_iter().next()?.ok()?;
     let n = |k: &str| v[k].as_u64().unwrap_or(0) as usize;
-    Some(Handover { time, taken: n("written") + n("already"), cancelled: v["cancelled"] == true, unreachable: n("unreachable") })
+    Some(Handover { time, taken: if v["edited"].is_u64() { n("edited") } else { n("written") + n("already") }, cancelled: v["cancelled"] == true, unreachable: n("unreachable") })
 }
 
 /// Local date of Unix seconds ("08.11.2026" / "2026-11-08").
@@ -118,9 +97,100 @@ pub fn date(time: i64) -> String {
     crate::menu::i18n::format::date(crate::menu::i18n::language(), t.year, t.month as u8, t.tag as u8).unwrap_or_default()
 }
 
+/// What the read-only check ("Prüfen") found for a catalog, or why it could not read it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Check {
+    /// running in the background
+    Running,
+    Done(library::lightroom::Preview),
+    Failed(String),
+}
+
+/// The main button of the dialog in the one-step flow: choose a catalog → check it (reads only) → import (writes;
+/// the edits come along). `Blocked`: the button is shown but disabled, and the dialog says why.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Step {
+    /// no catalog: choose one (or take the suggestion: then "Prüfen" with it)
+    Choose,
+    /// a catalog found in the Pictures folder can be checked right away
+    CheckSuggestion,
+    Check,
+    Import,
+    /// the edits of an earlier run are still due (cancelled): take them over again
+    Handover,
+    /// the catalog cannot be read: the import button stays, disabled, with the reason
+    Blocked,
+    /// a run or the check is going on
+    Wait,
+    Done,
+}
+
+impl LrState {
+    /// Next step for the main button. `check`: result of the check of the current catalog in this session;
+    /// `failed`: the last run (or check) could not read the catalog; `suggestion`: a catalog found in the Pictures
+    /// folder while none is chosen.
+    pub fn step(&self, check: Option<&Check>, failed: bool, suggestion: bool, running: bool) -> Step {
+        if running || matches!(check, Some(Check::Running)) {
+            return Step::Wait;
+        }
+        if !self.catalog_found {
+            return if self.catalog.is_none() && suggestion { Step::CheckSuggestion } else { Step::Choose };
+        }
+        if failed || matches!(check, Some(Check::Failed(_))) {
+            return Step::Blocked;
+        }
+        match check {
+            Some(Check::Done(_)) => Step::Import,
+            _ if self.import.is_none() => Step::Check,
+            _ if self.handover_due() => Step::Handover,
+            _ => Step::Done,
+        }
+    }
+}
+
+/// Plain sentence for a catalog that cannot be read (the technical text goes into the details).
+pub fn failure_text(error: &str, catalog: &std::path::Path) -> String {
+    let e = error.to_lowercase();
+    let name = catalog.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if !catalog.exists() {
+        if catalog.starts_with("/Volumes") {
+            return crate::trf!("„{a}“ ist nicht da. Ist das Laufwerk verbunden?", a = name);
+        }
+        return crate::trf!("„{a}“ ist nicht da. Wurde der Katalog verschoben oder umbenannt?", a = name);
+    }
+    if error.contains(library::lightroom::OTHER_CATALOG) {
+        return crate::tr("Die Bibliothek wurde aus einem anderen Lightroom-Katalog übernommen. Ein zweiter Katalog würde Fotos vertauschen, deshalb bleibt alles, wie es ist.").to_string();
+    }
+    if e.contains("not a database") || e.contains("malformed") || e.contains("no such table") || e.contains("file is encrypted") {
+        return crate::tr("Diese Datei ist kein Lightroom-Katalog oder ist beschädigt.").to_string();
+    }
+    if e.contains("unable to open") || e.contains("permission") || e.contains("not authorized") {
+        return crate::tr("Der Katalog lässt sich nicht öffnen. Hat graineo Zugriff auf den Ordner?").to_string();
+    }
+    if e.contains("locked") || e.contains("busy") {
+        return crate::tr("Lightroom schreibt gerade in den Katalog. Beende Lightroom und prüfe noch einmal.").to_string();
+    }
+    crate::tr("Der Katalog lässt sich nicht lesen.").to_string()
+}
+
+/// Name of the collection set the catalog's collections go into: the catalog's name without the extension.
+pub fn default_set_name(catalog: &std::path::Path) -> String {
+    catalog.file_stem().map(|n| n.to_string_lossy().trim().to_string()).filter(|n| !n.is_empty()).unwrap_or_else(|| "Lightroom".to_string())
+}
+
+/// Folder in which Lightroom keeps its catalogs by default (`~/Pictures/Lightroom`); for test runs
+/// `GRAINEO_LR_SEARCH_DIR` (only with `GRAINEO_DATA_DIR`).
+pub fn search_dir() -> Option<PathBuf> {
+    if let Some(d) = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var_os("GRAINEO_LR_SEARCH_DIR")) {
+        return Some(PathBuf::from(d));
+    }
+    Some(sysdirs::home()?.join("Pictures").join("Lightroom"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn state(found: bool, import: Option<i64>, handover: Option<(i64, bool)>) -> LrState {
         LrState {
@@ -131,15 +201,40 @@ mod tests {
         }
     }
 
-    /// The gold button always names the action needed now.
+    /// One step after the other: choose (or check the suggestion) → check → import; a catalog that cannot be read
+    /// blocks the import button instead of offering it.
     #[test]
-    fn next_action_follows_the_state() {
-        assert_eq!(state(false, None, None).next(), Next::ChooseCatalog);
-        assert_eq!(state(true, None, None).next(), Next::Import);
-        assert_eq!(state(true, Some(100), None).next(), Next::Handover);
-        assert_eq!(state(true, Some(100), Some((90, false))).next(), Next::Handover, "import after the handover");
-        assert_eq!(state(true, Some(100), Some((110, true))).next(), Next::Handover, "cancelled");
-        assert_eq!(state(true, Some(100), Some((110, false))).next(), Next::Done);
+    fn main_button_follows_the_check() {
+        let none = LrState::default();
+        assert_eq!(none.step(None, false, false, false), Step::Choose);
+        assert_eq!(none.step(None, false, true, false), Step::CheckSuggestion);
+        let missing = state(false, None, None);
+        assert_eq!(missing.step(None, false, true, false), Step::Choose, "a chosen catalog that is gone: choose again");
+        let fresh = state(true, None, None);
+        assert_eq!(fresh.step(None, false, false, false), Step::Check);
+        assert_eq!(fresh.step(Some(&Check::Running), false, false, false), Step::Wait);
+        assert_eq!(fresh.step(Some(&Check::Done(Default::default())), false, false, false), Step::Import);
+        assert_eq!(fresh.step(Some(&Check::Failed("file is not a database".into())), false, false, false), Step::Blocked);
+        assert_eq!(fresh.step(None, true, false, false), Step::Blocked, "the last run could not read it");
+        assert_eq!(fresh.step(None, false, false, true), Step::Wait);
+        assert_eq!(state(true, Some(100), Some((110, false))).step(None, false, false, false), Step::Done);
+        assert_eq!(state(true, Some(100), Some((110, true))).step(None, false, false, false), Step::Handover);
+        assert_eq!(state(true, Some(100), Some((110, false))).step(Some(&Check::Done(Default::default())), false, false, false), Step::Import, "checked again: import again");
+    }
+
+    #[test]
+    fn failure_in_plain_words() {
+        let _l = crate::menu::i18n::locale::TestLanguage::set(crate::menu::i18n::Language::De);
+        let d = std::env::temp_dir().join(format!("graineo-lrfail-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let k = d.join("Kaputt.lrcat");
+        std::fs::write(&k, b"x").unwrap();
+        assert_eq!(failure_text("Katalog nicht lesbar: file is not a database", &k), "Diese Datei ist kein Lightroom-Katalog oder ist beschädigt.");
+        assert!(failure_text(&format!("{}: …", library::lightroom::OTHER_CATALOG), &k).starts_with("Die Bibliothek wurde aus einem anderen Lightroom-Katalog übernommen."));
+        assert_eq!(failure_text("x", Path::new("/Volumes/NAS/LR/K.lrcat")), "„K.lrcat“ ist nicht da. Ist das Laufwerk verbunden?");
+        assert!(failure_text("x", &d.join("weg.lrcat")).starts_with("„weg.lrcat“ ist nicht da."));
+        assert_eq!(default_set_name(Path::new("/a/Lightroom Catalog-v13.lrcat")), "Lightroom Catalog-v13");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

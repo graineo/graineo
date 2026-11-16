@@ -1,4 +1,4 @@
-//! Labels of a grid cell (Mediathek) in fixed zones, never overlapping.
+//! Labels of a grid cell (Bibliothek) in fixed zones, never overlapping.
 //!
 //! - Header: number on the left, quick collection on the right with a fixed width, in between the file name (its
 //!   extension stays visible: "IMG_85…34.JPG") followed by small marks: a virtual copy as a stack with its number,

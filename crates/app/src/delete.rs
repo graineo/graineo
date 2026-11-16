@@ -356,7 +356,7 @@ impl App {
             // one below the other and in Photos: how many, and where to (sidecars and library entries go without saying)
             let mut parts = vec![crate::trf!("{a} gelöscht", a = dialog::count(e.trash + e.apple, crate::tr("Foto"), crate::tr("Fotos")))];
             if e.trash > 0 && e.apple > 0 {
-                parts.push(crate::trf!("{a} aus der Mediathek → Papierkorb", a = dialog::number(e.trash)));
+                parts.push(crate::trf!("{a} aus der Bibliothek → Papierkorb", a = dialog::number(e.trash)));
                 parts.push(crate::trf!("{a} aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)", a = dialog::number(e.apple)));
             } else if e.apple > 0 {
                 parts.push(crate::tr("aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)").to_string());

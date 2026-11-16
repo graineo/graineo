@@ -1,7 +1,8 @@
 //! One import for all file types, in a window with three fixed columns: **source** on the left (cards, cameras,
 //! folders, counters and filters), the **selection** in the middle (grid grouped by capture day, RAW+JPEG as one cell,
 //! large view with the space bar; for "Hinzufügen" the folders), **target and "apply on import"** on the right.
-//! Nothing appears or disappears when the operation changes; what does not apply is dimmed.
+//! Nothing moves when the operation changes; what does not apply keeps its place empty. A switch at the top chooses
+//! the kind of source (card or camera · folder · Lightroom catalog, which has its own dialog).
 //!
 //! The run can continue in the background ("Im Hintergrund weiter"): the window closes, the status in the title bar
 //! shows the progress, a click there opens it again. At the end the window shows the result. An import interrupted by
@@ -163,14 +164,79 @@ pub(super) struct Import {
     source_error: Option<String>,
     /// a camera: number of files in its list that the candidates were read from
     camera_files: Option<usize>,
+    /// kind of source chosen in the switch at the top (follows the source once one is read)
+    kind: SourceKind,
 }
 
 fn read_mode() -> Mode {
     Mode::from_key(library::settings::value("importMode").as_str().unwrap_or("copy"))
 }
 
+/// Kind of source, as the switch at the top of the window shows it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(super) enum SourceKind {
+    /// memory card or camera
+    Card,
+    Folder,
+    /// Lightroom catalog: its own dialog
+    Lightroom,
+}
+
+/// Mode a source starts with (as long as the user has not chosen one in this window): a card or camera is copied
+/// (from a camera only copying is possible; for a card the operation chosen last time, copy or move); a folder on a
+/// disk is added where it is – an archive must not be doubled by accident.
+pub(super) fn default_mode(kind: SourceKind, remembered_for_cards: Mode) -> Mode {
+    match kind {
+        SourceKind::Card if remembered_for_cards == Mode::InPlace => Mode::CopyFiles,
+        SourceKind::Card => remembered_for_cards,
+        SourceKind::Folder | SourceKind::Lightroom => Mode::InPlace,
+    }
+}
+
+/// Why the import button is disabled, in plain words (shown next to it); `None`: it can start.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn block_reason(source: bool, scanning: bool, photos: usize, mode: Mode, target: bool, target_unreachable: bool, chosen: usize, folders: usize, collection_name_missing: bool) -> Option<&'static str> {
+    if !source {
+        return Some("Wähle zuerst eine Quelle: Karte, Kamera oder Ordner");
+    }
+    if scanning {
+        return Some("Liest die Fotos …");
+    }
+    if photos == 0 {
+        return Some("In dieser Quelle sind keine Fotos");
+    }
+    if mode == Mode::InPlace {
+        if folders == 0 {
+            return Some("Wähle mindestens einen Ordner");
+        }
+    } else {
+        if !target {
+            return Some("Wähle zuerst einen Zielordner");
+        }
+        if target_unreachable {
+            return Some("Der Zielordner ist gerade nicht erreichbar");
+        }
+        if chosen == 0 {
+            return Some("Wähle mindestens ein Foto");
+        }
+    }
+    if collection_name_missing {
+        return Some("Gib der neuen Sammlung einen Namen");
+    }
+    None
+}
+
 pub(super) fn is_card(p: &Path) -> bool {
     library::card_watch::is_on_card(p)
+}
+
+/// Card or camera, otherwise a folder.
+pub(super) fn source_kind(p: &Path) -> SourceKind {
+    if is_card(p) || library::import_source::is_camera(p) {
+        SourceKind::Card
+    } else {
+        SourceKind::Folder
+    }
 }
 
 /// Recently used source folders (setting `importRecent`, newest first, at most 5; cards are not remembered).
@@ -387,6 +453,7 @@ impl LibraryView {
             cameras: camera::Cameras::new(ctx),
             source_error: None,
             camera_files: None,
+            kind: SourceKind::Card,
         };
         if let Some(q) = source {
             self.import_start_scan(&mut imp, q, ctx);
@@ -395,6 +462,7 @@ impl LibraryView {
     }
 
     fn import_start_scan(&mut self, imp: &mut Import, q: PathBuf, ctx: &egui::Context) {
+        imp.kind = source_kind(&q);
         imp.source = Some(q.clone());
         imp.scanning = true;
         imp.cand.clear();
@@ -529,11 +597,7 @@ impl LibraryView {
         }
         if imp.mode_automatic {
             if let Some(q) = imp.source.clone() {
-                if is_card(&q) || library::import_source::is_camera(&q) {
-                    imp.mode = Mode::CopyFiles;
-                } else if imp.source_in_library {
-                    imp.mode = Mode::InPlace;
-                }
+                imp.mode = default_mode(source_kind(&q), read_mode());
             }
         }
         if !imp.scanning {
@@ -648,14 +712,16 @@ impl LibraryView {
         let in_place = imp.mode == Mode::InPlace;
         let chosen = imp.chosen().count();
         let folders = imp.folders_chosen().len();
-        let can = !running
-            && !done
-            && !imp.scanning
-            && !imp.cand.is_empty()
-            && if in_place { folders > 0 } else { chosen > 0 && imp.target.is_some() && !target_gone }
-            && (imp.collection != Choice::New || !imp.new_collection.trim().is_empty());
+        let reason = block_reason(imp.source.is_some(), imp.scanning, imp.cand.len(), imp.mode, imp.target.is_some(), target_gone, chosen, folders, imp.collection == Choice::New && imp.new_collection.trim().is_empty());
+        let can = !running && !done && reason.is_none();
         let photos = |n: usize| dialog::count(n, crate::tr("Foto"), crate::tr("Fotos"));
-        let button = if in_place { crate::trf!("{a} hinzufügen", a = dialog::count(folders, crate::tr("Ordner"), crate::tr("Ordner"))) } else { crate::trf!("{a} importieren", a = photos(chosen)) };
+        // the button names what happens
+        let button = match imp.mode {
+            Mode::InPlace => crate::trf!("{a} hinzufügen", a = dialog::count(folders, crate::tr("Ordner"), crate::tr("Ordner"))),
+            Mode::CopyFiles => crate::trf!("{a} kopieren", a = photos(chosen)),
+            Mode::MoveFiles => crate::trf!("{a} verschieben", a = photos(chosen)),
+        };
+        let mut kind_pick: Option<SourceKind> = None;
         let (w, h) = window_size(ctx);
         let collections: Vec<(i64, String)> = self.collections.iter().filter(|s| s.kind == 0 && Some(s.id) != self.quick_id).map(|s| (s.id, s.name.clone())).collect();
         // large view: Esc belongs to it (it would close the window)
@@ -679,6 +745,19 @@ impl LibraryView {
                 "Fotos importieren",
                 w,
                 |ui| {
+                    // the kind of source, clearly at the top: card or camera · folder · Lightroom catalog (own dialog)
+                    ui.add_enabled_ui(!running && !done, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(crate::tr("Quelle")).color(lr::TEXT_DIM));
+                            ui.add_space(6.0);
+                            let mut k = imp.kind;
+                            let opts = [(SourceKind::Card, crate::tr("Karte oder Kamera")), (SourceKind::Folder, crate::tr("Ordner")), (SourceKind::Lightroom, crate::tr("Lightroom-Katalog"))];
+                            if lr::segmented_blue(ui, &mut k, &opts) {
+                                kind_pick = Some(k);
+                            }
+                        });
+                    });
+                    ui.add_space(6.0);
                     ui.allocate_ui_with_layout(egui::vec2(w, h), egui::Layout::left_to_right(egui::Align::Min), |ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         let mid_w = w - LEFT_W - RIGHT_W - 2.0 * 14.0;
@@ -729,11 +808,46 @@ impl LibraryView {
                                 grid::check_all(imp, false);
                             }
                         });
+                        // a disabled import button says why, in plain words, next to it
+                        if let Some(r) = reason.filter(|_| !running && !done) {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(egui::RichText::new(crate::tr(r)).color(Color32::from_rgb(0xe0, 0xb0, 0x40)));
+                            });
+                        }
                     });
                 },
                 buttons,
             )
         };
+        match kind_pick {
+            Some(SourceKind::Lightroom) => {
+                // the Lightroom catalog has its own dialog (reads only, checks first)
+                self.lr_window = true;
+                if imp.run.is_none() {
+                    return;
+                }
+            }
+            Some(k) => {
+                imp.kind = k;
+                // to the other kind: what was read from the other kind of source goes
+                if imp.source.as_deref().is_some_and(|q| source_kind(q) != k) {
+                    import_clear_source(&mut imp);
+                }
+                match k {
+                    SourceKind::Card => {
+                        if let Some(c) = imp.cards.first().cloned() {
+                            self.import_start_scan(&mut imp, c, ctx);
+                        }
+                    }
+                    _ => {
+                        if imp.source.is_none() {
+                            pick.source = true;
+                        }
+                    }
+                }
+            }
+            None => {}
+        }
         if pick.source {
             crate::file_dialog::folder(ctx, "imp-quelle", |d| d.set_title(crate::tr("Quelle für den Import")));
         }
@@ -837,8 +951,9 @@ impl LibraryView {
         };
         let set = library::settings::set;
         let camera = camera::is_camera(imp.source.as_deref());
-        // from a camera only copying is possible: the operation chosen for cards stays remembered
-        if !camera {
+        // remembered only for cards (copy or move); from a camera only copying is possible, a folder starts with
+        // "Hinzufügen" every time
+        if !camera && imp.kind == SourceKind::Card {
             set("importMode", serde_json::json!(imp.mode.key()));
         }
         if let Some(z) = &imp.target {
@@ -904,6 +1019,7 @@ impl LibraryView {
         let secs = (k.duration_ms / 1000) as u64;
         let mut summary = match imp.mode {
             Mode::InPlace => crate::trf!("{a} hinzugefügt (bleiben am Ort)", a = photos(e.added)),
+            Mode::MoveFiles => crate::trf!("{a} verschoben und geprüft ({b}, {c})", a = files(k.copied), b = dialog::size(k.bytes), c = dialog::duration(std::time::Duration::from_secs(secs))),
             _ => crate::trf!("{a} kopiert und geprüft ({b}, {c})", a = files(k.copied), b = dialog::size(k.bytes), c = dialog::duration(std::time::Duration::from_secs(secs))),
         };
         let errors = k.error.iter().filter(|x| x.as_str() != "abgebrochen").count();
@@ -1047,6 +1163,24 @@ impl LibraryView {
             _ => {}
         }
     }
+}
+
+/// Forget the source and what was read from it (another kind of source chosen at the top).
+fn import_clear_source(imp: &mut Import) {
+    imp.scan = Arc::default();
+    imp.scanning = false;
+    imp.source = None;
+    imp.cand.clear();
+    imp.cells.clear();
+    imp.days.clear();
+    imp.folders.clear();
+    imp.folders_on.clear();
+    imp.last_click = None;
+    imp.big = None;
+    imp.hovered = None;
+    imp.preselection = None;
+    imp.source_error = None;
+    imp.mode_automatic = true;
 }
 
 /// Read a camera as source: wait until it is connected and has listed its files (the source column shows how far it
@@ -1240,5 +1374,36 @@ fn remaining_time(secs: f64) -> String {
         0..=59 => format!("{s} s"),
         60..=3599 => format!("{} min", s.div_ceil(60)),
         _ => format!("{} h {} min", s / 3600, (s % 3600) / 60),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A card is copied (or moved, if chosen last time), a folder is added where it is.
+    #[test]
+    fn default_mode_per_source() {
+        assert_eq!(default_mode(SourceKind::Card, Mode::CopyFiles), Mode::CopyFiles);
+        assert_eq!(default_mode(SourceKind::Card, Mode::MoveFiles), Mode::MoveFiles);
+        assert_eq!(default_mode(SourceKind::Card, Mode::InPlace), Mode::CopyFiles, "a card is never only added");
+        assert_eq!(default_mode(SourceKind::Folder, Mode::CopyFiles), Mode::InPlace, "an archive is not doubled by accident");
+        assert_eq!(default_mode(SourceKind::Folder, Mode::MoveFiles), Mode::InPlace);
+    }
+
+    /// The disabled import button names the first thing missing.
+    #[test]
+    fn block_reason_names_what_is_missing() {
+        assert_eq!(block_reason(false, false, 0, Mode::CopyFiles, false, false, 0, 0, false), Some("Wähle zuerst eine Quelle: Karte, Kamera oder Ordner"));
+        assert_eq!(block_reason(true, true, 0, Mode::CopyFiles, false, false, 0, 0, false), Some("Liest die Fotos …"));
+        assert_eq!(block_reason(true, false, 0, Mode::CopyFiles, true, false, 0, 0, false), Some("In dieser Quelle sind keine Fotos"));
+        assert_eq!(block_reason(true, false, 7, Mode::CopyFiles, false, false, 7, 0, false), Some("Wähle zuerst einen Zielordner"));
+        assert_eq!(block_reason(true, false, 7, Mode::MoveFiles, true, true, 7, 0, false), Some("Der Zielordner ist gerade nicht erreichbar"));
+        assert_eq!(block_reason(true, false, 7, Mode::CopyFiles, true, false, 0, 0, false), Some("Wähle mindestens ein Foto"));
+        assert_eq!(block_reason(true, false, 7, Mode::CopyFiles, true, false, 7, 0, false), None);
+        // adding needs no target, only folders
+        assert_eq!(block_reason(true, false, 7, Mode::InPlace, false, false, 0, 2, false), None);
+        assert_eq!(block_reason(true, false, 7, Mode::InPlace, false, false, 0, 0, false), Some("Wähle mindestens einen Ordner"));
+        assert_eq!(block_reason(true, false, 7, Mode::InPlace, false, false, 0, 1, true), Some("Gib der neuen Sammlung einen Namen"));
     }
 }

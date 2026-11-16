@@ -74,10 +74,12 @@ impl Roots {
     /// Takes the folders that exist; refuses (skips) anything that is not a deep folder (`/`, the home folder, a
     /// volume root …), so a wrong setting can never point trimming at something large.
     pub fn new(folders: &[&Path]) -> Roots {
-        let home = sysdirs::home().and_then(|h| std::fs::canonicalize(h).ok());
+        // comparison only: without the Windows `\\?\` prefix
+        let home = sysdirs::home().and_then(|h| std::fs::canonicalize(h).ok()).map(|h| sysdirs::simplify(&h));
         let v = folders
             .iter()
             .filter_map(|p| std::fs::canonicalize(p).ok())
+            .map(|p| sysdirs::simplify(&p))
             .filter(|c| c.is_dir() && c.components().count() >= 4 && Some(c) != home.as_ref())
             .collect();
         Roots(v)
@@ -98,7 +100,7 @@ impl Roots {
         if !meta.file_type().is_file() {
             return false;
         }
-        let Ok(canon) = std::fs::canonicalize(path) else { return false };
+        let Ok(canon) = std::fs::canonicalize(path).map(|p| sysdirs::simplify(&p)) else { return false };
         self.0.iter().any(|r| canon.starts_with(r) && canon != *r)
     }
 }

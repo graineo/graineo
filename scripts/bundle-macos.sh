@@ -140,7 +140,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 # German texts of the system dialogs (Apple Photos, removable volumes)
 mkdir -p "$APP/Contents/Resources/de.lproj"
-printf '"NSPhotoLibraryUsageDescription" = "graineo zeigt die Fotos deiner Mediathek, lädt Originale aus iCloud zum Bearbeiten und löscht Fotos nur nach deiner Bestätigung.";\n' > "$APP/Contents/Resources/de.lproj/InfoPlist.strings"
+printf '"NSPhotoLibraryUsageDescription" = "graineo zeigt die Fotos deiner Bibliothek, lädt Originale aus iCloud zum Bearbeiten und löscht Fotos nur nach deiner Bestätigung.";\n' > "$APP/Contents/Resources/de.lproj/InfoPlist.strings"
 printf '"NSRemovableVolumesUsageDescription" = "graineo liest Fotos von Speicherkarten, um sie zu importieren. Auf der Karte wird nichts verändert.";\n' >> "$APP/Contents/Resources/de.lproj/InfoPlist.strings"
 # French, Spanish and Japanese texts of the same dialogs
 for L in fr es ja; do mkdir -p "$APP/Contents/Resources/$L.lproj"; done

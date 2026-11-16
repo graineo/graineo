@@ -832,8 +832,8 @@ Lokaler Weißwert	Local white level
 Ältere lokale Helligkeit	Legacy local brightness
 Verknüpfung der Teilmasken	Sub-mask combination
 Weitere nicht unterstützte Maskendaten	Other unsupported mask data
-MEDIATHEK	LIBRARY
-Mediathek: Fotos finden und auswählen · G	Library: find and select photos · G
+BIBLIOTHEK	LIBRARY
+Bibliothek: Fotos finden und auswählen · G	Library: find and select photos · G
 ENTWICKELN	DEVELOP
 Entwickeln: das Foto digital entwickeln · D	Develop: develop the photo digitally · D
 DUNKELKAMMER	DARKROOM
@@ -1082,7 +1082,7 @@ rechte Leiste ein/aus	toggle right panel
 Einfachklick ins Bild	Single click on the image
 Einpassen ↔ 100 % an dieser Stelle (ohne aktives Werkzeug)	Fit ↔ 100 % at this point (when no tool is active)
 Doppelklick ins Bild	Double-click on the image
-zurück zur Mediathek (ohne aktives Werkzeug)	back to Library (when no tool is active)
+zurück zur Bibliothek (ohne aktives Werkzeug)	back to Library (when no tool is active)
 Zwei Finger wischen / Mausrad	Two-finger swipe / mouse wheel
 vergrößertes Bild verschieben	pan the zoomed image
 Zusammenziehen / ⌘ oder ⌥ + Scrollen	Pinch / ⌘ or ⌥ + scroll
@@ -2118,7 +2118,7 @@ Prüfsumme von {path} stimmt nicht – Datei verworfen	Checksum mismatch for {pa
 Moduldatei nicht prüfbar: {e}	Can’t verify module file: {e}
  (doppeltes Bild zusammengeführt)	 (duplicate image merged)
 Katalog nicht lesbar: {e}	Can’t read catalog: {e}
-{} Bilder übernehmen …	Importing {} photos…
+{} Fotos übernehmen …	Importing {} photos…
 Modellkopf zu groß	Model header too large
 Ungültige Modelldimension oder Datenposition	Invalid model dimension or data position
 Modelldimension zu groß	Model dimension too large
@@ -2241,6 +2241,8 @@ weicht von den übrigen Aufnahmen dieser Brennweite ab (Motiv ohne durchgehend g
 nicht verwendet: {a} – {b}	not used: {a} – {b}
 Wirkt vor allen anderen Profilen; im Papierkorb wiederherstellbar	Takes precedence over all other profiles; can be restored from the Trash
 Metadaten-Filter	Metadata filter
+Metadaten-Filter zurücksetzen	Reset metadata filters
+Metadaten-Filter: {a}	Metadata filters: {a}
 Zusammen (ein Foto)	Together (one photo)
 Einzeln (zwei Fotos)	Separate (two photos)
 Sortierung:	Sort:
@@ -2277,7 +2279,8 @@ Namen prüfen …	Checking names…
 Gesichter: {} von {} Fotos	Faces: {} of {} photos
 Personen	People
 Gesichter automatisch erkennen	Detect faces automatically
-Läuft im Hintergrund mit niedriger Priorität; beim ersten Mal wird ein Gesichtsmodell (39 MB) geladen. Wirkt ab dem nächsten Start	Runs in the background at low priority; a face model (39 MB) is downloaded the first time. Takes effect on next launch
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Wirkt ab dem nächsten Start	Runs in the background at low priority; graineo asks before downloading the face model (39 MB) once. Takes effect on next launch
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Auf diesem System rechnet graineo die Gesichtserkennung selbst; das kann länger dauern. Wirkt ab dem nächsten Start	Runs in the background at low priority; graineo asks before downloading the face model (39 MB) once. On this system graineo computes face detection itself; this can take longer. Takes effect on next launch
 Anderer Name …	Other name…
 Übernehmen	Apply
 Namen prüfen ({a})	Check names ({a})
@@ -2401,8 +2404,8 @@ aus	off
 Klicken zum Schließen	Click to close
 Foto aus Apple Fotos – dort löschen	Photo from Apple Photos – delete it there
 Apple Fotos	Apple Photos
-Mediathek von Apple Fotos einbinden	Include the Apple Photos library
-Keine Mediathek von Apple Fotos gefunden	No Apple Photos library found
+Bibliothek von Apple Fotos einbinden	Include the Apple Photos library
+Keine Bibliothek von Apple Fotos gefunden	No Apple Photos library found
 {p} · wird nur gelesen; Fotos, Alben und Favoriten erscheinen in der Bibliothek, Einstellungen bleiben bei graineo	{p} · read-only; photos, albums and favorites appear in the library; settings stay in graineo
 Abgleich	Sync
 Jetzt abgleichen	Sync now
@@ -2414,7 +2417,7 @@ Versionen	Versions
 Eine virtuelle Kopie hat eigene Einstellungen, die Datei bleibt dieselbe.	A virtual copy has its own settings; the file stays the same.
 Zum Beispiel ein anderer Film oder ein anderer Ausschnitt desselben Fotos, ohne die Datei zu verdoppeln.\n\n### Löschen\nKopie wählen, dann Entf.	For example, a different film or a different crop of the same photo, without duplicating the file.\n\n### Delete\nSelect the copy, then press Delete.
 Apple Fotos: viele Fotos verschwunden	Apple Photos: many photos missing
-{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Mediathek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{n} of {k} photos suddenly disappeared from Apple Photos (and aren’t in “Recently Deleted” either). This can happen when Apple Photos is repairing a library or rebuilding it from iCloud.
+{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Bibliothek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{n} of {k} photos suddenly disappeared from Apple Photos (and aren’t in “Recently Deleted” either). This can happen when Apple Photos is repairing a library or rebuilding it from iCloud.
 Der Abgleich wurde angehalten, in graineo ist nichts entfernt. Beim Abgleichen werden diese Fotos samt Sternen, Stichwörtern und Bearbeitung aus der Bibliothek entfernt.	Sync has been paused; nothing was removed in graineo. If you sync, these photos will be removed from the library along with their stars, keywords and edits.
 Trotzdem abgleichen	Sync anyway
 Apple Fotos: Abgleich angehalten – {n} von {k} Fotos wären entfernt worden	Apple Photos: sync paused – {n} of {k} photos would have been removed
@@ -2537,7 +2540,7 @@ Filter: unmarkierte zeigen	Filter: show unflagged
 Filter: abgelehnte zeigen	Filter: show rejected
 {a} · {b} Fotos	{a} · {b} photos
 {a} gelöscht	{a} deleted
-{a} aus der Mediathek → Papierkorb	{a} from the library → Trash
+{a} aus der Bibliothek → Papierkorb	{a} from the library → Trash
 {a} aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	{a} from Apple Photos → “Recently Deleted” (30 days)
 aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	from Apple Photos → “Recently Deleted” (30 days)
 in den Papierkorb	move to Trash
@@ -2661,8 +2664,8 @@ Ziel ohne Dateiname	Destination has no file name
 Abgleich mit den Begleitdateien …	Syncing with sidecar files…
 kein Quellordner gewählt	no source folder chosen
 kein erreichbarer Stammordner	no root folder available
-nie in die Mediathek von Apple Fotos schreiben	never write into the Apple Photos library
-Nie in die Mediathek von Apple Fotos verschieben	Never move into the Apple Photos library
+nie in die Bibliothek von Apple Fotos schreiben	never write into the Apple Photos library
+Nie in die Bibliothek von Apple Fotos verschieben	Never move into the Apple Photos library
 Bibliothek hat ein älteres Schema ({v}) – erst mit graineo öffnen	Library uses an older schema ({v}) – open it in graineo first
 kein Dateiname	no file name
 keine freie Nebendatei	no free name for a companion file
@@ -2696,7 +2699,7 @@ Stichwort nicht angelegt	Keyword not created
 Rahmen zu klein	Frame too small
 Ordner unbekannt	Unknown folder
 Leser abgestürzt	Reader crashed
-Mediathek nicht gefunden	Library not found
+Bibliothek nicht gefunden	Library not found
 keine Kennung	no identifier
 keine lokale Vorschau in Apple Fotos	no local preview in Apple Photos
 ImageIO kann die Datei nicht lesen	ImageIO can’t read the file
@@ -2704,13 +2707,13 @@ Bildgröße passt nicht	Image size doesn’t match
 Änderungen eintragen …	Saving changes…
 {p}: Begleitdatei {} aus der Bibliothek neu geschrieben	{p}: sidecar file {} rewritten from the library
 {p}: {g} in die Begleitdatei geschrieben (Bibliothek neuer){}	{p}: {g} written to the sidecar file (library newer){}
-Die Mediathek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	Add the Apple Photos library in Settings → Library, not as a folder
+Die Bibliothek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	Add the Apple Photos library in Settings → Library, not as a folder
 Ziel existiert schon: {}	Destination already exists: {}
 Datei unbekannt	Unknown file
 Fotos aus Apple Fotos lassen sich hier nicht verschieben oder umbenennen	Photos from Apple Photos can’t be moved or renamed here
 {n} Foto(s) nach {}	{n} photo(s) to {}
 ungültiger Ordnername	invalid folder name
-Ordner der Mediathek von Apple Fotos werden nicht umbenannt	Apple Photos library folders can’t be renamed
+Ordner der Bibliothek von Apple Fotos werden nicht umbenannt	Apple Photos library folders can’t be renamed
 Ordner umbenennen in {}	Rename folder to {}
 {} fehlt	{} is missing
 Modellkopf zu kurz	Model header too short
@@ -3005,7 +3008,7 @@ Der Stammordner {a} fehlt – bitte zuerst ihn suchen	The root folder {a} is mis
 Die Bibliothek kennt in diesem Ordner keine Fotos – nichts zu verknüpfen	The library has no photos in this folder – nothing to relink
 Die Bibliothek hat sich inzwischen geändert – bitte noch einmal suchen	The library has changed in the meantime – please try locating it again
 {a}. Der gewählte Ordner ist schon in der Bibliothek – bitte dort die Einträge prüfen oder einen anderen Ordner wählen.	{a}. The chosen folder is already in the library – please check the entries there or choose another folder.
-Ordner der Mediathek von Apple Fotos werden nicht neu verknüpft	Apple Photos library folders can’t be relinked
+Ordner der Bibliothek von Apple Fotos werden nicht neu verknüpft	Apple Photos library folders can’t be relinked
 1 Foto ist dort nicht – es bleibt als fehlend markiert.	1 photo isn’t there – it stays marked as missing.
 1 Datei heißt gleich, ist aber anders groß – sie bleibt als fehlend markiert, bis der Abgleich sie prüft.	1 file has the same name but a different size – it stays marked as missing until the next sync checks it.
 1 Foto mit gleicher Größe, aber anderer Änderungszeit wird mit verknüpft.	1 photo with the same size but a different modification time is also relinked.
@@ -3098,7 +3101,7 @@ Ohne Vorschau (Datei nicht lesbar): {a}	No preview (file unreadable): {a}
 ohne Vorschau: {a}	no preview: {a}
 Ordner zusammengeführt	Folder merged
 Ordner {a} von {b} · Datei {c} von {d} · {e} von {f}	Folder {a} of {b} · file {c} of {d} · {e} of {f}
-Bleiben liegen (Lightroom-Katalog, Mediathek von Apple Fotos, Pakete anderer Programme): {a}	Left in place (Lightroom catalog, Apple Photos library, packages from other apps): {a}
+Bleiben liegen (Lightroom-Katalog, Bibliothek von Apple Fotos, Pakete anderer Programme): {a}	Left in place (Lightroom catalog, Apple Photos library, packages from other apps): {a}
 {a} Katalogdateien	{a} catalog files
 Verschieben vorbereiten	Preparing the move
 Ordner und Ziel werden verglichen …	Comparing folder and destination…
@@ -3712,7 +3715,7 @@ Ziel nicht verwendet	Destination not used
 Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben.	The file as is, copied and verified (SHA-256); nothing is overwritten.
 Begleitdatei (XMP) mit Bewertung und Entwicklung	Sidecar (XMP) with rating and edits
 Kamera-JPEG der RAW+JPEG-Paare	Camera JPEG from RAW+JPEG pairs
-Ziel liegt in „{a}“ – in die Mediathek oder das Paket eines anderen Programms schreibt graineo nicht	The destination is inside “{a}” – graineo never writes into another app’s library or package
+Ziel liegt in „{a}“ – in die Bibliothek oder das Paket eines anderen Programms schreibt graineo nicht	The destination is inside “{a}” – graineo never writes into another app’s library or package
 {a}: gibt es schon – nichts wird überschrieben	{a}: already exists – nothing is overwritten
 Fotos löschen	Deleting Photos
 Kontaktabzug wird berechnet	Computing Contact Print
@@ -3865,7 +3868,7 @@ Zeigt das Bild so, wie es in einem kleineren Farbraum aussähe – nur die Anzei
 Farbproof: Voller Umfang ↔ zuletzt gewählter Farbraum	Soft proof: full gamut ↔ last-used space
 Farbumfang-Warnung: Pixel außerhalb des Proof-Farbraums markieren	Gamut warning: highlight pixels outside the proof space
 Entwickeln zeigt die Farben ohne Beschneiden auf sRGB, wenn der Bildschirm mehr kann (MacBook Pro, EIZO): eingepasst, vergrößert, Lupe und Vergleich. Gilt für Foveon und alle anderen Formate, nicht für Film, Schwarzweiß und ältere Foveon-Kameras (DP1, DP2, SD15 …)	On wide-gamut displays (MacBook Pro, EIZO), Develop shows colors without clipping them to sRGB: fit, zoomed, loupe and compare. Applies to Foveon and all other formats, except film, black & white and older Foveon cameras (DP1, DP2, SD15…)
-• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Mediathek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **Soft proof** – View → Soft Proof: full gamut, sRGB, Display P3, Adobe RGB or ProPhoto. Colors outside the chosen space are clipped to its edge. ⌘Y toggles between full gamut and the last-used space.\n• **Gamut warning** – ⇧⌘Y paints pixels that fall outside the proof space magenta.\n\nApplies wherever Develop shows the photo: fit to window, zoomed, in the loupe, in the navigator and when comparing, including the Darkroom. Thumbnails (Library, filmstrip), film and black & white are sRGB images; they fall inside every proof space, so proofing doesn’t change them. The setting lasts until you quit; here you choose what graineo starts with.
+• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Bibliothek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **Soft proof** – View → Soft Proof: full gamut, sRGB, Display P3, Adobe RGB or ProPhoto. Colors outside the chosen space are clipped to its edge. ⌘Y toggles between full gamut and the last-used space.\n• **Gamut warning** – ⇧⌘Y paints pixels that fall outside the proof space magenta.\n\nApplies wherever Develop shows the photo: fit to window, zoomed, in the loupe, in the navigator and when comparing, including the Darkroom. Thumbnails (Library, filmstrip), film and black & white are sRGB images; they fall inside every proof space, so proofing doesn’t change them. The setting lasts until you quit; here you choose what graineo starts with.
 Automatisch (natürlich)	Automatic (natural)
 ohne Wirkung unter ISO 800	no effect below ISO 800
 {w} × {h} · Binning ×{n}	{w} × {h} · binning ×{n}
@@ -3917,7 +3920,7 @@ Abschnitt einschalten	Turn section on
 Abschnitt vorübergehend ausschalten	Turn section off temporarily
 Blendenstufen der hellsten 0,1 % jeder Schicht bis zur Sättigung	Stops from the brightest 0.1 % of each layer to saturation
 Kachelgröße	Tile size
-Suchfeld der Mediathek	Library search field
+Suchfeld der Bibliothek	Library search field
 Aufsteigend sortiert · Klick kehrt um	Sorted ascending · click to reverse
 Absteigend sortiert · Klick kehrt um	Sorted descending · click to reverse
 Metadaten-Filter: Kamera, Objektiv, ISO …	Metadata filter: camera, lens, ISO…
@@ -3927,7 +3930,7 @@ Nur abgelehnte	Rejects only
 Suchen, auch nach Feldern wie iso:200	Search, including fields like iso:200
 Eigene Einstellungen, dieselbe Datei	Separate settings, same file
 Info: Metadaten, Stichwörter, Bewertung	Info: metadata, keywords, rating
-Mediathek: Fotos finden und auswählen	Library: find and select photos
+Bibliothek: Fotos finden und auswählen	Library: find and select photos
 Entwickeln: das Foto digital entwickeln	Develop: develop the photo digitally
 Dunkelkammer: Film entwickeln und auf Papier abziehen	Darkroom: develop the film and print it on paper
 Neue virtuelle Kopie, um einen anderen Film auszuprobieren	New virtual copy to try another film
@@ -4280,7 +4283,7 @@ Nicht in der Bibliothek · wird gesucht …	Not in library · searching…
 Name klingt nach Papierkorb	name suggests a trash folder
 Name klingt nach Export	name suggests an export
 Name klingt nach Sicherung oder Kopie	name suggests a backup or copy
-Photo-Booth-Mediathek	Photo Booth library
+Photo-Booth-Bibliothek	Photo Booth library
 Picasa-Ordner	Picasa folder
 {a} vermutlich schon in der Bibliothek (gleicher Name und Größe)	{a} probably already in the library (same name and size)
 Datei fehlt oder Laufwerk nicht verbunden	file missing or drive not connected
@@ -4351,7 +4354,7 @@ Zurück zur Liste	Back to the list
 Größe, Aufnahmezeit, Prüfsumme	size, capture time, checksum
 nicht erreichbar, nichts wird entfernt	unavailable, nothing will be removed
 Bild {a} % gleich, gleicher Tag, nur von Hand	image {a} % identical, same day, manual only
-Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner an Ort und Stelle in die Bibliothek auf (wie „Importieren …“ mit „An Ort und Stelle“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur vorübergehend zum Entwickeln, ohne Aufnahme	One tree per root folder with photo counts. graineo doesn’t copy, move or rename anything.\n\n## Gray, crossed out\nLocation offline. The photos stay visible via their previews; stars, keywords and people can still be changed. Developing, exporting and deleting need the original.\n\n## Adding folders\n• **+** at the right of the header – adds a folder to the library in place (like “Import…” with “In place”)\n• **View Folder…** (⌘O, File menu) – temporary, just for developing, without adding it
+Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner in die Bibliothek auf; die Fotos bleiben, wo sie sind (wie „Fotos importieren …“ mit „Hinzufügen“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur ansehen, ohne Import; verändert nichts	One tree per root folder with photo counts. graineo doesn’t copy, move or rename anything.\n\n## Gray, crossed out\nLocation offline. The photos stay visible via their previews; stars, keywords and people can still be changed. Developing, exporting and deleting need the original.\n\n## Adding folders\n• **+** at the right of the header – adds a folder to the library; the photos stay where they are (like “Import Photos…” with “Add”)\n• **View Folder…** (⌘O, File menu) – only view, without importing; changes nothing
 Rückgängig: Einstellungen ({n} Fotos)	Undone: settings ({n} photos)
 Wiederholt: Einstellungen ({n} Fotos)	Redone: settings ({n} photos)
 Ähnlich zu: {a}	Similar to: {a}
@@ -4620,7 +4623,7 @@ Blendenbereich	Aperture range
 Defektpixel	Defective pixels
 Bildstil	Picture style
 Stichwörter des Fotos.	The photo’s keywords.
-Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Mediathek, Spalte „Stichwort“.	The field adds a keyword (to all selected photos if several are selected). To filter by keywords and manage them (rename, move, delete via right-click), use the Library’s metadata filter, “Keyword” column.
+Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Bibliothek, Spalte „Stichwort“.	The field adds a keyword (to all selected photos if several are selected). To filter by keywords and manage them (rename, move, delete via right-click), use the Library’s metadata filter, “Keyword” column.
 Import wartet auf das Laufwerk	Import waiting for drive
 {a} hinzufügen	Add {a}
 Im Hintergrund weiter	Continue in background
@@ -4698,7 +4701,7 @@ Rest importieren	Import Remaining
 Fenster zeigen	Show Window
 Bringt Fotos von einer Karte oder aus einem Ordner in die Bibliothek.	Brings photos from a card or folder into the library.
 • **Hinzufügen** – die Fotos bleiben, wo sie sind; ihre Ordner kommen in die Bibliothek (abgehakt wird je Ordner)\n• **Kopieren** – jede Datei wird ins Ziel kopiert, danach vom Ziel zurückgelesen (am Zwischenspeicher des Macs vorbei) und mit SHA-256 verglichen; erst dann gilt sie als importiert. Die Quelle bleibt unverändert\n• **Verschieben** – wie Kopieren; die Originale eines Fotos kommen erst in den Papierkorb, wenn alle seine Kopien (RAW, JPEG, XMP, zweite Kopie) geprüft sind\n\n### Marken\n• **schon da** – dieselbe Datei (gleicher Inhalt, Name egal) ist schon in der Bibliothek; sie wird übersprungen\n• **vermutlich da** – gleiche Größe und gleicher Name oder Aufnahmezeit wie ein Foto, dessen Laufwerk gerade nicht verbunden ist; nicht angehakt, du entscheidest\n• **identisch** – bytegleiche Kopie eines anderen Fotos in derselben Quelle; nur das erste wird importiert\n\n### Im Hintergrund weiter\nSchließt das Fenster, der Import läuft weiter und graineo bleibt bedienbar. Die Statusanzeige oben zeigt den Fortschritt, ein Klick darauf holt das Fenster zurück. Fehlt unterwegs das Ziel oder die Karte, wartet der Import, bis sie wieder da sind.	• **Add** – the photos stay where they are; their folders are added to the library (selected per folder)\n• **Copy** – each file is copied to the destination, then read back from it (bypassing the Mac’s cache) and compared via SHA-256; only then does it count as imported. The source is left untouched\n• **Move** – like Copy; a photo’s originals go to the Trash only after all its copies (RAW, JPEG, XMP, second copy) are verified\n\n### Marks\n• **already imported** – the same file (same content, regardless of name) is already in the library; it’s skipped\n• **probably imported** – same size and same name or capture time as a photo on a drive that isn’t connected; not checked, you decide\n• **identical** – a byte-for-byte copy of another photo in the same source; only the first one is imported\n\n### Continue in background\nCloses the window; the import keeps running and you can keep using graineo. The status display at the top shows progress; click it to bring the window back. If the destination or card disappears midway, the import waits until it’s back.
-In der Mediathek zeigen	Show in Library
+In der Bibliothek zeigen	Show in Library
 angeschlossen – zum Lesen anklicken	connected – click to load
 verbindet …	connecting…
 liest die Dateiliste … {p} %	reading the file list… {p} %
@@ -4778,7 +4781,7 @@ Foto öffnen	Open photo
 Alle sehr wahrscheinlichen bestätigen ({n})	Confirm all very likely ({n})
 Bestätigt die Vorschläge „sehr wahrscheinlich“ der aktuellen Auswahl in den Spalten (⌘Z nimmt es zurück)	Confirms the “very likely” suggestions in the current column selection (⌘Z to undo)
 Name entfernen, das Gesicht bleibt ohne Namen	Remove the name; the face stays unnamed
-Alle Fotos dieser Person in der Mediathek zeigen	Show all photos of this person in the Library
+Alle Fotos dieser Person in der Bibliothek zeigen	Show all photos of this person in the Library
 Nicht angezeigte Personen bekommen keine Vorschläge und stehen nur in der Personenspalte	Hidden people get no suggestions and only appear in the People column
 Die neuen Vorschläge übernehmen (die Ansicht ändert sich nicht von allein)	Apply the new suggestions (the view doesn’t update on its own)
 Die Vorschläge wurden im Hintergrund neu berechnet.	The suggestions were recalculated in the background.
@@ -4866,13 +4869,14 @@ Film: spektrafilm, A. Volpato (GPL-3.0)	Film: spektrafilm, A. Volpato (GPL-3.0)
 Filmdaten: CC BY-SA 4.0	Film data: CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	RAW decoding: rawler (LGPL-2.1)
 Objektivdaten: lensfun (CC BY-SA 3.0)	Lens data: lensfun (CC BY-SA 3.0)
+Gesichter finden: YuNet, Shiqi Yu (MIT)	Face detection: YuNet, Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	Tool ideas: grain loupe, pre-flash, diffusion and light points, inspired by spektrafilm
 Schriften und Symbole	Fonts and icons
 Marken	Trademarks
 Foveon und Sigma sind Marken der Sigma Corporation; graineo ist nicht mit Sigma verbunden.	Foveon and Sigma are trademarks of Sigma Corporation; graineo is not affiliated with Sigma.
 ← Personen	← People
 Rahmen	Frames
-Alle Fotos von {a} in der Mediathek zeigen	Show all photos of {a} in the Library
+Alle Fotos von {a} in der Bibliothek zeigen	Show all photos of {a} in the Library
 Einblenden	Show
 {a} wieder einblenden: bekommt wieder Vorschläge	Show {a} again: suggestions resume
 {a} ausblenden: keine Vorschläge mehr, nur noch in der Spalte PERSON zu finden	Hide {a}: no more suggestions; only listed in the PERSON column
@@ -5109,3 +5113,141 @@ Aufnahmedaten: Kamera, Objektiv, Blende, Zeit, ISO, Datum, Urheber	Shooting data
 Alles: zusätzlich Stichwörter, Beschreibung, Sterne, Etikett	All: also keywords, caption, stars, label
 Standort (GPS) mitschreiben	Include location (GPS)
 Nur wenn das Original einen Standort hat	Only if the original has a location
+Filter werden geladen …	Loading filters…
+Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.	When adding, the whole folder goes into the library.
+Wähle zuerst, wohin die Fotos kommen.	First choose where the photos go.
+Neuer Ordner in der Bibliothek:	New folder in the library:
+{a} kopieren	Copy {a}
+{a} verschieben	Move {a}
+Karte oder Kamera	Card or Camera
+{a} verschoben und geprüft ({b}, {c})	{a} moved and verified ({b}, {c})
+Bewertungen als Begleitdatei (XMP) neben die Fotos schreiben	Write ratings next to the photos as sidecar files (XMP)
+Zur Bibliothek hinzufügen …	Add to Library…
+Wie möchtest du anfangen?	How would you like to start?
+Von Karte, Kamera oder aus einem Ordner.	From a card, a camera or a folder.
+Du wählst, ob die Fotos bleiben, kopiert oder verschoben werden.	You choose whether the photos stay, are copied or are moved.
+Aus Lightroom importieren	Import from Lightroom
+Aus Lightroom importieren …	Import from Lightroom…
+Fotos, Sterne, Sammlungen und Bearbeitungen.	Photos, stars, collections and edits.
+Der Katalog wird nur gelesen.	The catalog is only read.
+Ordner nur ansehen	Just View a Folder
+Fotos durchblättern, ohne Import.	Browse photos without importing.
+Verändert nichts.	Changes nothing.
+Ordner und Fotos kannst du auch hierher ziehen.	You can also drag folders and photos here.
+Du nutzt Apple Fotos? Bibliothek verbinden …	Using Apple Photos? Connect its library…
+Öffnet Einstellungen › Bibliothek › Apple Fotos	Opens Settings › Library › Apple Photos
+graineo liest deinen Lightroom-Katalog nur. Lightroom und deine Fotos bleiben unverändert.	graineo only reads your Lightroom catalog. Lightroom and your photos stay unchanged.
+In „{a}“ ist keiner.	There is none in “{a}”.
+Sucht nach Katalogen …	Looking for catalogs…
+Lightroom ist geöffnet. Am besten vorher beenden, sonst fehlen die neuesten Änderungen.	Lightroom is open. Best quit it first, or the latest changes will be missing.
+Lightroom vorher beenden (sonst fehlen die neuesten Änderungen).	Quit Lightroom first (otherwise the latest changes are missing).
+Importieren geht erst mit einem lesbaren Katalog. Wähle einen anderen oder prüfe ihn erneut.	Importing needs a readable catalog. Choose another one or check it again.
+Liest den Katalog …	Reading the catalog…
+{a}, davon {b} neu	{a}, {b} of them new
+{a} bearbeitet	{a} edited
+Sammlungssatz	Collection set
+Sammlungssätze	Collection sets
+{a} gerade nicht erreichbar: {b}	{a} not reachable right now: {b}
+Die Bearbeitungen kommen gleich mit. Erst „Importieren“ schreibt in die Bibliothek.	The edits come along. Only “Import” writes to the library.
+Erneut prüfen	Check Again
+Bearbeitungen: abgebrochen am {d} · {n} übernommen	Edits: cancelled on {d} · {n} transferred
+Bearbeitungen: {n} übernommen · {d}	Edits: {n} transferred · {d}
+Bearbeitungen: noch nicht übernommen	Edits: not transferred yet
+„Prüfen“ liest den Katalog und zeigt, was kommt. Geschrieben wird erst beim Importieren; die Bearbeitungen kommen gleich mit.	“Check” reads the catalog and shows what will come. Nothing is written until you import; the edits come along.
+leer: ganz oben	empty: at the top level
+Die Sammlungen aus Lightroom kommen in diesen Sammlungssatz	The collections from Lightroom go into this collection set
+{n} Bearbeitungen übernommen	{n} edits transferred
+Im Hintergrund fortsetzen	Continue in Background
+„{a}“ ist nicht da. Ist das Laufwerk verbunden?	“{a}” is not there. Is the drive connected?
+„{a}“ ist nicht da. Wurde der Katalog verschoben oder umbenannt?	“{a}” is not there. Was the catalog moved or renamed?
+Diese Datei ist kein Lightroom-Katalog oder ist beschädigt.	This file is not a Lightroom catalog or is damaged.
+Der Katalog lässt sich nicht öffnen. Hat graineo Zugriff auf den Ordner?	The catalog can’t be opened. Does graineo have access to the folder?
+Lightroom schreibt gerade in den Katalog. Beende Lightroom und prüfe noch einmal.	Lightroom is writing to the catalog. Quit Lightroom and check again.
+Der Katalog lässt sich nicht lesen.	The catalog can’t be read.
+{p} · graineo liest deine Bibliothek nur. In Apple Fotos ändert sich nichts.	{p} · graineo only reads your library. Nothing changes in Apple Photos.
+Bibliothek von Apple Fotos verbinden	Connect the Apple Photos library
+Ordner ansehen, ohne zu importieren	View a folder without importing
+Was passiert	What happens
+Anderen wählen …	Choose Another…
+Die Fotos bleiben an ihrem Ort und werden nur eingetragen.	The photos stay where they are and are only added to the library.
+Die Fotos werden geprüft kopiert; die Originale bleiben.	The photos are copied and verified; the originals stay.
+Nach der geprüften Kopie kommen die Originale in den Papierkorb.	After the verified copy, the originals go to the Trash.
+Von der Kamera wird immer geprüft kopiert. Auf der Kamera ändert sich nichts.	From a camera, photos are always copied and verified. Nothing changes on the camera.
+Wähle zuerst eine Quelle: Karte, Kamera oder Ordner	First choose a source: card, camera or folder
+Liest die Fotos …	Reading the photos…
+In dieser Quelle sind keine Fotos	There are no photos in this source
+Wähle mindestens einen Ordner	Choose at least one folder
+Wähle zuerst einen Zielordner	First choose a destination folder
+Der Zielordner ist gerade nicht erreichbar	The destination folder can’t be reached right now
+Wähle mindestens ein Foto	Choose at least one photo
+Gib der neuen Sammlung einen Namen	Give the new collection a name
+Zum Bewerten zur Bibliothek hinzufügen oder den Schalter „Bewertungen als Begleitdatei (XMP)“ einschalten	To rate, add to the library or turn on “Ratings as sidecar files (XMP)”
+Holt Fotos, Bewertungen, Stichwörter, Sammlungen, Gesichter und Bearbeitungen aus dem Lightroom-Katalog in die Bibliothek.	Imports photos, ratings, keywords, collections, faces and edits from the Lightroom catalog into the library.
+Der Katalog wird nur gelesen; Lightroom und die Fotos bleiben unverändert.\n• **Prüfen** – liest den Katalog und zeigt, was kommt; geschrieben wird noch nichts\n• **Importieren** – schreibt in die Bibliothek; die Bearbeitungen kommen im selben Lauf mit\n• **Erneut prüfen** – holt spätere Änderungen aus Lightroom nach; was du seither in graineo geändert hast, bleibt\n• **Sammlungssatz** – die Sammlungen des Katalogs kommen in diesen Satz; leer: ganz oben\n• **Smart-Sammlungen** – kommen nur mit ihrem Namen\n\n### Tipp\nLightroom vorher beenden, sonst fehlen die neuesten Änderungen.	The catalog is only read; Lightroom and the photos stay unchanged.\n• **Check** – reads the catalog and shows what will come; nothing is written yet\n• **Import** – writes to the library; the edits come along in the same run\n• **Check Again** – picks up later changes from Lightroom; anything you’ve changed in graineo since then is kept\n• **Collection set** – the catalog’s collections go into this set; empty: at the top level\n• **Smart collections** – only their names are imported\n\n### Tip\nQuit Lightroom first, or the latest changes will be missing.
+Willkommen bei	Welcome to
+Gefunden in deinem Lightroom-Ordner:	Found in your Lightroom folder:
+Noch nichts gewählt	Nothing chosen yet
+Gesichtserkennung vorbereiten	Prepare face recognition
+graineo lädt einmalig {a} MB für die Gesichtserkennung. Danach arbeitet sie ohne Internet.	graineo downloads {a} MB once for face recognition. After that it works without internet.
+Mit „Später“ wird nichts geladen; die Frage kommt beim nächsten Start wieder. Abschalten: Einstellungen → Entwickeln → Personen → „Gesichter automatisch erkennen“.	“Later” downloads nothing; the question comes back at the next launch. To switch off: Settings → Develop → People → “Detect faces automatically”.
+Laden	Download
+Gesichtsmodell fehlt – es wird erst nach Bestätigung geladen	The face model is missing – it is only downloaded after confirmation
+Zielordner nicht beschreibbar: {}	Destination folder is not writable: {}
+Zielordner nicht gefunden: {}	Destination folder not found: {}
+„{a}“ lässt sich nicht als Regel sichern: wähle links „Alle Fotos“	“{a}” cannot be saved as a rule: choose “All Photos” on the left
+Metadaten-Filter werden noch geladen	Metadata filters are still loading
+Diese Fotos als Smart-Sammlung sichern	Save these photos as a Smart Collection
+Als Smart-Sammlung sichern	Save as Smart Collection
+Sichert die Filter als Regel: neue passende Fotos kommen von selbst hinzu	Saves the filters as a rule: new matching photos are added automatically
+Fotos/Videos bleibt eine Einstellung der Ansicht, keine Regel	Photos/videos stays a view setting, not a rule
+Titel	Title
+GPS-Position	GPS location
+Im Katalog fehlt: {a}. Diese Angaben bleiben leer.	Missing in the catalog: {a}. These details stay empty.
+{n} übernommen	{n} taken over
+Nicht übernommen: {a}	Not taken over: {a}
+bearbeitetes Foto	edited photo
+bearbeitete Fotos	edited photos
+Neueres Katalogformat als getestet ({a}, getestet: {b}). graineo importiert trotzdem; was fehlt, steht im Bericht.	Newer catalog format than tested ({a}, tested: {b}). graineo imports it anyway; anything missing is listed in the report.
+KI-Maske	AI mask
+KI-Masken	AI masks
+Bereichsmaske	range mask
+Bereichsmasken	range masks
+Maske mit Subtraktion	mask with subtraction
+Masken mit Subtraktion	masks with subtraction
+andere Maske	other mask
+andere Masken	other masks
+Punktfarbe	point color
+Punktfarben	point colors
+Entfernen-Punkt	remove spot
+Entfernen-Punkte	remove spots
+Stichwort-Synonym	keyword synonym
+Stichwort-Synonyme	keyword synonyms
+Stapel	stack
+Etikett ohne Farbe (nur Text)	label without color (text only)
+Etiketten ohne Farbe (nur Text)	labels without color (text only)
+KI-Daten des Katalogs fehlen (Ordner „.lrcat-data“)	AI data of the catalog missing (folder “.lrcat-data”)
+Titel · GPS	Title · GPS
+{a} mit Titel · {b} mit GPS-Position	{a} with title · {b} with GPS location
+Etiketten ohne Farbe	Labels without color
+ – neuer als getestet ({a})	 – newer than tested ({a})
+Katalogformat	Catalog format
+Im Katalog fehlt	Missing in the catalog
+Bearbeitet (in Lightroom)	Edited (in Lightroom)
+Nicht übernommen	Not taken over
+Bedienfelder einblenden	Show panels
+Bedienfelder ausblenden	Hide panels
+Licht aus: nur in der Einzelansicht	Lights out: single view only
+Licht dimmen	Dim the lights
+Licht ganz aus	Lights fully out
+Licht wieder an	Lights back on
+Alles wieder einblenden	Show everything again
+„(ohne)“ lässt sich nicht als Regel sichern	“(none)” can’t be saved as a rule
+„{a}“ enthält ein Anführungszeichen und lässt sich nicht als Regel sichern	“{a}” contains a quotation mark and can’t be saved as a rule
+{a} im Netzwerk, nicht geprüft: {b}	{a} on the network, not checked: {b}
+Die Bibliothek wurde aus einem anderen Lightroom-Katalog übernommen. Ein zweiter Katalog würde Fotos vertauschen, deshalb bleibt alles, wie es ist.	The library was imported from a different Lightroom catalog. A second catalog would mix up photos, so nothing is changed.
+Der Name ist schon vergeben, gesichert wird als „{n}“.	The name is already taken; it will be saved as “{n}”.
+Nur ansehen – Originale unverändert	View only – your originals stay untouched
+Änderungen (Entwicklung) werden als Begleitdatei (XMP) neben das Foto gespeichert, sobald du etwas änderst. Zur Bibliothek hinzufügen speichert sie stattdessen in der Bibliothek.	Changes (develop edits) are saved as a sidecar (XMP) next to the photo as soon as you change something. Adding to the library saves them in the library instead.
+Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	Applies to ratings only. Develop edits are always saved as a sidecar next to the photo.
+Zielordner wird geprüft …	Checking the destination folder …
+Zielordner antwortet nicht: {}	Destination folder is not responding: {}

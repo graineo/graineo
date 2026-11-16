@@ -139,17 +139,7 @@ impl Ticket {
         let last_run = db.last_import();
         let quick_id = db.quick_id();
         let quick = (quick_id, quick_id.map(|id| db.images_of_collection(id).unwrap_or_default().into_iter().collect()).unwrap_or_default());
-        let facet_keywords = self.facets.then(|| {
-            let mut keywords: HashMap<i64, Vec<i64>> = HashMap::new();
-            if let Ok(mut st) = db.conn.prepare("SELECT image, keyword FROM image_keyword") {
-                if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))) {
-                    for (b, k) in rows.flatten() {
-                        keywords.entry(b).or_default().push(k);
-                    }
-                }
-            }
-            keywords
-        });
+        let facet_keywords = self.facets.then(|| super::library_facets_job::read_assignments(db));
         let keys = rows.iter().map(|z| (z.file, super::row_key(&folder_paths, z))).collect();
         let mut stats = Stats::default();
         stats.add(&rows);
@@ -222,7 +212,7 @@ impl LibraryView {
     /// Starting point for a load in another thread (job): see [`Ticket::load`], then [`Self::adopt_load`].
     pub fn load_ticket(&self) -> Ticket {
         let pending = self.quick_pending.load(Ordering::SeqCst) > 0;
-        Ticket { counter: self.loader.counter.clone(), facets: self.facets.is_some(), settled: self.loader.rating_settled, quick_sent: (!pending).then_some(self.loader.quick_sent) }
+        Ticket { counter: self.loader.counter.clone(), facets: self.facets.is_some() || self.facets_job.is_some(), settled: self.loader.rating_settled, quick_sent: (!pending).then_some(self.loader.quick_sent) }
     }
 
     /// Re-read everything from the database (after import/sync, …) – in the background; the result is adopted in a later
@@ -385,15 +375,12 @@ impl LibraryView {
         self.build_tree_with(Some(l.dates));
         (self.cameras, self.formats, self.years) = stats.finish();
         // rebuild the column filters; the selection is kept (via the names)
-        let remembered = self.facets.take().map(|f| f.remember());
-        if let Some(g) = &remembered {
-            match &l.facet_keywords {
-                Some(kw) => self.facets = Some(crate::library_filter::Facets::build(&self.rows, &self.keywords, kw)),
-                None => self.facets_ready(),
-            }
-            if let Some(f) = &mut self.facets {
-                f.restore(g);
-            }
+        if let Some(g) = self.take_facets_state() {
+            let source = match l.facet_keywords {
+                Some(kw) => super::library_facets_job::Assignments::Known(kw),
+                None => super::library_facets_job::Assignments::FromDb(self.db.as_ref().map(|d| d.path.clone()).unwrap_or_default()),
+            };
+            self.start_facets(g, source);
         }
         self.query_for = None;
         self.smart_counts.clear();

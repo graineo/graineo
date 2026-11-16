@@ -359,6 +359,64 @@ pub fn import(w: &Values, size: [usize; 2]) -> (Option<Document>, Option<MaskImp
     (doc, any.then_some(report))
 }
 
+/// Keys of [`not_taken`] (English; the app shows them translated).
+pub const AI_MASKS: &str = "ai_masks";
+pub const RANGE_MASKS: &str = "range_masks";
+pub const SUBTRACTIONS: &str = "subtractions";
+pub const OTHER_MASKS: &str = "other_masks";
+pub const POINT_COLOR: &str = "point_color";
+pub const REMOVE_SPOTS: &str = "remove_spots";
+
+/// `PointColors = { … }` with at least one entry (Lightroom 15 writes an empty one into every text).
+fn point_colors_listed(text: &str) -> bool {
+    text.match_indices("PointColors").any(|(i, k)| {
+        let rest = text[i + k.len()..].trim_start();
+        let Some(rest) = rest.strip_prefix('=') else { return false };
+        let Some(rest) = rest.trim_start().strip_prefix('{') else { return false };
+        !rest.trim_start().starts_with('}')
+    })
+}
+
+/// What graineo does not take over from one Lightroom settings text (`Adobe_imageDevelopSettings.text`), counted per
+/// kind: local corrections whose masks cannot be read (AI selections `Mask/Image`, range masks, subtracted parts,
+/// others – one count per correction, by the first reason, as [`import`] skips them), point color entries and
+/// spots of the newer remove tool (`RetouchAreas`; the older spot removal `RetouchInfo` is taken over). Empty if
+/// everything comes along. Quick for texts without any of these (no parsing).
+pub fn not_taken(text: &str) -> std::collections::BTreeMap<String, usize> {
+    let mut out = std::collections::BTreeMap::new();
+    let masks = text.contains("CorrectionMasks");
+    let remove = text.contains("RetouchAreas");
+    let point = point_colors_listed(text);
+    if !(masks || remove || point) {
+        return out;
+    }
+    let Some(w) = crate::lightroom::from_catalog(text) else { return out };
+    let len = |key: &str| match w.get(key) {
+        Some(Value::List(v)) => v.len(),
+        Some(Value::Table(t)) => t.len(),
+        _ => 0,
+    };
+    if masks {
+        if let (_, Some(r)) = import(&w, [1, 1]) {
+            for (reason, n) in r.unsupported {
+                let key = match reason.as_str() {
+                    "Mask/Image" => AI_MASKS,
+                    "Mask/RangeMask" | "CorrectionRangeMask" => RANGE_MASKS,
+                    "MaskBlendMode" => SUBTRACTIONS,
+                    _ => OTHER_MASKS,
+                };
+                *out.entry(key.to_string()).or_default() += n;
+            }
+        }
+    }
+    for (key, n) in [(POINT_COLOR, len("PointColors")), (REMOVE_SPOTS, len("RetouchAreas"))] {
+        if n > 0 {
+            *out.entry(key.to_string()).or_default() += n;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 #[path = "lr_masks_tests.rs"]
 mod tests;

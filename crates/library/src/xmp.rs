@@ -95,8 +95,9 @@ fn allowed_by(no_xmp: Option<&str>, data: Option<&Path>, p: &Path) -> bool {
             }
         }
     };
-    let folder = canon(p.parent().unwrap_or(p));
-    [data.to_path_buf(), std::env::temp_dir()].iter().any(|allowed| folder.starts_with(canon(allowed)))
+    // comparison only: without the Windows `\\?\` prefix on both sides (a folder that does not exist yet has none)
+    let folder = sysdirs::simplify(&canon(p.parent().unwrap_or(p)));
+    [data.to_path_buf(), std::env::temp_dir()].iter().any(|allowed| folder.starts_with(sysdirs::simplify(&canon(allowed))))
 }
 
 /// XMP path of an image. `raw_beside`: there is a same-named RAW in the folder (only relevant for non-RAW).
@@ -458,6 +459,13 @@ pub fn write(p: &Path, w: &Values) -> Result<(), String> {
         }
     };
     crate::files::write_atomic(p, text.as_bytes()).map_err(|e| format!("{}: {e}", p.display()))
+}
+
+/// The title (`dc:title`, first non-empty language alternative) of an XMP packet; `None` if missing or empty.
+pub fn title(text: &str) -> Option<String> {
+    let content = element(text, "dc:title")?;
+    let t = li_texts(content).into_iter().find(|t| !t.trim().is_empty()).unwrap_or_else(|| unescape(content.trim()));
+    Some(t.trim().to_string()).filter(|t| !t.is_empty() && !t.contains('<'))
 }
 
 /// Develop settings (JSON, English field names) from `graineo:DevelopSettings`.

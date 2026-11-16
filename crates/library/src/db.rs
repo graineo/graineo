@@ -118,6 +118,13 @@ CREATE TABLE IF NOT EXISTS image (
 CREATE INDEX IF NOT EXISTS image_file ON image(file);
 CREATE UNIQUE INDEX IF NOT EXISTS image_original ON image(file) WHERE copy IS NULL;
 CREATE INDEX IF NOT EXISTS image_run ON image(run) WHERE run IS NOT NULL;
+-- descriptive values of an image beside the rating (added without a version step: older versions ignore the table)
+CREATE TABLE IF NOT EXISTS image_meta (
+    image      INTEGER PRIMARY KEY REFERENCES image(id) ON DELETE CASCADE,
+    title      TEXT,                     -- title (IPTC/XMP dc:title, from Lightroom)
+    latitude   REAL,                     -- GPS position in degrees, north positive (from Lightroom)
+    longitude  REAL                      -- east positive
+);
 CREATE TABLE IF NOT EXISTS keyword (
     id      INTEGER PRIMARY KEY,
     name    TEXT NOT NULL,
@@ -802,6 +809,33 @@ impl Db {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Name for a new own smart collection that no other own smart collection carries yet: `name`, else
+    /// `name (2)`, `name (3)` …
+    pub fn unique_smart_name(&self, name: &str) -> Result<String> {
+        let taken = |n: &str| -> Result<bool> {
+            Ok(self.conn.query_row("SELECT 1 FROM collection WHERE name=?1 COLLATE NOCASE AND kind=2 AND lr_id IS NULL", [n], |_| Ok(())).optional()?.is_some())
+        };
+        if !taken(name)? {
+            return Ok(name.to_string());
+        }
+        for i in 2.. {
+            let candidate = format!("{name} ({i})");
+            if !taken(&candidate)? {
+                return Ok(candidate);
+            }
+        }
+        unreachable!()
+    }
+
+    /// Save a view as a NEW smart collection; never replaces an existing one (a taken name gets " (2)" etc.).
+    /// Returns the id and the name actually given.
+    pub fn save_smart_new(&self, name: &str, search: &str) -> Result<(i64, String)> {
+        let search = crate::search_fields::canonical_query(search);
+        let name = self.unique_smart_name(name)?;
+        self.conn.execute("INSERT INTO collection(name, kind, search, translatable) VALUES(?1, 2, ?2, 1)", params![name, search])?;
+        Ok((self.conn.last_insert_rowid(), name))
+    }
+
     /// AI description of an image (via its file).
     pub fn ai_of(&self, file: i64) -> Option<Ai> {
         self.conn
@@ -836,6 +870,20 @@ impl Db {
 
     pub fn image_text_of(&self, image: i64) -> Option<String> {
         self.conn.query_row("SELECT caption FROM image WHERE id=?1", [image], |r| r.get(0)).optional().ok().flatten().flatten()
+    }
+
+    /// Title of an image (from Lightroom), if any.
+    pub fn title_of(&self, image: i64) -> Option<String> {
+        self.conn.query_row("SELECT title FROM image_meta WHERE image=?1", [image], |r| r.get::<_, Option<String>>(0)).optional().ok().flatten().flatten().filter(|t| !t.trim().is_empty())
+    }
+
+    /// GPS position (latitude, longitude in degrees) of an image (from Lightroom), if any.
+    pub fn position_of(&self, image: i64) -> Option<(f64, f64)> {
+        self.conn
+            .query_row("SELECT latitude, longitude FROM image_meta WHERE image=?1 AND latitude IS NOT NULL AND longitude IS NOT NULL", [image], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()
+            .ok()
+            .flatten()
     }
 
     /// Image IDs of a collection in Lightroom order.
@@ -1581,5 +1629,26 @@ mod migration_guard_tests {
         assert!(Db::open(&p).is_err());
         assert_eq!(std::fs::read(&p).unwrap(), junk);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod smart_name_tests {
+    use super::*;
+
+    /// Saving a view as a smart collection never replaces an existing one: a taken name gets " (2)", " (3)" …
+    #[test]
+    fn saving_a_view_never_replaces_a_smart_collection() {
+        let db = Db::open(std::path::Path::new(":memory:")).unwrap();
+        let (a, na) = db.save_smart_new("Sterne", "rating:>=3").unwrap();
+        assert_eq!(na, "Sterne");
+        let (b, nb) = db.save_smart_new("sterne", "rating:>=5").unwrap();
+        assert_eq!(nb, "sterne (2)");
+        let (c, nc) = db.save_smart_new("Sterne", "rating:>=1").unwrap();
+        assert_eq!(nc, "Sterne (3)");
+        assert!(a != b && b != c);
+        let first: String = db.conn.query_row("SELECT search FROM collection WHERE id=?1", [a], |r| r.get(0)).unwrap();
+        assert_eq!(first, "rating:>=3", "the first rule is untouched");
+        assert_eq!(db.unique_smart_name("Neu").unwrap(), "Neu");
     }
 }

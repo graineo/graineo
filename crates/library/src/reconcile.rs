@@ -679,7 +679,7 @@ fn relink(db: &Db, missing_items: &[(i64, Option<i64>, String)], new: &[(i64, i6
 /// root folder, nothing is created (returns: that root).
 pub fn add_root(db: &Db, folder: &Path, progress: &dyn Fn(&str)) -> Result<(i64, Report), String> {
     if crate::apple_photos::in_photos_library(folder) {
-        return Err("Die Mediathek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner".into());
+        return Err("Die Bibliothek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner".into());
     }
     if let Some(s) = db.root_to_path(folder) {
         let b = reconcile(db, Some(s.id), progress)?;

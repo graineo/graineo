@@ -266,6 +266,10 @@ impl App {
         self.turn_undo.other_action();
         crate::log(&format!("rate {a:?}: images {target:?}"));
         self.adopt_values(&new);
+        if self.lib.take_rating_refused() {
+            self.status = crate::tr(crate::library_ui::RATING_REFUSED).to_string();
+            return;
+        }
         if let Some(t) = feedback(a, &new) {
             self.status = t;
         }
@@ -293,7 +297,7 @@ impl App {
     pub(crate) fn undo_rating(&mut self) -> bool {
         let Some(alt) = self.lib.undo_rating_change() else { return false };
         self.adopt_values(&alt);
-        self.status = crate::trf!("Rückgängig: Bewertung ({a} {b})", a = alt.len(), b = if alt.len() == 1 { crate::tr("Bild") } else { crate::tr("Bilder") });
+        self.status = crate::trf!("Rückgängig: Bewertung ({a} {b})", a = alt.len(), b = if alt.len() == 1 { crate::tr("Foto") } else { crate::tr("Fotos") });
         true
     }
 }

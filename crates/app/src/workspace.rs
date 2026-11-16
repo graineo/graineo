@@ -147,17 +147,7 @@ impl App {
         // Tab = side panels, ⇧Tab = all panels, F5–F8 individually
         let darkroom = self.darkroom_active();
         if let Some(shift) = self.tab_pressed.take_if(|_| !darkroom) {
-            if shift {
-                let any = self.show_top || self.show_filmstrip || self.show_left || self.show_right;
-                self.show_top = !any;
-                self.show_filmstrip = !any;
-                self.show_left = !any;
-                self.show_right = !any;
-            } else {
-                let any = self.show_left || self.show_right;
-                self.show_left = !any;
-                self.show_right = !any;
-            }
+            self.toggle_panels(shift);
         }
         if !darkroom && p(egui::Key::F5) {
             self.show_top = !self.show_top;

@@ -59,6 +59,7 @@ mod darkroom_contact;
 mod path_check;
 mod darkroom_print;
 mod darkroom_layout;
+mod panel_buttons;
 mod toolbar_plan;
 mod darkroom_strip;
 mod darkroom_zones;
@@ -67,6 +68,7 @@ mod darkroom_recipes;
 mod recipe_grid;
 mod darkroom_border;
 mod darkroom_shelf;
+mod film_previews;
 mod darkroom_dodge;
 mod media_library;
 mod zoom;
@@ -123,6 +125,7 @@ mod sensor_raw;
 mod sensor_ui;
 mod delete;
 mod dialog;
+mod export_probe;
 mod test_matrix;
 mod image_kind;
 mod rating;
@@ -140,6 +143,7 @@ mod test_image;
 mod update_ui;
 mod binning_ui;
 mod crash_log;
+mod crossfade;
 mod file_migration;
 mod bug_report;
 
@@ -359,6 +363,10 @@ struct Current {
     /// Last answer of `Session::has_spp_for` (key hash of the settings, answer) for the moments when the session is
     /// locked (own pipeline rendering): then the last known answer counts instead of "base missing"
     spp_ready_cache: std::cell::Cell<Option<(u64, bool)>>,
+    /// The exact base of this photo has just arrived (time): the render that follows is faded in (crossfade.rs)
+    fade_armed: Option<f64>,
+    /// Running crossfade fast preview -> exact image (old texture below, new one fading in)
+    fade: Option<crossfade::Fade>,
 }
 
 impl Current {
@@ -655,11 +663,11 @@ struct App {
     loupe_moved_at: f64,
     /// "Copy section": title and settings at the time of copying
     section_clip: Option<(String, Settings)>,
-    /// Film grid: image, settings key and one thumbnail per film
-    film_thumbs: Option<(usize, u64, std::collections::HashMap<String, TextureHandle>)>,
-    /// requested key of the film grid (still in progress)
-    film_thumbs_pending: Option<u64>,
+    /// Small previews per film, Sigma mode and look ("Film & Look", darkroom film shelf; film_previews.rs)
+    film_previews: film_previews::FilmPreviews,
     profile_export: Option<film_profiles_ui::ExportCheck>,
+    /// Write test of the export target running in the background (see `export_probe.rs`).
+    export_probe: Option<export_probe::ExportProbe>,
     /// Rebuilds of the image list (state → old index → new index), used to map results of older jobs
     /// onto the current list (see `Worker::epoch`)
     list_remaps: Vec<(u64, HashMap<usize, usize>)>,
@@ -926,9 +934,9 @@ impl App {
             loupe: false,
             loupe_moved_at: 0.0,
             section_clip: None,
-            film_thumbs: None,
-            film_thumbs_pending: None,
+            film_previews: Default::default(),
             profile_export: None,
+            export_probe: None,
             list_remaps: Vec::new(),
             film_hover: false,
             film_hover_left: None,
@@ -1335,7 +1343,7 @@ impl App {
             self.committed = self.committed.take().and_then(|(i, s)| map(i).map(|n| (n, s)));
             self.rendered_for = self.rendered_for.take().and_then(|(i, s)| map(i).map(|n| (n, s)));
             self.panes.reset();
-            self.film_thumbs = self.film_thumbs.take().and_then(|(i, k, m)| map(i).map(|n| (n, k, m)));
+            self.film_previews.remap(&map);
             if let Some((_, cancel)) = self.spp_prefetching.take() {
                 cancel.store(true, Ordering::SeqCst);
             }
@@ -1616,6 +1624,8 @@ impl App {
             detail_grain_scale: 1,
             detail_left_scale: 1,
             spp_ready_cache: std::cell::Cell::new(None),
+            fade_armed: None,
+            fade: None,
         });
         self.panes.reset();
         self.look_compare.end();
@@ -1714,8 +1724,6 @@ impl App {
         // the view of the open photo for ⌘C (photo_copy.rs)
         if let Some(e) = self.entries.get(index).filter(|_| self.current.as_ref().is_some_and(|c| c.index == index)) {
             photo_copy::remember_view(e.image, e.copy.clone(), width, height, &rgb);
-            // the film shelf chooses its crop place from the first developed view of the photo
-            self.darkroom.shelf.note_view(&e.path, width, height, &rgb);
         }
         if let Some(c) = self.current.as_mut().filter(|c| c.index == index) {
             c.out_hist = Some(rgb_histogram(&rgb));
@@ -1750,9 +1758,20 @@ impl App {
                 log(&format!("render {index} applied ({width}×{height})"));
             }
             let img = ColorImage::from_rgb([width, height], &rgb);
-            match &mut c.texture {
-                Some(t) => t.set(img, TextureOptions::LINEAR),
-                None => c.texture = Some(ctx.load_texture("preview", img, TextureOptions::LINEAR)),
+            // the render after the exact base arrived: new texture, the old one stays underneath for the crossfade;
+            // never while a slider is dragged (live adjustment stays immediate)
+            let now = ctx.input(|i| i.time);
+            let armed = c.fade_armed.take().is_some_and(|t| now - t < crossfade::ARM_WINDOW) && !ctx.input(|i| i.pointer.any_down());
+            c.fade = None;
+            match (&mut c.texture, armed) {
+                (Some(t), true) => {
+                    let new = ctx.load_texture("preview", img, TextureOptions::LINEAR);
+                    let old = std::mem::replace(t, new);
+                    c.fade = crossfade::Fade::new(old, now);
+                    ctx.request_repaint();
+                }
+                (Some(t), false) => t.set(img, TextureOptions::LINEAR),
+                (None, _) => c.texture = Some(ctx.load_texture("preview", img, TextureOptions::LINEAR)),
             }
             // HDR gain map: developed image × map as photo texture (in the background)
             match c.loaded.previews.foreign.as_ref().and_then(|d| d.hdr.clone()) {
@@ -1945,6 +1964,7 @@ impl App {
     fn handle_results(&mut self, ctx: &egui::Context) {
         let _t = frame_watch::section("results");
         self.take_sidecars_ahead();
+        self.poll_export_probe();
         self.take_thumbs(ctx);
         // HDR crops converted in the background: next to the 8-bit crop of the same region and settings
         for d in self.display.poll() {
@@ -2296,6 +2316,8 @@ impl App {
                         c.detail = None;
                         c.detail_grain = None;
                         c.detail_hover = None;
+                        c.fade = None;
+                        c.fade_armed = Some(ctx.input(|i| i.time));
                         self.panes.invalidate();
                         self.rendered_for = None;
                         self.spp_seconds = Some(seconds);
@@ -2419,31 +2441,8 @@ impl App {
                         self.darkroom.probe.outcome(ctx, key, images);
                     }
                 }
-                JobResult::FilmThumbs { index, key, thumbs } => {
-                    if self.film_thumbs_pending == Some(key) {
-                        self.film_thumbs_pending = None;
-                    }
-                    if self.current.as_ref().is_some_and(|c| c.index == index) && self.film_thumbs.as_ref().is_some_and(|(i,k,_)| *i == index && *k == key) {
-                        let mut map = match self.film_thumbs.take() {
-                            Some((i, k, m)) if i == index && k == key => m,
-                            _ => Default::default(),
-                        };
-                        for (id, w, h, rgb) in thumbs {
-                            let img = ColorImage::from_rgb([w, h], &rgb);
-                            match map.get_mut(&id) {
-                                Some(t) => t.set(img, TextureOptions::LINEAR),
-                                None => {
-                                    let t = ctx.load_texture(crate::trf!("film-{id}", id = id), img, TextureOptions::LINEAR);
-                                    map.insert(id, t);
-                                }
-                            }
-                        }
-                        self.film_thumbs = Some((index, key, map));
-                    }
-                }
-                JobResult::FilmCrops { index, key, done, not_ready, end } => {
-                    let index_now = self.current.as_ref().map_or(usize::MAX, |c| c.index);
-                    self.darkroom.shelf.receive(ctx, if index == index_now { index } else { usize::MAX }, key, done, not_ready, end);
+                JobResult::FilmThumbs { index, key, thumbs, end, background } => {
+                    self.film_previews.receive(ctx, index, key, thumbs, end, background);
                 }
                 JobResult::HoverSuperseded { index, settings } => {
                     // replaced by a newer hover (the newest one is still on its way: `hover_preset` stays) or crashed
@@ -2985,6 +2984,46 @@ impl App {
             self.export_dir = None;
             return;
         }
+        // writable? the message comes before the run, not as an error in the middle of it. The write test runs in
+        // the background (a hanging network drive must not freeze the window); `poll_export_probe` goes on.
+        if self.export_probe.is_some() {
+            return;
+        }
+        self.exporting = true;
+        jobs::EXPORT_CANCEL.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.export_status = crate::tr("Zielordner wird geprüft …").into();
+        self.export_probe = Some(export_probe::ExportProbe::start(&self.egui_ctx, dir, indices));
+    }
+
+    /// Once per frame: the write test of the export target is done -> the export goes on (or is refused).
+    fn poll_export_probe(&mut self) {
+        let Some(p) = &self.export_probe else { return };
+        if jobs::EXPORT_CANCEL.load(std::sync::atomic::Ordering::SeqCst) {
+            self.export_probe = None;
+            self.exporting = false;
+            self.export_status = "Abgebrochen".into();
+            return;
+        }
+        match p.poll() {
+            export_probe::Poll::Waiting => {}
+            export_probe::Poll::Failed(e) => {
+                let dir = p.dir.clone();
+                self.export_probe = None;
+                self.exporting = false;
+                self.export_status.clear();
+                self.notes.fault(activity::Fault { title: crate::tr("Export fehlgeschlagen").into(), cause: menu::i18n::tr_msg(&e).into_owned(), subject: sysdirs::display_path(&dir), reveal: None, retry: None });
+                self.export_dir = None;
+            }
+            export_probe::Poll::Ready => {
+                let Some(p) = self.export_probe.take() else { return };
+                self.exporting = false;
+                self.export_status.clear();
+                self.export_after_probe(p.indices, p.dir);
+            }
+        }
+    }
+
+    fn export_after_probe(&mut self, indices: Vec<usize>, dir: PathBuf) {
         self.save_current();
         if self.export_original {
             // the files unchanged: every reachable photo (also finished images and videos), with the stacked camera JPEG
@@ -3278,12 +3317,8 @@ impl App {
             CameraJpeg => self.toggle_camera_jpeg(),
             Clipping => self.show_clipping = !self.show_clipping,
             Info => self.info_next(),
-            Panels => {
-                let any = self.show_left || self.show_right;
-                self.show_left = !any;
-                self.show_right = !any;
-            }
-            Lights => self.lights = (self.lights + 1) % 3,
+            Panels => self.toggle_panels(false),
+            Lights => self.cycle_lights(),
             FullPreview => self.toggle_preview_full(ctx),
             Loupe100 => {
                 self.loupe = !self.loupe;
@@ -3466,7 +3501,7 @@ impl App {
 
         // L = lights out: dimmed → off → normal
         if pressed(egui::Key::L) {
-            self.lights = (self.lights + 1) % 3;
+            self.cycle_lights();
         }
         // F (in `workspace_shortcuts`): the whole app fullscreen. Panels independently with Tab/⇧Tab;
         // Esc first leaves fullscreen, then the single view. (The former ⇧F screen modes are gone.)
@@ -3902,7 +3937,7 @@ impl eframe::App for App {
         }
         let ctx = ui.ctx().clone();
         if film_profiles_ui::frame(&ctx) {
-            self.film_thumbs = None; self.film_thumbs_pending = None;
+            self.film_previews.forget();
             self.hover_preset = None; self.film_hover = false;
             self.rendered_for = None;
         }
@@ -4305,6 +4340,8 @@ impl eframe::App for App {
                 p.rect_filled(r, 0.0, shade);
             }
         }
+        // pale way-back button in the corner while the top bar is hidden or the lights are dimmed
+        self.way_back_button(&ctx);
         let sheet_area = self.darkroom.column_rects.iter().flatten().chain(self.darkroom.handle_rect.iter()).fold(central, |a, b| a.union(*b));
         self.darkroom_contact_draw(&ctx, sheet_area);
         self.darkroom_drawer(&ctx);
@@ -4397,6 +4434,8 @@ impl App {
         let mut right = ui.new_child(egui::UiBuilder::new().max_rect(full).layout(egui::Layout::right_to_left(egui::Align::Center)));
         {
             let ui = &mut right;
+            // the switches for panels and lights at the very right, the module tabs to their left (fixed places)
+            self.panel_buttons(ui);
             self.module_bar(ui);
         }
         let left_rect = full.with_max_x(right.min_rect().left() - 16.0);
@@ -5322,6 +5361,10 @@ impl App {
         if self.compare_view(ui, avail, &resp, &painter, generation, click_free) {
             return;
         }
+        // fade over: release the old texture
+        if let Some(c) = self.current.as_mut().filter(|c| c.fade.as_ref().is_some_and(|f| f.alpha(now).is_none())) {
+            c.fade = None;
+        }
         let c = self.current.as_ref().unwrap();
         // Crop (crop/straighten); in crop mode the whole image
         let [fw_px, fh_px] = c.loaded.full_size;
@@ -5493,7 +5536,19 @@ impl App {
                 clipped.image(t.id(), rect, full_uv, image_tint);
             }
             (None, Some(angle)) if angle.abs() > 0.001 => paint_src_quad_rotated(&painter.with_clip_rect(avail), tex_id, full_src, &frame, rect, image_tint, &ViewTransform::new(rect.center(), angle)),
-            _ => paint_src_quad(&clipped, tex_id, full_src, &frame, rect, image_tint),
+            _ => {
+                // crossfade fast preview -> exact image: the old picture below, the new one over it with rising alpha;
+                // only in the plain fitted view of the current photo (not hover, camera JPEG or zoom)
+                let fading = c.fade.as_ref().filter(|_| self.hover_tex.is_none() && !self.show_camera_jpeg && !self.show_before && !self.compare);
+                match fading.and_then(|f| f.alpha(now).map(|a| (f, a))) {
+                    Some((f, a)) => {
+                        paint_src_quad(&clipped, f.old.id(), full_src, &frame, rect, image_tint);
+                        paint_src_quad(&clipped, tex_id, full_src, &frame, rect, image_tint.gamma_multiply(a));
+                        ui.ctx().request_repaint();
+                    }
+                    None => paint_src_quad(&clipped, tex_id, full_src, &frame, rect, image_tint),
+                }
+            }
         }
         if self.darkroom.active && self.tab == Tab::Develop {
             self.darkroom.compare.draw(&painter, avail, rect, full_src, &frame, &self.entries[c.index].settings, None, tint);
@@ -7526,32 +7581,31 @@ impl App {
         self.entries[i].settings.crop_angle = angle;
     }
 
-    /// Request thumbnails for the profile browser (Sigma's colour modes and all films) as soon as
-    /// the image or basic settings have changed; returns the existing textures.
+    /// Small previews of "Film & Look" (Sigma's colour modes, camera looks, films) for the current photo and settings
+    /// state: returns the textures shown now and requests the `requested` ones that are missing (see film_previews.rs).
     fn profile_thumbs(&mut self, ui: &egui::Ui, requested: &[String]) -> HashMap<String, TextureHandle> {
+        self.film_previews_request(ui, requested, &[])
+    }
+
+    /// Like [`Self::profile_thumbs`]; afterwards the tiles of `fill` are computed quietly in the background (darkroom
+    /// film shelf: the rows not scrolled to yet).
+    pub(crate) fn film_previews_request(&mut self, ui: &egui::Ui, requested: &[String], fill: &[String]) -> HashMap<String, TextureHandle> {
         let Some(c) = &self.current else { return HashMap::new() };
         let index = c.index;
-        let key = {
-            use std::hash::{Hash, Hasher};
-            let mut base = self.entries[index].settings.clone();
-            base.film.stock.clear(); base.film.active = false; base.film.paper = None;
-            base.color_mode = None; base.raw.look.clear(); base.raw.look_name.clear(); base.raw.look_package.clear(); base.profile_amount = 1.0;
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            serde_json::to_string(&base).unwrap_or_default().hash(&mut h);
-            index.hash(&mut h); raw::film_profile::generation().hash(&mut h); h.finish()
-        };
-        if self.film_thumbs.as_ref().is_none_or(|(i,k,_)| *i != index || *k != key) {
-            self.film_thumbs = Some((index, key, HashMap::new()));
+        let settings = &self.entries[index].settings;
+        let path = self.entries[index].path.clone();
+        let key = film_previews::state_key(&path, settings);
+        let now = ui.input(|i| i.time);
+        let plan = self.film_previews.plan(index, &path, key, requested, fill, now);
+        for (modes, background) in [(plan.front, false), (plan.back, true)] {
+            if !modes.is_empty() {
+                self.worker.send(Job::FilmThumbs { index, previews: c.loaded.previews.clone(), cal: c.loaded.cal.clone(), settings: settings.clone(), key, modes, valid: self.film_previews.valid(), background });
+            }
         }
-        let map = &self.film_thumbs.as_ref().unwrap().2;
-        let mut modes: Vec<String> = requested.iter().filter(|k| !map.contains_key(*k)).cloned().collect();
-        modes.sort(); modes.dedup();
-        if !modes.is_empty() && self.film_thumbs_pending.is_none() {
-            self.worker.send(Job::FilmThumbs { index, previews: c.loaded.previews.clone(), cal: c.loaded.cal.clone(), settings: self.entries[index].settings.clone(), key, modes });
-            self.film_thumbs_pending = Some(key);
+        if plan.busy {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
-        if self.film_thumbs_pending.is_some() { ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)); }
-        self.film_thumbs.as_ref().unwrap().2.clone()
+        self.film_previews.shown()
     }
 
     /// Panel "Crop & Straighten": at the top the icon row of the tools (crop,

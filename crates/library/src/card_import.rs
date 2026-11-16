@@ -606,6 +606,13 @@ fn copy_photos(
         b.error.push(e);
         return b;
     }
+    // writable? a clear message before the first file instead of one error per file
+    if !candidates.is_empty() {
+        if let Some(e) = std::iter::once(target).chain(backup).find_map(|p| crate::write_target::probe(p).err()) {
+            b.error.push(e);
+            return b;
+        }
+    }
     let list: Vec<Candidate> = candidates.iter().filter(|k| !k.duplicate).cloned().collect();
     b.duplicate = candidates.len() - list.len();
     let groups = photos(&list);

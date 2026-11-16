@@ -1,7 +1,7 @@
 //! Side columns of the import window: on the left the source (cards, cameras, folders, recent folders), counters and
 //! filters; on the right the operation, target, subfolders, second copy and "apply on import" (collection, develop
-//! preset, keywords, rating, label, copyright). Both have a fixed order: for "Hinzufügen" the target rows stay and are
-//! dimmed. "Hinzufügen" shows the folders in the middle column instead of the grid ([`folders`]).
+//! preset, keywords, rating, label, copyright). Both have a fixed order: for "Hinzufügen" the target rows and the file
+//! filters keep their place but are not shown (they would do nothing). "Hinzufügen" shows the folders in the middle column instead of the grid ([`folders`]).
 
 use super::*;
 use library::import_select as sel;
@@ -48,16 +48,22 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
             });
         }
         camera::sources(ui, imp, pick);
-        let r = ui.button(crate::tr("Ordner …"));
-        lr::hover_tip(ui, &r, "Einen Ordner als Quelle wählen");
-        if r.clicked() {
-            pick.source = true;
-        }
-        if let Some(q) = imp.source.as_ref().filter(|q| !camera::is_camera(Some(q))) {
-            small(ui, &q.display().to_string(), lr::TEXT_DIM);
-        }
+        ui.add_space(2.0);
+        // the folder chosen as source in its own field (label left, button right above it)
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(crate::tr("Ordner")).color(lr::TEXT_DIM));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let r = ui.button(crate::tr("Wählen …"));
+                lr::hover_tip(ui, &r, "Einen Ordner als Quelle wählen");
+                if r.clicked() {
+                    pick.source = true;
+                }
+            });
+        });
+        let folder = imp.source.as_ref().filter(|q| !camera::is_camera(Some(q)) && !is_card(q)).map(|q| q.display().to_string());
+        lr::value_field(ui, folder.as_deref(), "Noch nichts gewählt");
         let recent: Vec<PathBuf> = recent_sources().into_iter().filter(|p| Some(p) != imp.source.as_ref()).take(4).collect();
-        ui.add_space(4.0);
+        lr::section_rule(ui);
         heading(ui, "Zuletzt");
         if recent.is_empty() {
             small(ui, crate::tr("–"), lr::TEXT_DIM);
@@ -70,8 +76,7 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
                 pick.card = Some(p);
             }
         }
-        ui.add_space(6.0);
-        ui.separator();
+        lr::section_rule(ui);
         // the source as it is (photos = shots: RAW+JPEG of one shot is one photo); the filters below only change what
         // is imported (footer and button), never these numbers
         let o = sel::overview(&imp.cand, &imp.cells.iter().map(|c| c.members.clone()).collect::<Vec<_>>());
@@ -108,7 +113,16 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         lr::hover_tip(ui, &r, "Gleiche Größe und gleicher Name oder Aufnahmezeit wie ein Foto der Bibliothek, dessen Laufwerk nicht verbunden ist – nicht angehakt");
         let r = ui.scope(|ui| counter(ui, known(o.identical), "identisch")).response;
         lr::hover_tip(ui, &r, "Bytegleiche Kopien in dieser Quelle: nur die erste wird importiert");
-        ui.add_space(6.0);
+        lr::section_rule(ui);
+        // "Hinzufügen" takes whole folders: the file types and the grid switches would do nothing (their place stays)
+        let in_place = imp.mode == Mode::InPlace;
+        if in_place {
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.")).small().color(lr::TEXT_DIM)).wrap());
+        }
+        ui.scope(|ui| {
+        if in_place {
+            ui.set_invisible();
+        }
         heading(ui, "Dateien");
         ui.horizontal_wrapped(|ui| {
             for (f, n) in &o.files {
@@ -134,7 +148,20 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         ui.add_space(6.0);
         ui.add_enabled(o.there > 0 || imp.show_existing, egui::Checkbox::new(&mut imp.show_existing, crate::tr("Schon importierte zeigen")));
         ui.add_enabled(o.identical > 0 || imp.show_identical, egui::Checkbox::new(&mut imp.show_identical, crate::tr("Identische zeigen")));
+        });
     });
+}
+
+/// One sentence under the mode switch: what happens to the photos.
+pub(super) fn mode_sentence(mode: Mode, from_camera: bool) -> &'static str {
+    if from_camera {
+        return "Von der Kamera wird immer geprüft kopiert. Auf der Kamera ändert sich nichts.";
+    }
+    match mode {
+        Mode::InPlace => "Die Fotos bleiben an ihrem Ort und werden nur eingetragen.",
+        Mode::CopyFiles => "Die Fotos werden geprüft kopiert; die Originale bleiben.",
+        Mode::MoveFiles => "Nach der geprüften Kopie kommen die Originale in den Papierkorb.",
+    }
 }
 
 /// Free space at the target, read in the background (a sleeping NAS must not stop the window).
@@ -160,7 +187,7 @@ fn free_space(imp: &Import, target: &Path) -> Option<u64> {
 pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, String)], target_gone: bool, pick: &mut Picks) {
     egui::ScrollArea::vertical().id_salt("import-rechts").auto_shrink([false, false]).show(ui, |ui| {
         ui.horizontal(|ui| {
-            heading(ui, "Ziel");
+            heading(ui, "Was passiert");
             crate::help::info(ui, "import", "Fotos importieren", &crate::help::IMPORT);
         });
         // from a camera only copying: nothing is ever deleted on it, and it has no folders to add
@@ -168,25 +195,24 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
         if from_camera {
             imp.mode = Mode::CopyFiles;
         }
-        let r = ui
-            .add_enabled_ui(!from_camera, |ui| {
-                if lr::segmented(ui, &mut imp.mode, &[(Mode::InPlace, crate::tr("Hinzufügen")), (Mode::CopyFiles, crate::tr("Kopieren")), (Mode::MoveFiles, crate::tr("Verschieben"))]) {
-                    imp.mode_automatic = false;
-                }
-            })
-            .response;
-        lr::hover_tip(
-            ui,
-            &r,
-            if from_camera { "Von einer Kamera wird immer kopiert: geprüft (SHA-256) ins Ziel, auf der Kamera bleibt alles unverändert" } else { match imp.mode {
-                Mode::InPlace => "Hinzufügen: Fotos bleiben am Ort, ihre Ordner kommen in die Bibliothek",
-                Mode::CopyFiles => "Kopieren: geprüft (SHA-256) ins Ziel, die Quelle bleibt unverändert",
-                Mode::MoveFiles => "Verschieben: wie Kopieren, danach die Originale in den Papierkorb – erst wenn alle Kopien eines Fotos geprüft sind",
-            } },
-        );
-        let copies = imp.mode != Mode::InPlace;
+        ui.add_enabled_ui(!from_camera, |ui| {
+            if lr::segmented_blue(ui, &mut imp.mode, &[(Mode::InPlace, crate::tr("Hinzufügen")), (Mode::CopyFiles, crate::tr("Kopieren")), (Mode::MoveFiles, crate::tr("Verschieben"))]) {
+                imp.mode_automatic = false;
+            }
+        });
+        // what happens, always visible under the switch (two lines reserved: nothing moves when the mode changes)
+        let what = mode_sentence(imp.mode, from_camera);
         ui.add_space(4.0);
-        ui.add_enabled_ui(copies, |ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 30.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(what)).small().color(lr::TEXT_DIM)).wrap());
+        });
+        let copies = imp.mode != Mode::InPlace;
+        lr::section_rule(ui);
+        // "Hinzufügen": the target rows would do nothing – their place stays, empty
+        ui.scope(|ui| {
+            if !copies {
+                ui.set_invisible();
+            }
             ui.horizontal(|ui| {
                 heading(ui, "Ablegen in");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -195,12 +221,9 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                     }
                 });
             });
-            if !copies {
-                small(ui, crate::tr("– Fotos bleiben am Ort –"), lr::TEXT_DIM);
-                small(ui, "", lr::TEXT_DIM);
-            } else {
-                let t = imp.target.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| crate::tr("noch kein Ordner gewählt").into());
-                small(ui, &t, lr::TEXT);
+            {
+                let t = imp.target.as_ref().map(|p| p.display().to_string());
+                lr::value_field(ui, t.as_deref(), "Wähle zuerst, wohin die Fotos kommen.");
                 // a fixed line below the path: problem, or free space and what is needed
                 let need = imp.chosen_tally().bytes;
                 let line = if let (None, Some(p)) = (&imp.target, &imp.target_missing) {
@@ -220,7 +243,7 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                 };
                 small(ui, &line.0, line.1);
             }
-            ui.add_space(2.0);
+            lr::section_rule(ui);
             heading(ui, "Unterordner");
             ui.checkbox(&mut imp.by_date, crate::tr("nach Aufnahmedatum (JJJJ/JJJJ-MM-TT)"));
             let example = imp.chosen().next().map(|ci| {
@@ -233,7 +256,7 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                 }
             });
             small(ui, &example.unwrap_or_default(), lr::TEXT_DIM);
-            ui.add_space(2.0);
+            lr::section_rule(ui);
             ui.horizontal(|ui| {
                 heading(ui, "Zweite Kopie");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -245,11 +268,10 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                     }
                 });
             });
-            let t = imp.backup.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| crate::tr("keine").into());
-            small(ui, &t, if imp.backup.is_some() { lr::TEXT } else { lr::TEXT_DIM });
+            let t = imp.backup.as_ref().map(|p| p.display().to_string());
+            lr::value_field(ui, t.as_deref(), "keine");
         });
-        ui.add_space(6.0);
-        ui.separator();
+        lr::section_rule(ui);
         apply_on_import(ui, imp, collections);
     });
 }
@@ -316,13 +338,16 @@ fn apply_on_import(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, Str
         }
     });
     row(ui, "Etikett", &mut |ui| {
-        let names = ["Kein Etikett", "Etikett Rot", "Etikett Gelb", "Etikett Grün", "Etikett Blau", "Etikett Lila"];
-        let items: Vec<(Color32, &str)> = library::label::COLORS.iter().zip(names).map(|(c, n)| (Color32::from_rgb(c[0], c[1], c[2]), n)).collect();
-        ui.allocate_ui(egui::vec2(field_w, 24.0), |ui| {
-            if let Some(i) = lr::color_chips(ui, "imp-etikett", &items, Some(imp.label as usize)) {
-                imp.label = i as u8;
-            }
-        });
+        // the same rectangular cells as in the library; a click on the chosen one takes it off again
+        let names = ["Etikett Rot", "Etikett Gelb", "Etikett Grün", "Etikett Blau", "Etikett Lila"];
+        let cells: Vec<_> = (1..=5u8).map(|e| {
+            let c = library::label::COLORS[e as usize];
+            (lr::Cell::Color(Color32::from_rgb(c[0], c[1], c[2])), imp.label == e, names[e as usize - 1])
+        }).collect();
+        if let Some(i) = lr::cell_group_sized(ui, "imp-etikett", &cells, 26.0, 22.0).0 {
+            let e = i as u8 + 1;
+            imp.label = if imp.label == e { 0 } else { e };
+        }
     });
     row(ui, "Copyright", &mut |ui| {
         crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut imp.copyright).hint_text(crate::tr("z. B. © 2026 Name")).desired_width(field_w));
@@ -361,7 +386,7 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
     if imp.source_in_library {
         small(ui, crate::tr("liegt in einem Ordner der Bibliothek"), lr::TEXT_DIM);
     } else if imp.source.is_some() {
-        small(ui, crate::tr("als neuer Stammordner:"), lr::TEXT_DIM);
+        small(ui, crate::tr("Neuer Ordner in der Bibliothek:"), lr::TEXT_DIM);
         small(ui, &source.display().to_string(), lr::TEXT);
     }
 }

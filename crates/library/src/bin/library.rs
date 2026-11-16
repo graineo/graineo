@@ -71,6 +71,7 @@ fn main() {
             // gesichter [ANZAHL] [THREADS]: search for faces (Vision) and compute features (SFace)
             let max = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(100);
             let threads = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(3);
+            library::people::allow_download();
             let m = library::people::load_model().unwrap_or_else(|e| error(&e));
             let b = library::people::search(&db, &m, max, threads, &std::sync::atomic::AtomicBool::new(false), &|f, g| eprintln!("  {f}/{g}")).unwrap_or_else(|e| error(&e));
             println!("{b:?}\n{}", library::people::numbers(&db.conn).unwrap());
@@ -127,6 +128,7 @@ fn main() {
             // gesicht-pruefen BILD_ID: scan one photo right away (like the single view) and print the faces with suggestions
             let image: i64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
             let t = Instant::now();
+            library::people::allow_download();
             let n = library::people::check_image(&db, image).unwrap_or_else(|e| error(&e));
             println!("{n} faces in {:?}", t.elapsed());
             for g in library::people::faces_to_image(&db.conn, image) {
@@ -140,6 +142,7 @@ fn main() {
             if z.len() < 4 {
                 error("gesicht-hand BILD_ID X Y B H");
             }
+            library::people::allow_download();
             let id = library::people::manual_face(&db, image, z[0], z[1], z[2], z[3]).unwrap_or_else(|e| error(&e));
             let hole = |g: i64| -> Option<Vec<f32>> { db.conn.query_row("SELECT embedding FROM face WHERE id=?1", [g], |r| r.get::<_, Option<Vec<u8>>>(0)).ok().flatten().map(|b| library::people::read_blob(&b)) };
             let new = hole(id).unwrap_or_default();

@@ -8,15 +8,24 @@
 #[path = "i18n/mod.rs"]
 pub(crate) mod i18n;
 
-use i18n::{Language, Text};
+use i18n::Text;
+#[cfg(any(target_os = "macos", windows))]
+use i18n::Language;
+#[cfg(any(target_os = "macos", windows))]
 use std::cell::{Cell, RefCell};
+#[cfg(any(target_os = "macos", windows))]
 use std::collections::HashMap;
+#[cfg(any(target_os = "macos", windows))]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(any(target_os = "macos", windows))]
 use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(any(target_os = "macos", windows))]
 use std::sync::{Arc, Mutex, OnceLock};
 
 use eframe::egui;
+#[cfg(any(target_os = "macos", windows))]
 use muda::accelerator::{Accelerator, Code, Modifiers};
+#[cfg(any(target_os = "macos", windows))]
 use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 use crate::shortcuts::{self, Trigger};
@@ -111,6 +120,22 @@ impl Cmd {
     }
 }
 
+/// Linux: no native menu bar (muda would pull in the GTK3 bindings). The commands stay
+/// reachable through the shortcuts of the window (`shortcut_without_menu`) and the buttons of the interface.
+#[cfg(not(any(target_os = "macos", windows)))]
+pub struct AppMenu;
+#[cfg(not(any(target_os = "macos", windows)))]
+impl AppMenu {
+    pub fn install(_ctx: &egui::Context, _hwnd: Option<isize>) -> Option<Self> {
+        i18n::set_logger(crate::log);
+        None
+    }
+    pub fn poll(&self) -> Vec<Cmd> {
+        Vec::new()
+    }
+}
+
+#[cfg(any(target_os = "macos", windows))]
 pub struct AppMenu {
     _menu: Menu,
     rx: Receiver<Cmd>,
@@ -123,6 +148,7 @@ pub struct AppMenu {
     ctx: egui::Context,
 }
 
+#[cfg(any(target_os = "macos", windows))]
 /// egui key → muda code (only what appears in the menu).
 fn code(k: egui::Key) -> Option<Code> {
     use egui::Key as K;
@@ -151,6 +177,7 @@ fn code(k: egui::Key) -> Option<Code> {
     })
 }
 
+#[cfg(any(target_os = "macos", windows))]
 /// Title and accelerator from the table: with ⌘ a real shortcut, otherwise the key in the title.
 fn from_table(title: &str, id: Option<&str>) -> (String, Option<Accelerator>) {
     // muda reads "&" as a mnemonic marker and drops it ("Freistellen & Ausrichten"); "&&" shows one "&"
@@ -185,6 +212,7 @@ fn from_table(title: &str, id: Option<&str>) -> (String, Option<Accelerator>) {
     }
 }
 
+#[cfg(any(target_os = "macos", windows))]
 /// Character of a key as macOS key equivalent (keys without ⌘ that only show in the menu).
 fn key_equivalent(k: egui::Key) -> Option<String> {
     use egui::Key as K;
@@ -208,6 +236,7 @@ fn key_equivalent(k: egui::Key) -> Option<String> {
     })
 }
 
+#[cfg(any(target_os = "macos", windows))]
 /// Single-key shortcut of a menu entry (no ⌘): key equivalent and modifier mask (⇧ = 1 << 17, ⌥ = 1 << 19).
 fn single_key(id: Option<&str>) -> Option<(String, u64)> {
     let k = shortcuts::find(id?)?;
@@ -530,12 +559,14 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
     (Cmd::GamutWarning, Text::MenuGamutWarning, Some("gamut_warning"), Some("exclamationmark.triangle.fill")),
 ];
 
+#[cfg(any(target_os = "macos", windows))]
 enum Label {
     Action(MenuItem, Text, Option<&'static str>),
     Check(muda::CheckMenuItem, Text, Option<&'static str>),
     Native(PredefinedMenuItem, Text),
     Group(Submenu, Text),
 }
+#[cfg(any(target_os = "macos", windows))]
 impl Label {
     fn apply(&self, language: Language) {
         match self {
@@ -550,14 +581,18 @@ impl Label {
         }
     }
 }
+#[cfg(any(target_os = "macos", windows))]
 struct Route {
     generation: u64,
     ids: HashMap<muda::MenuId, Cmd>,
     tx: Sender<Cmd>,
     ctx: egui::Context,
 }
+#[cfg(any(target_os = "macos", windows))]
 type Router = Arc<Mutex<Option<Route>>>;
+#[cfg(any(target_os = "macos", windows))]
 static ROUTER: OnceLock<Router> = OnceLock::new();
+#[cfg(any(target_os = "macos", windows))]
 fn deliver(router: &Router, id: &muda::MenuId) {
     let target = router
         .lock()
@@ -572,6 +607,7 @@ fn deliver(router: &Router, id: &muda::MenuId) {
         ctx.request_repaint();
     }
 }
+#[cfg(any(target_os = "macos", windows))]
 fn connect(ctx: &egui::Context, tx: Sender<Cmd>, ids: HashMap<muda::MenuId, Cmd>) -> u64 {
     let router = ROUTER.get_or_init(|| {
         let router: Router = Arc::new(Mutex::new(None));
@@ -589,6 +625,7 @@ fn connect(ctx: &egui::Context, tx: Sender<Cmd>, ids: HashMap<muda::MenuId, Cmd>
     });
     generation
 }
+#[cfg(any(target_os = "macos", windows))]
 impl Drop for AppMenu {
     fn drop(&mut self) {
         if let Some(router) = ROUTER.get() {
@@ -600,6 +637,7 @@ impl Drop for AppMenu {
     }
 }
 
+#[cfg(any(target_os = "macos", windows))]
 impl AppMenu {
     /// Builds the menu and attaches it to the macOS app (main thread, after the window is set up).
     /// `hwnd`: Windows window handle (HWND) – there the menu bar hangs on the window, not on the app.
@@ -652,68 +690,79 @@ impl AppMenu {
             item
         };
 
-        let app = Submenu::with_items(
-            i18n::text_in(language, Text::NativeApp),
-            true,
-            &[
-                &item(Cmd::About),
-                &item(Cmd::CheckUpdates),
-                &PredefinedMenuItem::separator(),
-                &item(Cmd::Settings),
-                &PredefinedMenuItem::separator(),
-                &native(
-                    PredefinedMenuItem::services(Some(i18n::text_in(
-                        language,
+        // macOS: the app menu (About, Updates, Settings, Services, Hide, Quit). Windows has none: About and Updates go to
+        // Help, Settings to Edit, Exit to the end of File – and no Mac-only entries (Services, Hide …).
+        let mac = cfg!(target_os = "macos");
+        let app = if mac {
+            let app = Submenu::with_items(
+                i18n::text_in(language, Text::NativeApp),
+                true,
+                &[
+                    &item(Cmd::About),
+                    &item(Cmd::CheckUpdates),
+                    &PredefinedMenuItem::separator(),
+                    &item(Cmd::Settings),
+                    &PredefinedMenuItem::separator(),
+                    &native(
+                        PredefinedMenuItem::services(Some(i18n::text_in(
+                            language,
+                            Text::NativeServices,
+                        ))),
                         Text::NativeServices,
-                    ))),
-                    Text::NativeServices,
-                ),
-                &PredefinedMenuItem::separator(),
-                &native(
-                    PredefinedMenuItem::hide(Some(i18n::text_in(language, Text::NativeHide))),
-                    Text::NativeHide,
-                ),
-                &native(
-                    PredefinedMenuItem::hide_others(Some(i18n::text_in(
-                        language,
+                    ),
+                    &PredefinedMenuItem::separator(),
+                    &native(
+                        PredefinedMenuItem::hide(Some(i18n::text_in(language, Text::NativeHide))),
+                        Text::NativeHide,
+                    ),
+                    &native(
+                        PredefinedMenuItem::hide_others(Some(i18n::text_in(
+                            language,
+                            Text::NativeHideOthers,
+                        ))),
                         Text::NativeHideOthers,
-                    ))),
-                    Text::NativeHideOthers,
-                ),
-                &native(
-                    PredefinedMenuItem::show_all(Some(i18n::text_in(
-                        language,
+                    ),
+                    &native(
+                        PredefinedMenuItem::show_all(Some(i18n::text_in(
+                            language,
+                            Text::NativeShowAll,
+                        ))),
                         Text::NativeShowAll,
-                    ))),
-                    Text::NativeShowAll,
-                ),
-                &PredefinedMenuItem::separator(),
-                &item(Cmd::Quit),
-            ],
-        )
-        .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
-        labels
-            .borrow_mut()
-            .push(Label::Group(app.clone(), Text::NativeApp));
-        let file = Submenu::with_items(
-            i18n::text_in(language, Text::NativeFile),
-            true,
-            &[
-                &item(Cmd::OpenFolder),
-                &item(Cmd::Import),
-                &item(Cmd::Lightroom),
-                &PredefinedMenuItem::separator(),
-                &item(Cmd::Export),
-                &item(Cmd::ContactPrint),
-                &PredefinedMenuItem::separator(),
-                &item(Cmd::ShowInFinder),
-                &item(Cmd::ShowInLibrary),
-                &PredefinedMenuItem::separator(),
-                &item(Cmd::RemoveFromCollection),
-                &item(Cmd::TrashSelected),
-                &item(Cmd::DeleteRejected),
-            ],
-        )
+                    ),
+                    &PredefinedMenuItem::separator(),
+                    &item(Cmd::Quit),
+                ],
+            )
+            .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+            labels
+                .borrow_mut()
+                .push(Label::Group(app.clone(), Text::NativeApp));
+            Some(app)
+        } else {
+            None
+        };
+        // the way in first: import photos, import from Lightroom, then only view a folder
+        let mut file_items: Vec<Box<dyn muda::IsMenuItem>> = vec![
+            Box::new(item(Cmd::Import)),
+            Box::new(item(Cmd::Lightroom)),
+            Box::new(item(Cmd::OpenFolder)),
+            Box::new(PredefinedMenuItem::separator()),
+            Box::new(item(Cmd::Export)),
+            Box::new(item(Cmd::ContactPrint)),
+            Box::new(PredefinedMenuItem::separator()),
+            Box::new(item(Cmd::ShowInFinder)),
+            Box::new(item(Cmd::ShowInLibrary)),
+            Box::new(PredefinedMenuItem::separator()),
+            Box::new(item(Cmd::RemoveFromCollection)),
+            Box::new(item(Cmd::TrashSelected)),
+            Box::new(item(Cmd::DeleteRejected)),
+        ];
+        if !mac {
+            file_items.push(Box::new(PredefinedMenuItem::separator()));
+            file_items.push(Box::new(item(Cmd::Quit)));
+        }
+        let file_refs: Vec<&dyn muda::IsMenuItem> = file_items.iter().map(|b| b.as_ref()).collect();
+        let file = Submenu::with_items(i18n::text_in(language, Text::NativeFile), true, &file_refs)
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
         labels
             .borrow_mut()
@@ -741,6 +790,9 @@ impl AppMenu {
             ],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+        if !mac {
+            let _ = edit.append_items(&[&PredefinedMenuItem::separator(), &item(Cmd::Settings)]);
+        }
         labels
             .borrow_mut()
             .push(Label::Group(edit.clone(), Text::NativeEdit));
@@ -845,6 +897,12 @@ impl AppMenu {
                     PredefinedMenuItem::maximize(Some(i18n::text_in(language, Text::NativeZoom))),
                     Text::NativeZoom,
                 ),
+            ],
+        )
+        .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+        // full screen and "bring all to front" exist only on the Mac
+        if mac {
+            let _ = window.append_items(&[
                 &PredefinedMenuItem::separator(),
                 &native(
                     PredefinedMenuItem::fullscreen(Some(i18n::text_in(
@@ -858,9 +916,8 @@ impl AppMenu {
                     PredefinedMenuItem::bring_all_to_front(Some(i18n::text_in(language, Text::NativeBringAllToFront))),
                     Text::NativeBringAllToFront,
                 ),
-            ],
-        )
-        .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+            ]);
+        }
         labels
             .borrow_mut()
             .push(Label::Group(window.clone(), Text::NativeWindow));
@@ -870,12 +927,15 @@ impl AppMenu {
             &[&item(Cmd::Shortcuts), &PredefinedMenuItem::separator(), &item(Cmd::ReportBug), &item(Cmd::ShowLogs)],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+        if !mac {
+            let _ = help.append_items(&[&PredefinedMenuItem::separator(), &item(Cmd::CheckUpdates), &item(Cmd::About)]);
+        }
         labels
             .borrow_mut()
             .push(Label::Group(help.clone(), Text::NativeHelp));
 
         let menu = Menu::new();
-        for s in [&app, &file, &edit, &library_menu, &photo, &view, &window, &help] {
+        for s in app.iter().chain([&file, &edit, &library_menu, &photo, &view, &window, &help]) {
             menu.append(s).map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
         }
         #[cfg(target_os = "macos")]
@@ -1066,7 +1126,7 @@ fn set_symbols(menu: &Menu, icons: &HashMap<muda::MenuId, &'static str>, keys: &
         single_key_equivalents(found);
     }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 fn set_symbols(_: &Menu, _: &HashMap<muda::MenuId, &'static str>, _: &HashMap<muda::MenuId, (String, u64)>) {}
 
 /// Keys without ⌘ (P, X, R, G …) appear right-aligned in the shortcut column like real shortcuts – but only while
@@ -1108,6 +1168,7 @@ fn single_key_equivalents(items: Vec<(usize, String, u64)>) {
     });
 }
 
+#[cfg(any(target_os = "macos", windows))]
 #[cfg(test)]
 mod localization_tests {
     use super::*;

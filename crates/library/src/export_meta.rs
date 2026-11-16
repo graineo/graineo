@@ -561,6 +561,17 @@ fn xml(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
+/// Longest title/description in the export (characters): longer texts (Lightroom allows megabytes) would burst the
+/// 64 KB segment of a JPEG, and the whole metadata would be lost.
+const MAX_TEXT_CHARS: usize = 2000;
+/// Longest keyword (characters) and largest number of keywords written to the export.
+const MAX_KEYWORD_CHARS: usize = 200;
+const MAX_KEYWORDS: usize = 500;
+
+fn shortened(s: &str, max: usize) -> String {
+    s.chars().take(max).collect()
+}
+
 /// XMP packet with copyright and (optionally) the personal fields. None: nothing to write.
 fn xmp_packet(f: &OwnFields) -> Option<String> {
     let copyright = f.fields.copyright.as_deref().map(str::trim).filter(|c| !c.is_empty());
@@ -578,16 +589,16 @@ fn xmp_packet(f: &OwnFields) -> Option<String> {
         }
         if !p.keywords.is_empty() {
             body.push_str("<dc:subject><rdf:Bag>");
-            for k in &p.keywords {
-                body.push_str(&format!("<rdf:li>{}</rdf:li>", xml(k)));
+            for k in p.keywords.iter().take(MAX_KEYWORDS) {
+                body.push_str(&format!("<rdf:li>{}</rdf:li>", xml(&shortened(k, MAX_KEYWORD_CHARS))));
             }
             body.push_str("</rdf:Bag></dc:subject>");
         }
         if let Some(t) = &p.title {
-            body.push_str(&alt("dc:title", t));
+            body.push_str(&alt("dc:title", &shortened(t, MAX_TEXT_CHARS)));
         }
         if let Some(t) = &p.description {
-            body.push_str(&alt("dc:description", t));
+            body.push_str(&alt("dc:description", &shortened(t, MAX_TEXT_CHARS)));
         }
     }
     if let Some(c) = copyright {
@@ -614,7 +625,10 @@ fn jpeg_with(data: &[u8], exif: &[u8], xmp: Option<&str>) -> Result<Vec<u8>, Str
     };
     let mut inserted = seg(b"Exif\0\0", exif)?;
     if let Some(x) = xmp {
-        inserted.extend(seg(XMP_ID, x.as_bytes())?);
+        // an XMP packet that still does not fit only loses itself, never the EXIF block (with the copyright)
+        if let Ok(x) = seg(XMP_ID, x.as_bytes()) {
+            inserted.extend(x);
+        }
     }
     let mut out = data[..2].to_vec();
     let mut i = 2;
@@ -1001,6 +1015,33 @@ mod tests {
         let again = jpeg_with(&out, &exif_block(&f), None).unwrap();
         assert_eq!(String::from_utf8_lossy(&again).matches("Exif\0\0").count(), 1);
         assert!(!String::from_utf8_lossy(&again).contains("xmp:Rating"));
+    }
+
+    /// Review N4: a huge title (Lightroom allows megabytes) neither removes the other metadata nor the copyright.
+    #[test]
+    fn huge_title_keeps_the_other_metadata() {
+        let j = jpeg_bytes();
+        let fields = ExportFields {
+            personal: true,
+            stars: 3,
+            copyright: Some("© Test Person".into()),
+            title: Some("T".repeat(200_000)),
+            description: Some("D".repeat(100_000)),
+            keywords: vec!["Meer".into(), "k".repeat(100_000)],
+            shot: Some(shot()),
+            ..Default::default()
+        };
+        let f = OwnFields { fields, width: 16, height: 8 };
+        let xmp = xmp_packet(&f).unwrap();
+        assert!(xmp.len() < 60_000, "{}", xmp.len());
+        let out = jpeg_with(&j, &exif_block(&f), Some(&xmp)).unwrap();
+        let s = String::from_utf8_lossy(&out);
+        assert!(s.contains("xmp:Rating=\"3\"") && s.contains("Test Person") && s.contains("Meer"));
+        assert_eq!(tag(&read_tags(&app1_exif(&out).unwrap()), 0xA434).as_deref(), Some("SIGMA 30mm f/2.8"));
+        // an oversized packet loses only itself
+        let huge = "x".repeat(70_000);
+        let out = jpeg_with(&j, &exif_block(&f), Some(&huge)).unwrap();
+        assert_eq!(tag(&read_tags(&app1_exif(&out).unwrap()), 0xA434).as_deref(), Some("SIGMA 30mm f/2.8"));
     }
 
     #[test]

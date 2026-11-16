@@ -261,10 +261,48 @@ pub fn model_path() -> std::path::PathBuf {
     std::env::var_os("GRAINEO_FACE_MODEL").map(std::path::PathBuf::from).unwrap_or_else(|| crate::data_dir().join("modules").join("faces").join(faces::sface::FILE_NAME))
 }
 
-/// Load the model; if the file is missing, it is downloaded once (https, SHA-256 checksum).
+static DOWNLOAD_ALLOWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The user (or a command line tool) confirmed that the model may be downloaded. Without it, [`load_model`]
+/// never touches the network.
+pub fn allow_download() {
+    DOWNLOAD_ALLOWED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Default of the setting `facesAutomatic`: on where the system finds the faces (macOS, Apple Vision), off where
+/// graineo computes the detection itself on the CPU (YuNet: Windows, Linux).
+pub fn automatic_default() -> bool {
+    faces::detector::AUTOMATIC_DEFAULT
+}
+
+/// Is the automatic face search switched on (setting `facesAutomatic`, default [`automatic_default`])?
+pub fn automatic_enabled() -> bool {
+    crate::settings::value("facesAutomatic").as_bool().unwrap_or(automatic_default())
+}
+
+/// Does graineo compute the face detection itself (YuNet on the CPU) instead of the system (Apple Vision)?
+pub fn detection_computed_itself() -> bool {
+    faces::detector::computes_itself()
+}
+
+/// Is the model file there (nothing to download)?
+pub fn model_present() -> bool {
+    model_path().exists()
+}
+
+/// Size of the download in bytes (from the model data).
+pub fn model_download_bytes() -> u64 {
+    faces::sface::SIZE_BYTES
+}
+
+/// Load the model; if the file is missing, it is downloaded once (https, SHA-256 checksum) – but only after
+/// [`allow_download`] (the app asks first).
 pub fn load_model() -> Result<faces::sface::Sface, String> {
     let p = model_path();
     if !p.exists() {
+        if !DOWNLOAD_ALLOWED.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("Gesichtsmodell fehlt – es wird erst nach Bestätigung geladen".into());
+        }
         download_model(&p)?;
     }
     if std::env::var_os("GRAINEO_FACE_MODEL").is_none() && crate::relocate::sha256(&p)? != faces::sface::SHA256 {

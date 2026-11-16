@@ -367,7 +367,7 @@ pub fn plan_files(db: &Db, files: &[i64], target_dir: &Path, new_name: Option<&s
     let mut v = Operation { id: new_id(), title: String::new(), steps: Vec::new(), changes: Vec::new(), status: "planned".into(), message: String::new(), kind: String::new(), cleanup: None };
     let mut seen = std::collections::HashSet::new();
     if crate::apple_photos::in_photos_library(target_dir) {
-        return Err("Nie in die Mediathek von Apple Fotos verschieben".into());
+        return Err("Nie in die Bibliothek von Apple Fotos verschieben".into());
     }
     crate::write_target::check(target_dir)?;
     for &d in files {
@@ -433,7 +433,7 @@ pub fn plan_folder(db: &Db, folder: i64, new_name: &str) -> Result<Operation, St
         return Err("Stammordner werden nicht umbenannt".into());
     }
     if crate::apple_photos::in_photos_library(Path::new(&root_path)) {
-        return Err("Ordner der Mediathek von Apple Fotos werden nicht umbenannt".into());
+        return Err("Ordner der Bibliothek von Apple Fotos werden nicht umbenannt".into());
     }
     let old = PathBuf::from(format!("{root_path}{rel}"));
     let parent_rel = rel.trim_end_matches('/').rsplit_once('/').map_or(String::new(), |(a, _)| format!("{a}/"));

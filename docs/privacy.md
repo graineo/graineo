@@ -14,7 +14,7 @@ graineo connects to the internet only in the cases listed below. As with any web
 |---|---|---|---|
 | Update check | `github.com`, redirected to `objects.githubusercontent.com` or `release-assets.githubusercontent.com` | Download of two public files (`latest.json`, `latest.json.sig`). Only the usual request with the identifier `graineo/<version>` (user agent) is sent. No device identifier, no photo data. | at most once in 24 hours at start, if “Check for updates automatically” is on (default: on); also when you choose “Check for Updates …” |
 | Downloading an update | the same servers | Download of the update package (ZIP) with the same identifier | only after you click “Install” |
-| Face recognition (model) | `media.githubusercontent.com` (the “SFace” model of the OpenCV Zoo project) | Download of a public model file (about 39 MB), identifier of the system program `curl` | once, on the first run of automatic face detection (default: on, about 25 seconds after start); recognition itself runs only locally |
+| Face recognition (model) | `media.githubusercontent.com` (the “SFace” model of the OpenCV Zoo project) | Download of a public model file (about 39 MB), identifier of the system program `curl` | once, only after you confirm a notice in the app window (“graineo downloads 39 MB once for face recognition” with the buttons “Download” and “Later”); the notice appears on the first run of automatic face detection (default: on under macOS, off under Windows and Linux; about 25 seconds after start), and again at the next start if you chose “Later”; nothing is downloaded before that; recognition itself runs only locally |
 | Search models (modules) | `huggingface.co` and its download servers | Download of public model files at a fixed revision, identifier `curl` | only when you load a module in Settings |
 | Apple Photos | Apple (iCloud), through macOS | graineo requests photos through the Photos interface of macOS; if originals are stored only in iCloud, macOS downloads them from Apple | only with your permission for Apple Photos and when such photos are opened |
 | “Report a Problem …” | `github.com` (in your browser) | nothing from graineo itself: your browser opens a pre-filled form. It is sent only when you submit it there with your GitHub account. | only on click |
@@ -25,7 +25,7 @@ Downloaded updates and models are checked before use (size and SHA-256; updates 
 ## What you can change
 
 - **Update check:** Settings, section “Updates” → switch off “Check for updates automatically”. graineo then only asks when you choose “Check for Updates …” yourself.
-- **Face detection:** Settings, section “People” → switch off “Detect faces automatically” (default: on). The model is then not downloaded either.
+- **Face detection:** Settings, section “People” → switch off “Detect faces automatically” (default: on under macOS, off under Windows and Linux). The model is then not downloaded either. Finding faces uses Apple Vision on macOS (on the device) and, on other systems, the YuNet model built into graineo; neither sends anything over the network.
 - **Modules:** are only downloaded when you choose them yourself.
 
 ## Problem report

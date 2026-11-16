@@ -827,8 +827,8 @@ Lokaler Weißwert	ローカル白レベル
 Ältere lokale Helligkeit	旧ローカル明るさ
 Verknüpfung der Teilmasken	サブマスクの結合
 Weitere nicht unterstützte Maskendaten	その他の未対応マスクデータ
-MEDIATHEK	ライブラリ
-Mediathek: Fotos finden und auswählen · G	ライブラリ：写真を探して選択 · G
+BIBLIOTHEK	ライブラリ
+Bibliothek: Fotos finden und auswählen · G	ライブラリ：写真を探して選択 · G
 ENTWICKELN	現像
 Entwickeln: das Foto digital entwickeln · D	現像：写真をデジタルで現像 · D
 DUNKELKAMMER	暗室
@@ -1071,7 +1071,7 @@ rechte Leiste ein/aus	右パネルの表示/非表示
 Einfachklick ins Bild	画像をクリック
 Einpassen ↔ 100 % an dieser Stelle (ohne aktives Werkzeug)	この位置で全体表示 ↔ 100 %（ツール未使用時）
 Doppelklick ins Bild	画像をダブルクリック
-zurück zur Mediathek (ohne aktives Werkzeug)	ライブラリに戻る（ツール未使用時）
+zurück zur Bibliothek (ohne aktives Werkzeug)	ライブラリに戻る（ツール未使用時）
 Zwei Finger wischen / Mausrad	2本指でスワイプ / マウスホイール
 vergrößertes Bild verschieben	拡大した画像を移動
 Zusammenziehen / ⌘ oder ⌥ + Scrollen	ピンチ / ⌘ または ⌥ + スクロール
@@ -2106,7 +2106,7 @@ Prüfsumme von {path} stimmt nicht – Datei verworfen	{path}のチェックサ�
 Moduldatei nicht prüfbar: {e}	モジュールファイルを確認できません：{e}
  (doppeltes Bild zusammengeführt)	（重複画像を統合）
 Katalog nicht lesbar: {e}	カタログを読み込めません：{e}
-{} Bilder übernehmen …	{}件の画像を取り込み中…
+{} Fotos übernehmen …	{}枚の写真を取り込み中…
 Modellkopf zu groß	モデルヘッダが大きすぎます
 Ungültige Modelldimension oder Datenposition	モデルの次元またはデータ位置が無効です
 Modelldimension zu groß	モデルの次元が大きすぎます
@@ -2229,6 +2229,8 @@ weicht von den übrigen Aufnahmen dieser Brennweite ab (Motiv ohne durchgehend g
 nicht verwendet: {a} – {b}	未使用：{a} – {b}
 Wirkt vor allen anderen Profilen; im Papierkorb wiederherstellbar	他のすべてのプロファイルより優先されます。ゴミ箱から復元できます
 Metadaten-Filter	メタデータフィルター
+Metadaten-Filter zurücksetzen	メタデータフィルターをリセット
+Metadaten-Filter: {a}	メタデータフィルター: {a}
 Zusammen (ein Foto)	まとめて（写真1枚）
 Einzeln (zwei Fotos)	個別（写真2枚）
 Sortierung:	並べ替え：
@@ -2265,7 +2267,8 @@ Namen prüfen …	名前を確認中…
 Gesichter: {} von {} Fotos	顔：{}/{}枚の写真
 Personen	人物
 Gesichter automatisch erkennen	顔を自動検出
-Läuft im Hintergrund mit niedriger Priorität; beim ersten Mal wird ein Gesichtsmodell (39 MB) geladen. Wirkt ab dem nächsten Start	低い優先度でバックグラウンド実行します。初回は顔モデル（39 MB）をダウンロードします。次回の起動から有効になります
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Wirkt ab dem nächsten Start	低い優先度でバックグラウンド実行します。顔モデル（39 MB）を一度だけダウンロードする前に確認します。次回の起動から有効になります
+Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Auf diesem System rechnet graineo die Gesichtserkennung selbst; das kann länger dauern. Wirkt ab dem nächsten Start	低い優先度でバックグラウンド実行します。顔モデル（39 MB）を一度だけダウンロードする前に確認します。このシステムでは graineo が顔検出を自前で計算するため、時間がかかる場合があります。次回の起動から有効になります
 Anderer Name …	別の名前…
 Übernehmen	適用
 Namen prüfen ({a})	名前を確認（{a}）
@@ -2390,8 +2393,8 @@ aus	オフ
 Klicken zum Schließen	クリックして閉じる
 Foto aus Apple Fotos – dort löschen	Apple 写真の写真です。削除は Apple 写真で行ってください
 Apple Fotos	Apple 写真
-Mediathek von Apple Fotos einbinden	Apple 写真のライブラリを追加
-Keine Mediathek von Apple Fotos gefunden	Apple 写真のライブラリが見つかりません
+Bibliothek von Apple Fotos einbinden	Apple 写真のライブラリを追加
+Keine Bibliothek von Apple Fotos gefunden	Apple 写真のライブラリが見つかりません
 {p} · wird nur gelesen; Fotos, Alben und Favoriten erscheinen in der Bibliothek, Einstellungen bleiben bei graineo	{p} · 読み取り専用です。写真、アルバム、お気に入りはライブラリに表示され、設定は graineo 側に保存されます
 Abgleich	同期
 Jetzt abgleichen	今すぐ同期
@@ -2403,7 +2406,7 @@ Versionen	バージョン
 Eine virtuelle Kopie hat eigene Einstellungen, die Datei bleibt dieselbe.	仮想コピーは独自の設定を持ち、ファイルは同じままです。
 Zum Beispiel ein anderer Film oder ein anderer Ausschnitt desselben Fotos, ohne die Datei zu verdoppeln.\n\n### Löschen\nKopie wählen, dann Entf.	たとえば、ファイルを複製せずに同じ写真で別のフィルムや別の切り抜きを試せます。\n\n### 削除\nコピーを選んでから Delete キーを押します。
 Apple Fotos: viele Fotos verschwunden	Apple 写真：多数の写真が消えました
-{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Mediathek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{k}枚中{n}枚の写真が Apple 写真から一度に消えました（「最近削除した項目」にもありません）。Apple 写真がライブラリを修復中か、iCloud から再構築中の可能性があります。
+{n} von {k} Fotos sind auf einmal aus Apple Fotos verschwunden (auch nicht unter „Zuletzt gelöscht“). Das kann eine Bibliothek sein, die Apple Fotos gerade repariert oder aus iCloud neu aufbaut.	{k}枚中{n}枚の写真が Apple 写真から一度に消えました（「最近削除した項目」にもありません）。Apple 写真がライブラリを修復中か、iCloud から再構築中の可能性があります。
 Der Abgleich wurde angehalten, in graineo ist nichts entfernt. Beim Abgleichen werden diese Fotos samt Sternen, Stichwörtern und Bearbeitung aus der Bibliothek entfernt.	同期を停止しました。graineo では何も削除されていません。同期すると、これらの写真は星評価、キーワード、編集とともにライブラリから削除されます。
 Trotzdem abgleichen	それでも同期
 Apple Fotos: Abgleich angehalten – {n} von {k} Fotos wären entfernt worden	Apple 写真：同期を停止しました。{k}枚中{n}枚が削除されるところでした
@@ -2525,7 +2528,7 @@ Filter: unmarkierte zeigen	フィルター：フラグなしを表示
 Filter: abgelehnte zeigen	フィルター：除外を表示
 {a} · {b} Fotos	{a} · 写真{b}枚
 {a} gelöscht	{a}を削除しました
-{a} aus der Mediathek → Papierkorb	{a}をライブラリから削除 → ゴミ箱
+{a} aus der Bibliothek → Papierkorb	{a}をライブラリから削除 → ゴミ箱
 {a} aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	{a}を Apple 写真から削除 →「最近削除した項目」（30日間）
 aus Apple Fotos → „Zuletzt gelöscht“ (30 Tage)	Apple 写真から削除 →「最近削除した項目」（30日間）
 in den Papierkorb	ゴミ箱へ移動
@@ -2648,8 +2651,8 @@ Ziel ohne Dateiname	保存先にファイル名がありません
 Abgleich mit den Begleitdateien …	サイドカーファイルと同期中…
 kein Quellordner gewählt	元フォルダが選択されていません
 kein erreichbarer Stammordner	利用可能なルートフォルダがありません
-nie in die Mediathek von Apple Fotos schreiben	Apple 写真のライブラリには書き込まない
-Nie in die Mediathek von Apple Fotos verschieben	Apple 写真のライブラリには移動しない
+nie in die Bibliothek von Apple Fotos schreiben	Apple 写真のライブラリには書き込まない
+Nie in die Bibliothek von Apple Fotos verschieben	Apple 写真のライブラリには移動しない
 Bibliothek hat ein älteres Schema ({v}) – erst mit graineo öffnen	ライブラリのスキーマ（{v}）が古いため、先にgraineoで開いてください
 kein Dateiname	ファイル名がありません
 keine freie Nebendatei	付随ファイルに使える空き名がありません
@@ -2683,7 +2686,7 @@ Stichwort nicht angelegt	キーワードを作成できませんでした
 Rahmen zu klein	フレームが小さすぎます
 Ordner unbekannt	不明なフォルダ
 Leser abgestürzt	リーダーがクラッシュしました
-Mediathek nicht gefunden	ライブラリが見つかりません
+Bibliothek nicht gefunden	ライブラリが見つかりません
 keine Kennung	識別子がありません
 keine lokale Vorschau in Apple Fotos	Apple 写真にローカルのプレビューがありません
 ImageIO kann die Datei nicht lesen	ImageIOでファイルを読み込めません
@@ -2691,13 +2694,13 @@ Bildgröße passt nicht	画像サイズが一致しません
 Änderungen eintragen …	変更を書き込み中…
 {p}: Begleitdatei {} aus der Bibliothek neu geschrieben	{p}：サイドカーファイル {} をライブラリから書き直しました
 {p}: {g} in die Begleitdatei geschrieben (Bibliothek neuer){}	{p}：{g} をサイドカーファイルに書き込みました（ライブラリの方が新しい）{}
-Die Mediathek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	Apple 写真のライブラリは、フォルダとしてではなく、設定 → ライブラリから追加します
+Die Bibliothek von Apple Fotos wird über Einstellungen → Bibliothek eingebunden, nicht als Ordner	Apple 写真のライブラリは、フォルダとしてではなく、設定 → ライブラリから追加します
 Ziel existiert schon: {}	保存先はすでに存在します：{}
 Datei unbekannt	不明なファイル
 Fotos aus Apple Fotos lassen sich hier nicht verschieben oder umbenennen	Apple 写真の写真は、ここでは移動も名前変更もできません
 {n} Foto(s) nach {}	{n} 枚の写真を {} へ
 ungültiger Ordnername	無効なフォルダ名
-Ordner der Mediathek von Apple Fotos werden nicht umbenannt	Apple 写真ライブラリのフォルダは名前を変更できません
+Ordner der Bibliothek von Apple Fotos werden nicht umbenannt	Apple 写真ライブラリのフォルダは名前を変更できません
 Ordner umbenennen in {}	フォルダ名を {} に変更
 {} fehlt	{} がありません
 Modellkopf zu kurz	モデルヘッダーが短すぎます
@@ -2992,7 +2995,7 @@ Der Stammordner {a} fehlt – bitte zuerst ihn suchen	ルートフォルダ {a} 
 Die Bibliothek kennt in diesem Ordner keine Fotos – nichts zu verknüpfen	このフォルダにはライブラリ上の写真がないため、再リンクするものがありません
 Die Bibliothek hat sich inzwischen geändert – bitte noch einmal suchen	その間にライブラリが変更されました。もう一度探してください
 {a}. Der gewählte Ordner ist schon in der Bibliothek – bitte dort die Einträge prüfen oder einen anderen Ordner wählen.	{a}。選択したフォルダは既にライブラリにあります。そこでエントリを確認するか、別のフォルダを選んでください。
-Ordner der Mediathek von Apple Fotos werden nicht neu verknüpft	Apple 写真ライブラリのフォルダは再リンクできません
+Ordner der Bibliothek von Apple Fotos werden nicht neu verknüpft	Apple 写真ライブラリのフォルダは再リンクできません
 1 Foto ist dort nicht – es bleibt als fehlend markiert.	1 枚の写真はそこにないため、欠落としてマークされたままです。
 1 Datei heißt gleich, ist aber anders groß – sie bleibt als fehlend markiert, bis der Abgleich sie prüft.	1 個のファイルは名前が同じでもサイズが異なるため、同期で確認されるまで欠落としてマークされたままです。
 1 Foto mit gleicher Größe, aber anderer Änderungszeit wird mit verknüpft.	サイズが同じで更新日時が異なる写真 1 枚も一緒に再リンクされます。
@@ -3085,7 +3088,7 @@ Ohne Vorschau (Datei nicht lesbar): {a}	プレビューなし（ファイルを�
 ohne Vorschau: {a}	プレビューなし：{a}
 Ordner zusammengeführt	フォルダを統合しました
 Ordner {a} von {b} · Datei {c} von {d} · {e} von {f}	フォルダ {a} / {b} · ファイル {c} / {d} · {e} / {f}
-Bleiben liegen (Lightroom-Katalog, Mediathek von Apple Fotos, Pakete anderer Programme): {a}	そのまま残すもの（Lightroomカタログ、Apple 写真ライブラリ、他のプログラムのパッケージ）：{a}
+Bleiben liegen (Lightroom-Katalog, Bibliothek von Apple Fotos, Pakete anderer Programme): {a}	そのまま残すもの（Lightroomカタログ、Apple 写真ライブラリ、他のプログラムのパッケージ）：{a}
 {a} Katalogdateien	カタログファイル {a} 個
 Verschieben vorbereiten	移動の準備
 Ordner und Ziel werden verglichen …	フォルダと移動先を比較中…
@@ -3698,7 +3701,7 @@ Ziel nicht verwendet	保存先は未使用
 Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben.	ファイルは変更せず、検証付きでコピーされます（SHA-256）。何も上書きされません。
 Begleitdatei (XMP) mit Bewertung und Entwicklung	評価と現像設定を含むサイドカー (XMP)
 Kamera-JPEG der RAW+JPEG-Paare	RAW+JPEG ペアのカメラ JPEG
-Ziel liegt in „{a}“ – in die Mediathek oder das Paket eines anderen Programms schreibt graineo nicht	保存先は「{a}」の中にあります。graineo は他のアプリのライブラリやパッケージには書き込みません
+Ziel liegt in „{a}“ – in die Bibliothek oder das Paket eines anderen Programms schreibt graineo nicht	保存先は「{a}」の中にあります。graineo は他のアプリのライブラリやパッケージには書き込みません
 {a}: gibt es schon – nichts wird überschrieben	{a}: すでに存在します。何も上書きされません
 Fotos löschen	写真を削除中
 Kontaktabzug wird berechnet	コンタクトプリントを計算中
@@ -3855,7 +3858,7 @@ Gruppe von Reglern zu einem Thema.	1 つのテーマに関するスライダー�
 Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.	ヘッダーで開閉できます。セクション内で何かを調整すると、ヘッダー右側にスイッチとリセットボタンが表示されます。
 Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral	各ホイールで色相（方向）とその強さ（中心からの距離）を設定します。明るさは変わりません。定番: 冷たいシャドウ、暖かいハイライト、または白黒のセピアやセレン。\n\n### 操作\nホイールをドラッグ: 色相と強さ · ドラッグ中に ⇧: 強さのみ · ダブルクリック: ニュートラル
 Entwickeln zeigt die Farben ohne Beschneiden auf sRGB, wenn der Bildschirm mehr kann (MacBook Pro, EIZO): eingepasst, vergrößert, Lupe und Vergleich. Gilt für Foveon und alle anderen Formate, nicht für Film, Schwarzweiß und ältere Foveon-Kameras (DP1, DP2, SD15 …)	ディスプレイがより広い色域を表示できる場合（MacBook Pro、EIZO）、現像では色を sRGB に切り詰めずに表示します：全体表示、拡大、ルーペ、比較。Foveon とその他すべての形式に適用されます。フィルム、白黒、旧型の Foveon カメラ（DP1、DP2、SD15 …）には適用されません
-• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Mediathek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **ソフト校正** – 表示 → ソフト校正：全色域、sRGB、Display P3、Adobe RGB、ProPhoto。選んだ色空間の外にある色は、その境界に合わせられます。⌘Y で全色域と最後に選んだ色空間を切り替えます。\n• **色域外警告** – ⇧⌘Y で、校正用の色空間の外にあるピクセルをマゼンタで表示します。\n\n現像で写真を表示するすべての場所に適用されます：全体表示、拡大、ルーペ、ナビゲーター、比較、暗室でも。サムネイル（ライブラリ、フィルムストリップ）とフィルム・白黒は sRGB 画像で、どの校正用色空間にも収まるため、校正による変化はありません。選択は終了するまで有効です。ここでは graineo の起動時の設定を選びます。
+• **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Bibliothek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **ソフト校正** – 表示 → ソフト校正：全色域、sRGB、Display P3、Adobe RGB、ProPhoto。選んだ色空間の外にある色は、その境界に合わせられます。⌘Y で全色域と最後に選んだ色空間を切り替えます。\n• **色域外警告** – ⇧⌘Y で、校正用の色空間の外にあるピクセルをマゼンタで表示します。\n\n現像で写真を表示するすべての場所に適用されます：全体表示、拡大、ルーペ、ナビゲーター、比較、暗室でも。サムネイル（ライブラリ、フィルムストリップ）とフィルム・白黒は sRGB 画像で、どの校正用色空間にも収まるため、校正による変化はありません。選択は終了するまで有効です。ここでは graineo の起動時の設定を選びます。
 Voller Umfang	全色域
 Farbproof beim Start	起動時のソフト校正
 Farbproof	ソフト校正
@@ -3916,7 +3919,7 @@ Abschnitt einschalten	セクションをオン
 Abschnitt vorübergehend ausschalten	セクションを一時的にオフ
 Blendenstufen der hellsten 0,1 % jeder Schicht bis zur Sättigung	各層の最も明るい 0.1 % から飽和までの段数
 Kachelgröße	タイルサイズ
-Suchfeld der Mediathek	ライブラリの検索欄
+Suchfeld der Bibliothek	ライブラリの検索欄
 Aufsteigend sortiert · Klick kehrt um	昇順 · クリックで反転
 Absteigend sortiert · Klick kehrt um	降順 · クリックで反転
 Metadaten-Filter: Kamera, Objektiv, ISO …	メタデータフィルター：カメラ、レンズ、ISO …
@@ -3926,7 +3929,7 @@ Nur abgelehnte	除外のみ
 Suchen, auch nach Feldern wie iso:200	検索（iso:200 などのフィールドも可）
 Eigene Einstellungen, dieselbe Datei	独自の設定、同じファイル
 Info: Metadaten, Stichwörter, Bewertung	情報：メタデータ、キーワード、評価
-Mediathek: Fotos finden und auswählen	ライブラリ：写真を探して選ぶ
+Bibliothek: Fotos finden und auswählen	ライブラリ：写真を探して選ぶ
 Entwickeln: das Foto digital entwickeln	現像：写真をデジタル現像
 Dunkelkammer: Film entwickeln und auf Papier abziehen	暗室：フィルムを現像してペーパーにプリント
 Neue virtuelle Kopie, um einen anderen Film auszuprobieren	別のフィルムを試すための新しい仮想コピー
@@ -4277,7 +4280,7 @@ Nicht in der Bibliothek · wird gesucht …	ライブラリ外 · 検索中…
 Name klingt nach Papierkorb	名前からゴミ箱と思われます
 Name klingt nach Export	名前から書き出しと思われます
 Name klingt nach Sicherung oder Kopie	名前からバックアップかコピーと思われます
-Photo-Booth-Mediathek	Photo Booth ライブラリ
+Photo-Booth-Bibliothek	Photo Booth ライブラリ
 Picasa-Ordner	Picasa フォルダ
 {a} vermutlich schon in der Bibliothek (gleicher Name und Größe)	{a} はおそらくライブラリにすでにあります（同じ名前とサイズ）
 Datei fehlt oder Laufwerk nicht verbunden	ファイルがないかドライブが未接続
@@ -4349,7 +4352,7 @@ Eigenes Profil wählen	カスタムプロファイルを選択
 Größe, Aufnahmezeit, Prüfsumme	サイズ・撮影日時・チェックサム
 nicht erreichbar, nichts wird entfernt	アクセス不可、削除しません
 Bild {a} % gleich, gleicher Tag, nur von Hand	画像 {a} % 一致、同じ日、手動のみ
-Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner an Ort und Stelle in die Bibliothek auf (wie „Importieren …“ mit „An Ort und Stelle“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur vorübergehend zum Entwickeln, ohne Aufnahme	ルートフォルダごとに画像数付きのツリーを表示します。graineo はコピー、移動、名前変更を一切行いません。\n\n## グレー、取り消し線\n保存場所にアクセスできません。写真はプレビューで表示されたままで、星、キーワード、人物は引き続き変更できます。現像、書き出し、削除には元のファイルが必要です。\n\n## フォルダを追加\n• 見出し右の **+** – フォルダをその場所のままライブラリに追加します（「読み込み…」の「その場で」と同じ）\n• **フォルダを表示…**（⌘O、ファイルメニュー）– 現像のため一時的に開くだけで、追加しません
+Je Stammordner ein Baum mit Bildanzahl. graineo kopiert, verschiebt und benennt nichts um.\n\n## Grau, durchgestrichen\nSpeicherort nicht erreichbar. Die Fotos bleiben über die Vorschauen sichtbar; Sterne, Stichwörter und Personen lassen sich weiter ändern. Entwickeln, Export und Löschen brauchen das Original.\n\n## Ordner aufnehmen\n• **+** rechts im Kopf – nimmt einen Ordner in die Bibliothek auf; die Fotos bleiben, wo sie sind (wie „Fotos importieren …“ mit „Hinzufügen“)\n• **Ordner ansehen …** (⌘O, Menü Ablage) – nur ansehen, ohne Import; verändert nichts	ルートフォルダごとに画像数付きのツリーを表示します。graineo はコピー、移動、名前変更を一切行いません。\n\n## グレー、取り消し線\n保存場所にアクセスできません。写真はプレビューで表示されたままで、星、キーワード、人物は引き続き変更できます。現像、書き出し、削除には元のファイルが必要です。\n\n## フォルダを追加\n• 見出し右の **+** – フォルダをライブラリに追加します。写真はそのままの場所に残ります（「写真を読み込む…」の「追加」と同じ）\n• **フォルダを表示…**（⌘O、ファイルメニュー）– 見るだけで読み込みません。何も変更しません
 Rückgängig: Einstellungen ({n} Fotos)	取り消し: 設定（{n} 枚）
 Wiederholt: Einstellungen ({n} Fotos)	やり直し: 設定（{n} 枚）
 Ähnlich zu: {a}	類似: {a}
@@ -4618,7 +4621,7 @@ Blendenbereich	絞り範囲
 Defektpixel	欠陥画素
 Bildstil	ピクチャースタイル
 Stichwörter des Fotos.	写真のキーワード。
-Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Mediathek, Spalte „Stichwort“.	フィールドでキーワードを追加します（複数選択時は選択中のすべての写真に）。キーワードでの絞り込みと管理（名前変更・移動・削除は右クリック）は、ライブラリのメタデータフィルターの「キーワード」列で行います。
+Das Feld fügt ein Stichwort hinzu (bei mehreren gewählten Fotos allen). Nach Stichwörtern filtern und sie verwalten (umbenennen, verschieben, löschen per Rechtsklick) geht im Metadaten-Filter der Bibliothek, Spalte „Stichwort“.	フィールドでキーワードを追加します（複数選択時は選択中のすべての写真に）。キーワードでの絞り込みと管理（名前変更・移動・削除は右クリック）は、ライブラリのメタデータフィルターの「キーワード」列で行います。
 Import wartet auf das Laufwerk	読み込み：ドライブ待ち
 {a} hinzufügen	{a}を追加
 Im Hintergrund weiter	バックグラウンドで続行
@@ -4696,7 +4699,7 @@ Rest importieren	残りを読み込む
 Fenster zeigen	ウインドウを表示
 Bringt Fotos von einer Karte oder aus einem Ordner in die Bibliothek.	カードやフォルダの写真をライブラリに読み込みます。
 • **Hinzufügen** – die Fotos bleiben, wo sie sind; ihre Ordner kommen in die Bibliothek (abgehakt wird je Ordner)\n• **Kopieren** – jede Datei wird ins Ziel kopiert, danach vom Ziel zurückgelesen (am Zwischenspeicher des Macs vorbei) und mit SHA-256 verglichen; erst dann gilt sie als importiert. Die Quelle bleibt unverändert\n• **Verschieben** – wie Kopieren; die Originale eines Fotos kommen erst in den Papierkorb, wenn alle seine Kopien (RAW, JPEG, XMP, zweite Kopie) geprüft sind\n\n### Marken\n• **schon da** – dieselbe Datei (gleicher Inhalt, Name egal) ist schon in der Bibliothek; sie wird übersprungen\n• **vermutlich da** – gleiche Größe und gleicher Name oder Aufnahmezeit wie ein Foto, dessen Laufwerk gerade nicht verbunden ist; nicht angehakt, du entscheidest\n• **identisch** – bytegleiche Kopie eines anderen Fotos in derselben Quelle; nur das erste wird importiert\n\n### Im Hintergrund weiter\nSchließt das Fenster, der Import läuft weiter und graineo bleibt bedienbar. Die Statusanzeige oben zeigt den Fortschritt, ein Klick darauf holt das Fenster zurück. Fehlt unterwegs das Ziel oder die Karte, wartet der Import, bis sie wieder da sind.	• **追加** – 写真は元の場所のまま、フォルダをライブラリに追加します（フォルダ単位で選択）\n• **コピー** – 各ファイルを保存先にコピーし、保存先から読み直して（Macのキャッシュを通さず）SHA-256で照合します。照合後に読み込み済みになります。読み込み元は変更されません\n• **移動** – コピーと同じ。写真のすべてのコピー（RAW、JPEG、XMP、2つ目のコピー）を検証してから元ファイルをゴミ箱に入れます\n\n### 表示\n• **既存** – 同じファイル（内容が同じ、名前は問わない）がライブラリにあります。スキップします\n• **既存の可能性** – 未接続ドライブ上の写真と同じサイズで、名前または撮影時刻も同じ。未選択なので、必要に応じて選んでください\n• **同一** – 同じ読み込み元にある別の写真とバイト単位で同一のコピー。最初の1枚だけ読み込みます\n\n### バックグラウンドで続行\nウインドウを閉じても読み込みは続き、graineoを操作できます。上部の状態表示に進行状況が出て、クリックするとウインドウが再表示されます。途中で保存先やカードが外れた場合は、戻るまで待機します。
-In der Mediathek zeigen	ライブラリで表示
+In der Bibliothek zeigen	ライブラリで表示
 angeschlossen – zum Lesen anklicken	接続済み – クリックで読み込み
 verbindet …	接続中…
 liest die Dateiliste … {p} %	ファイル一覧を読み込み中… {p} %
@@ -4776,7 +4779,7 @@ Foto öffnen	写真を開く
 Alle sehr wahrscheinlichen bestätigen ({n})	可能性大をすべて確認 ({n})
 Bestätigt die Vorschläge „sehr wahrscheinlich“ der aktuellen Auswahl in den Spalten (⌘Z nimmt es zurück)	列で選択中の「可能性大」の候補を確認します(⌘Zで取り消し)
 Name entfernen, das Gesicht bleibt ohne Namen	名前を外し、顔は名前なしのままにする
-Alle Fotos dieser Person in der Mediathek zeigen	この人物のすべての写真をライブラリで表示
+Alle Fotos dieser Person in der Bibliothek zeigen	この人物のすべての写真をライブラリで表示
 Nicht angezeigte Personen bekommen keine Vorschläge und stehen nur in der Personenspalte	非表示の人物には候補が出ず、人物の列にだけ表示されます
 Die neuen Vorschläge übernehmen (die Ansicht ändert sich nicht von allein)	新しい候補を反映します(表示は自動では変わりません)
 Die Vorschläge wurden im Hintergrund neu berechnet.	候補がバックグラウンドで再計算されました。
@@ -4864,13 +4867,14 @@ Film: spektrafilm, A. Volpato (GPL-3.0)	フィルム: spektrafilm, A. Volpato (G
 Filmdaten: CC BY-SA 4.0	フィルムデータ: CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	RAW デコード: rawler (LGPL-2.1)
 Objektivdaten: lensfun (CC BY-SA 3.0)	レンズデータ: lensfun (CC BY-SA 3.0)
+Gesichter finden: YuNet, Shiqi Yu (MIT)	顔検出: YuNet、Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	ツールのアイデア: 粒子ルーペ、プレフラッシュ、ディフュージョン、光点は spektrafilm に基づく
 Schriften und Symbole	フォントとアイコン
 Marken	商標
 Foveon und Sigma sind Marken der Sigma Corporation; graineo ist nicht mit Sigma verbunden.	Foveon と Sigma は Sigma Corporation の商標です。graineo は Sigma と提携していません。
 ← Personen	← 人物
 Rahmen	枠
-Alle Fotos von {a} in der Mediathek zeigen	{a} のすべての写真をライブラリで表示
+Alle Fotos von {a} in der Bibliothek zeigen	{a} のすべての写真をライブラリで表示
 Einblenden	表示
 {a} wieder einblenden: bekommt wieder Vorschläge	{a} を再表示:再び候補が出ます
 {a} ausblenden: keine Vorschläge mehr, nur noch in der Spalte PERSON zu finden	{a} を非表示:候補を出さず、「人物」列にのみ表示
@@ -5107,3 +5111,141 @@ Aufnahmedaten: Kamera, Objektiv, Blende, Zeit, ISO, Datum, Urheber	撮影デー�
 Alles: zusätzlich Stichwörter, Beschreibung, Sterne, Etikett	すべて：キーワード、説明、星、ラベルも追加
 Standort (GPS) mitschreiben	位置情報（GPS）を含める
 Nur wenn das Original einen Standort hat	元画像に位置情報がある場合のみ
+Filter werden geladen …	フィルターを読み込み中…
+Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.	追加では、フォルダ全体がライブラリに入ります。
+Wähle zuerst, wohin die Fotos kommen.	まず写真の保存先を選んでください。
+Neuer Ordner in der Bibliothek:	ライブラリの新しいフォルダ:
+{a} kopieren	{a}をコピー
+{a} verschieben	{a}を移動
+Karte oder Kamera	カードまたはカメラ
+{a} verschoben und geprüft ({b}, {c})	{a}を移動して検証しました（{b}、{c}）
+Bewertungen als Begleitdatei (XMP) neben die Fotos schreiben	評価をサイドカーファイル（XMP）として写真の横に書き込む
+Zur Bibliothek hinzufügen …	ライブラリに追加…
+Wie möchtest du anfangen?	どこから始めますか？
+Von Karte, Kamera oder aus einem Ordner.	カード、カメラ、フォルダから。
+Du wählst, ob die Fotos bleiben, kopiert oder verschoben werden.	写真をそのままにするか、コピーするか、移動するかを選べます。
+Aus Lightroom importieren	Lightroom から読み込む
+Aus Lightroom importieren …	Lightroom から読み込む…
+Fotos, Sterne, Sammlungen und Bearbeitungen.	写真、星、コレクション、編集内容。
+Der Katalog wird nur gelesen.	カタログは読み取るだけです。
+Ordner nur ansehen	フォルダを見るだけ
+Fotos durchblättern, ohne Import.	読み込まずに写真を見る。
+Verändert nichts.	何も変更しません。
+Ordner und Fotos kannst du auch hierher ziehen.	フォルダや写真をここにドラッグすることもできます。
+Du nutzt Apple Fotos? Bibliothek verbinden …	Apple 写真をお使いですか？ライブラリを接続…
+Öffnet Einstellungen › Bibliothek › Apple Fotos	設定 › ライブラリ › Apple 写真 を開きます
+graineo liest deinen Lightroom-Katalog nur. Lightroom und deine Fotos bleiben unverändert.	graineo は Lightroom カタログを読み取るだけです。Lightroom と写真は変更されません。
+In „{a}“ ist keiner.	「{a}」にはありません。
+Sucht nach Katalogen …	カタログを探しています…
+Lightroom ist geöffnet. Am besten vorher beenden, sonst fehlen die neuesten Änderungen.	Lightroom が開いています。先に終了してください。そうしないと最新の変更が反映されません。
+Lightroom vorher beenden (sonst fehlen die neuesten Änderungen).	先に Lightroom を終了してください（最新の変更が反映されないため）。
+Importieren geht erst mit einem lesbaren Katalog. Wähle einen anderen oder prüfe ihn erneut.	読み込みには読み取れるカタログが必要です。別のカタログを選ぶか、もう一度確認してください。
+Liest den Katalog …	カタログを読み取っています…
+{a}, davon {b} neu	{a}（うち新規 {b}）
+{a} bearbeitet	編集済み {a}
+Sammlungssatz	コレクションセット
+Sammlungssätze	コレクションセット
+{a} gerade nicht erreichbar: {b}	{a} に現在アクセスできません: {b}
+Die Bearbeitungen kommen gleich mit. Erst „Importieren“ schreibt in die Bibliothek.	編集内容も一緒に取り込まれます。ライブラリに書き込むのは「読み込み」だけです。
+Erneut prüfen	再確認
+Bearbeitungen: abgebrochen am {d} · {n} übernommen	編集: {d} に中止 · {n} 件を引き継ぎ済み
+Bearbeitungen: {n} übernommen · {d}	編集: {n} 件を引き継ぎ済み · {d}
+Bearbeitungen: noch nicht übernommen	編集: まだ引き継いでいません
+„Prüfen“ liest den Katalog und zeigt, was kommt. Geschrieben wird erst beim Importieren; die Bearbeitungen kommen gleich mit.	「確認」はカタログを読み取り、取り込まれる内容を表示します。書き込みは読み込み時のみで、編集内容も一緒に取り込まれます。
+leer: ganz oben	空欄: 最上位
+Die Sammlungen aus Lightroom kommen in diesen Sammlungssatz	Lightroom のコレクションはこのコレクションセットに入ります
+{n} Bearbeitungen übernommen	編集 {n} 件を引き継ぎました
+Im Hintergrund fortsetzen	バックグラウンドで続行
+„{a}“ ist nicht da. Ist das Laufwerk verbunden?	「{a}」が見つかりません。ドライブは接続されていますか？
+„{a}“ ist nicht da. Wurde der Katalog verschoben oder umbenannt?	「{a}」が見つかりません。カタログを移動または名前変更しましたか？
+Diese Datei ist kein Lightroom-Katalog oder ist beschädigt.	このファイルは Lightroom カタログではないか、破損しています。
+Der Katalog lässt sich nicht öffnen. Hat graineo Zugriff auf den Ordner?	カタログを開けません。graineo にフォルダへのアクセス権がありますか？
+Lightroom schreibt gerade in den Katalog. Beende Lightroom und prüfe noch einmal.	Lightroom がカタログに書き込み中です。Lightroom を終了してもう一度確認してください。
+Der Katalog lässt sich nicht lesen.	カタログを読み取れません。
+{p} · graineo liest deine Bibliothek nur. In Apple Fotos ändert sich nichts.	{p} · graineo はライブラリを読み取るだけです。Apple 写真では何も変わりません。
+Bibliothek von Apple Fotos verbinden	Apple 写真のライブラリを接続
+Ordner ansehen, ohne zu importieren	読み込まずにフォルダを表示
+Was passiert	処理内容
+Anderen wählen …	別のものを選択…
+Die Fotos bleiben an ihrem Ort und werden nur eingetragen.	写真はそのままの場所に残り、登録だけされます。
+Die Fotos werden geprüft kopiert; die Originale bleiben.	写真は検証付きでコピーされ、元のファイルは残ります。
+Nach der geprüften Kopie kommen die Originale in den Papierkorb.	検証済みのコピーの後、元のファイルはゴミ箱に入ります。
+Von der Kamera wird immer geprüft kopiert. Auf der Kamera ändert sich nichts.	カメラからは常に検証付きでコピーします。カメラ上では何も変わりません。
+Wähle zuerst eine Quelle: Karte, Kamera oder Ordner	まずソースを選んでください: カード、カメラ、フォルダ
+Liest die Fotos …	写真を読み取っています…
+In dieser Quelle sind keine Fotos	このソースには写真がありません
+Wähle mindestens einen Ordner	フォルダを1つ以上選んでください
+Wähle zuerst einen Zielordner	まず保存先フォルダを選んでください
+Der Zielordner ist gerade nicht erreichbar	保存先フォルダに現在アクセスできません
+Wähle mindestens ein Foto	写真を1枚以上選んでください
+Gib der neuen Sammlung einen Namen	新しいコレクションに名前を付けてください
+Zum Bewerten zur Bibliothek hinzufügen oder den Schalter „Bewertungen als Begleitdatei (XMP)“ einschalten	評価するにはライブラリに追加するか、「評価をサイドカー（XMP）に書く」をオンにしてください
+Holt Fotos, Bewertungen, Stichwörter, Sammlungen, Gesichter und Bearbeitungen aus dem Lightroom-Katalog in die Bibliothek.	Lightroomカタログから写真、評価、キーワード、コレクション、顔、編集内容をライブラリに取り込みます。
+Der Katalog wird nur gelesen; Lightroom und die Fotos bleiben unverändert.\n• **Prüfen** – liest den Katalog und zeigt, was kommt; geschrieben wird noch nichts\n• **Importieren** – schreibt in die Bibliothek; die Bearbeitungen kommen im selben Lauf mit\n• **Erneut prüfen** – holt spätere Änderungen aus Lightroom nach; was du seither in graineo geändert hast, bleibt\n• **Sammlungssatz** – die Sammlungen des Katalogs kommen in diesen Satz; leer: ganz oben\n• **Smart-Sammlungen** – kommen nur mit ihrem Namen\n\n### Tipp\nLightroom vorher beenden, sonst fehlen die neuesten Änderungen.	カタログは読み取るだけです。Lightroom と写真は変更されません。\n• **確認** – カタログを読み取り、取り込まれる内容を表示します。まだ何も書き込みません\n• **読み込み** – ライブラリに書き込みます。編集内容も同じ処理で取り込まれます\n• **再確認** – Lightroom でその後に加えた変更を取り込みます。それ以降に graineo で変更した内容は保持されます\n• **コレクションセット** – カタログのコレクションはこのセットに入ります。空欄: 最上位\n• **スマートコレクション** – 名前だけが取り込まれます\n\n### ヒント\n先に Lightroom を終了してください。そうしないと最新の変更が反映されません。
+Willkommen bei	ようこそ
+Gefunden in deinem Lightroom-Ordner:	Lightroom フォルダで見つかりました:
+Noch nichts gewählt	まだ選択されていません
+Gesichtserkennung vorbereiten	顔認識の準備
+graineo lädt einmalig {a} MB für die Gesichtserkennung. Danach arbeitet sie ohne Internet.	graineo は顔認識のために {a} MB を一度だけダウンロードします。その後はインターネットなしで動作します。
+Mit „Später“ wird nichts geladen; die Frage kommt beim nächsten Start wieder. Abschalten: Einstellungen → Entwickeln → Personen → „Gesichter automatisch erkennen“.	「後で」を選ぶと何もダウンロードしません。次回の起動時に再度確認します。無効にするには：設定 → 現像 → 人物 →「顔を自動検出」。
+Laden	ダウンロード
+Gesichtsmodell fehlt – es wird erst nach Bestätigung geladen	顔モデルがありません。確認後にのみダウンロードされます
+Zielordner nicht beschreibbar: {}	保存先フォルダーに書き込めません: {}
+Zielordner nicht gefunden: {}	保存先フォルダーが見つかりません: {}
+„{a}“ lässt sich nicht als Regel sichern: wähle links „Alle Fotos“	「{a}」はルールとして保存できません: 左で「すべての写真」を選んでください
+Metadaten-Filter werden noch geladen	メタデータフィルターを読み込み中です
+Diese Fotos als Smart-Sammlung sichern	これらの写真をスマートコレクションとして保存
+Als Smart-Sammlung sichern	スマートコレクションとして保存
+Sichert die Filter als Regel: neue passende Fotos kommen von selbst hinzu	フィルターをルールとして保存します: 条件に合う新しい写真は自動で追加されます
+Fotos/Videos bleibt eine Einstellung der Ansicht, keine Regel	写真/ビデオは表示の設定で、ルールには含まれません
+Titel	タイトル
+GPS-Position	GPS位置
+Im Katalog fehlt: {a}. Diese Angaben bleiben leer.	カタログにありません: {a}。これらの情報は空のままです。
+{n} übernommen	{n}を引き継ぎました
+Nicht übernommen: {a}	引き継がれなかったもの: {a}
+bearbeitetes Foto	編集済みの写真
+bearbeitete Fotos	編集済みの写真
+Neueres Katalogformat als getestet ({a}, getestet: {b}). graineo importiert trotzdem; was fehlt, steht im Bericht.	テスト済みより新しいカタログ形式です（{a}、テスト済み: {b}）。graineoはそのまま読み込みます。欠けている項目はレポートに記載されます。
+KI-Maske	AIマスク
+KI-Masken	AIマスク
+Bereichsmaske	範囲マスク
+Bereichsmasken	範囲マスク
+Maske mit Subtraktion	減算付きマスク
+Masken mit Subtraktion	減算付きマスク
+andere Maske	その他のマスク
+andere Masken	その他のマスク
+Punktfarbe	ポイントカラー
+Punktfarben	ポイントカラー
+Entfernen-Punkt	削除スポット
+Entfernen-Punkte	削除スポット
+Stichwort-Synonym	キーワードの同義語
+Stichwort-Synonyme	キーワードの同義語
+Stapel	スタック
+Etikett ohne Farbe (nur Text)	色のないラベル（テキストのみ）
+Etiketten ohne Farbe (nur Text)	色のないラベル（テキストのみ）
+KI-Daten des Katalogs fehlen (Ordner „.lrcat-data“)	カタログのAIデータがありません（フォルダ「.lrcat-data」）
+Titel · GPS	タイトル · GPS
+{a} mit Titel · {b} mit GPS-Position	タイトルあり {a} · GPS位置あり {b}
+Etiketten ohne Farbe	色のないラベル
+ – neuer als getestet ({a})	 – テスト済みより新しい（{a}）
+Katalogformat	カタログ形式
+Im Katalog fehlt	カタログにないもの
+Bearbeitet (in Lightroom)	編集済み（Lightroom）
+Nicht übernommen	引き継がれなかったもの
+Bedienfelder einblenden	パネルを表示
+Bedienfelder ausblenden	パネルを隠す
+Licht aus: nur in der Einzelansicht	ライトオフ：単一表示のみ
+Licht dimmen	ライトを暗くする
+Licht ganz aus	ライトを完全に消す
+Licht wieder an	ライトを戻す
+Alles wieder einblenden	すべてを再表示
+„(ohne)“ lässt sich nicht als Regel sichern	「（なし）」はルールとして保存できません
+„{a}“ enthält ein Anführungszeichen und lässt sich nicht als Regel sichern	「{a}」には引用符が含まれるため、ルールとして保存できません
+{a} im Netzwerk, nicht geprüft: {b}	{a} ネットワーク上のため未確認: {b}
+Die Bibliothek wurde aus einem anderen Lightroom-Katalog übernommen. Ein zweiter Katalog würde Fotos vertauschen, deshalb bleibt alles, wie es ist.	ライブラリは別の Lightroom カタログから読み込まれています。2つ目のカタログは写真を取り違えるため、何も変更しません。
+Der Name ist schon vergeben, gesichert wird als „{n}“.	この名前は既に使われています。「{n}」として保存します。
+Nur ansehen – Originale unverändert	表示のみ – オリジナルは変更されません
+Änderungen (Entwicklung) werden als Begleitdatei (XMP) neben das Foto gespeichert, sobald du etwas änderst. Zur Bibliothek hinzufügen speichert sie stattdessen in der Bibliothek.	変更（現像）を行うと、写真の隣にサイドカー（XMP）として保存されます。ライブラリに追加すると、代わりにライブラリに保存されます。
+Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert.	評価にのみ適用されます。現像は常に写真の隣にサイドカーとして保存されます。
+Zielordner wird geprüft …	保存先フォルダーを確認中 …
+Zielordner antwortet nicht: {}	保存先フォルダーが応答しません: {}

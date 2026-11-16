@@ -830,7 +830,7 @@ fn library(ui: &mut egui::Ui) {
     // Lightroom: catalog, import and handover of the edits all happen in the dialog "Import from Lightroom"
     group(ui, crate::tr("Lightroom"), |ui| {
         row(ui, crate::tr("Katalog"), None, |ui| {
-            if ui.button(crate::tr("Aus Lightroom übernehmen …")).clicked() {
+            if ui.button(crate::tr("Aus Lightroom importieren …")).clicked() {
                 OPEN.store(false, Ordering::Relaxed);
                 crate::library_ui::request_lightroom();
             }
@@ -843,13 +843,15 @@ fn library(ui: &mut egui::Ui) {
             }
         });
     });
+    // Apple Photos exists only on the Mac (access is asked for only when the switch is turned on)
+    #[cfg(target_os = "macos")]
     group(ui, crate::tr("Apple Fotos"), |ui| {
         let m = crate::apple_photos_ui::media_library();
         let hint = match &m {
-            Some(p) => crate::trf!("{p} · wird nur gelesen; Fotos, Alben und Favoriten erscheinen in der Bibliothek, Einstellungen bleiben bei graineo", p = p.display()),
-            None => crate::tr("Keine Mediathek von Apple Fotos gefunden").to_string(),
+            Some(p) => crate::trf!("{p} · graineo liest deine Bibliothek nur. In Apple Fotos ändert sich nichts.", p = p.display()),
+            None => crate::tr("Keine Bibliothek von Apple Fotos gefunden").to_string(),
         };
-        row(ui, crate::tr("Mediathek von Apple Fotos einbinden"), Some(&hint), |ui| {
+        row(ui, crate::tr("Bibliothek von Apple Fotos verbinden"), Some(&hint), |ui| {
             let mut an = crate::apple_photos_ui::an();
             ui.add_enabled_ui(m.is_some(), |ui| {
                 if toggle(ui, &mut an) {
@@ -1246,8 +1248,14 @@ fn develop_section(ui: &mut egui::Ui) {
         });
     });
     group(ui, crate::tr("Personen"), |ui| {
-        row(ui, crate::tr("Gesichter automatisch erkennen"), Some(crate::tr("Läuft im Hintergrund mit niedriger Priorität; beim ersten Mal wird ein Gesichtsmodell (39 MB) geladen. Wirkt ab dem nächsten Start")), |ui| {
-            let mut an = setting_bool("facesAutomatic", true);
+        // where graineo computes the detection itself (no Apple Vision), say so honestly
+        let description = if library::people::detection_computed_itself() {
+            crate::tr("Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Auf diesem System rechnet graineo die Gesichtserkennung selbst; das kann länger dauern. Wirkt ab dem nächsten Start")
+        } else {
+            crate::tr("Läuft im Hintergrund mit niedriger Priorität; vor dem einmaligen Laden des Gesichtsmodells (39 MB) fragt graineo nach. Wirkt ab dem nächsten Start")
+        };
+        row(ui, crate::tr("Gesichter automatisch erkennen"), Some(description), |ui| {
+            let mut an = setting_bool("facesAutomatic", library::people::automatic_default());
             if toggle(ui, &mut an) {
                 library::settings::set("facesAutomatic", json!(an));
             }

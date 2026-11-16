@@ -27,6 +27,10 @@ pub const FIELD_FILL: Color32 = Color32::from_gray(0x0f);
 pub const FIELD_STROKE: Color32 = Color32::from_gray(0x33);
 pub const ACCENT: Color32 = Color32::from_gray(0xb8);
 /// Gold tone for "active" and "selected" (underline of the active area, active toggles, selection frame).
+/// The app's blue for "on" and "chosen" (switch on, progress bar, chosen mode, links) – never gold.
+pub const BLUE: Color32 = Color32::from_rgb(0x3b, 0x7d, 0xd8);
+/// Lighter text variant of [`BLUE`] on dark ground (clickable lines).
+pub const BLUE_TEXT: Color32 = Color32::from_rgb(0x7f, 0xaa, 0xe6);
 pub const GOLD: Color32 = Color32::from_rgb(0xc8, 0xaa, 0x62);
 
 /// Colored tracks as in common photo apps (muted so they don't shout).
@@ -573,6 +577,16 @@ pub fn segmented_pad<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, opt
 
 /// Like [`segmented_pad`] with a tooltip per segment (`tips[i]`, German text, empty = none).
 pub fn segmented_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)], tips: &[&str], pad: f32) -> bool {
+    segmented_fill(ui, value, options, tips, pad, ACTIVE_FILL)
+}
+
+/// Like [`segmented`], the chosen segment filled in [`BLUE`]: for a choice that decides what happens (import mode,
+/// kind of source), so the setting is visible at a glance.
+pub fn segmented_blue<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) -> bool {
+    segmented_fill(ui, value, options, &[], 10.0, BLUE)
+}
+
+fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)], tips: &[&str], pad: f32, active_fill: Color32) -> bool {
     let font = egui::TextStyle::Button.resolve(ui.style());
     let h = 20.0;
     let widths: Vec<f32> = options
@@ -595,7 +609,7 @@ pub fn segmented_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, op
         }
         let active = *value == *v;
         if active {
-            painter.rect_filled(seg, 0.0, ACTIVE_FILL);
+            painter.rect_filled(seg, 0.0, if ui.is_enabled() { active_fill } else { active_fill.gamma_multiply(0.5) });
         } else if resp.hovered() {
             painter.rect_filled(seg, 0.0, Color32::from_gray(0x33));
         }
@@ -727,6 +741,35 @@ pub fn middle_ellipsis_font(painter: &egui::Painter, text: &str, font: &egui::Fo
     let left = lo.div_ceil(2);
     let right = lo / 2;
     format!("{}…{}", chars[..left].iter().collect::<String>(), chars[chars.len() - right..].iter().collect::<String>())
+}
+
+/// A chosen value (folder, target, catalog) in its own field: slightly lighter ground, one line, paths shortened in
+/// the middle, the full text as tooltip. `None`: the empty state, dimmed (e.g. "Noch nichts gewählt").
+pub fn value_field(ui: &mut egui::Ui, value: Option<&str>, empty: &str) -> egui::Response {
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+    p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, FIELD_STROKE), egui::StrokeKind::Inside);
+    let font = egui::FontId::proportional(UI_SIZE - 0.5);
+    let (text, color) = match value {
+        Some(v) => (middle_ellipsis_font(p, v, &font, rect.width() - 14.0), Color32::from_gray(0xe6)),
+        None => (crate::tr(empty).to_string(), Color32::from_gray(0x80)),
+    };
+    let g = p.layout_no_wrap(text, font, color);
+    p.galley(egui::pos2(rect.left() + 7.0, rect.center().y - g.size().y / 2.0), g, color);
+    if let Some(v) = value {
+        hover_tip(ui, &resp, v);
+    }
+    resp
+}
+
+/// Start of a section in a dialog column: more air above, a thin rule, then the content (headings follow).
+pub fn section_rule(ui: &mut egui::Ui) {
+    ui.add_space(8.0);
+    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, Color32::from_gray(0x2c)));
+    ui.add_space(4.0);
 }
 
 /// Does `text` fit into `width` on one line (body font)?
@@ -864,7 +907,7 @@ pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(36.0, 20.0), egui::Sense::click());
     if response.clicked() { *on = !*on; }
     let t = ui.ctx().animate_bool(response.id, *on);
-    let bg = Color32::from_gray(0x5c).lerp_to_gamma(Color32::from_rgb(0x3b, 0x7d, 0xd8), t);
+    let bg = Color32::from_gray(0x5c).lerp_to_gamma(BLUE, t);
     let bg = if ui.is_enabled() { bg } else { bg.gamma_multiply(0.5) };
     ui.painter().rect_filled(rect, 10.0, bg);
     let x = egui::lerp(rect.left() + 10.0..=rect.right() - 10.0, t);

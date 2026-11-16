@@ -1135,7 +1135,7 @@ pub fn load(path: &Path, format: &str, max: u32) -> Result<(RgbImage, Meta), Str
     }
     // Apple Photos: original only in iCloud (or a video) → Apple's local preview file
     if crate::apple_photos::in_photos_library(path) && (format == "VIDEO" || !path.is_file()) {
-        let m = path.ancestors().find(|a| a.extension().is_some_and(|e| e == "photoslibrary")).ok_or("Mediathek nicht gefunden")?;
+        let m = path.ancestors().find(|a| a.extension().is_some_and(|e| e == "photoslibrary")).ok_or("Bibliothek nicht gefunden")?;
         let uuid = crate::apple_photos::uuid_from_path(path).ok_or("keine Kennung")?;
         let v = crate::apple_photos::preview_for(m, &uuid).ok_or("keine lokale Vorschau in Apple Fotos")?;
         let img = image::open(&v).map_err(|e| e.to_string())?.to_rgb8();

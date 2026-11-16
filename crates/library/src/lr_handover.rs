@@ -64,13 +64,23 @@ impl Catalog {
     pub fn load(catalog: &Path) -> Result<Catalog, String> {
         let e = |e: rusqlite::Error| e.to_string();
         let conn = crate::lightroom::open_catalog(catalog).map_err(|e| format!("Katalog nicht lesbar: {e}"))?;
+        // columns another Lightroom version may lack read as NULL (see `CatalogSchema`)
+        let schema = crate::lightroom::CatalogSchema::read(&conn).map_err(e)?;
+        for (table, columns) in [("AgLibraryFile", &["id_local", "folder", "baseName"][..]), ("AgLibraryFolder", &["id_local", "rootFolder"]), ("AgLibraryRootFolder", &["id_local", "absolutePath"]), ("Adobe_images", &["id_local", "rootFile"])] {
+            schema.require(table, columns).map_err(|m| format!("Katalog nicht lesbar: {m} fehlt"))?;
+        }
         let mut paths = HashMap::new();
         let mut by_name: HashMap<(String, String), Vec<i64>> = HashMap::new();
         {
             let mut st = conn
                 .prepare(
-                    "SELECT f.id_local, r.absolutePath || fo.pathFromRoot || f.baseName || '.' || f.extension, f.baseName, f.extension
-                     FROM AgLibraryFile f JOIN AgLibraryFolder fo ON fo.id_local = f.folder JOIN AgLibraryRootFolder r ON r.id_local = fo.rootFolder",
+                    &{
+                        let (from_root, ext) = (schema.col("AgLibraryFolder", "fo", "pathFromRoot"), schema.col("AgLibraryFile", "f", "extension"));
+                        format!(
+                            "SELECT f.id_local, r.absolutePath || coalesce({from_root}, '') || f.baseName || '.' || coalesce({ext}, ''), f.baseName, coalesce({ext}, '')
+                             FROM AgLibraryFile f JOIN AgLibraryFolder fo ON fo.id_local = f.folder JOIN AgLibraryRootFolder r ON r.id_local = fo.rootFolder"
+                        )
+                    },
                 )
                 .map_err(e)?;
             let rows = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?))).map_err(e)?;
@@ -85,12 +95,23 @@ impl Catalog {
         }
         let mut images: HashMap<i64, Vec<CatalogImage>> = HashMap::new();
         {
-            let mut st = conn
-                .prepare(
-                    "SELECT i.id_local, i.rootFile, i.masterImage, i.copyName, i.orientation, d.text, d.hasDevelopAdjustmentsEx
-                     FROM Adobe_images i LEFT JOIN Adobe_imageDevelopSettings d ON d.image = i.id_local ORDER BY i.id_local, d.id_local",
+            let i = |c: &str| schema.col("Adobe_images", "i", c);
+            let sql = if schema.require("Adobe_imageDevelopSettings", &["image"]).is_ok() {
+                let d = |c: &str| schema.col("Adobe_imageDevelopSettings", "d", c);
+                format!(
+                    "SELECT i.id_local, i.rootFile, {}, {}, {}, {}, {}
+                     FROM Adobe_images i LEFT JOIN Adobe_imageDevelopSettings d ON d.image = i.id_local ORDER BY i.id_local, {}",
+                    i("masterImage"),
+                    i("copyName"),
+                    i("orientation"),
+                    d("text"),
+                    d("hasDevelopAdjustmentsEx"),
+                    d("id_local")
                 )
-                .map_err(e)?;
+            } else {
+                format!("SELECT i.id_local, i.rootFile, {}, {}, {}, NULL, NULL FROM Adobe_images i ORDER BY i.id_local", i("masterImage"), i("copyName"), i("orientation"))
+            };
+            let mut st = conn.prepare(&sql).map_err(e)?;
             let rows = st
                 .query_map([], |r| {
                     Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, Option<i64>>(2)?, r.get::<_, Option<String>>(3)?, r.get::<_, Option<String>>(4)?, r.get::<_, Option<String>>(5)?, number(r.get(6)?)))
@@ -167,6 +188,15 @@ pub struct Report {
     pub written: usize,
     /// virtual copies with their own Lightroom settings among them
     pub copies: usize,
+    /// photos (originals and virtual copies) Lightroom marks as edited whose settings are in the library after this run
+    /// (written now or already before). Not the same definition as "bearbeitet" when checking
+    /// ([`crate::lightroom::Preview::edited`], all photos of the catalog marked as edited): photos whose file is not in
+    /// the library, or without settings text, are missing here
+    pub edited: usize,
+    /// parts of these photos' Lightroom settings graineo does not take over (kind → count, see [`run_with`]) and the
+    /// number of photos (originals and copies) with at least one of them
+    pub not_taken: std::collections::BTreeMap<String, usize>,
+    pub not_taken_photos: usize,
     /// already in the sidecar
     pub already: usize,
     /// catalog images with settings that are not in the library, and photos of the library missing on disk
@@ -194,6 +224,9 @@ impl Report {
             "with_data": self.with_data,
             "written": self.written,
             "copies": self.copies,
+            "edited": self.edited,
+            "not_taken": self.not_taken,
+            "not_taken_photos": self.not_taken_photos,
             "already": self.already,
             "not_found": self.not_found,
             "unreachable": self.unreachable,
@@ -218,9 +251,28 @@ struct LibraryFile {
 /// Run the handover. `write = false`: check run, only counts (nothing is written, the library may be opened
 /// read-only). `progress(done, total)` is called now and then; `cancel` stops after the current photo.
 pub fn run(db: &Db, catalog: &Path, write: bool, progress: &dyn Fn(usize, usize), cancel: &AtomicBool) -> Result<Report, String> {
+    run_with(db, catalog, write, progress, cancel, &|_| std::collections::BTreeMap::new())
+}
+
+/// [`run`] that also counts what of the settings graineo does not take over: `not_taken` gets each settings text of
+/// the photos whose settings are in the library after the run (the interpretation lives in the develop crate).
+pub fn run_with(
+    db: &Db,
+    catalog: &Path,
+    write: bool,
+    progress: &dyn Fn(usize, usize),
+    cancel: &AtomicBool,
+    not_taken: &dyn Fn(&str) -> std::collections::BTreeMap<String, usize>,
+) -> Result<Report, String> {
     let t0 = std::time::Instant::now();
     let e = |e: rusqlite::Error| e.to_string();
     let cat = Catalog::load(catalog)?;
+    // never the settings of another catalog (its ids collide with the ones of the library)
+    {
+        let files: HashMap<i64, String> = cat.paths.iter().map(|(id, p)| (*id, p.rsplit('/').next().unwrap_or(p).to_string())).collect();
+        let images: HashMap<i64, i64> = cat.images.iter().flat_map(|(file, list)| list.iter().map(move |i| (i.image, *file))).collect();
+        crate::lightroom::check_same_catalog(&db.conn, &files, &images)?;
+    }
     let mut r = Report { catalog: catalog.display().to_string(), ..Default::default() };
     let files: Vec<LibraryFile> = {
         let mut st = db
@@ -300,10 +352,23 @@ pub fn run(db: &Db, catalog: &Path, write: bool, progress: &dyn Fn(usize, usize)
                 copy_changes.push((name, want));
             }
         }
+        // Lightroom's "edited" mark of the original (if its settings come along) and of the copies
+        let edited = cat.images_of(cf).iter().filter(|i| i.edited && i.text.is_some()).count();
+        for text in cat.images_of(cf).iter().filter_map(|i| i.text.as_deref()) {
+            let parts = not_taken(text);
+            if !parts.is_empty() {
+                r.not_taken_photos += 1;
+                for (k, n) in parts {
+                    *r.not_taken.entry(k).or_default() += n;
+                }
+            }
+        }
         if lr_new == present && copy_changes.is_empty() {
             r.already += 1;
+            r.edited += edited;
             continue;
         }
+        r.edited += edited;
         r.written += 1;
         r.copies += copies.len();
         if write {
@@ -324,6 +389,7 @@ pub fn run(db: &Db, catalog: &Path, write: bool, progress: &dyn Fn(usize, usize)
                 Ok(()) => r.log.push(format!("übernommen: {}", f.path.display())),
                 Err(x) => {
                     r.written -= 1;
+                    r.edited -= edited;
                     r.copies -= copies.len();
                     r.errors += 1;
                     r.log.push(format!("Fehler: {}: {x}", f.path.display()));

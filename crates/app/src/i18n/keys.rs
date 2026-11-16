@@ -248,6 +248,22 @@ impl Text {
         Self::NativeZoom,
         Self::NativeBringAllToFront,
     ];
+    /// Catalog key on this system: Windows has its own words for a few menu entries ("Datei", "Im Explorer zeigen",
+    /// "Minimieren", "Maximieren").
+    pub fn platform_id(self) -> &'static str {
+        self.id_on(cfg!(windows))
+    }
+
+    pub fn id_on(self, windows: bool) -> &'static str {
+        match self {
+            Self::NativeFile if windows => "native-file-windows",
+            Self::MenuShowInFinder if windows => "menu-show-in-explorer",
+            Self::NativeMinimize if windows => "native-minimize-windows",
+            Self::NativeZoom if windows => "native-zoom-windows",
+            _ => self.id(),
+        }
+    }
+
     pub fn id(self) -> &'static str {
         match self {
 

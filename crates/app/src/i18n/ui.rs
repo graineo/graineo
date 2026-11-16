@@ -681,9 +681,105 @@ const FRIENDLY_OTHER: &[(&str, [&str; 3])] = &[
     ("Stale NFS file handle (os error 70)", ["ネットワークドライブが再接続されました。もう一度お試しください", "le disque réseau a été reconnecté – réessayez", "la unidad de red se volvió a conectar: inténtalo de nuevo"]),
 ];
 
+/// Windows system errors (`GetLastError` codes as in `… (os error N)`) with a plain phrase and what to do:
+/// (code, [German, English, Japanese, French, Spanish]). The system's own text is in the language of Windows, so
+/// the code is what is recognised, never the wording.
+const WINDOWS_ERRORS: &[(u32, [&str; 5])] = &[
+    (2, ["Datei oder Ordner nicht gefunden", "file or folder not found", "ファイルまたはフォルダが見つかりません", "fichier ou dossier introuvable", "archivo o carpeta no encontrado"]),
+    (3, ["Pfad nicht gefunden", "path not found", "パスが見つかりません", "chemin introuvable", "ruta no encontrada"]),
+    (5, [
+        "Windows hat den Zugriff verweigert – „Überwachten Ordnerzugriff“ prüfen und graineo erlauben oder einen anderen Zielordner wählen",
+        "Windows denied access – check “Controlled folder access” and allow graineo, or choose another destination folder",
+        "Windows がアクセスを拒否しました。「コントロールされたフォルダー アクセス」を確認して graineo を許可するか、別の保存先フォルダーを選んでください",
+        "Windows a refusé l'accès – vérifiez « Accès contrôlé aux dossiers » et autorisez graineo, ou choisissez un autre dossier de destination",
+        "Windows denegó el acceso: revisa «Acceso controlado a carpetas» y permite graineo, o elige otra carpeta de destino",
+    ]),
+    (19, ["das Laufwerk ist schreibgeschützt", "the drive is write-protected", "ドライブは書き込み禁止です", "le disque est protégé en écriture", "la unidad está protegida contra escritura"]),
+    (21, ["das Laufwerk ist nicht bereit", "the drive is not ready", "ドライブの準備ができていません", "le disque n'est pas prêt", "la unidad no está lista"]),
+    (32, [
+        "Die Datei wird von einem anderen Programm benutzt, z. B. OneDrive oder dem Virenscanner",
+        "The file is in use by another program, e.g. OneDrive or the virus scanner",
+        "ファイルは別のプログラム（OneDrive やウイルス対策ソフトなど）で使用中です",
+        "Le fichier est utilisé par un autre programme, p. ex. OneDrive ou l'antivirus",
+        "Otro programa está usando el archivo, p. ej. OneDrive o el antivirus",
+    ]),
+    (33, [
+        "Ein anderes Programm hat die Datei gesperrt, z. B. OneDrive oder der Virenscanner",
+        "Another program has locked the file, e.g. OneDrive or the virus scanner",
+        "別のプログラム（OneDrive やウイルス対策ソフトなど）がファイルをロックしています",
+        "Un autre programme a verrouillé le fichier, p. ex. OneDrive ou l'antivirus",
+        "Otro programa ha bloqueado el archivo, p. ej. OneDrive o el antivirus",
+    ]),
+    (53, ["das Netzlaufwerk ist nicht erreichbar", "the network drive is not reachable", "ネットワークドライブに接続できません", "le disque réseau est inaccessible", "la unidad de red no está accesible"]),
+    (67, ["das Netzlaufwerk ist nicht erreichbar", "the network drive is not reachable", "ネットワークドライブに接続できません", "le disque réseau est inaccessible", "la unidad de red no está accesible"]),
+    (80, ["die Datei gibt es schon", "the file already exists", "ファイルはすでに存在します", "le fichier existe déjà", "el archivo ya existe"]),
+    (112, ["kein Platz mehr auf dem Laufwerk", "no space left on the drive", "ドライブの空き容量がありません", "plus d'espace disponible sur le disque", "no queda espacio en la unidad"]),
+    (123, ["Dateiname oder Pfad ungültig (Sonderzeichen?)", "file name or path not valid (special characters?)", "ファイル名またはパスが無効です（特殊文字？）", "nom de fichier ou chemin non valide (caractères spéciaux ?)", "nombre de archivo o ruta no válidos (¿caracteres especiales?)"]),
+    (183, ["die Datei gibt es schon", "the file already exists", "ファイルはすでに存在します", "le fichier existe déjà", "el archivo ya existe"]),
+    (206, ["Pfad zu lang (Windows erlaubt etwa 260 Zeichen)", "path too long (Windows allows about 260 characters)", "パスが長すぎます（Windows では約 260 文字まで）", "chemin trop long (Windows autorise environ 260 caractères)", "ruta demasiado larga (Windows permite unos 260 caracteres)"]),
+    (1920, [
+        "Die Datei lässt sich nicht öffnen – vermutlich ein Cloud-Platzhalter (z. B. OneDrive): Datei zuerst herunterladen oder „Immer auf diesem Gerät behalten“ wählen",
+        "The file cannot be opened – probably a cloud placeholder (e.g. OneDrive): download the file first or choose “Always keep on this device”",
+        "ファイルを開けません。クラウドのプレースホルダー（OneDrive など）の可能性があります。先にダウンロードするか「このデバイス上で常に保持する」を選んでください",
+        "Le fichier ne peut pas être ouvert – probablement un espace réservé du cloud (p. ex. OneDrive) : téléchargez-le d'abord ou choisissez « Toujours conserver sur cet appareil »",
+        "No se puede abrir el archivo: probablemente un marcador de posición de la nube (p. ej. OneDrive); descárgalo primero o elige «Mantener siempre en este dispositivo»",
+    ]),
+];
+
+/// Replaces every `<system text> (os error N)` of a Windows error whose code is in [`WINDOWS_ERRORS`] by the plain
+/// phrase in `lang`; the context before it ("…\a.X3F: ") stays. The system text is dropped whatever its language
+/// is: it is everything after the last ": " in front of the code. `None` if nothing matches.
+fn windows_friendly(msg: &str, lang: Language) -> Option<String> {
+    const MARK: &str = "(os error ";
+    if !msg.contains(MARK) {
+        return None;
+    }
+    let col = match lang { Language::De => 0, Language::En => 1, Language::Ja => 2, Language::Fr => 3, _ => 4 };
+    let mut out = String::with_capacity(msg.len());
+    let mut rest = msg;
+    let mut changed = false;
+    while let Some(i) = rest.find(MARK) {
+        let after = &rest[i + MARK.len()..];
+        let digits: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+        let code = digits.parse::<u32>().ok();
+        let end = i + MARK.len() + digits.len();
+        let known = code.filter(|_| rest[end..].starts_with(')')).and_then(|c| WINDOWS_ERRORS.iter().find(|(k, _)| *k == c));
+        match known {
+            Some((_, phrases)) => {
+                // start of the system text: after the last ": " (or the beginning) in front of the code
+                let head = &rest[..i];
+                let start = head.rfind(": ").map(|p| p + 2).unwrap_or(0);
+                out.push_str(&rest[..start]);
+                out.push_str(phrases[col]);
+                rest = &rest[end + 1..];
+                changed = true;
+            }
+            None => {
+                out.push_str(&rest[..end]);
+                rest = &rest[end..];
+            }
+        }
+    }
+    out.push_str(rest);
+    changed.then_some(out)
+}
+
 /// Replace technical error texts in a message by a plain phrase in the current language (see [`FRIENDLY`]).
 /// Everything else stays as it is. Every message shown to the user passes through here via [`tr_msg`].
+/// On Windows the `\\?\` prefix of paths is dropped and Windows error codes are explained ([`WINDOWS_ERRORS`]).
 pub fn friendly(msg: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(windows) {
+        let plain = sysdirs::strip_verbatim(msg);
+        let windows = windows_friendly(&plain, language());
+        if windows.is_some() || matches!(plain, std::borrow::Cow::Owned(_)) {
+            let text = windows.unwrap_or_else(|| plain.into_owned());
+            return std::borrow::Cow::Owned(friendly_unix(&text).into_owned());
+        }
+    }
+    friendly_unix(msg)
+}
+
+fn friendly_unix(msg: &str) -> std::borrow::Cow<'_, str> {
     if !FRIENDLY.iter().any(|(t, _, _)| msg.contains(t)) {
         return std::borrow::Cow::Borrowed(msg);
     }
@@ -824,6 +920,38 @@ mod tests_msg {
 
     /// A folder of the user is shown as it is named. `fill` would translate the value through the
     /// template "{n} Personen" ("graineo-demo / Personen" → "graineo-demo / people").
+    #[test]
+    fn windows_errors_become_plain_phrases_in_any_system_language() {
+        // English, German and French system text: only the code counts
+        for raw in [
+            r"C:\Users\a\Pictures\x.X3F: Access is denied. (os error 5)",
+            r"C:\Users\a\Pictures\x.X3F: Zugriff verweigert. (os error 5)",
+            r"C:\Users\a\Pictures\x.X3F: Accès refusé. (os error 5)",
+        ] {
+            assert_eq!(
+                windows_friendly(raw, Language::De).unwrap(),
+                r"C:\Users\a\Pictures\x.X3F: Windows hat den Zugriff verweigert – „Überwachten Ordnerzugriff“ prüfen und graineo erlauben oder einen anderen Zielordner wählen"
+            );
+        }
+        assert!(windows_friendly("x.X3F: Access denied (os error 5)", Language::En).unwrap().ends_with("or choose another destination folder"));
+        assert!(windows_friendly("x: Der Prozess kann nicht auf die Datei zugreifen. (os error 32)", Language::De).unwrap().ends_with("z. B. OneDrive oder dem Virenscanner"));
+        assert_eq!(windows_friendly("a: x (os error 112)", Language::Es).unwrap(), "a: no queda espacio en la unidad");
+        assert_eq!(windows_friendly("a: x (os error 19)", Language::Fr).unwrap(), "a: le disque est protégé en écriture");
+        assert_eq!(windows_friendly("a: x (os error 123)", Language::Ja).unwrap(), "a: ファイル名またはパスが無効です（特殊文字？）");
+        assert!(windows_friendly("a: x (os error 1920)", Language::De).unwrap().contains("Cloud-Platzhalter"));
+        assert!(windows_friendly("a: x (os error 3)", Language::De).unwrap().ends_with("Pfad nicht gefunden"));
+        // two errors in one message, unknown code and text without a code stay as they are
+        let two = windows_friendly("a: x (os error 32) / b: y (os error 112)", Language::De).unwrap();
+        assert!(two.contains("OneDrive") && two.ends_with("kein Platz mehr auf dem Laufwerk"), "{two}");
+        assert!(windows_friendly("a: x (os error 9999)", Language::De).is_none());
+        assert!(windows_friendly("alles gut", Language::De).is_none());
+        assert!(windows_friendly("a: kaputt (os error 5", Language::De).is_none());
+        // every code has all five languages filled in
+        for (code, p) in WINDOWS_ERRORS {
+            assert!(p.iter().all(|t| !t.is_empty()), "{code}");
+        }
+    }
+
     #[test]
     fn names_of_the_user_are_never_translated() {
         let _l = TestLanguage::set(Language::En);

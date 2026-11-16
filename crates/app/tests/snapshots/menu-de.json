@@ -44,7 +44,7 @@
   {
     "action": "Lightroom",
     "text_id": "menu-lightroom",
-    "de": "Aus Lightroom übernehmen …",
+    "de": "Aus Lightroom importieren …",
     "shortcut": null,
     "symbol": "arrow.down.doc"
   },

@@ -32,14 +32,14 @@ static QUESTION: Mutex<Option<Question>> = Mutex::new(None);
 
 fn work(ctx: &egui::Context, f: impl FnOnce(&Storage) -> Report + Send + 'static) {
     {
-        let mut lock = STATE.lock().unwrap();
+        let mut lock = STATE.lock().unwrap_or_else(|e| e.into_inner());
         let s = lock.get_or_insert_with(Snapshot::default);
         s.running = true;
         JOBS.fetch_add(1, Ordering::SeqCst);
     }
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let _serial = SERIAL.lock().unwrap();
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let a = Storage::standard();
         let mut report = f(&a);
         let (_, scan) = a.search_with_report();
@@ -63,7 +63,7 @@ fn work(ctx: &egui::Context, f: impl FnOnce(&Storage) -> Report + Send + 'static
             .iter()
             .map(|p| (p.uuid.clone(), p.name.clone()))
             .collect();
-        *STATE.lock().unwrap() = Some(Snapshot {
+        *STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(Snapshot {
             loaded: true,
             running: JOBS.fetch_sub(1, Ordering::SeqCst) > 1,
             packages: a.packages(),
@@ -76,7 +76,7 @@ fn work(ctx: &egui::Context, f: impl FnOnce(&Storage) -> Report + Send + 'static
     });
 }
 fn snapshot(ctx: &egui::Context) -> Snapshot {
-    let s = STATE.lock().unwrap().clone().unwrap_or_default();
+    let s = STATE.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_default();
     if !s.loaded && !s.running {
         work(ctx, |_| Report::default());
     }
@@ -124,7 +124,7 @@ pub fn frame(ctx: &egui::Context) -> bool {
     if let Some(p) = crate::file_dialog::fetch(FOLDER_DIALOG) {
         work(ctx, move |a| a.add_folder(&p));
     }
-    let question = QUESTION.lock().unwrap().clone();
+    let question = QUESTION.lock().unwrap_or_else(|e| e.into_inner()).clone();
     if let Some(question) = question {
         let remove = matches!(&question, Question::Folder(_));
         let name = match &question {
@@ -165,7 +165,7 @@ pub fn frame(ctx: &egui::Context) -> bool {
             dialog::Buttons::confirm(if remove { "Entfernen" } else { "Ausblenden" }, true),
         );
         if r != dialog::Answer::Open {
-            *QUESTION.lock().unwrap() = None;
+            *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = None;
             if r == dialog::Answer::Primary {
                 work(ctx, move |a| match question {
                     Question::Folder(p) => outcome(a.remove_folder(&p)),
@@ -245,7 +245,7 @@ pub fn settings(ui: &mut egui::Ui) {
                             crate::tr("Referenzierter Ordner")
                         });
                         if !automatic && ui.button(crate::tr("Ordner entfernen …")).clicked() {
-                            *QUESTION.lock().unwrap() = Some(Question::Folder(path.clone()));
+                            *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Folder(path.clone()));
                         }
                     });
                 });
@@ -264,7 +264,7 @@ pub fn settings(ui: &mut egui::Ui) {
                             if visible {
                                 work(ui.ctx(), move |a| outcome(a.show_package(&name, true)));
                             } else {
-                                *QUESTION.lock().unwrap() = Some(Question::Package(name));
+                                *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Package(name));
                             }
                         }
                         ui.label(egui::RichText::new(&package.name).strong().color(
@@ -279,7 +279,7 @@ pub fn settings(ui: &mut egui::Ui) {
                     ui.horizontal(|ui| {
                         if ui.button(crate::tr("Im Finder zeigen")).clicked() {
                             if let Some(p) = package.folders.first() {
-                                crate::system::open(p);
+                                crate::system::show(p);
                             }
                         }
                     });
@@ -451,7 +451,7 @@ impl ExportCheck {
                     }
                 }
             }
-            *result.lock().unwrap() = Some(errors);
+            *result.lock().unwrap_or_else(|e| e.into_inner()) = Some(errors);
             ctx.request_repaint();
         });
         Self {
@@ -460,7 +460,7 @@ impl ExportCheck {
         }
     }
     pub fn step(&mut self, ctx: &egui::Context) -> ExportStep {
-        let errors = self.outcome.lock().unwrap().clone();
+        let errors = self.outcome.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let Some(errors) = errors else {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
             return ExportStep::Waiting;
