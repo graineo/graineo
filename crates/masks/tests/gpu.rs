@@ -21,7 +21,12 @@ fn document() -> Document {
                 texture: 0.3,
                 sharpness: 0.2,
                 noise_reduction: 0.4,
+                ..Default::default()
             },
+            name: None,
+            enabled: true,
+            amount: 1.0,
+            refine: 0.0,
         }],
     }
 }
@@ -115,4 +120,27 @@ fn gpu_selective() {
         println!("single slider CPU/GPU max {max:.9}");
         assert!(max < 0.00005);
     }
+}
+
+/// Strength and on/off act the same on the graphics card as on the processor.
+#[test]
+#[ignore = "Explicit GPU check"]
+fn gpu_strength_and_switch() {
+    let (w, h) = (96, 64);
+    let data: Vec<f32> = (0..w * h).flat_map(|i| {
+        let v = ((i * 13) % 101) as f32 / 100.0;
+        [v, v * 0.6, 0.5]
+    }).collect();
+    let im = Image::new(w, h, &data).unwrap();
+    let mut d = document();
+    let first = d.layers[0].clone();
+    d.layers[0].amount = 0.4;
+    d.layers.push(Layer { enabled: false, ..first });
+    d.settle_version();
+    assert_eq!(d.version, 4);
+    let cpu = apply(im, &d).unwrap();
+    let gpu = gpu::apply(im, &d).unwrap().expect("GPU must be available for this explicit check");
+    let max = cpu.iter().zip(&gpu).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+    println!("GPU/CPU with strength 40 % and a switched-off layer: max={max:.9}");
+    assert!(max < 0.00005);
 }

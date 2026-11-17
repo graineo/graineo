@@ -462,6 +462,7 @@ impl LibraryView {
     }
 
     fn import_start_scan(&mut self, imp: &mut Import, q: PathBuf, ctx: &egui::Context) {
+        crate::import_bench::scan_started();
         imp.kind = source_kind(&q);
         imp.source = Some(q.clone());
         imp.scanning = true;
@@ -647,11 +648,17 @@ impl LibraryView {
 
     /// The window ("Fotos importieren"), every frame; also receives the result of the run.
     pub(super) fn import_dialog(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        if crate::import_bench::frame(ctx) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         let Some(mut imp) = self.import.take() else {
             self.import_resume(ctx);
             return;
         };
         imp.thumbs.poll(ctx);
+        if crate::import_bench::active() {
+            crate::import_bench::listed(imp.cand.len(), !imp.scanning);
+        }
         // Run finished?
         let finished = imp.run.as_ref().and_then(|l| {
             let mut g = l.lock().unwrap();
@@ -968,6 +975,7 @@ impl LibraryView {
         let files = ci::photos(&candidates.iter().filter(|k| !k.duplicate).cloned().collect::<Vec<_>>()).len();
         let run = Arc::new(Mutex::new(Run { state_key: ci::State { files, ..Default::default() }, start: Some(std::time::Instant::now()), ..Default::default() }));
         imp.run = Some(run.clone());
+        crate::import_bench::run_started(files);
         imp.big = None;
         imp.cancel.store(false, Ordering::Relaxed);
         let (cancel, ctx) = (imp.cancel.clone(), ctx.clone());
@@ -1095,6 +1103,7 @@ impl LibraryView {
             actions.push(Action::Redevelop(redevelop));
         }
         let card = imp.source.clone().filter(|q| is_card(q) && imp.mode != Mode::InPlace);
+        crate::import_bench::run_finished(e.added, errors);
         imp.finished = Some(Finished { verdict, summary, rows, details, card, ejected: None });
         imp.hidden = false;
     }

@@ -453,10 +453,15 @@ pub(crate) fn with_conn<T>(f: impl FnOnce(&Connection) -> Option<T>) -> Option<T
 /// The library's file of a photo path: (file id, its sidecar has been read once). `None`: not in the library
 /// (then the sidecar next to it is used, as before).
 pub fn locate(image: &Path) -> Option<(i64, bool)> {
+    with_conn(|c| locate_in(c, image))
+}
+
+/// [`locate`] on a given connection.
+pub fn locate_in(c: &Connection, image: &Path) -> Option<(i64, bool)> {
     let dir = format!("{}/", image.parent()?.to_string_lossy().trim_end_matches('/'));
     let name = crate::nfc(&image.file_name()?.to_string_lossy());
     let dir = crate::nfc(&dir);
-    with_conn(|c| {
+    {
         c.prepare_cached(
             "SELECT d.id, d.xmp_read IS NOT NULL FROM root_folder s
              JOIN folder o ON o.root = s.id AND o.path = substr(?1, length(s.path) + 1)
@@ -468,7 +473,7 @@ pub fn locate(image: &Path) -> Option<(i64, bool)> {
         .optional()
         .ok()
         .flatten()
-    })
+    }
 }
 
 #[derive(Clone, Debug, Default)]

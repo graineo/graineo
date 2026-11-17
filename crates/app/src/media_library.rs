@@ -155,6 +155,13 @@ impl App {
     }
 
     pub(crate) fn open_export(&mut self) {
+        // a collapsed series among the photos: ask first (only the top photo or all), the answer comes back here
+        if self.in_grid() && self.lib.series_ask_scope(crate::library_ui::ScopeKind::Export) {
+            return;
+        }
+        if self.in_grid() {
+            self.sync_source(true);
+        }
         self.export_scope = 0;
         self.show_export = !self.entries.is_empty();
         self.navigation.click.cancel();

@@ -56,6 +56,13 @@
     "symbol": "square.and.arrow.up"
   },
   {
+    "action": "Print",
+    "text_id": "menu-print",
+    "de": "Drucken …",
+    "shortcut": "print",
+    "symbol": "printer"
+  },
+  {
     "action": "ContactPrint",
     "text_id": "menu-contact-print",
     "de": "Kontaktabzug erstellen …",
@@ -68,6 +75,13 @@
     "de": "Objektive …",
     "shortcut": null,
     "symbol": "camera.aperture"
+  },
+  {
+    "action": "CameraLooks",
+    "text_id": "menu-camera-looks",
+    "de": "Kamera-Looks …",
+    "shortcut": null,
+    "symbol": "camera.filters"
   },
   {
     "action": "ShowInFinder",
@@ -217,6 +231,34 @@
     "symbol": "plus.square.on.square"
   },
   {
+    "action": "StackReview",
+    "text_id": "menu-stack-review",
+    "de": "Serie sichten …",
+    "shortcut": "stack_review",
+    "symbol": "square.stack"
+  },
+  {
+    "action": "StackGroup",
+    "text_id": "menu-stack-group",
+    "de": "Als Stapel bündeln",
+    "shortcut": "stack_group",
+    "symbol": "square.stack.3d.down.right"
+  },
+  {
+    "action": "StackDissolve",
+    "text_id": "menu-stack-dissolve",
+    "de": "Stapel auflösen",
+    "shortcut": "stack_dissolve",
+    "symbol": "square.stack.3d.up.slash"
+  },
+  {
+    "action": "StackToggleAll",
+    "text_id": "menu-stack-toggle-all",
+    "de": "Serien auf-/zuklappen",
+    "shortcut": "stack_toggle_all",
+    "symbol": "rectangle.expand.vertical"
+  },
+  {
     "action": "Pick",
     "text_id": "menu-pick",
     "de": "Markieren",
@@ -362,6 +404,13 @@
     "de": "Leistungsbericht erstellen …",
     "shortcut": null,
     "symbol": "speedometer"
+  },
+  {
+    "action": "Support",
+    "text_id": "menu-support",
+    "de": "graineo unterstützen …",
+    "shortcut": null,
+    "symbol": "heart"
   },
   {
     "action": "NewCollection",

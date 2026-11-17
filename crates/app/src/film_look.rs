@@ -847,6 +847,10 @@ impl App {
             self.darkroom.lut.hook_done = true;
             self.film_look_lut_open();
         }
+        // learned look of this camera and style, and the window to learn one (at the bottom of the look panel)
+        if !film_an && crate::learn_look_ui::panel_section(ui, foreign.as_deref()) {
+            crate::camera_looks_ui::open(self.lib.learn_candidates(), foreign.as_ref().and_then(|d| d.learn_key.clone()));
+        }
         // during the look comparison hovering shows nothing in the image (the fields are the preview)
         if self.look_compare.on {
             hovered = None;

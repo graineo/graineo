@@ -220,7 +220,12 @@ fn test_catalog_15_1() {
     println!("{}", serde_json::to_string_pretty(&r.json()).unwrap());
     assert!(r.catalog_gaps.is_empty(), "{:?}", r.catalog_gaps);
     assert_eq!((r.images, r.with_title, r.with_position), (28, 8, 2));
-    assert_eq!((r.not_taken.synonyms, r.not_taken.stacks, r.not_taken.stacked_photos), (4, 1, 2));
+    // the one stack of two different photos is taken over (the stack of an original with its virtual copy is a
+    // version in graineo); top = position 1 in the catalog
+    assert_eq!((r.not_taken.synonyms, r.not_taken.stacks, r.stacks), (4, 0, 1));
+    assert_eq!(count(&db, "SELECT count(*) FROM stack WHERE origin = 'lightroom' AND kind = 'manual'"), 1);
+    assert_eq!(count(&db, "SELECT count(*) FROM stack_image"), 2);
+    assert_eq!(count(&db, "SELECT count(*) FROM stack s JOIN image b ON b.id = s.cover WHERE b.lr_id = 200"), 1);
     assert_eq!((r.unknown_labels.get("Winner"), r.unknown_labels.get("Prüfen")), (Some(&3), Some(&1)));
     assert_eq!(count(&db, "SELECT count(*) FROM image WHERE caption IS NOT NULL AND caption <> ''"), 5);
     assert_eq!(before, fingerprint(&cat), "catalog changed");

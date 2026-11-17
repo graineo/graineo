@@ -335,7 +335,14 @@ fn std_look(cc: vec3<f32>) -> vec3<f32> {
     return o;
 }
 
-// camera look (n³ differences, in d after the standard look from offset p[61]) on encoded sRGB; p[16] = n
+// node of the camera look table at grid position (x, y, z), as a difference
+fn kamera_look_node(off: u32, n: i32, x: i32, y: i32, z: i32) -> vec3<f32> {
+    let k = u32((x * n + y) * n + z) * 3u;
+    return vec3<f32>(d[off + k], d[off + k + 1u], d[off + k + 2u]);
+}
+
+// camera look (n³ differences, in d after the standard look from offset p[61]) on encoded sRGB; p[16] = n,
+// p[62] = 1: tetrahedral interpolation (learned looks), otherwise trilinear
 fn kamera_look(cc: vec3<f32>) -> vec3<f32> {
     let off = u32(p[61]);
     let n = i32(p[16]);
@@ -343,6 +350,29 @@ fn kamera_look(cc: vec3<f32>) -> vec3<f32> {
     let pp = clamp(cc, vec3<f32>(0.0), vec3<f32>(1.0)) * m;
     let i = vec3<i32>(min(i32(pp.x), n - 2), min(i32(pp.y), n - 2), min(i32(pp.z), n - 2));
     let fr = pp - vec3<f32>(f32(i.x), f32(i.y), f32(i.z));
+    if (p[62] > 0.5) {
+        let c0 = clamp(cc, vec3<f32>(0.0), vec3<f32>(1.0));
+        let r = fr.x;
+        let g = fr.y;
+        let b = fr.z;
+        let n000 = kamera_look_node(off, n, i.x, i.y, i.z);
+        let n111 = kamera_look_node(off, n, i.x + 1, i.y + 1, i.z + 1);
+        var t = vec3<f32>(0.0);
+        if (r >= g && g >= b) {
+            t = (1.0 - r) * n000 + (r - g) * kamera_look_node(off, n, i.x + 1, i.y, i.z) + (g - b) * kamera_look_node(off, n, i.x + 1, i.y + 1, i.z) + b * n111;
+        } else if (r >= b && b > g) {
+            t = (1.0 - r) * n000 + (r - b) * kamera_look_node(off, n, i.x + 1, i.y, i.z) + (b - g) * kamera_look_node(off, n, i.x + 1, i.y, i.z + 1) + g * n111;
+        } else if (b > r && r >= g) {
+            t = (1.0 - b) * n000 + (b - r) * kamera_look_node(off, n, i.x, i.y, i.z + 1) + (r - g) * kamera_look_node(off, n, i.x + 1, i.y, i.z + 1) + g * n111;
+        } else if (g > r && r >= b) {
+            t = (1.0 - g) * n000 + (g - r) * kamera_look_node(off, n, i.x, i.y + 1, i.z) + (r - b) * kamera_look_node(off, n, i.x + 1, i.y + 1, i.z) + b * n111;
+        } else if (g >= b && b > r) {
+            t = (1.0 - g) * n000 + (g - b) * kamera_look_node(off, n, i.x, i.y + 1, i.z) + (b - r) * kamera_look_node(off, n, i.x, i.y + 1, i.z + 1) + r * n111;
+        } else {
+            t = (1.0 - b) * n000 + (b - g) * kamera_look_node(off, n, i.x, i.y, i.z + 1) + (g - r) * kamera_look_node(off, n, i.x, i.y + 1, i.z + 1) + r * n111;
+        }
+        return clamp(c0 + t, vec3<f32>(0.0), vec3<f32>(1.0));
+    }
     var o = cc;
     for (var ia = 0; ia < 2; ia++) {
         let wa = select(1.0 - fr.x, fr.x, ia == 1);

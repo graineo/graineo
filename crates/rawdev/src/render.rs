@@ -94,23 +94,35 @@ impl Params {
         let ws_xyz = color::rec2020_to_xyz_d65();
         let cam_ws = color::mul(&color::xyz_d50_to(&ws_xyz), &cam_xyz);
         let ws_srgb = color::mul(&color::inv(&color::srgb_to_xyz_d65()).expect("sRGB"), &ws_xyz);
-        let ev = doc.base_ev + s.exposure as f32;
+        let ev = doc.base_ev_for(s) + s.exposure as f32;
         let gain = ev.exp2();
         let m = color::mul(&cam_ws, &color::diag(scale_wb)).map(|row| row.map(|v| v * gain));
         // calibration (primaries) acts like a modified profile: in the working space after the camera matrix
         let m = crate::calibration::matrix(&r.calibration).map_or(m, |k| color::mul(&k, &m));
         let c = s.contrast.clamp(-1.0, 1.0) as f32;
-        let look = if s.film.is_active() { None } else { doc.look_for(s) };
+        let mut look = if s.film.is_active() { None } else { doc.look_for(s) };
         // A bundled camera look (picture style) is a table fitted to the camera JPEG on the plain standard development:
         // without the per-camera saturation correction and without the camera hue table (`std_look`). It already
         // contains the camera's saturation, so on top of the correction it desaturated twice (Ricoh GR IIIx
         // "Positivfilm" ΔC* -4 against the camera JPEG). With such a look both are left out, as in the fit.
         // Film profiles are not fitted on graineo's development: unchanged.
-        let camera_look = look.is_some() && doc.look_name(s).is_some_and(|n| !n.starts_with("film:"));
+        let mut camera_look = look.is_some() && doc.look_name(s).is_some_and(|n| !n.starts_with("film:"));
+        let mut look_amount = s.profile_amount.clamp(0.0, 1.0);
+        // A learned look (`crate::learn`) is the standard of its camera and style: it stands in for the hue table and
+        // the saturation correction (it was fitted on the development without them), so they never act twice; its
+        // strength is its own. Only for a neutral photo without film; a chosen look or film wins.
+        if look.is_none() && !s.film.is_active() {
+            if let Some((l, a)) = doc.learned_look() {
+                look = Some(l);
+                look_amount = a.clamp(0.0, 1.0);
+                camera_look = true;
+            }
+        }
+        let plain = doc.plain.load(std::sync::atomic::Ordering::Relaxed);
         // per-camera saturation of the standard development (only for RAWs; finished images skip the curve)
-        let saturation = if doc.finished || camera_look { 1.0 } else { raw::development::camera_saturation(&doc.info.maker, &doc.info.model) };
+        let saturation = if doc.finished || doc.apple.is_some() || camera_look || plain { 1.0 } else { raw::development::camera_saturation(&doc.info.maker, &doc.info.model) };
         let tone = Sigmoid { contrast: 1.8 * (0.55 * c).exp2(), saturation, ..raw::development::default_tone() };
-        let std_look = if camera_look { None } else { doc.std_look.clone() };
+        let std_look = if camera_look || plain { None } else { doc.std_look.clone() };
         Params {
             m,
             lum: ws_xyz[1],
@@ -123,7 +135,7 @@ impl Params {
             blacks: r.blacks.clamp(-1.0, 1.0),
             ev,
             look,
-            look_amount: s.profile_amount.clamp(0.0, 1.0),
+            look_amount,
             std_look,
             saturation: s.saturation.clamp(-1.0, 1.0),
             vibrance: s.vibrance.clamp(-1.0, 1.0),
@@ -166,6 +178,7 @@ impl Params {
                 (n, flatten_table(d))
             }),
             look_amount: self.look_amount,
+            look_tetrahedral: self.look.as_ref().is_some_and(|l| l.tetrahedral()),
             haze: None,
             brake: self.brake,
             scene: false,
@@ -439,7 +452,7 @@ pub fn prepare(doc: &RawDoc, px: &[[f32; 3]], w: usize, h: usize, mask: &[f32], 
         });
     }
     if let Some(m) = toneq_mask(doc, &out, w, h, s, toneq) {
-        let t = develop::tone_eq::Apply::new(&s.tone_eq, &m, doc.base_ev + s.exposure as f32, false);
+        let t = develop::tone_eq::Apply::new(&s.tone_eq, &m, doc.base_ev_for(s) + s.exposure as f32, false);
         out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
             for (x, v) in row.iter_mut().enumerate() {
                 let g = t.gain(x, y, *v);
@@ -475,7 +488,7 @@ fn toneq_mask_image(doc: &RawDoc, px: &[[f32; 3]], w: usize, h: usize, s: &Setti
         return None;
     }
     let m = toneq_mask(doc, px, w, h, s, toneq)?;
-    let t = develop::tone_eq::Apply::new(&s.tone_eq, &m, doc.base_ev + s.exposure as f32, true);
+    let t = develop::tone_eq::Apply::new(&s.tone_eq, &m, doc.base_ev_for(s) + s.exposure as f32, true);
     let mut data = vec![0u16; w * h * 3];
     data.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
         for x in 0..w {

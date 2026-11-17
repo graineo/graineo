@@ -2210,6 +2210,10 @@ Bild zu klein für die Schärfekarte	Image trop petite pour la carte de netteté
 keine eingebettete Vorschau	pas d'aperçu intégré
 Seitenverhältnis der Vorschau {}×{} passt nicht zum Zuschnitt	Le rapport d'aspect de l'aperçu {}×{} ne correspond pas au recadrage
 Fuji SuperCCD (gedrehter Sensor) wird nicht unterstützt	Fuji SuperCCD (capteur pivoté) n'est pas pris en charge
+Nikon High Efficiency (HE/HE*): diese NEF-Kompression wird noch nicht dekodiert	Nikon High Efficiency (HE/HE*) : cette compression NEF ne peut pas encore être décodée
+NEF-Kompression nicht unterstützt	Compression NEF non prise en charge
+Nikon „Hohe Effizienz“ (HE und HE★) kann graineo noch nicht entwickeln. Die Vorschau aus der Kamera bleibt sichtbar. Fotos mit „Verlustfrei komprimiert“, „Komprimiert“ oder „Unkomprimiert“ lassen sich entwickeln.	graineo ne peut pas encore développer les fichiers Nikon « Haute efficacité » (HE et HE★). L’aperçu de l’appareil reste visible. Les photos enregistrées en « Compression sans perte », « Compressé » ou « Non compressé » peuvent être développées.
+NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt	Compression NEF « Haute efficacité » – pas encore prise en charge
 E/A-Fehler: {}	Erreur d'E/S : {}
 keine X3F-Datei (Kennung {})	pas un fichier X3F (signature {})
 Datei beschädigt: {}	Fichier endommagé : {}
@@ -3128,7 +3132,6 @@ Ordner verschieben	Déplacement du dossier
 Punkte sichtbar  H	Points visibles  H
 Punkte verborgen  H	Points masqués  H
 Retusche-Punkt wählen; Ziehen verschiebt Punkt oder Quelle	sélectionner un point de retouche ; glisser déplace le point ou sa source
-Retusche-Punkte und Maskenkonturen ein/aus (im Werkzeug „Masken“ sichtbar)	afficher/masquer les points de retouche et les contours de masque (visibles dans l'outil « Masques »)
 Retusche-Werkzeug und Auswahl beenden	quitter l'outil de retouche et la sélection
 Sicherung der Bibliothek	Sauvegarde de la bibliothèque
 Abgleich · {a}	Synchronisation · {a}
@@ -3325,7 +3328,7 @@ Entzerrt um die Bildmitte, als wäre die Kamera nicht nach oben oder unten gekip
 Farbrauschen zeigt sich beim Foveon als bunte Flecken in dunklen, gleichmäßigen Flächen. Mehr glättet sie, kann aber feine Farbdetails an Kanten verwischen.\n• **Mitte** – Standard\n• **Ganz links** – schwächste sinnvolle Stufe; ohne Farbglättung zeigen sich schon bei ISO 100 bunte Pünktchen\n\nJede Stufe rechnet die Basis neu.	Avec le Foveon, le bruit de chrominance apparaît en taches colorées dans les zones sombres et uniformes. Plus lisse, mais peut estomper de fins détails de couleur sur les bords.\n• **Milieu** – valeur par défaut\n• **Tout à gauche** – palier le plus faible raisonnable ; sans lissage des couleurs, de petits points colorés apparaissent dès ISO 100\n\nChaque palier recalcule la base.
 • **Film** – simuliert Filmmaterial, Entwicklung, Papier, Korn und Lichthof\n• **Look** – gestaltet Farbe und Tonwerte; Looks aus Profilpaketen haben einen Intensitätsregler\n• **Wie Kamera** – der zum Bildstil der Aufnahme passende Look (z. B. Monochrom + Ye); wird nur auf Klick angewandt, unbearbeitete Fotos starten neutral\n\nFilm und Look schließen sich aus: Ein gewählter Look schaltet den Film aus, „Film ausschalten“ bringt den gespeicherten Look zurück.	• **Film** – simule pellicule, développement, papier, grain et halo\n• **Look** – façonne couleur et tonalités ; les looks issus de paquets de profils ont un curseur d'intensité\n• **Comme l'appareil** – le look correspondant au style d'image de la prise de vue (p. ex. Monochrome + Ye) ; appliqué seulement sur clic, les photos non retouchées démarrent en neutre\n\nFilm et look s'excluent : un look choisi désactive le film, « Désactiver le film » rétablit le look enregistré.
 Vergleichsknopf (zwei Felder, oben rechts) einschalten und bis zu drei Look-Kacheln anklicken; ein zweiter Klick nimmt einen wieder heraus.\n• **Erstes Feld** – der aktuelle Stand\n• **Weitere Felder** – derselbe Stand mit dem gewählten Look\n\nZoomen und Verschieben wirken in allen Feldern gleich. Ein Klick auf ein Feld übernimmt dessen Look.\n\n### Tasten\n⌘-Klick vergleicht ohne Schalter · ⌘Z rückgängig · Esc beendet	Activer le bouton de comparaison (deux champs, en haut à droite) et cliquer sur jusqu'à trois vignettes de look ; un second clic en retire une.\n• **Premier champ** – l'état actuel\n• **Autres champs** – le même état avec le look choisi\n\nZoom et déplacement agissent de la même façon sur tous les champs. Un clic sur un champ applique son look.\n\n### Touches\n⌘-clic compare sans le bouton · ⌘Z annuler · Échap quitte
-Art wählen und „Neue Maske“: Pinsel, Verlauf und Ellipse werden gleich im Bild gezogen. Die Liste zeigt alle Masken; die Regler darunter gelten für die gewählte.\n• **Addieren, abziehen, schneiden** – weitere Formen kombinieren\n• **Fluss** – baut Deckkraft über überlappende Tupfer auf\n• **Version 2** – begrenzt Kantenhalos\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · Esc Zeichnen beenden · ⌘Z rückgängig	Choisir un type puis « Nouveau masque » : pinceau, dégradé et ellipse se tracent aussitôt dans l'image. La liste montre tous les masques ; les curseurs dessous s'appliquent à celui qui est sélectionné.\n• **Ajouter, soustraire, intersecter** – combiner d'autres formes\n• **Flux** – accumule l'opacité sur les touches qui se chevauchent\n• **Version 2** – limite les halos de bord\n\nLes corrections suivent l'image même après recadrage et rotation.\n\n### Touches\nH masquer les contours · Échap arrêter le tracé · ⌘Z annuler
+Oben stehen alle Masken: das Auge schaltet eine aus, ⋯ benennt um, dupliziert, invertiert, verschiebt oder löscht. „+ Neue Maske ▾“ legt eine an: automatisch, als Form oder als Bereich.\n• **Teile** – eine Maske besteht aus Teilen: + hinzufügen, − abziehen, ∩ schneiden\n• **Werkzeug** – der gewählte Teil zeichnet im Bild: Pinsel malt, Verlauf und Ellipse an den Griffen ziehen, Farbbereich nimmt mit der Pipette Proben (⇧ dazu, ⌥ weg), Klick-Auswahl nimmt Klicks oder einen gezogenen Rahmen\n• **Kante** – Bitmap-Masken (Motiv, Personen, Klick-Auswahl) dehnen oder schrumpfen, ohne neu zu rechnen\n• **Tiefe** – wählt ganze Segmente nach ihrer Entfernung (Vorne, Mitte, Hinten); ein Klick ins Bild nimmt ein Segment dazu oder heraus\n• **Kante verfeinern** – gezeichnete Masken und Bereiche folgen in einem schmalen Band den Kanten im Bild\n• **Stärke** – Deckkraft der ganzen Maske\n• **Reihenfolge** – oben wird zuerst angewendet; Helligkeits- und Farbbereiche lesen den Stand davor\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · ⇧O Überlagerung (Rot → Maske → Bild auf Grau → Abdeckfolie → aus) · Esc Werkzeug beenden · ⌫ Maske löschen · ⌘Z rückgängig	En haut figurent tous les masques : l'œil en désactive un, ⋯ le renomme, le duplique, l'inverse, le déplace ou le supprime. « + Nouveau masque ▾ » en crée un : automatique, comme forme ou comme plage.\n• **Parties** – un masque se compose de parties : + ajouter, − soustraire, ∩ intersection\n• **Outil** – la partie choisie dessine sur la photo : le pinceau peint, dégradé et ellipse se tirent par leurs poignées, une plage de couleur prend des échantillons à la pipette (⇧ ajouter, ⌥ retirer), la sélection par clic prend des clics ou un cadre tracé\n• **Bord** – les masques bitmap (sujet, personnes, sélection par clic) s’élargissent ou se rétrécissent sans nouveau calcul\n• **Profondeur** – sélectionne des segments entiers selon leur distance (avant, milieu, arrière) ; un clic dans l’image ajoute ou retire un segment\n• **Affiner le bord** – les masques dessinés et les plages suivent les contours de l’image dans une bande étroite\n• **Intensité** – opacité de tout le masque\n• **Ordre** – celui du haut s'applique en premier ; les plages de luminosité et de couleur lisent l'état d'avant\n\nLes corrections suivent la photo aussi après recadrage et rotation.\n\n### Touches\nH masquer les contours · ⇧O superposition (rouge → masque → image sur gris → film → désactivée) · Échap termine l'outil · ⌫ supprime le masque · ⌘Z annuler
 graineo	graineo
 RAW & Film	RAW & Film
 Version {a}	Version {a}
@@ -3800,7 +3803,7 @@ Standardprogramm	App par défaut
 Standardprogramm für {a}	App par défaut pour {a}
 graineo verwenden	Utiliser graineo
 keins	aucune
-Weitere Formate (CR3, RAF, DNG, ARW)	Autres formats (CR3, RAF, DNG, ARW)
+Weitere Formate (CR3, RAF, DNG, ARW, NEF, NRW)	Autres formats (CR3, RAF, DNG, ARW, NEF, NRW)
 Weniger Formate	Moins de formats
 Nur in der installierten App einstellbar.	Réglable uniquement dans l'app installée.
 virtuelle Kopie	copie virtuelle
@@ -3842,7 +3845,7 @@ Alles, was in deinen Stammordnern liegt, ist in der Bibliothek.	Tout ce qui se t
 Aufnehmen legt nur Bibliothekseinträge an. Die Fotos auf der Platte bleiben unverändert. Doppelklick auf eine Zeile zeigt den Ordner.	L'ajout ne crée que des entrées de bibliothèque. Les photos sur le disque restent inchangées. Un double-clic sur une ligne affiche le dossier.
 In die Bibliothek aufgenommen: {a}	Ajouté à la bibliothèque : {a}
 „Verlustfrei“ heißt bei Foveon-Dateien drei verschiedene Dinge.	Pour les fichiers Foveon, « sans perte » désigne trois choses différentes.
-• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **Couches du capteur** – TIFF « Couches du capteur » : les trois couches inchangées comme dans le X3F, sans couleur ; le niveau de noir et la matrice sont enregistrés dans le fichier\n• **Linéaire, rien d'écrêté** – DNG linéaire, TIFF 32 bits, OpenEXR : sans courbe des tonalités ; les hautes lumières au-delà du blanc et les couleurs hors de l'espace colorimétrique sont conservées\n• **Image finie** – TIFF ou PNG 16 bits : courbe des tonalités appliquée, pour l'impression et la retouche\n\nSeul le X3F lui-même contient tout – l'étalonnage et la trame noire n'existent que là.\n\n### Pour quel logiciel\nLightroom et Camera Raw : DNG linéaire. Resolve, Nuke, Affinity : OpenEXR. L'Aperçu de macOS n'ouvre pas les DNG 32 bits.
+• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit, JPEG XL verlustfrei: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **Couches du capteur** – TIFF « Couches du capteur » : les trois couches inchangées comme dans le X3F, sans couleur ; le niveau de noir et la matrice sont enregistrés dans le fichier\n• **Linéaire, rien d'écrêté** – DNG linéaire, TIFF 32 bits, OpenEXR : sans courbe des tonalités ; les hautes lumières au-delà du blanc et les couleurs hors de l'espace colorimétrique sont conservées\n• **Image finie** – TIFF ou PNG 16 bits, JPEG XL sans perte : courbe des tonalités appliquée, pour l'impression et la retouche\n\nSeul le X3F lui-même contient tout – l'étalonnage et la trame noire n'existent que là.\n\n### Pour quel logiciel\nLightroom et Camera Raw : DNG linéaire. Resolve, Nuke, Affinity : OpenEXR. L'Aperçu de macOS n'ouvre pas les DNG 32 bits.
 Verlustfrei exportieren	Exporter sans perte
 16 Bit	16 bits
 32 Bit linear	32 bits linéaire
@@ -3864,8 +3867,6 @@ Rot, Grün und Blau nebeneinander, jeweils über die Bildbreite.	Rouge, vert et 
 Oben ist hell, unten dunkel. Gleich hohe Spuren an einer Stelle bedeuten neutrales Grau; ein Farbstich zeigt sich als Spur, die höher oder tiefer liegt als die anderen.	Le haut est clair, le bas sombre. Des traces de même hauteur au même endroit signifient un gris neutre ; une dominante apparaît comme une trace plus haute ou plus basse que les autres.
 Rot, Grün und Blau übereinander, über die Bildbreite.	Rouge, vert et bleu superposés, sur la largeur de l'image.
 Links im Bild ist links in der Anzeige. Oben ist hell, unten dunkel; wo sich alle drei Farben decken, wird die Spur weiß (neutral).	La gauche de l'image correspond à la gauche de l'affichage. Le haut est clair, le bas sombre ; là où les trois couleurs se superposent, la trace devient blanche (neutre).
-Farbton als Richtung, Sättigung als Abstand zur Mitte.	Teinte selon la direction, saturation selon la distance au centre.
-Neutrales Grau liegt in der Mitte; ein Farbstich zieht die Wolke zur Seite.\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Schräge Linie** – die Hauttonlinie: Haut liegt meist nahe daran	Le gris neutre se trouve au centre ; une dominante tire le nuage sur le côté.\n• **Cases** – rouge, magenta, bleu, cyan, vert et jaune à 75 % de saturation\n• **Ligne oblique** – la ligne des tons chair : la peau se situe généralement à proximité
 Gruppe von Reglern zu einem Thema.	Groupe de curseurs sur un même thème.
 Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.	L'en-tête déplie et replie la section. Dès qu'un réglage y est modifié, l'interrupteur et le bouton de réinitialisation apparaissent à droite de l'en-tête.
 Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral	Chaque roue fixe une nuance (direction) et son intensité (distance au centre) ; la luminosité reste la même. Classique : ombres froides, hautes lumières chaudes – ou sépia et sélénium pour le noir et blanc.\n\n### Utilisation\nGlisser une roue : teinte et intensité · ⇧ en glissant : intensité seule · double-clic : neutre
@@ -5466,3 +5467,944 @@ Schon nach Namen geordnet	Déjà trié par nom
 Steht schon auf der obersten Ebene	Déjà au niveau supérieur
 Alben aus Apple Fotos bleiben in ihrem Satz	Les albums d’Apple Photos restent dans leur ensemble
 In Lightroom: {n} Schritte	Dans Lightroom : {n} étapes
+graineo unterstützen …	Soutenir graineo…
+Fotos einer Serie vergleichen und das beste wählen.	Comparer les photos d’une série et choisir la meilleure.
+• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **Comparaison** – 2 à 4 photos en grand côte à côte ; un double-clic ou Z zoome tous les cadres ensemble à 1:1 sur l’endroit le plus net\n• **Table lumineuse** – toutes les photos de la série ; un clic en met une dans la comparaison\n• **Duel** – deux photos, ← garde celle de gauche, → celle de droite, jusqu’à ce qu’il n’en reste qu’une\n\nLes indications sont relatives à la série : netteté en part de la photo la plus nette, yeux et visages (Apple Vision, macOS seulement), hautes lumières écrêtées, flou de bougé. La suggestion donne sa raison et ne règle rien ; s’il n’y a guère de différence, elle le dit.\n\n### Touches\n↩/Espace choisir la meilleure · ⇧X rejeter le reste · P/X/U/0–5 comme partout · Z zoom · H visages · ⌘↩ triée, suivante · ↓/↑ série suivante/précédente · ⌘Z annuler · Esc retour
+Stapel nicht geändert: {e}	Pile non modifiée : {e}
+Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	Bracketing d’exposition : {n} photos, {k} paliers sur {ev} IL
+Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	Série : {n} photos en {t}, même sujet (similarité {s})
+Serie: {n} Fotos in {t} (nur nach Zeit, Bildinhalt noch unbekannt)	Série : {n} photos en {t} (selon l’heure seulement, contenu encore inconnu)
+Stapel aus Lightroom: {n} Fotos	Pile de Lightroom : {n} photos
+Stapel: {n} Fotos	Pile : {n} photos
+Noch nicht gesichtet	Pas encore triée
+Serie aufklappen	Déplier la série
+Stapel aufklappen	Déplier la pile
+Serie zuklappen	Replier la série
+Stapel zuklappen	Replier la pile
+Serie sichten …	Trier la série…
+Stapel sichten …	Trier la pile…
+Als Titelfoto	Comme photo de couverture
+Aus Serie nehmen	Retirer de la série
+Aus Stapel nehmen	Retirer de la pile
+Serie teilen ab hier	Scinder la série ici
+Stapel teilen ab hier	Scinder la pile ici
+Serie auflösen	Défaire la série
+Stapel auflösen	Défaire la pile
+Zu Stapel bündeln	Regrouper en pile
+Ganze Serie bewertet ({n} Fotos)	Série entière notée ({n} photos)
+Zum Bündeln mindestens zwei Fotos auswählen	Sélectionnez au moins deux photos à regrouper
+Stapel aus {n} Fotos	Pile de {n} photos
+Serie teilen	Scinder la série
+Ganze Serie ({n} Fotos)	Série entière ({n} photos)
+{a}: nur oberstes Foto oder ganze Serie?	{a} : seulement la photo du dessus ou toute la série ?
+Die Auswahl enthält zugeklappte Serien oder Stapel mit {n} weiteren Fotos.	La sélection contient des séries ou piles repliées avec {n} photos de plus.
+Nur oberstes Foto	Seulement la photo du dessus
+Nur oberste Fotos ({n})	Seulement les photos du dessus ({n})
+Serien	Séries
+Alle Serien und Stapel, je eine Kachel; ungesichtete zuerst	Toutes les séries et piles, une vignette chacune ; non triées d’abord
+Serien · {n} noch nicht gesichtet	Séries · {n} pas encore triées
+Serien und Stapel	Séries et piles
+Serien automatisch erkennen	Détecter les séries automatiquement
+Fotos derselben Kamera, kurz nacheinander und mit gleichem Motiv, leise im Hintergrund.	Photos du même appareil, prises peu après l’une l’autre avec le même sujet, discrètement en arrière-plan.
+Serien zuklappen	Replier les séries
+nach der Sichtung	après le tri
+⇧X beim Sichten	⇧X pendant le tri
+Was mit den übrigen Fotos einer Serie geschieht, wenn das beste gewählt ist. Gelöscht wird nie.	Ce qui arrive aux autres photos d’une série une fois la meilleure choisie. Rien n’est jamais supprimé.
+Hinweise zu Gesichtern und Augen gibt es nur unter macOS.	Les indications sur les visages et les yeux n’existent que sous macOS.
+Serien erkennen: noch {n} Fotos	Détection des séries : encore {n} photos
+Serien erkennen	Détection des séries
+Zum Sichten eine Serie oder 2–60 Fotos auswählen	Sélectionnez une série ou 2 à 60 photos à trier
+Keine weitere Serie zu sichten	Plus aucune série à trier
+Als bestes Foto gewählt	Choisie comme meilleure photo
+Erst das beste Foto wählen (Leertaste oder ↩)	Choisissez d’abord la meilleure photo (Espace ou ↩)
+Rest abgestuft ({n} Fotos) – ⌘Z macht es rückgängig	Reste déclassé ({n} photos) – ⌘Z annule
+Rest abgelehnt ({n} Fotos) – ⌘Z macht es rückgängig	Reste rejeté ({n} photos) – ⌘Z annule
+Serie gesichtet	Série triée
+Belichtungsreihe	Bracketing d’exposition
+Serie	Série
+Auswahl	Sélection
+Zum Raster	Vers la grille
+Gesichtet, weiter	Triée, suivante
+Als bestes wählen	Choisir comme meilleure
+Rest ablehnen	Rejeter le reste
+Belichtungsreihe: kein Vorschlag (Material zum Zusammenfügen)	Bracketing : pas de suggestion (matière à fusionner)
+Hinweise werden gemessen ({a}/{n}) …	Mesure des indications ({a}/{n})…
+Kaum Unterschied – selbst entscheiden	Guère de différence – à vous de décider
+schärfstes Foto	photo la plus nette
+alle Augen offen	tous les yeux ouverts
+ohne Bewegungsunschärfe	sans flou de bougé
+ohne abgeschnittene Lichter	sans hautes lumières écrêtées
+von dir am besten bewertet	le mieux notée par vous
+Vorschlag: {k}/{n}{w}	Suggestion : {k}/{n}{w}
+VORSCHLAG	SUGGESTION
+wird gemessen …	mesure en cours…
+Schärfe: {a} % des schärfsten Fotos der Serie (gemessen an der schärfsten Stelle)	Netteté : {a} % de la photo la plus nette de la série (mesurée à l’endroit le plus net)
+Augen {n}/{n} offen	Yeux {n}/{n} ouverts
+Augen {a}/{n} zu	Yeux {a}/{n} fermés
+Lichter {a} %	Hautes lumières {a} %
+Fokus neben dem Gesicht	Mise au point à côté du visage
+Klick: in den Vergleich legen, ⌘-Klick: herausnehmen	Clic : mettre dans la comparaison, ⌘-clic : retirer
+{k}/{n} – Klick: in den Vergleich, ⌘-Klick: heraus	{k}/{n} – clic : dans la comparaison, ⌘-clic : retirer
+Gesichter	Visages
+{k}/{n}: Augen zu	{k}/{n} : yeux fermés
+{k}/{n}: Gesichtsqualität {q}	{k}/{n} : qualité du visage {q}
+Serie/Stapel des aktiven Fotos auf-/zuklappen	Déplier/replier la série ou pile de la photo active
+alle Serien und Stapel auf-/zuklappen	déplier/replier toutes les séries et piles
+Auswahl zu einem Stapel bündeln (Titelfoto = aktives Foto)	Regrouper la sélection en pile (couverture = photo active)
+Serie/Stapel auflösen (die Fotos werden nie wieder zusammengelegt)	Défaire la série/pile (les photos ne seront plus jamais regroupées)
+Serie sichten (bzw. die Auswahl von 2–60 Fotos)	Trier la série (ou la sélection de 2 à 60 photos)
+ganze Serie als Auswahl markieren	marquer toute la série comme retenue
+ganze Serie ablehnen	rejeter toute la série
+Markierung der ganzen Serie aufheben	retirer le marquage de toute la série
+Sterne der ganzen Serie löschen / setzen	effacer / définir les étoiles de toute la série
+Farbetikett der ganzen Serie	étiquette de couleur de toute la série
+fokussiertes Foto als bestes wählen (Titelfoto + Markierung „Auswahl“)	choisir la photo active comme meilleure (couverture + marquage « retenue »)
+fokussiertes Foto als bestes wählen	choisir la photo active comme meilleure
+Rest ablehnen: alle Fotos der Serie außer den markierten (ein ⌘Z)	Rejeter le reste : toutes les photos de la série sauf les retenues (un ⌘Z)
+gekoppelter Zoom 1:1 an der schärfsten Stelle ↔ Einpassen	zoom couplé 1:1 sur l’endroit le plus net ↔ ajuster
+Gesichterleiste ein/aus	barre des visages oui/non
+Serie als gesichtet abschließen, weiter zur nächsten ungesichteten	terminer la série comme triée, passer à la suivante non triée
+nächste Serie (ohne Abschluss)	série suivante (sans terminer)
+vorige Serie	série précédente
+zurück ins Raster	retour à la grille
+Feld 1–4 fokussieren (auch ← →)	activer le cadre 1 à 4 (aussi ← →)
+fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	changer de cadre actif ; en duel : garder la photo de gauche / droite
+Vergleich	Comparaison
+Leuchttisch	Table lumineuse
+Duell	Duel
+2–4 Fotos groß nebeneinander	2 à 4 photos en grand côte à côte
+Alle Fotos der Serie; Klick legt eins in den Vergleich	Toutes les photos de la série ; un clic en met une dans la comparaison
+Zwei Fotos: ← behält das linke, → das rechte	Deux photos : ← garde celle de gauche, → celle de droite
+immer	toujours
+nie	jamais
+nichts	rien
+Serie als gesichtet abschließen und zur nächsten	Terminer la série comme triée et passer à la suivante
+Fokussiertes Foto als bestes wählen: Titelfoto und Markierung „Auswahl“	Choisir la photo active comme meilleure : couverture et marquage « retenue »
+Alle Fotos außer den markierten ablehnen (ein ⌘Z)	Rejeter toutes les photos sauf les retenues (un ⌘Z)
+Gekoppelter Zoom auf die schärfste Stelle (Doppelklick: an dieser Stelle)	Zoom couplé sur l’endroit le plus net (double-clic : à cet endroit)
+Gesichter und Augen (Apple Vision); geschlossene Augen sind im Foto umrandet	Visages et yeux (Apple Vision) ; les yeux fermés sont encadrés dans la photo
+Anteil abgeschnittener Lichter in der Vorschau	Part de hautes lumières écrêtées dans l’aperçu
+Die Kanten sind in einer Richtung verwischt (Bewegungsunschärfe)	Les contours sont étalés dans une direction (flou de bougé)
+Das Fokusfeld der Kamera berührt keines der gefundenen Gesichter (nur ein Hinweis)	La zone de mise au point ne touche aucun des visages trouvés (simple indication)
+verwischt	flou
+Serien sichten	Trier les séries
+Das Foto liegt in keinem Stapel	La photo n’est dans aucune pile
+Hier lässt sich nicht teilen	Impossible de scinder ici
+Bildstile lesen	Lecture des styles d’image
+{a} (Startwert von {b})	{a} (point de départ : {b})
+{a} (gelernt)	{a} (appris)
+Gelernter Look	Look appris
+Als Standard dieser Kamera und dieses Bildstils verwenden (aus: eingebaute Entwicklung)	Utiliser par défaut pour cet appareil et ce style d’image (désactivé : rendu intégré)
+Stärke des gelernten Looks	Intensité du look appris
+Wirklich zurücksetzen?	Vraiment réinitialiser ?
+Gelernten Look entfernen: wieder die eingebaute Entwicklung dieser Kamera	Supprimer le look appris : retour au rendu intégré de cet appareil
+Look dieser Kamera lernen …	Apprendre le look de cet appareil …
+Look je Kamera und Bildstil aus RAW und Kamera-JPEG der eigenen Fotos lernen	Apprendre un look par appareil et style d’image à partir du RAW et du JPEG de l’appareil de vos photos
+Alle Fotos aus einem Ordner	Toutes les photos viennent d’un seul dossier
+{n} Fotos mit „{a}“ ausgelassen	{n} photos avec « {a} » exclues
+{n} Fotos mit „{a}“ einbezogen (adaptive Kamera-Einstellung)	{n} photos avec « {a} » incluses (réglage adaptatif de l’appareil)
+Gemischte Weißabgleiche (Kunstlicht und Tageslicht)	Balances des blancs mélangées (lumière artificielle et lumière du jour)
+Kaum Hauttöne unter den Fotos	Presque aucun ton chair parmi les photos
+Kaum kräftige Farben unter den Fotos	Presque aucune couleur vive parmi les photos
+Lesen der Bildstile abgebrochen	Lecture des styles d’image annulée
+Lernen abgebrochen	Apprentissage annulé
+Look dieser Kamera lernen	Apprendre le look de cet appareil
+Vergleicht die Entwicklung mit dem Kamera-JPEG derselben Aufnahme und lernt daraus den Look je Kamera und Bildstil. Fotos werden nur gelesen; nichts verlässt den Rechner.	Compare le rendu au JPEG de l’appareil de la même prise et en apprend le look par appareil et style d’image. Les photos sont seulement lues ; rien ne quitte l’ordinateur.
+{a}: {d} von {n} Fotos	{a} : {d} sur {n} photos
+Keine geeigneten RAW-Fotos in der Bibliothek (Sigma/Foveon und eigene Bildstile bleiben außen vor).	Aucune photo RAW adaptée dans la bibliothèque (Sigma/Foveon et les styles d’image personnels sont exclus).
+Fotos mit adaptiven Kamera-Einstellungen einbeziehen	Inclure les photos avec des réglages adaptatifs de l’appareil
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches passen das Kamera-JPEG an die Szene an; ohne Haken bleiben solche Fotos außen vor	DR Auto, correction des ombres, optimisation automatique et autres adaptent le JPEG de l’appareil à la scène ; sans coche, ces photos sont exclues
+{a}: Foto {d} von {n}	{a} : photo {d} sur {n}
+Übernehmen und weiteres Lernen warten darauf.	L’application et tout nouvel apprentissage l’attendent.
+Startwert übernommen: Look von {a} für {b}	Point de départ appliqué : look de {a} pour {b}
+Startwert nicht übernommen: {a}	Point de départ non appliqué : {a}
+Look exportieren (.cube)	Exporter le look (.cube)
+Gespeichert: {a}	Enregistré : {a}
+Nicht gespeichert: {a}	Non enregistré : {a}
+Übernommen: {a} ist jetzt der Standard dieser Kamera. Vorschauen werden im Leerlauf erneuert.	Appliqué : {a} est maintenant le réglage par défaut de cet appareil. Les aperçus sont renouvelés pendant l’inactivité.
+Kamera · Bildstil	Appareil · style d’image
+Empfehlung	Recommandation
+Hinweise	Remarques
+{a} ({b} nutzbar)	{a} ({b} utilisables)
+Geeignete Fotos; in Klammern die genutzten (höchstens 4 je Aufnahmetag)	Photos adaptées ; entre parenthèses celles utilisées (au plus 4 par jour de prise de vue)
+zu wenig	trop peu
+gelernt, aus	appris, désactivé
+ein Ordner	un seul dossier
+{n} adaptiv	{n} adaptatives
+Fotos mit adaptiven Kamera-Einstellungen (z. B. DR Auto, Auto-Optimierung) werden ausgelassen	Les photos avec des réglages adaptatifs (p. ex. DR Auto, optimisation automatique) sont exclues
+Lernen	Apprendre
+Gerade läuft ein anderer Lernvorgang	Un autre apprentissage est en cours
+Mindestens 20 Fotos an mindestens zwei Aufnahmetagen nötig	Il faut au moins 20 photos d’au moins deux jours de prise de vue
+Look aus diesen Fotos lernen (im Hintergrund, jederzeit abbrechbar)	Apprendre le look à partir de ces photos (en arrière-plan, annulable à tout moment)
+Ergebnis · {a}	Résultat · {a}
+Nicht gelernt: {a}	Non appris : {a}
+Kein besserer Look gefunden: an den herausgehaltenen Fotos war keine Stufe deutlich besser als die heutige Entwicklung.	Aucun meilleur look trouvé : sur les photos mises de côté, aucune étape n’était nettement meilleure que le rendu actuel.
+Farbmatrix	Matrice de couleur
+Farbmatrix und Kurven	Matrice de couleur et courbes
+Farbmatrix, Kurven und 3D-Tabelle	Matrice de couleur, courbes et table 3D
+Übernommen ({a})	Appliqué ({a})
+Besserer Look gefunden ({a})	Meilleur look trouvé ({a})
+ΔE00 Mittel / p95	ΔE00 moyenne / p95
+Training ({a} Fotos)	Apprentissage ({a} photos)
+Fotos, aus denen gelernt wurde	Photos à partir desquelles le look a été appris
+Kontrolle ({a} Fotos)	Contrôle ({a} photos)
+Herausgehaltene Fotos anderer Aufnahmetage: der ehrliche Kontrollwert	Photos mises de côté d’autres jours de prise de vue : le contrôle honnête
+Heute	Actuel
+Gelernt	Appris
+Look exportieren (.cube) …	Exporter le look (.cube) …
+Gelernten Look als 3D-LUT (.cube, sRGB) speichern	Enregistrer le look appris comme LUT 3D (.cube, sRGB)
+Look lernen · {a}	Apprentissage du look · {a}
+Standardentwicklung · gelernter Look dieser Kamera	Rendu par défaut · look appris de cet appareil
+Startwert …	Point de départ …
+Zu wenige Fotos: den Look von {a} als Startwert übernehmen (deutlich gekennzeichnet)	Trop peu de photos : reprendre le look de {a} comme point de départ (clairement signalé)
+; {a} Fotos mit adaptiver Kamera-Einstellung ausgelassen	 ; {a} photos avec un réglage adaptatif de l'appareil écartées
+Nur {n} nutzbare Fotos, mindestens {m} sind nötig{rest}.	Seulement {n} photos utilisables, il en faut au moins {m}{rest}.
+Alle Fotos stammen von einem Aufnahmetag: eine Kontrolle an anderen Tagen ist nicht möglich.	Toutes les photos datent d'un seul jour de prise de vue : aucun contrôle sur d'autres jours n'est possible.
+nur {d} Aufnahmetage	seulement {d} jours de prise de vue
+alle aus einem Ordner	toutes dans un même dossier
+knapp genug Fotos	à peine assez de photos
+kaum kräftige Farben	peu de couleurs vives
+{n} Fotos an {d} Tagen in {f} Ordnern	{n} photos sur {d} jours dans {f} dossiers
+, kaum Hauttöne	, peu de tons chair
+lernbar: ja	apprenable : oui
+lernbar: eingeschränkt	apprenable : avec réserves
+lernbar: nein	apprenable : non
+sehr nah	très proche
+mäßig	moyen
+ΔE00 {d} ({c})	ΔE00 {d} ({c})
+an Kontrollfotos geprüft	vérifié sur des photos de contrôle
+aus der Kamera-Makernote, ohne Messung	issu de la makernote de l'appareil, sans mesure
+Basis ohne Messung	base sans mesure
+Startwert von {a}	point de départ de {a}
+Kamera-Looks	Looks des appareils
+Kamera oder Bildstil suchen …	Rechercher un appareil ou un style d'image…
+nur lernbare	apprenables seulement
+Nur Bildstile zeigen, aus deren Fotos sich ein Look lernen lässt	Afficher uniquement les styles d'image dont les photos permettent d'apprendre un look
+nur ohne Look	sans look seulement
+Nur Bildstile ohne mitgelieferten und ohne gelernten Look	Uniquement les styles d'image sans look fourni ni look appris
+Bildstile lesen: {d} von {n} Fotos	Lecture des styles d'image : {d} sur {n} photos
+Keine RAW-Fotos in der Bibliothek (Sigma/Foveon bleibt außen vor).	Aucune photo RAW dans la bibliothèque (Sigma/Foveon exclu).
+RAW-Fotos dieser Kamera in der Bibliothek	Photos RAW de cet appareil dans la bibliothèque
+{n} neue Fotos seit dem Lernen	{n} nouvelles photos depuis l'apprentissage
+Mit den neuen Fotos lässt sich der Look neu lernen; er wird nur ersetzt, wenn er an denselben Kontrollfotos besser ist	Le look peut être réappris avec les nouvelles photos ; il n'est remplacé que s'il est meilleur sur les mêmes photos de contrôle
+Bildstile werden gelesen …	Lecture des styles d'image…
+kein lesbarer Bildstil	aucun style d'image lisible
+GELERNT	APPRIS
+AUS	DÉSACTIVÉ
+MITGELIEFERT	FOURNI
+FARBTONTABELLE	TABLE DE TEINTES
+KEINER	AUCUN
+Gelernt: {a}	Appris : {a}
+Mitgeliefert: {a}	Fourni : {a}
+Eingebaute Farbtontabelle der Standardentwicklung (an Kontrollfotos gemessen)	Table de teintes intégrée du développement standard (mesurée sur des photos de contrôle)
+Links eine Kamera und einen Bildstil wählen.	Choisissez un appareil et un style d'image à gauche.
+Erfahrungswert: an Kontrollfotos meist nah am Kamera-JPEG (ΔE00 etwa 0,7–1,7). Zugesagt ist nichts: angeboten wird nur, was messbar besser ist.	Par expérience : sur les photos de contrôle, généralement proche du JPEG de l'appareil (ΔE00 env. 0,7–1,7). Rien n'est garanti : seul ce qui est mesurablement meilleur est proposé.
+Ergebnis unsicher: angeboten wird nur, was an Kontrollfotos messbar besser ist.	Résultat incertain : seul ce qui est mesurablement meilleur sur les photos de contrôle est proposé.
+STATISTIK	STATISTIQUES
+Teilen	Partager
+Gelernten Look als .x3look (für graineo) oder .cube (auch für andere Programme) speichern: nur Farbwerte mit Herkunft und Güte, keine Bilder, keine Aufnahmedaten	Enregistrer le look appris en .x3look (pour graineo) ou .cube (aussi pour d'autres logiciels) : uniquement des valeurs de couleur avec origine et qualité, sans images ni données de prise de vue
+Geteilten Look (.x3look oder .cube) für diese Kamera und diesen Bildstil laden; ein vorhandener gelernter Look wird aufbewahrt	Charger un look partagé (.x3look ou .cube) pour cet appareil et ce style d'image ; un look appris existant est conservé
+Den neuen Look als Standard dieser Kamera und dieses Bildstils verwenden; ein bisheriger gelernter Look wird aufbewahrt	Utiliser le nouveau look comme standard de cet appareil et de ce style d'image ; un ancien look appris est conservé
+Erneut lernen	Réapprendre
+Noch einmal lernen (verwirft das Ergebnis, nicht den Look in Gebrauch)	Apprendre encore une fois (abandonne le résultat, pas le look utilisé)
+Erst eine Kamera und einen Bildstil wählen	Choisissez d'abord un appareil et un style d'image
+Gerade läuft ein Lernvorgang	Un apprentissage est en cours
+Zu wenige geeignete Fotos (siehe Einschätzung)	Trop peu de photos adaptées (voir l'estimation)
+Mit aktuellen Fotos neu lernen: das Ergebnis wird an denselben Kontrollfotos gegen den bisherigen Look und gegen heute gemessen und nur angeboten, wenn es besser ist	Réapprendre avec les photos actuelles : le résultat est mesuré sur les mêmes photos de contrôle face à l'ancien look et à aujourd'hui, et n'est proposé que s'il est meilleur
+Look aus RAW und Kamera-JPEG dieser Fotos lernen (leise im Hintergrund, jederzeit abbrechbar)	Apprendre un look à partir du RAW et du JPEG de l'appareil de ces photos (discrètement en arrière-plan, annulable à tout moment)
+adaptive einbeziehen	inclure les adaptatifs
+Auch Fotos mit adaptiven Kamera-Einstellungen nutzen (DR Auto, Schattenkorrektur, Auto-Optimierung …); sie passen das Kamera-JPEG an die Szene an, daher sonst ausgelassen	Utiliser aussi les photos avec des réglages adaptatifs (DR Auto, correction des ombres, optimisation auto …) ; ils adaptent le JPEG de l'appareil à la scène et sont donc écartés sinon
+Ausrichtung	Alignement
+Paare	Paires
+Matrix	Matrice
+Kurven	Courbes
+Tabelle	Table
+Kontrolle	Contrôle
+Bisher gelernt	Appris précédemment
+Lernen · {a}	Apprentissage · {a}
+Anpassen und kontrollieren	Ajustement et contrôle
+Foto {d} von {n} · {a}	Photo {d} sur {n} · {a}
+Zuletzt entwickeltes Foto	Dernière photo développée
+Heute bisher: ΔE00 {a}	Aujourd'hui jusqu'ici : ΔE00 {a}
+Median der Fotos so weit: Abstand der heutigen Entwicklung zum Kamera-JPEG	Médiane des photos jusqu'ici : écart du développement actuel au JPEG de l'appareil
+Lernen beenden; es wird nichts geändert	Arrêter l'apprentissage ; rien n'est modifié
+Läuft leise weiter, auch wenn das Fenster geschlossen wird.	Continue discrètement, même si la fenêtre est fermée.
+Ergebnis	Résultat
+Der bisherige Look bleibt: an denselben Kontrollfotos war der neue nicht deutlich besser.	L'ancien look reste : sur les mêmes photos de contrôle, le nouveau n'était pas nettement meilleur.
+Kein besserer Look gefunden: an den Kontrollfotos war keine Stufe deutlich besser als die heutige Entwicklung.	Aucun meilleur look trouvé : sur les photos de contrôle, aucune étape n'était nettement meilleure que le développement actuel.
+ΔE00 Median / p90	ΔE00 médiane / p90
+Kontrolle ({a})	Contrôle ({a})
+Training ({a})	Entraînement ({a})
+Neu	Nouveau
+Gemessen an denselben Kontrollfotos wie der bisherige Look.	Mesuré sur les mêmes photos de contrôle que l'ancien look.
+ausgeschaltet (Look-Fach)	désactivé (panneau Look)
+Mitgeliefert	Fourni
+Eingebaut	Intégré
+Farbtontabelle der Standardentwicklung, an Kontrollfotos gemessen	table de teintes du développement standard, mesurée sur des photos de contrôle
+neutrale Entwicklung mit der Farbmatrix der Kamera	développement neutre avec la matrice couleur de l'appareil
+Look von {a} als Startwert …	Look de {a} comme point de départ…
+Zu wenige Fotos: den Look einer verwandten Kamera übernehmen, gekennzeichnet als Basis ohne Messung	Trop peu de photos : reprendre le look d'un appareil proche, marqué comme base sans mesure
+Fotos der Kamera	Photos de l'appareil
+in diesem Bildstil	dans ce style d'image
+Bei mehr als 400 Fotos einer Kamera wird eine über die Aufnahmetage verteilte Auswahl gelesen	Au-delà de 400 photos d'un appareil, une sélection répartie sur les jours de prise de vue est lue
+Ohne Fotos mit adaptiven Kamera-Einstellungen (außer sie sind einbezogen)	Sans les photos avec réglages adaptatifs (sauf si incluses)
+davon zum Lernen	dont pour l'apprentissage
+Höchstens 4 je Aufnahmetag und 80 insgesamt, über den Tag verteilt	Au plus 4 par jour de prise de vue et 80 au total, répartis sur la journée
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches	DR Auto, correction des ombres, optimisation auto et similaires
+Aufnahmetage	Jours de prise de vue
+Kontrollfotos stammen von anderen Tagen als die Trainingsfotos	Les photos de contrôle proviennent d'autres jours que les photos d'entraînement
+mit Kamera-JPEG	avec JPEG de l'appareil
+RAW+JPEG; sonst dient die im RAW eingebettete Vorschau als Kamera-Bild	RAW+JPEG ; sinon l'aperçu intégré au RAW sert d'image de l'appareil
+Farbabdeckung wird aus den Vorschauen ermittelt …	Calcul de la couverture des couleurs à partir des aperçus…
+Keine Vorschauen für die Farbabdeckung	Aucun aperçu pour la couverture des couleurs
+aus den Lernblöcken (Kamera-JPEG)	d'après les blocs d'apprentissage (JPEG de l'appareil)
+aus den Vorschauen der Bibliothek	d'après les aperçus de la bibliothèque
+Abdeckung, {a}	Couverture, {a}
+Anteil dunkler bis heller Bildteile (fünf Stufen)	Part des zones sombres à claires (cinq niveaux)
+Farben	Couleurs
+Anteil farbiger Bildteile je Farbton (Rot, Gelb, Grün, Cyan, Blau, Magenta)	Part des zones colorées par teinte (rouge, jaune, vert, cyan, bleu, magenta)
+Hauttöne {a} %	Tons chair {a} %
+Anteil hauttonähnlicher Farben; unter 1 % lernt der Look Hauttöne kaum	Part des couleurs proches des tons chair ; en dessous de 1 %, le look apprend à peine les tons chair
+kräftige Farben {a} %	couleurs vives {a} %
+Anteil stark gesättigter Farben; unter 1 % bleiben kräftige Farben unsicher	Part des couleurs très saturées ; en dessous de 1 %, les couleurs vives restent incertaines
+ · gemischt (Kunstlicht und Tageslicht)	 · mixte (lumière artificielle et lumière du jour)
+Weißabgleich {a}–{b} K{c}	Balance des blancs {a}–{b} K{c}
+Weißabgleich-Streuung: wird beim Lernen gemessen	Dispersion de la balance des blancs : mesurée pendant l'apprentissage
+10. bis 90. Perzentil des Weißabgleichs der Aufnahmen	10e au 90e centile de la balance des blancs des prises de vue
+Fassungen	Versions
+ohne Messung	sans mesure
+in Gebrauch	utilisé
+Wirklich?	Vraiment ?
+Zurück zu dieser	Revenir à celle-ci
+Diese frühere Fassung wieder verwenden; die jetzige wird aufbewahrt	Réutiliser cette version antérieure ; la version actuelle est conservée
+Frühere Fassung wieder in Gebrauch; die bisherige ist aufbewahrt.	Version antérieure de nouveau utilisée ; la précédente est conservée.
+Nicht zurückgesetzt: {a}	Non rétabli : {a}
+Look exportieren	Exporter le look
+graineo-Look	Look graineo
+Look importieren	Importer un look
+Geladen als Look von {a}	Chargé comme look de {a}
+Nicht geladen: {a}	Non chargé : {a}
+Hier erscheint der Vergleich eines Fotos: neutral, aktuell, neu gelernt und Kamera-JPEG.	La comparaison d'une photo s'affiche ici : neutre, actuel, nouvellement appris et JPEG de l'appareil.
+Entwicklung ohne kameraeigene Farbkorrektur: die Grundlage, auf der gelernt wird	Développement sans correction de couleur propre à l'appareil : la base de l'apprentissage
+Standardentwicklung, wie sie jetzt ist (mit eingeschaltetem gelernten Look)	Développement standard tel qu'il est maintenant (avec un look appris activé)
+Grundlage mit dem neu gelernten Look (oder dem gelernten Look in Gebrauch)	Base avec le look nouvellement appris (ou le look appris utilisé)
+Das Bild der Kamera: JPEG neben dem RAW oder die eingebettete Vorschau	L'image de l'appareil : JPEG à côté du RAW ou aperçu intégré
+Wischen	Volet
+Nebeneinander	Côte à côte
+Ein Bild, links und rechts der Trennlinie verschieden (Linie ziehen)	Une image, différente à gauche et à droite de la ligne de séparation (faites glisser la ligne)
+Beide Bilder nebeneinander, Zoomen und Verschieben gekoppelt	Les deux images côte à côte, zoom et déplacement couplés
+Zwischen eingepasst und 100 % der Vorschau wechseln (auch Doppelklick ins Bild); Scrollrad oder Zwei-Finger-Geste zoomt, Ziehen verschiebt	Basculer entre ajusté et 100 % de l'aperçu (aussi double-clic dans l'image) ; la molette ou le geste à deux doigts zoome, le glisser déplace
+Kamera-JPEG neben dem RAW	JPEG de l'appareil à côté du RAW
+eingebettete Vorschau	aperçu intégré
+{a} · Belichtung an das Kamera-Bild angeglichen ({b} EV) · {c}	{a} · exposition alignée sur l'image de l'appareil ({b} IL) · {c}
+{a} · wird entwickelt …	{a} · développement en cours…
+Foto wird entwickelt …	Développement de la photo…
+Kein Foto zum Vergleichen	Aucune photo à comparer
+Noch kein neuer Look: erst lernen	Pas encore de nouveau look : apprenez d'abord
+Kontrollfoto: nicht zum Lernen benutzt, daran wird gemessen	Photo de contrôle : non utilisée pour l'apprentissage, sert à la mesure
+Trainingsfoto: daraus wird gelernt	Photo d'entraînement : sert à l'apprentissage
+Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)	Photo que l'apprentissage utiliserait (entraînement ou contrôle décidé lors de l'apprentissage)
+{a} (geladen)	{a} (chargé)
+Kamera-Looks …	Looks des appareils…
+Looks der Kameras der Bibliothek: Übersicht, Vergleich mit dem Kamera-JPEG, Lernen aus RAW und Kamera-JPEG der eigenen Fotos, Fassungen und Teilen	Looks des appareils de la bibliothèque : vue d'ensemble, comparaison avec le JPEG de l'appareil, apprentissage depuis le RAW et le JPEG de vos photos, versions et partage
+Nicht gelernt: nur {n} brauchbare Fotos, mindestens {m} sind nötig.	Non appris : seulement {n} photos exploitables, il en faut au moins {m}.
+Nicht gelernt: zu wenige Aufnahmetage für eine getrennte Kontrolle.	Non appris : trop peu de jours de prise de vue pour un contrôle séparé.
+Neu lernen	Réapprendre
+„Motiv“ und „Personen“ wählen mit der Bildanalyse des Systems aus, was im Foto vorne steht. Die Maske ist nur eine Auswahl: Pixel ändern erst die Regler darunter.	« Sujet » et « Personnes » sélectionnent avec l'analyse d'image du système ce qui ressort de la photo. Le masque n'est qu'une sélection : seuls les curseurs en dessous modifient les pixels.
+• **Motiv 1, 2 …** – mehrere erkannte Motive einzeln an- und abwählen\n• **Weiche Kante** – weicher Übergang am Rand der Auswahl\n• **+ Hinzufügen / − Abziehen → Pinsel** – vergessene Teile ergänzen, zu viel Ausgewähltes abziehen\n• **Überlagerung** – zeigt die Wirkung der Maske rot im Bild\n\nGrenzen: Haare, Fell, Glas, feine Zweige und Bilder ohne klares Hauptmotiv werden oft ungenau. Die Berechnung läuft auf dem Rechner, nichts verlässt ihn. Die Auswahl wird in der Bibliothek gespeichert; beim Einfügen auf andere Fotos wird sie dort neu berechnet.\n\nNur unter macOS (Motiv: ab macOS 14).	• **Sujet 1, 2 …** – activer ou désactiver un à un plusieurs sujets détectés\n• **Bord progressif** – transition douce au bord de la sélection\n• **+ Ajouter / − Soustraire → Pinceau** – compléter les parties oubliées, soustraire ce qui est sélectionné en trop\n• **Superposition** – montre l'effet du masque en rouge dans l'image\n\nLimites : cheveux, fourrure, verre, branches fines et images sans sujet principal net sont souvent imprécis. Le calcul se fait sur l'ordinateur, rien ne le quitte. La sélection est enregistrée dans la bibliothèque ; collée sur d'autres photos, elle y est recalculée.\n\nmacOS uniquement (Sujet : macOS 14 ou ultérieur).
+„Stelle entfernen“ füllt eine angeklickte Stelle mit Inhalt, den ein Modell aus der Umgebung erfindet. Das ist keine Fotografie mehr, sondern eine Vermutung.	« Supprimer une zone » remplit l'endroit cliqué avec un contenu qu'un modèle invente à partir des environs. Ce n'est plus une photographie, mais une supposition.
+• **Gut** – Himmel, Wasser, Wiese, Wand, Muster\n• **Schlecht** – Gesichter, Schrift, Kanten von Gegenständen, große Flächen\n• **Größe** – Radius des nächsten Kreises\n\nDie Füllung wird einmal berechnet und in der Bibliothek gespeichert; Helligkeit und Farbe passen sich beim Entwickeln der Umgebung an. Für kleine Flecken auf echtem Bildinhalt ist „Heilen“ meist besser. Das Modell („Objekte entfernen“, Einstellungen → Module) rechnet auf dem Rechner, nichts verlässt ihn.	• **Bien** – ciel, eau, pelouse, mur, motifs\n• **Mal** – visages, texte, bords d'objets, grandes surfaces\n• **Taille** – rayon du prochain cercle\n\nLe remplissage est calculé une fois et enregistré dans la bibliothèque ; luminosité et couleur suivent les environs au développement. Pour de petites taches sur un vrai contenu, « Corriger » est généralement meilleur. Le modèle (« Supprimer des objets », Réglages → Modules) calcule sur l'ordinateur, rien ne le quitte.
+Klick-Auswahl	Sélection par clic
+Überlagerung	Superposition
+Entfernen fehlgeschlagen: {e}	Échec de la suppression : {e}
+OBJEKTE ENTFERNEN	SUPPRIMER DES OBJETS
+Alle entfernen	Tout retirer
+{n} entfernte Stellen	{n} endroits supprimés
+Wirkung der gewählten Maske rot zeigen (im Werkzeug „Masken“)	Afficher en rouge l'effet du masque choisi (dans l'outil « Masques »)
+Berechnung fehlgeschlagen: {e}	Échec du calcul : {e}
+Auswahl nicht gespeichert: {e}	Sélection non enregistrée : {e}
+Kein Motiv erkannt	Aucun sujet détecté
+Keine Person erkannt	Aucune personne détectée
+{n} gefunden · {t} s	{n} trouvé(s) · {t} s
+Auswahl fehlt – Modul „Klick-Auswahl“ nicht installiert	Sélection manquante – module « Sélection par clic » non installé
+Auswahl steht aus	Sélection en attente
+Auswahl fehlt – auf diesem System nicht berechenbar	Sélection manquante – impossible à calculer sur ce système
+Auswahl fehlt in der Bibliothek	Sélection absente de la bibliothèque
+Motiv {n}	Sujet {n}
+Person {n}	Personne {n}
+Neu berechnen	Recalculer
+Pinsel +	Pinceau +
+Pinsel −	Pinceau −
+Motiv	Sujet
+Auswahl per Klick	Sélection par clic
+Bitmap	Bitmap
+Motiv und Personen	Sujet et personnes
+Objekte entfernen	Supprimer des objets
+Klick-Auswahl (MobileSAM)	Sélection par clic (MobileSAM)
+Objekte entfernen (LaMa)	Supprimer des objets (LaMa)
+Masken: Objekt anklicken, Auswahl wird berechnet	Masques : cliquer sur un objet, la sélection est calculée
+Retusche: markierte Bereiche mit erfundenem Inhalt füllen	Retouche : remplir les zones marquées avec un contenu inventé
+Hauptmotiv auswählen (Bildanalyse des Systems, ändert keine Pixel)	Sélectionner le sujet principal (analyse d'image du système, ne change aucun pixel)
+Personen auswählen (Bildanalyse des Systems, ändert keine Pixel)	Sélectionner les personnes (analyse d'image du système, ne change aucun pixel)
+Braucht macOS 14 oder neuer	Nécessite macOS 14 ou ultérieur
+Gibt es nur unter macOS	Disponible uniquement sur macOS
+Wird gerade berechnet (wenige Sekunden)	Calcul en cours (quelques secondes)
+Auswahl mit der Bildanalyse neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	Recalculer la sélection (p. ex. après une correction d'objectif modifiée)
+Mit dem Pinsel zur Auswahl hinzufügen	Ajouter à la sélection au pinceau
+Mit dem Pinsel aus der Auswahl entfernen	Retirer de la sélection au pinceau
+Objekt im Bild anklicken; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	Cliquez sur un objet dans l'image ; ⌥-clic exclut des zones (calcul sur l'ordinateur)
+Braucht das Modul „Klick-Auswahl“ (Einstellungen → Module)	Nécessite le module « Sélection par clic » (Réglages → Modules)
+Wirkung der gewählten Maske rot im Bild zeigen	Afficher en rouge l'effet du masque choisi
+Stelle anklicken: der Bereich wird mit erfundenem Inhalt aus der Umgebung gefüllt (rechnet auf dem Rechner)	Cliquez sur un endroit : la zone est remplie d'un contenu inventé à partir des environs (calcul sur l'ordinateur)
+Braucht das Modul „Objekte entfernen“ (Einstellungen → Module)	Nécessite le module « Supprimer des objets » (Réglages → Modules)
+Alle entfernten Stellen wiederherstellen	Rétablir tous les endroits supprimés
+Ortsnamen: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)	Noms de lieux : GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)
+Ortsnamen bestimmen …	Détermination des noms de lieux…
+Vorschläge aus dem Bildinhalt brauchen das Suchmodell „Beste Treffer“ (SigLIP 2 Base). Installieren unter Einstellungen → Suche; es wird nichts von selbst geladen.	Les suggestions tirées du contenu de l’image nécessitent le modèle de recherche « Meilleurs résultats » (SigLIP 2 Base). Installez-le dans Réglages → Recherche ; rien n’est téléchargé automatiquement.
+Die Begriffe werden einmal für das Suchmodell vorbereitet (wenige Sekunden).	Les termes sont préparés une fois pour le modèle de recherche (quelques secondes).
+Die Vorschläge konnten nicht berechnet werden.	Les suggestions n’ont pas pu être calculées.
+Dieses Foto ist für das Suchmodell „Beste Treffer“ noch nicht eingelesen. Das geschieht im Hintergrund; danach erscheinen hier Vorschläge.	Cette photo n’a pas encore été lue par le modèle de recherche « Meilleurs résultats ». Cela se fait en arrière-plan ; des suggestions apparaîtront ensuite ici.
+Begriffe, die das Suchmodell im Bild erkennt. Klick übernimmt das Stichwort für dieses Foto, × lehnt den Vorschlag für dieses Foto ab. Nie automatisch vergeben.	Termes que le modèle de recherche reconnaît dans l’image. Un clic attribue le mot-clé à cette photo, × refuse la suggestion pour cette photo. Jamais attribués automatiquement.
+keine sicheren	aucune sûre
+Vorschlag „{a}“ abgelehnt	Suggestion « {a} » refusée
+Als Stichwort für dieses Foto übernehmen	Attribuer comme mot-clé à cette photo
+Vorschlag für dieses Foto ablehnen	Refuser la suggestion pour cette photo
+Basis aus Fremdbeispielen, nicht geprüft	base issue d'exemples d'autres photographes, non vérifiée
+Quelle: {a} Dateien	source : {a} fichiers
+An Kamera-JPEG angleichen	Aligner sur le JPEG de l’appareil
+Kein passendes Kamera-JPEG – neutral entwickelt	Aucun JPEG d’appareil utilisable – développement neutre
+Tonkurve dieses Fotos aus seinem Kamera-JPEG	Courbe tonale de cette photo d’après son JPEG d’appareil
+DRUCKEN …	IMPRIMER…
+Im Druckraum in voller Auflösung drucken (Filmstreifen-Vorlage)	Imprimer en pleine résolution dans la salle d'impression (modèle bandes de film)
+Druckauflösung	Résolution d'impression
+Ausdruck schärfen	Accentuer l'impression
+Farbraum der Seite	Espace colorimétrique de la page
+Pixel je Zoll auf dem Papier.	Pixels par pouce sur le papier.
+graineo rechnet jede Seite genau in dieser Auflösung, damit der Druckertreiber nicht mit einfacherem Verfahren nachskaliert. Epson-Drucker arbeiten intern mit 360 oder 720 ppi, viele Canon- und HP-Drucker mit 300 oder 600. Mehr als 360 ppi zeigt sich nur bei genauem Hinsehen und kostet Zeit und Speicher.	graineo calcule chaque page exactement à cette résolution, afin que le pilote de l'imprimante ne la redimensionne pas avec une méthode plus simple. Les imprimantes Epson travaillent en interne à 360 ou 720 ppp, beaucoup d'imprimantes Canon et HP à 300 ou 600. Au-delà de 360 ppp, la différence ne se voit qu'en regardant de très près et coûte du temps et de la mémoire.
+Ausgleich für die Unschärfe von Tinte und Papier.	Compense le flou de l'encre et du papier.
+Wirkt nach dem Skalieren auf die Helligkeit, mit einem Radius in Millimetern auf dem Papier – bei jeder Auflösung gleich. Mattes Papier lässt die Tinte stärker verlaufen und bekommt mehr. Am Bildschirm wirkt die Schärfung zu kräftig; maßgeblich ist der Ausdruck.	Agit sur la luminosité après la mise à l'échelle, avec un rayon en millimètres sur le papier – identique à toute résolution. Le papier mat fait davantage diffuser l'encre et en reçoit plus. À l'écran l'accentuation paraît trop forte ; seule l'épreuve imprimée compte.
+Farbraum der Seite; die Farben rechnet der Drucker um.	Espace colorimétrique de la page ; l'imprimante convertit les couleurs.
+Die Seite trägt ihr Farbprofil (Adobe RGB oder sRGB). Im Druckdialog übernimmt der Treiber die Umrechnung auf Drucker und Papier – dort Papiersorte und Qualität wählen und die Farbanpassung des Druckers eingeschaltet lassen. Adobe RGB erhält kräftige Grün- und Cyantöne, die gute Tintenstrahldrucker drucken können.	La page porte son profil colorimétrique (Adobe RGB ou sRGB). Dans la boîte de dialogue d'impression, le pilote convertit pour l'imprimante et le papier – choisissez-y le type de papier et la qualité et laissez activée la gestion des couleurs de l'imprimante. Adobe RGB conserve des verts et des cyans vifs que les bonnes imprimantes jet d'encre savent imprimer.
+Drucken …	Imprimer…
+Keine Seite zu drucken	Aucune page à imprimer
+leeres Bild	image vide
+{name}: keine Vorschau für den Entwurf	{name} : pas d'aperçu pour le brouillon
+Abstand	Espacement
+Als Vorlage sichern …	Enregistrer comme modèle…
+An den Druckdialog übergeben	Transmis à la boîte de dialogue d'impression
+Ausfüllen	Remplir
+Bildeinstellung	Réglages de l'image
+Drehen und einpassen	Faire pivoter pour ajuster
+Druckauftrag	Tâche d'impression
+Druckdialog im Testlauf übersprungen	Boîte de dialogue d'impression ignorée en test
+Drucken	Imprimer
+Drucker …	Imprimante…
+Drucker: {a}	Imprimante : {a}
+ENTWURF	BROUILLON
+Ein Foto pro Seite wiederholen	Répéter une photo par page
+Entwurfsmodus	Mode brouillon
+Farbmanagement: vom Drucker verwaltet	Gestion des couleurs : par l'imprimante
+Fotoinfo	Infos photo
+Fotos ({n})	Photos ({n})
+Hilfslinien	Repères
+Hintergrund	Arrière-plan
+In Datei drucken …	Imprimer dans un fichier…
+In Datei drucken	Imprimer dans un fichier
+In den Papierkorb legen	Mettre à la corbeille
+Kein Platz für eine Zelle: Ränder oder Abstände verkleinern	Pas de place pour une cellule : réduisez les marges ou l'espacement
+Kontur	Contour
+Konturbreite	Épaisseur du contour
+Konturfarbe	Couleur du contour
+Mit aktuellen Einstellungen aktualisieren	Mettre à jour avec les réglages actuels
+Nicht gedruckt: {e}	Non imprimé : {e}
+PDF für den Druck geschrieben: {a}	PDF d'impression écrit : {a}
+PDF	PDF
+Rand der Dunkelkammer mitdrucken	Imprimer la bordure de la chambre noire
+Rand links	Marge gauche
+Rand oben	Marge haute
+Rand rechts	Marge droite
+Rechnet Seite {a} von {n} …	Calcul de la page {a} sur {n}…
+Rechnet …	Calcul…
+Reihen × Spalten	Lignes × colonnes
+Ränder auf den bedruckbaren Bereich des Druckers angehoben	Marges agrandies à la zone imprimable de l'imprimante
+Schnittmarken	Traits de coupe
+Schriftgrad	Corps du texte
+Schärfen {a} · {m}	Accentuation {a} · {m}
+Seite und Raster	Page et grille
+Seite {a} von {n}	Page {a} sur {n}
+Seite	Page
+Seiteneinrichtung nicht verfügbar	Mise en page non disponible
+Seiteninformationen	Infos de page
+Seitennummern	Numéros de page
+TIFF	TIFF
+Vorlage nicht entfernt: {e}	Modèle non supprimé : {e}
+Vorlage nicht gesichert: {e}	Modèle non enregistré : {e}
+Vorlage „{a}“ gesichert	Modèle « {a} » enregistré
+Vorlagen	Modèles
+Zelle B × H	Cellule L × H
+mind. {a} mm	min. {a} mm
+ohne Schärfung	sans accentuation
+{name}: nicht mehr in der Liste	{name} : n'est plus dans la liste
+{n} Fotos · {p} Seiten	{n} photos · {p} pages
+{n} Seiten gespeichert: {a} …	{n} pages enregistrées : {a} …
+{s}, vom Drucker verwaltet	{s}, géré par l'imprimante
+{w} × {h} px je Seite · {mb} MB	{w} × {h} px par page · {mb} Mo
+Druckraum schließen	Fermer la salle d'impression
+Aktuelle Einstellungen als eigene Vorlage sichern	Enregistrer les réglages actuels comme modèle personnel
+Zelle ganz füllen, Überstand abschneiden; im Bild ziehen verschiebt den Ausschnitt	Remplir toute la cellule et rogner le surplus ; faire glisser dans la photo déplace le cadrage
+Foto um 90° drehen, wenn es dann größer wird	Faire pivoter la photo de 90° si elle devient ainsi plus grande
+Jede Zelle einer Seite zeigt dasselbe Foto	Chaque cellule d'une page montre la même photo
+Linie außen um jedes Foto	Ligne autour de chaque photo
+Ränder, Zellen und Maße in der Vorschau (werden nicht gedruckt)	Marges, cellules et dimensions dans l'aperçu (non imprimées)
+Unten in der Mitte	En bas au centre
+Datum, Vorlage, Farbraum, Auflösung und Schärfung klein unten links	Date, modèle, espace colorimétrique, résolution et accentuation, en petit en bas à gauche
+Kurze Linien im Rand an den Bildkanten	Courts traits dans la marge au niveau des bords de la photo
+Papier- und Filmrand der Dunkelkammer gehören zum Bild; sonst macht das Seitenlayout den Rand	Les bordures papier et film de la chambre noire font partie de la photo ; sinon c'est la mise en page qui fait la bordure
+Schnell: Bibliotheksvorschau statt voller Entwicklung, 150 ppi, ohne Schärfung, 8 Bit	Rapide : aperçu de la bibliothèque au lieu du développement complet, 150 ppp, sans accentuation, 8 bits
+16 Bit je Kanal (PDF, TIFF); nicht jeder Druckertreiber nutzt sie	16 bits par canal (PDF, TIFF) ; tous les pilotes d'imprimante ne les utilisent pas
+Auf diesem System über die PDF-Datei drucken	Sur ce système, imprimez à partir du fichier PDF
+Drucker, Papier und Ausrichtung wählen (Seiteneinrichtung)	Choisir l'imprimante, le papier et l'orientation (mise en page)
+Seiten in voller Qualität in eine Datei schreiben	Écrire les pages en pleine qualité dans un fichier
+Seiten in voller Qualität rechnen und an den Druckdialog geben	Calculer les pages en pleine qualité et les transmettre à la boîte de dialogue d'impression
+Nächste Seite	Page suivante
+Vorige Seite	Page précédente
+Grau	Gris
+Eigener Text	Texte personnalisé
+Glanz	Brillant
+Matt	Mat
+Niedrig	Faible
+Drucker	Imprimante
+Drucken (Druckraum)	Imprimer (salle d'impression)
+1 Foto, A4, 10 mm Rand	1 photo, A4, marge de 10 mm
+1 Foto, A3+, 15 mm Rand	1 photo, A3+, marge de 15 mm
+1 Foto, A3, 15 mm Rand	1 photo, A3, marge de 15 mm
+Randlos 10 × 15	Sans marges 10 × 15
+13 × 18, 5 mm Rand	13 × 18, marge de 5 mm
+2 Fotos, A4	2 photos, A4
+4 Fotos, A4	4 photos, A4
+Kontaktabzug A4 5 × 6	Planche contact A4 5 × 6
+Kontaktabzug A3+ 6 × 8	Planche contact A3+ 6 × 8
+Filmstreifen A4 (Kontaktabzug)	Bandes de film A4 (planche contact)
+ · JPEG XL ohne HDR-Gain-Map	 · JPEG XL sans carte de gain HDR
+JPEG XL (.jxl): kleiner als JPEG bei gleicher Qualität, auch verlustfrei und mit 16 Bit	JPEG XL (.jxl) : plus petit que JPEG à qualité égale, aussi sans perte et en 16 bits
+8 Bit	8 bits
+Fertiges Bild ohne Verlust, kleiner als TIFF und PNG.	Image finie sans perte, plus petite que TIFF et PNG.
+Fertiges Bild, kleiner als JPEG bei gleicher Qualität.	Image finie, plus petite que JPEG à qualité égale.
+Im Browser: {name}	Dans le navigateur : {name}
+Browser-Zugriff: rechnet für ein Gerät	Accès navigateur : calcul pour un appareil
+Browser-Zugriff an	Accès navigateur activé
+in {n} h	dans {n} h
+vor {n} h	il y a {n} h
+in {n} Tagen	dans {n} jours
+Browser-Zugriff	Accès navigateur
+Konnte nicht starten: {e}	Démarrage impossible : {e}
+Geräte	Appareils
+Kopplungscode	Code d’appairage
+gültig noch {m}:{s}	encore valable {m}:{s}
+QR-Code mit der Kamera des Tablets scannen oder die Adresse öffnen und den Code eingeben. Der Code gilt einmal und fünf Minuten.	Scannez le code QR avec l’appareil photo de la tablette, ou ouvrez l’adresse et saisissez le code. Le code est valable une fois, pendant cinq minutes.
+Gerät koppeln …	Appairer un appareil…
+darf ändern	peut modifier
+nur ansehen	consultation seule
+gültig bis	valable jusqu’à
+Widerruf	révocation
+Sicherheit	Sécurité
+zuletzt	dernière fois
+Nie	Jamais
+1 Tag	1 jour
+7 Tage	7 jours
+30 Tage	30 jours
+90 Tage	90 jours
+1 h	1 h
+4 h	4 h
+12 h	12 h
+Zertifikat	Certificat
+Browser-Zugriff erlauben	Autoriser l’accès navigateur
+Diese Bibliothek im Browser eines Tablets oder anderen Rechners in deinem Heimnetz ansehen, bewerten und einfach entwickeln, solange graineo hier läuft. Zugreifen kann nur ein Gerät, das du hier mit einem Code koppelst; die Verbindung ist verschlüsselt (HTTPS). Nichts geht an fremde Server.	Consulter, noter et développer simplement cette photothèque dans le navigateur d’une tablette ou d’un autre ordinateur de votre réseau domestique, tant que graineo tourne ici. Seul un appareil que vous appairez ici avec un code peut y accéder ; la connexion est chiffrée (HTTPS). Rien ne part vers des serveurs tiers.
+Adresse im Browser	Adresse dans le navigateur
+Auf dem Tablet eine dieser Adressen öffnen (gleiches WLAN). Beim ersten Mal warnt der Browser vor dem Zertifikat: Fingerabdruck vergleichen oder das Zertifikat installieren (siehe unten).	Ouvrez l’une de ces adresses sur la tablette (même Wi-Fi). La première fois, le navigateur avertit au sujet du certificat : comparez l’empreinte ou installez le certificat (voir ci-dessous).
+Fingerabdruck des Zertifikats	Empreinte du certificat
+Neue Geräte dürfen ändern	Les nouveaux appareils peuvent modifier
+Bewerten und die einfachen Regler. Aus: nur ansehen.	Noter et les curseurs simples. Désactivé : consultation seule.
+Neues Gerät	Nouvel appareil
+Alle Geräte	Tous les appareils
+Gekoppelte Geräte gelten	Les appareils appairés restent valables
+Danach ist eine neue Kopplung nötig. Gilt für neu gekoppelte Geräte.	Ensuite, un nouvel appairage est nécessaire. S’applique aux appareils appairés désormais.
+Automatisch ausschalten	Désactiver automatiquement
+Der Browser-Zugriff schaltet sich nach dieser Zeit selbst ab.	L’accès navigateur se désactive de lui-même après ce délai.
+Auch von außerhalb des Heimnetzes	Aussi depuis l’extérieur du réseau domestique
+Nur nötig für ein VPN mit öffentlichen Adressen. Unterwegs immer über ein VPN ins Heimnetz (z. B. das VPN des Routers oder NAS), nie über eine Portfreigabe im Router.	Nécessaire uniquement pour un VPN à adresses publiques. En déplacement, passez toujours par un VPN vers le réseau domestique (par ex. le VPN du routeur ou du NAS), jamais par une redirection de port sur le routeur.
+Neu erzeugen, wenn du ihm nicht mehr traust. Geräte müssen danach dem neuen Zertifikat vertrauen.	Recréez-le si vous ne lui faites plus confiance. Les appareils devront ensuite faire confiance au nouveau certificat.
+Zugriffsprotokoll	Journal des accès
+Anmeldungen, Kopplungen, Änderungen und abgewiesene Anfragen mit Zeit, Adresse und Gerät, ohne Inhalte.	Connexions, appairages, modifications et requêtes refusées avec l’heure, l’adresse et l’appareil, sans contenu.
+Zertifikat auf dem iPad: die Adresse öffnen, …/ca.crt laden, unter Einstellungen → Allgemein → VPN und Geräteverwaltung das Profil installieren und unter Info → Zertifikatsvertrauenseinstellungen einschalten. Fingerabdruck dabei vergleichen.	Certificat sur l’iPad : ouvrez l’adresse, chargez …/ca.crt, installez le profil sous Réglages → Général → VPN et gestion de l’appareil, puis activez-le sous Informations → Réglages des certificats. Comparez l’empreinte au passage.
+Fotos auf dem NAS: Das NAS muss auf diesem Rechner eingehängt sein, damit Originale entwickelt werden können. Zum Ansehen genügen die Vorschauen und Offline-Kopien, die hier liegen.	Photos sur le NAS : le NAS doit être monté sur cet ordinateur pour développer les originaux. Pour la consultation, les aperçus et copies hors ligne stockés ici suffisent.
+Ruhezustand: Schläft der Rechner oder ist graineo beendet, ist der Browser-Zugriff nicht erreichbar.	Veille : si l’ordinateur est en veille ou graineo fermé, l’accès navigateur n’est pas joignable.
+Genau	Exact
+Sparsam	Économe
+Leistung	Performances
+Betriebsart	Mode de fonctionnement
+Rechnet jetzt	Calcule actuellement
+Neu messen	Mesurer à nouveau
+von Hand gewählt	choisi manuellement
+Startwert nach der Hardware (Rechenfaktor ≈ {f}); noch keine Messung	valeur de départ selon le matériel (facteur de calcul ≈ {f}) ; pas encore mesuré
+gemessen: Rechenfaktor {f} aus {n} Rechnungen	mesuré : facteur de calcul {f} sur {n} calculs
+vorübergehend: Akkubetrieb	temporairement : sur batterie
+vorübergehend: Stromsparmodus	temporairement : mode économie d’énergie
+vorübergehend: Rechner ist heiß	temporairement : l’ordinateur est chaud
+vorübergehend: Arbeitsspeicher knapp	temporairement : mémoire insuffisante
+Betriebsart jetzt {t} ({c}) · Einstellungen → Entwickeln → Leistung	Mode de fonctionnement : {t} ({c}) · Réglages → Développement → Performances
+{t}: genaue Ansicht in {n} s, beim Zoomen sofort ({c})	{t} : vue exacte dans {n} s, immédiate en zoomant ({c})
+Sparsam wartet auf einem Foto etwas länger, bevor die genaue Ansicht gerechnet wird, rechnet nichts im Voraus und hält weniger Fotos im Speicher. Das Ergebnis bleibt gleich: Zoom, Rauschregler und Export rechnen sofort genau. Automatisch wählt nach den gemessenen Rechenzeiten dieses Rechners und rechnet bei Akku, Stromsparmodus, Wärme oder knappem Speicher vorübergehend sparsam	Économe attend un peu plus longtemps sur une photo avant de calculer la vue exacte, ne calcule rien à l’avance et garde moins de photos en mémoire. Le résultat reste le même : le zoom, les curseurs de bruit et l’exportation calculent exactement tout de suite. Automatique choisit d’après les temps de calcul mesurés sur cet ordinateur et économise temporairement sur batterie, en mode économie d’énergie, quand il fait chaud ou quand la mémoire manque
+auf 0 Sterne (außer 4–5)	mettre à 0 étoile (sauf 4–5)
+{a} gibt es schon und bleibt unverändert	{a} existe déjà et reste inchangé
+Vorlage „{a}“ gibt es schon.	Le modèle « {a} » existe déjà.
+Ersetzen	Remplacer
+{n} mit 4–5 Sternen unverändert	{n} avec 4–5 étoiles inchangées
+interner Fehler	erreur interne
+Seite zu groß zum Drucken: {w} × {h} Pixel bei {ppi} ppi, höchstens {max} MP und {edge} Pixel je Seite. Bitte kleineres Papier oder weniger ppi wählen.	Page trop grande pour l'impression : {w} × {h} pixels à {ppi} ppi, au maximum {max} MP et {edge} pixels par page. Choisissez un papier plus petit ou moins de ppi.
+Suchindex wird aufgebaut …	L'index de recherche est en cours de création…
+Seite {a}	Page {a}
+Druckraum	Salle d'impression
+vorheriges Foto im Filmstreifen (die Vorschau zeigt seine Seite)	photo précédente dans la bande de film (l'aperçu montre sa page)
+nächstes Foto im Filmstreifen (die Vorschau zeigt seine Seite)	photo suivante dans la bande de film (l'aperçu montre sa page)
+Auswahl im Filmstreifen erweitern / verkleinern	étendre / réduire la sélection dans la bande de film
+vorige Seite	page précédente
+nächste Seite	page suivante
+Klick / ⇧-Klick / ⌘-Klick im Filmstreifen	Clic / ⇧-clic / ⌘-clic dans la bande de film
+Foto wählen / Bereich wählen / einzeln dazu oder weg	choisir une photo / choisir une plage / ajouter ou retirer des photos une à une
+Ermittle …	Détection…
+Bild wird entwickelt …	Développement de la photo…
+Modell wird geladen …	Chargement du modèle…
+Motiv wird gesucht …	Recherche du sujet…
+Personen werden gesucht …	Recherche des personnes…
+Bild wird analysiert …	Analyse de la photo…
+Auswahl wird berechnet …	Calcul de la sélection…
+Bereich wird gefüllt …	Remplissage de la zone…
+Wird abgebrochen (nach diesem Schritt) …	Annulation (après cette étape)…
+Berechnung abbrechen (ein laufender Rechenschritt endet noch)	Annuler le calcul (une étape en cours se termine encore)
+Auswahl berechnet · {t} s	Sélection calculée · {t} s
+Auswahl berechnet	Sélection calculée
+Stelle entfernt · {t} s	Zone supprimée · {t} s
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter	Détection en cours – progression et Annuler sur la ligne en dessous
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter; weitere Stellen erst danach	Calcul en cours – progression et Annuler sur la ligne en dessous ; d’autres zones ensuite
+Erst möglich, wenn die laufende Bildanalyse fertig ist	Possible une fois l’analyse d’image en cours terminée
+Erst möglich, wenn die laufende Berechnung fertig ist	Possible une fois le calcul en cours terminé
+Weiche Kante (%)	Contour progressif (%)
+Größe (%)	Taille (%)
+Histogramm oben festhalten	Épingler l’histogramme en haut
+Histogramm oben festhalten (Bearbeiten, Masken) ein/aus	Épingler l’histogramme en haut (Modifier, Masques) oui/non
+Füllung	Remplissage
+Gelesen wird nur der Dateikopf, mehrere Fotos gleichzeitig, je Kamera höchstens {n} über die Aufnahmetage verteilt; die Liste füllt sich Kamera für Kamera. Einmal gelesen, bleibt das Ergebnis gespeichert (neue Fotos werden im Leerlauf vorab gelesen).	Seul le début de chaque fichier est lu, plusieurs photos à la fois, au plus {n} par appareil réparties sur les jours de prise de vue ; la liste se remplit appareil par appareil. Une fois lu, le résultat est conservé (les nouvelles photos sont lues à l’avance pendant l’inactivité).
+Bildstile: {d} von {n} gelesen	Styles d’image : {d} sur {n} lus
+Die Zahlen dieser Kamera sind vorläufig, bis ihre Auswahl ganz gelesen ist; Lernen geht danach	Les chiffres de cet appareil sont provisoires jusqu’à ce que sa sélection soit entièrement lue ; l’apprentissage est possible ensuite
+Die Bildstile dieser Kamera werden noch gelesen ({d} von {n}); gelernt wird mit der ganzen Auswahl	Les styles d’image de cet appareil sont encore en cours de lecture ({d} sur {n}) ; l’apprentissage utilise toute la sélection
+Als Stapel bündeln	Regrouper en pile
+Serien werden gesucht … sie erscheinen links unter „Serien“	Recherche de séries … elles apparaissent à gauche sous « Séries »
+Noch keine Serien oder Stapel	Pas encore de séries ni de piles
+Erst ein Foto auswählen	Sélectionnez d’abord une photo
+Das Foto liegt in keiner Serie und keinem Stapel	La photo ne fait partie d’aucune série ni pile
+Serien: warten auf den Suchindex	Séries : attente de l’index de recherche
+Serien werden gesucht … {d} von {n} Tagen	Recherche de séries … {d} sur {n} jours
+gedrosselt: Stromsparmodus	ralenti : mode économie d’énergie
+Serien sind Fotos kurz nacheinander mit gleichem Motiv. Die Erkennung läuft leise im Hintergrund und nutzt nur die Vorschauen. Eigene Stapel: Fotos auswählen, Foto → Als Stapel bündeln ({g}); sichten: Foto → Serie sichten ({r}).	Les séries sont des photos prises peu après les autres avec le même sujet. La détection s’exécute discrètement en arrière-plan et n’utilise que les aperçus. Piles personnelles : sélectionnez des photos, Photo → Regrouper en pile ({g}) ; passer en revue : Photo → Passer en revue la série ({r}).
+Erkennung aus	Détection désactivée
+Serienerkennung ist aus	La détection des séries est désactivée
+Einstellungen → Bibliothek → Serien automatisch erkennen	Réglages → Bibliothèque → Détecter les séries automatiquement
+wartet auf den Suchindex	attente de l’index de recherche
+Serien: warten auf den Suchindex …	Séries : attente de l’index de recherche …
+Der Suchindex wird zuerst gebaut (höchstens 5 Minuten), danach beginnt die Suche nach Serien.	L’index de recherche est créé d’abord (5 minutes au plus) ; la recherche de séries commence ensuite.
+Suche … {d} von {n} Fotos{s}	Recherche … {d} sur {n} photos{s}
+Serien werden gesucht … {d} von {n} Fotos{s}	Recherche de séries … {d} sur {n} photos{s}
+Der Bildinhalt der Fotos wird aus den Vorschauen verglichen.	Le contenu des photos est comparé à partir des aperçus.
+Suche … {d} von {n} Tagen{s}	Recherche … {d} sur {n} jours{s}
+Serien werden gesucht … {d} von {n} Tagen{s}	Recherche de séries … {d} sur {n} jours{s}
+Die Fotos jedes Aufnahmetags werden zu Serien gruppiert.	Les photos de chaque jour de prise de vue sont regroupées en séries.
+Suche …{s}	Recherche …{s}
+Serien werden gesucht …{s}	Recherche de séries …{s}
+noch keine gefunden	aucune trouvée pour l’instant
+Noch keine Serien gefunden	Aucune série trouvée pour l’instant
+Keine Fotos kurz nacheinander mit gleichem Motiv gefunden; Fotos ohne Vorschau kommen später dran.	Aucune photo prise peu après une autre avec le même sujet ; les photos sans aperçu suivront plus tard.
+Suche beginnt …	La recherche commence …
+Serien werden gesucht …	Recherche de séries …
+Die Suche beginnt kurz nachdem die Bibliothek geladen ist.	La recherche commence peu après le chargement de la bibliothèque.
+noch etwa {n} s	encore environ {n} s
+noch etwa {n} min	encore environ {n} min
+gedrosselt	ralenti
+Korrekturen	Corrections
+Licht	Lumière
+Flecken & rote Augen	Taches et yeux rouges
+Punkte sichtbar	Points visibles
+Punkte verborgen	Points masqués
+Retusche-Punkte im Bild zeigen oder verbergen	Afficher ou masquer les points de retouche sur la photo
+Gewählten löschen	Supprimer la sélection
+Gewählten Punkt löschen	Supprimer le point sélectionné
+Fleck anklicken: Struktur von einer Quelle daneben, an die Umgebung angepasst	Cliquez sur une tache : texture d'une source voisine, adaptée à l'entourage
+Fleck anklicken: kopiert die Quelle genau	Cliquez sur une tache : copie exactement la source
+Auf die Pupille klicken	Cliquez sur la pupille
+Stelle entfernen	Supprimer une zone
+Alle wiederherstellen	Tout restaurer
+Retusche: Heilen, Klonen, rote Augen, Objekte entfernen	Retouche : corriger, cloner, yeux rouges, supprimer des objets
+rechte Leiste: Werkzeug „Retusche“	panneau droit : outil « Retouche »
+Retusche-Punkte und Maskenkonturen ein/aus (in den Werkzeugen „Masken“ und „Retusche“ sichtbar)	afficher/masquer les points de retouche et les contours de masque (visibles dans les outils Masques et Retouche)
+Maske umbenannt	Masque renommé
+Maske ein/aus	Masque activé/désactivé
+Stärke der Maske	Intensité du masque
+Reihenfolge der Masken	Ordre des masques
+Radial	Radial
+Im Bild malen	Peindre sur la photo
+Linearer Verlauf: im Bild ziehen	Dégradé linéaire : faites glisser sur la photo
+Radialer Verlauf (Ellipse): im Bild ziehen	Dégradé radial (ellipse) : faites glisser sur la photo
+Bereich nach Helligkeit	Plage selon la luminosité
+Bereich nach Farbe	Plage selon la couleur
+Formen	Formes
+Bereiche	Plages
+Zusammengesetzt	Composée
+{n} Teile	{n} parties
+{n} Striche	{n} traits
+Erst „Filter auf Version 2 umstellen“	D'abord « Passer les filtres en version 2 »
+Erst „Filter auf Version 2 umstellen“ (⋯)	D'abord « Passer les filtres en version 2 » (⋯)
+Maske invertieren	Inverser le masque
+Regler zurücksetzen	Réinitialiser les curseurs
+Maske löschen	Supprimer le masque
+Maske ausschalten (bleibt erhalten)	Désactiver le masque (il est conservé)
+Maske einschalten	Activer le masque
+Wirkung	Effet
+Klick-Auswahl: Objekt im Bild anklicken – legt eine neue Maske an · Esc beendet	Sélection par clic : cliquez sur un objet de la photo – crée un nouveau masque · Échap termine
+Klick-Auswahl: Klick ergänzt diese Maske, ⌥-Klick nimmt heraus · Esc beendet	Sélection par clic : un clic complète ce masque, ⌥-clic retire · Échap termine
+Masken	Masques
+Maske: umbenennen, duplizieren, invertieren, verschieben, löschen	Masque : renommer, dupliquer, inverser, déplacer, supprimer
+Im Bild zeichnen: Pinsel malt, Verlauf und Ellipse ziehen · Esc beendet	Dessiner sur la photo : le pinceau peint, dégradé et ellipse se tracent · Échap termine
+Pinsel malen, Verlauf und Ellipse im Bild ziehen (Esc beendet)	Peindre au pinceau, tracer dégradé et ellipse sur la photo (Échap termine)
+Himmel	Ciel
+Härte (%)	Dureté (%)
+Fluss (%)	Flux (%)
+Stärke (%)	Intensité (%)
+Gilt für die nächsten Striche · ⌘Z nimmt einen Strich zurück	S'applique aux traits suivants · ⌘Z annule un trait
+Aus mehreren Formen zusammengesetzt; einzelne Formen lassen sich hier nicht ändern	Composée de plusieurs formes ; les formes ne peuvent pas être modifiées ici une à une
+Anfang und Ende im Bild ziehen	Faites glisser le début et la fin sur la photo
+Teile · {name} · invertiert	Parties · {name} · inversé
+Teile · {name}	Parties · {name}
+Teil: invertieren, Verknüpfung ändern, löschen	Partie : inverser, changer la combinaison, supprimer
+Teil invertieren	Inverser la partie
+Als „Hinzufügen“	En « Ajouter »
+Als „Abziehen“	En « Soustraire »
+Als „Schneiden“	En « Intersection »
+Der erste Teil ist die Grundlage	La première partie est la base
+Einziger Teil: „Maske löschen“ (⋯ der Maske)	Seule partie : « Supprimer le masque » (⋯ du masque)
+Ohne die Grundlage wirkte der nächste Teil auf das ganze Foto	Sans la base, la partie suivante agirait sur toute la photo
+Teil löschen	Supprimer la partie
++ Hinzufügen ▾	+ Ajouter ▾
+− Abziehen ▾	− Soustraire ▾
+Teil hinzufügen: vergrößert die Maske	Ajouter une partie : agrandit le masque
+Teil abziehen: nimmt aus der Maske heraus	Soustraire une partie : la retire du masque
+Mit einem Teil schneiden: wirkt nur, wo beide wirken	Intersection avec une partie : agit seulement là où les deux agissent
+Klick-Auswahl: Objekt im Bild anklicken – wird ein neuer Teil dieser Maske · Esc beendet	Sélection par clic : cliquez sur un objet de la photo – devient une nouvelle partie de ce masque · Échap termine
+Klick-Auswahl: Klick ergänzt diesen Teil, ⌥-Klick nimmt heraus · Esc beendet	Sélection par clic : un clic complète cette partie, ⌥-clic retire · Échap termine
+Pinsel: im Bild malen · Esc beendet	Pinceau : peignez sur la photo · Échap termine
+Im Bild ziehen, um die Form zu setzen · Esc beendet	Faites glisser sur la photo pour placer la forme · Échap termine
+Griffe im Bild ziehen · Esc beendet	Faites glisser les poignées sur la photo · Échap termine
+Teil anklicken, um im Bild zu zeichnen	Cliquez sur une partie pour dessiner sur la photo
+gewählte Maske löschen (im Werkzeug „Masken“, statt des Fotos)	supprimer le masque sélectionné (dans l'outil Masques, au lieu de la photo)
+Werkzeug der Maske beenden (Pinsel, Griffe, Klick-Auswahl)	terminer l'outil du masque (pinceau, poignées, sélection par clic)
+Wähle Fotos im Filmstreifen	Choisissez des photos dans le film fixe
+Keine Fotos in der Ansicht	Aucune photo dans la vue
+Keine Fotos ausgewählt: „Alle“ zeigt alle Fotos der Ansicht	Aucune photo sélectionnée : « Toutes » affiche toutes les photos de la vue
+{a} (lässt sich nicht drucken)	{a} (impossible à imprimer)
+alle Fotos der Ansicht auswählen	sélectionner toutes les photos de la vue
+Haupt-Foto aus der Auswahl nehmen (nichts wird gelöscht)	retirer la photo principale de la sélection (rien n’est supprimé)
+Nur die ausgewählten Fotos zeigen	Afficher uniquement les photos sélectionnées
+Alle Fotos der Ansicht zeigen	Afficher toutes les photos de la vue
+Für den Druck um 90° gedreht („Drehen und einpassen“)	Pivotée de 90° pour l’impression (« Faire pivoter pour ajuster »)
+Kante (%)	Bord (%)
+Noch keine Probe: Farbe im Bild anklicken	Pas encore d’échantillon : cliquez sur une couleur de la photo
+Probe entfernen	Retirer l’échantillon
+Toleranz	Tolérance
+Weichheit	Douceur
+Pipette: Bild wird für die Probe entwickelt …	Pipette : développement de la photo pour l’échantillon…
+Pipette: Farbe anklicken · ⇧ dazu · ⌥ weg	Pipette : cliquez une couleur · ⇧ ajouter · ⌥ retirer
+Farbprobe	Échantillon de couleur
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neue Maske · Esc beendet	Sélection par clic : cliquez l’objet ou tracez un cadre – nouveau masque · Échap termine
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neuer Teil · Esc beendet	Sélection par clic : cliquez l’objet ou tracez un cadre – nouvelle partie · Échap termine
+Klick-Auswahl: Klick ergänzt, ⌥-Klick nimmt heraus, Ziehen setzt den Rahmen	Sélection par clic : clic ajoute, ⌥-clic retire, glisser fixe le cadre
+Objekt im Bild anklicken oder einen Rahmen darum ziehen; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	Cliquez un objet dans la photo ou tracez un cadre autour ; ⌥-clic retire des zones (calculé sur cet ordinateur)
+Maske Schwarz-Weiß	Masque noir et blanc
+Bild auf Grau	Image sur gris
+Abdeckfolie (Rest rot)	Film de masquage (reste en rouge)
+Darstellung der Überlagerung wählen	Choisir l’affichage de la superposition
+Wirkung der gewählten Maske im Bild zeigen: {kind}	Montrer l’effet du masque choisi sur la photo : {kind}
+Überlagerung der Maske: an, Darstellung wechseln, aus (im Werkzeug „Masken“)	Superposition du masque : activer, changer d’affichage, désactiver (dans l’outil « Masques »)
+Alles außer dem Hauptmotiv (Motiv, invertiert)	Tout sauf le sujet principal (sujet, inversé)
+Bereich nach Farbe (Pipette)	Plage par couleur (pipette)
+Personen-Teile	Parties des personnes
+Gesicht	Visage
+Gesichtshaut	Peau du visage
+Augen	Yeux
+Augenbrauen	Sourcils
+Lippen	Lèvres
+Zähne	Dents
+Gesichter vom Kinn bis zur Stirn (Gesichtslandmarken der Bildanalyse des Systems)	Visages du menton au front (repères faciaux de l’analyse d’image du système)
+Haut der Gesichter: ohne Augen, Brauen und Mund, nach der Farbe des Gesichts	Peau des visages : sans yeux, sourcils ni bouche, selon la couleur du visage
+Augen (Kontur aus den Gesichtslandmarken)	Yeux (contour d’après les repères faciaux)
+Augenbrauen (aus den Gesichtslandmarken)	Sourcils (d’après les repères faciaux)
+Lippen ohne die Mundöffnung	Lèvres sans l’ouverture de la bouche
+Mundöffnung (Zähne), innere Lippenkontur	Ouverture de la bouche (dents), contour intérieur des lèvres
+Nur auf dem Mac (Gesichtslandmarken der Bildanalyse des Systems)	Uniquement sur Mac (repères faciaux de l’analyse d’image du système)
+Kein Gesicht erkannt	Aucun visage trouvé
+{n} Gesichter gefunden	{n} visages trouvés
+Nicht gefunden	Introuvable
+Auswahl fehlt – nur auf dem Mac berechenbar	Sélection manquante – calculable uniquement sur Mac
+Zeigt, welche Farben im Bild stecken: Winkel = Farbton, Abstand von der Mitte = Sättigung.	Montre les couleurs présentes dans l’image : angle = teinte, distance au centre = saturation.
+Jeder Bildpunkt landet an einer Stelle im Kreis. Die Richtung sagt, welche Farbe er hat (oben Rot, rechts Blau, unten Cyan, links Gelb), der Abstand von der Mitte, wie kräftig sie ist. Je heller ein Fleck, desto mehr Pixel haben diese Farbe.\n• **Mitte** – neutrales Grau, Weiß und Schwarz; ein Farbstich schiebt die ganze Wolke zur Seite\n• **Ringe** – Sättigung in Prozent (die Zahlen unten links)\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Haut** – die Hauttonlinie: Haut aller Menschen liegt nahe daran; weicht sie ab, hat die Haut einen Stich\n• **×1 · ×2 · ×4** – vergrößert die Mitte, denn die meisten Fotos sind nur wenig gesättigt\n• **S · M · L** – Größe der Anzeige im Kopf; ein Doppelklick auf die Anzeige wählt die nächste\n\nÜber der Anzeige steht oben links Farbton und Sättigung an der Zeigerposition.	Chaque pixel se place quelque part dans le cercle. La direction indique sa couleur (rouge en haut, bleu à droite, cyan en bas, jaune à gauche), la distance au centre son intensité. Plus une tache est claire, plus il y a de pixels de cette couleur.\n• **Centre** – gris neutre, blanc et noir ; une dominante pousse tout le nuage sur le côté\n• **Anneaux** – saturation en pourcentage (les chiffres en bas à gauche)\n• **Cases** – rouge, magenta, bleu, cyan, vert et jaune à 75 % de saturation\n• **Peau** – la ligne des tons chair : la peau de tout le monde s’en approche ; si elle s’en écarte, la peau a une dominante\n• **×1 · ×2 · ×4** – agrandit le centre, car la plupart des photos sont peu saturées\n• **S · M · L** – taille de l’affichage dans l’en-tête ; un double-clic sur l’affichage passe à la suivante\n\nEn haut à gauche de l’affichage figurent la teinte et la saturation sous le pointeur.
+Winkel = Farbton	Angle = teinte
+Abstand = Sättigung	Distance = saturation
+Mitte = neutral	Centre = neutre
+Helligkeit = Anzahl Pixel	Luminosité = nombre de pixels
+Größe der Anzeige: {s} (Doppelklick auf die Anzeige: nächste Größe)	Taille de l’affichage : {s} (double-clic sur l’affichage : taille suivante)
+Gelbgrün	Vert-jaune
+Türkisgrün	Vert printemps
+Cyan	Cyan
+Azurblau	Azur
+Violett	Violet
+Rosa	Rose
+Mg	Mg
+Cy	Cy
+Gb	J
+Haut	Peau
+Zoom auf die Sättigung (×1, ×2, ×4): Fotos liegen meist nahe der Mitte	Zoom sur la saturation (×1, ×2, ×4) : les photos restent souvent près du centre
+Hauttonlinie zeigen: Hauttöne aller Menschen liegen nahe daran	Afficher la ligne des tons chair : la peau de tout le monde s’en approche
+Neutral (Grau)	Neutre (gris)
+Sättigung {s} %	Saturation {s} %
+Vektorskop: Farbton = Winkel, Sättigung = Abstand von der Mitte (Doppelklick: Größe)	Vectorscope : teinte = angle, saturation = distance au centre (double-clic : taille)
+Tiefe	Profondeur
+Genauer	Plus précis
+Tiefe wird geschätzt …	Estimation de la profondeur …
+Himmel wird gesucht …	Recherche du ciel …
+Braucht das Modul „Tiefe“ (Einstellungen → Module)	Nécessite le module « Profondeur » (Réglages → Modules)
+Braucht die Module „Klick-Auswahl“ und „Tiefe“ (Einstellungen → Module)	Nécessite les modules « Sélection par clic » et « Profondeur » (Réglages → Modules)
+Himmel automatisch auswählen (Tiefe und Klick-Auswahl, ändert keine Pixel)	Sélectionner le ciel automatiquement (profondeur et sélection par clic, ne modifie aucun pixel)
+Tiefe (Modul): Depth Anything V2 Small, L. Yang et al. (Apache-2.0)	Profondeur (module) : Depth Anything V2 Small, L. Yang et al. (Apache-2.0)
+Optional, nicht mitgeliefert, nur nicht-kommerziell: {a}	Facultatif, non fourni, usage non commercial uniquement : {a}
+Kein Tiefenbild im Foto – Modul „Tiefe“ laden (Einstellungen → Module)	Pas de carte de profondeur dans la photo – charger le module « Profondeur » (Réglages → Modules)
+Himmel gefunden	Ciel trouvé
+Kein Himmel erkannt	Aucun ciel détecté
+Tiefe aus dem Foto gelesen	Profondeur lue dans la photo
+Tiefe geschätzt	Profondeur estimée
+Auswahl fehlt – {why}	Sélection manquante – {why}
+Tiefe aus dem Foto (gemessen)	Profondeur de la photo (mesurée)
+Tiefe berechnet	Profondeur calculée
+Himmel berechnet	Ciel calculé
+Tiefenbild aus dem Foto, sonst geschätzt mit Depth Anything V2 Small (Apache-2.0)	Carte de profondeur de la photo, sinon estimée avec Depth Anything V2 Small (Apache-2.0)
+Geschätzt mit Depth Anything V2 Base: feinere Kanten, etwa viermal langsamer; nur für nicht-kommerzielle Nutzung	Estimée avec Depth Anything V2 Base : bords plus fins, environ quatre fois plus lent ; usage non commercial uniquement
+Braucht das Modul „Tiefe genauer“ (Einstellungen → Module; nur nicht-kommerziell)	Nécessite le module « Profondeur plus précise » (Réglages → Modules ; non commercial uniquement)
+Auswahl neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	Recalculer la sélection (p. ex. après une correction d’objectif modifiée)
+„{name}“ laden?	Charger « {name} » ?
+Nur für nicht-kommerzielle Nutzung	Usage non commercial uniquement
+Lizenz: {l}. {s}	Licence : {l}. {s}
+Lizenztext lesen	Lire le texte de la licence
+Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	Le modèle n’est pas fourni par graineo mais chargé à ta demande depuis sa source d’origine ({s}). Toutes les fonctions marchent aussi avec le modèle libre.
+Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	J’utilise graineo avec ce modèle uniquement à des fins non commerciales
+Nur für nicht-kommerzielle Nutzung · {l}	Usage non commercial uniquement · {l}
+{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}. Licence : {l} · Source : huggingface.co/{r} · non fourni par graineo{c}
+ · nicht-kommerzielle Nutzung bestätigt	 · usage non commercial confirmé
+Tiefe (Depth Anything V2 Small)	Profondeur (Depth Anything V2 Small)
+Tiefe genauer (Depth Anything V2 Base)	Profondeur plus précise (Depth Anything V2 Base)
+Masken: Entfernung vom Objektiv schätzen (nah ↔ fern)	Masques : estimer la distance à l’objectif (proche ↔ lointain)
+Masken: Entfernung genauer schätzen (nur nicht-kommerziell)	Masques : estimer la distance plus précisément (non commercial uniquement)
+Das Modell darf mit Namensnennung genutzt und weitergegeben werden, aber nicht für kommerzielle Zwecke.	Le modèle peut être utilisé et partagé avec attribution, mais pas à des fins commerciales.
+Apple-RAW ist auf diesem System nicht verfügbar	Apple RAW n'est pas disponible sur ce système
+Datei nicht gefunden	Fichier introuvable
+Nicht unterstützt: Kamera {a} (macOS kennt das Modell nicht)	Non pris en charge : appareil {a} (inconnu de macOS)
+Nicht unterstützt: {a}	Non pris en charge : {a}
+Fehler: {a}	Erreur : {a}
+Apple RAW {a} · {b}	Apple RAW {a} · {b}
+Apple RAW	Apple RAW
+graineo · {a}	graineo · {a}
+wird geprüft …	vérification…
+wird entwickelt …	développement…
+fertig	terminé
+Neueste ({a})	La plus récente ({a})
+Neueste	La plus récente
+Apple RAW {a}	Apple RAW {a}
+Decoder-Version von Apple festhalten (nur für diese Ansicht); „Neueste“ folgt macOS-Updates	Figer la version du décodeur d'Apple (cette vue uniquement) ; « La plus récente » suit les mises à jour de macOS
+Apple RAW {a} nicht verfügbar	Apple RAW {a} non disponible
+Für dieses Foto bietet macOS die gepinnte Version nicht an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen.	macOS ne propose pas la version figée pour cette photo ; calcul avec Apple RAW {a}. L'image peut différer.
+Apple-Version	Version Apple
+erster Lauf {a} (Shader)	première exécution {a} (shaders)
+Decoder	Décodeur
+Zeit graineo	Temps graineo
+Zeit Apple	Temps Apple
+Status	État
+Nur zum Vergleichen – ändert die Entwicklung nicht	Pour comparer uniquement – ne modifie pas le développement
+Pipeline	Pipeline
+Apple	Apple
+Schritte	Étapes
+neutral	neutre
+Sensoransicht mit graineos Entwicklung	Vue capteur avec le développement de graineo
+Das Foto mit der RAW-Engine von macOS (Core Image) entwickelt – nur zum Ansehen	La photo développée par le moteur RAW de macOS (Core Image) – pour l'affichage uniquement
+Links graineo, rechts Apple; Zoomen und Verschieben wirken auf beide	graineo à gauche, Apple à droite ; le zoom et le déplacement agissent sur les deux
+Rauschminderung, Schärfen und Objektivkorrektur auf beiden Seiten aus; Weißabgleich und Belichtung aus dem Foto	Réduction du bruit, accentuation et correction d'objectif désactivées des deux côtés ; balance des blancs et exposition de la photo
+Jede Pipeline mit ihren eigenen Vorgaben – Apple und graineo machen dann nicht dieselben Schritte	Chaque pipeline avec ses propres réglages par défaut – Apple et graineo n'effectuent alors pas les mêmes étapes
+Segmente werden gebildet …	Formation des segments …
+Vorne	Avant
+Hinten	Arrière
+Ganze Segmente, deren mittlere Tiefe im nächsten Drittel des Fotos liegt	Segments entiers dont la profondeur médiane se situe dans le tiers le plus proche de la photo
+Ganze Segmente, deren mittlere Tiefe im mittleren Drittel des Fotos liegt	Segments entiers dont la profondeur médiane se situe dans le tiers central de la photo
+Ganze Segmente, deren mittlere Tiefe im fernsten Drittel des Fotos liegt	Segments entiers dont la profondeur médiane se situe dans le tiers le plus lointain de la photo
+Segmente zeigen	Afficher les segments
+Grenzen der Segmente im Bild zeigen; ein Klick ins Bild nimmt ein Segment dazu oder heraus	Afficher les limites des segments dans l'image ; un clic dans l'image ajoute ou retire un segment
+Klicks zurücksetzen ({n})	Réinitialiser les clics ({n})
+Angeklickte Segmente vergessen: nur die gewählten Bereiche zählen	Oublier les segments cliqués : seules les plages choisies comptent
+Tiefe: Klick nimmt ein Segment dazu oder weg · Esc beendet	Profondeur : un clic ajoute ou retire un segment · Échap pour quitter
+Ganze Segmente nach ihrer Entfernung vom Objektiv (vorne, Mitte, hinten; Tiefenbild aus dem Foto oder geschätzt, ändert keine Pixel)	Segments entiers selon leur distance à l’objectif (avant, milieu, arrière ; carte de profondeur de la photo ou estimée, ne modifie aucun pixel)
+Kante verfeinern (%)	Affiner le bord (%)
+Kante verfeinern	Affiner le bord
+Nur für gezeichnete Masken und Bereiche; Masken aus der Bildanalyse (Motiv, Personen, Klick-Auswahl, Tiefe, Himmel) behalten ihre Kante	Uniquement pour les masques dessinés et les plages ; les masques issus de l’analyse d’image (sujet, personnes, sélection par clic, profondeur, ciel) gardent leur bord
+Die Maskenkante folgt in einem schmalen Band den Kanten im Bild (geführter Filter); mehr = breiteres Band	Le bord du masque suit les contours de l’image dans une bande étroite (filtre guidé) ; plus = bande plus large
+Apple RAW gibt es nur unter macOS – hier entwickelt graineo	Apple RAW n'existe que sous macOS – ici, graineo développe
+Für Sigma/Foveon nur graineo – Apple kennt das Format nicht	Sigma/Foveon : graineo uniquement – Apple ne connaît pas le format
+Nur für RAW-Dateien	Fichiers RAW uniquement
+Für diese Kamera nur graineo – Apple kennt das Modell nicht	Pour cet appareil, graineo uniquement – Apple ne connaît pas le modèle
+nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren	impossible (HE) : graineo ne sait pas encore décoder Nikon « Haute efficacité »
+Dieses Foto mit graineos eigener Pipeline entwickeln	Développer cette photo avec le pipeline propre à graineo
+Dieses Foto mit der RAW-Engine von macOS dekodieren; Farbe, Ton, Looks, Film und Masken rechnet graineo	Décoder cette photo avec le moteur RAW de macOS ; graineo calcule couleur, tons, looks, film et masques
+Automatik	Automatique
+Zurück auf Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Retour en automatique : graineo, Apple seulement pour les fichiers que graineo ne sait pas décoder
+Entwickelt mit	Développé avec
+Apple RAW {a} fehlt – mit {b} gerechnet	Apple RAW {a} absent – calculé avec {b}
+Automatik · HE-Rückfall	Automatique · repli HE
+festgehalten · HE	épinglé · HE
+Apple RAW {a} nicht verfügbar – graineo	Apple RAW {a} indisponible – graineo
+Automatik · nur graineo	Automatique · graineo uniquement
+unbekannte Pipeline „{a}“ – graineo	pipeline inconnu « {a} » – graineo
+Für dieses Foto bietet macOS die festgehaltene Version nicht mehr an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen. Der Eintrag bleibt, bis du eine Version wählst.	macOS ne propose plus la version épinglée pour cette photo ; calculé avec Apple RAW {a}. L'image peut différer. L'entrée reste jusqu'à ce que vous choisissiez une version.
+Dieses Foto ist für Apple RAW {a} eingestellt. {b}. Entwickelt mit graineo – das Bild kann abweichen. Der Eintrag bleibt erhalten.	Cette photo est réglée sur Apple RAW {a}. {b}. Développée avec graineo – l'image peut différer. L'entrée est conservée.
+macOS hat die Datei nicht entwickelt	macOS n'a pas développé le fichier
+Apple RAW {a} · HE	Apple RAW {a} · HE
+entwickelt mit Apple RAW {a} (graineo kann HE noch nicht)	développé avec Apple RAW {a} (graineo ne sait pas encore lire le HE)
+Entwickelt mit Apple RAW {a}	Développé avec Apple RAW {a}
+graineo kann Nikon „Hohe Effizienz“ (HE und HE★) noch nicht dekodieren. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	graineo ne sait pas encore décoder Nikon « Haute efficacité » (HE et HE★). macOS décode cette photo (Apple RAW {a}) ; graineo calcule couleur, tons, looks, film et masques. Couleur et netteté peuvent différer du développement propre à graineo. La version est épinglée pour cette photo ; la changer dans le panneau Capteur, sous « Pipeline ».
+andere Pipeline als festgehalten	pipeline différent de celui épinglé
+festgehalten	épinglé
+voll	complet
+Die Entwicklung dieses Fotos	Le développement de cette photo
+Decoder-Version für dieses Foto festhalten (ändert die Entwicklung)	Épingler la version du décodeur pour cette photo (modifie le développement)
+Decoder-Version für den Vergleich; „Neueste“ folgt macOS-Updates	Version du décodeur pour la comparaison ; « La plus récente » suit les mises à jour de macOS
+linear	linéaire
+Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Automatique : graineo, Apple seulement pour les fichiers que graineo ne sait pas décoder
+Apple-Version für Nikon HE	Version Apple pour Nikon HE
+Nikon „Hohe Effizienz“ kann graineo noch nicht dekodieren; dann dekodiert macOS. „Bis RAW 8“ ist schneller und entrauscht nicht zusätzlich, „Neueste“ nimmt RAW 9, wo macOS es anbietet (3- bis 7-mal langsamer). Gilt für Fotos ohne festgehaltene Version	graineo ne sait pas encore décoder Nikon « Haute efficacité » ; macOS décode alors. « Jusqu'à RAW 8 » est plus rapide et ne débruite pas de lui-même, « La plus récente » prend RAW 9 là où macOS le propose (3 à 7 fois plus lent). S'applique aux photos sans version épinglée
+Bis RAW 8	Jusqu'à RAW 8
+Diese Bearbeitung stammt aus einer neueren Version und wird nicht überschrieben	Cette retouche provient d'une version plus récente et ne sera pas écrasée
+Bearbeitung aus neuerer Version	Retouche d'une version plus récente
+Bearbeitung aus neuerer Version – geschützt	retouche d'une version plus récente – protégée
+Bearbeitung aus einer neueren Version	Retouche d'une version plus récente
+Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	Cette retouche provient d'une version plus récente de graineo et ne sera pas écrasée. Cette version ne peut pas la lire et affiche les valeurs initiales ; les modifications de cette photo ne sont pas enregistrées, les étoiles et marques le sont. La version plus récente rouvre la retouche.
+Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	Ce dossier est seulement ouvert, il n’est pas dans la bibliothèque. graineo ne modifie jamais les photos elles-mêmes.
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### Ce qui est enregistré\n• **Développer** – chaque modification des curseurs (copies virtuelles comprises) est enregistrée dans un fichier annexe NOM.xmp à côté de la photo\n• **Noter** (étoiles, marquage, étiquette) – verrouillé tant que « Notes en XMP » est désactivé ; activé, les notes sont aussi écrites en XMP à côté des photos\n\n### Ce qui fonctionne ici\n• Afficher, développer, exporter\n• Filtrer par étoiles, marquage et étiquette (valeurs des XMP existants)\n• Rechercher par nom de fichier\n\n### Seulement après l’ajout\nFiltres par colonne (appareil, objectif, date …), recherche par contenu, mots-clés et lieux, collections, personnes, doublons et séries. À l’ajout, la bibliothèque reprend les notes et les développements des XMP.\n\n### Quitter\n**Fermer** dans le bandeau, ou choisir une source à gauche, par ex. « Toutes les photos ». **Ajouter à la bibliothèque…** ouvre l’importation avec ce dossier.
+Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	Vous consultez le dossier « {a} » – il n’est pas dans la bibliothèque
+Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	Ne plus consulter le dossier – retour à « Toutes les photos »
+Öffnet den Import mit diesem Ordner	Ouvre l’importation avec ce dossier
+Bewertungen als XMP	Notes en XMP
+Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	Écrire étoiles, marquages et étiquettes en fichiers annexes (XMP) à côté des photos. Désactivé : la notation est verrouillée ici.
+Deine Bibliothek – der angesehene Ordner gehört nicht dazu	Votre bibliothèque – le dossier consulté n’en fait pas partie
+Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	Pour noter, ajoutez à la bibliothèque ou activez « Notes en XMP » dans le bandeau en haut

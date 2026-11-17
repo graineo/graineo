@@ -26,6 +26,12 @@ pub enum Kind {
     Look,
     /// face detection failed
     Faces,
+    /// developed by the system RAW engine (graineo cannot decode the file)
+    Engine,
+    /// the engine chosen for the photo is not available (pinned Apple version missing, other system)
+    EngineMissing,
+    /// the stored development comes from a newer version and is not overwritten (`develop_guard.rs`)
+    NewerDevelop,
 }
 
 /// What a stored condition was made from. The texts are created anew from it whenever it is read (`get`), so that a
@@ -38,6 +44,7 @@ enum Spec {
     OpenFailed(String),
     SigmaExact(String),
     Faces(String),
+    NewerDevelop,
 }
 
 impl Spec {
@@ -49,6 +56,7 @@ impl Spec {
             Spec::OpenFailed(t) => open_failed(t),
             Spec::SigmaExact(t) => sigma_exact(t),
             Spec::Faces(t) => faces(t),
+            Spec::NewerDevelop => newer_develop(),
         })
     }
 }
@@ -135,7 +143,59 @@ pub fn unreadable(detail: &str) -> Notice {
 }
 
 pub fn open_failed(error: &str) -> Notice {
+    if error.contains(raw::NIKON_HE) {
+        // a known gap of the decoder, not a broken file: say what it is and what still works
+        return Notice {
+            spec: Spec::OpenFailed(error.to_string()),
+            ..Notice::new(
+                Kind::OpenFailed,
+                crate::tr("NEF-Kompression nicht unterstützt"),
+                crate::tr("NEF-Kompression nicht unterstützt"),
+                crate::tr("NEF-Kompression nicht unterstützt"),
+                crate::tr("Nikon „Hohe Effizienz“ (HE und HE★) kann graineo noch nicht entwickeln. Die Vorschau aus der Kamera bleibt sichtbar. Fotos mit „Verlustfrei komprimiert“, „Komprimiert“ oder „Unkomprimiert“ lassen sich entwickeln."),
+            )
+        };
+    }
     Notice { spec: Spec::OpenFailed(error.to_string()), ..Notice::new(Kind::OpenFailed, crate::tr("Lässt sich nicht öffnen"), crate::tr("lässt sich nicht öffnen"), crate::tr("Foto lässt sich nicht öffnen"), crate::menu::i18n::tr_msg(error)) }
+}
+
+/// Short reason instead of "<format> – lässt sich hier nicht entwickeln" when the photo uses a known unsupported
+/// variant of its format (Nikon High Efficiency NEF); `None` otherwise.
+pub fn unsupported_text(path: &Path) -> Option<String> {
+    let g = STORE.lock().unwrap();
+    let v = g.as_ref()?.get(path)?;
+    v.iter().any(|n| matches!(&n.spec, Spec::OpenFailed(t) if t.contains(raw::NIKON_HE))).then(|| crate::tr("NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt").to_string())
+}
+
+/// The stored development comes from a newer version of graineo: this version cannot read it, shows the initial values
+/// and never overwrites it (`develop_guard.rs`).
+pub fn newer_develop() -> Notice {
+    Notice {
+        spec: Spec::NewerDevelop,
+        ..Notice::new(
+            Kind::NewerDevelop,
+            crate::tr("Bearbeitung aus neuerer Version"),
+            crate::tr("Bearbeitung aus neuerer Version – geschützt"),
+            crate::tr("Bearbeitung aus einer neueren Version"),
+            crate::tr("Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen."),
+        )
+    }
+}
+
+/// Developed by the system RAW engine of macOS because graineo cannot decode the file (Nikon High Efficiency).
+pub fn engine_fallback(version: &str) -> Notice {
+    Notice::new(
+        Kind::Engine,
+        crate::trf!("Apple RAW {a} · HE", a = version),
+        crate::trf!("entwickelt mit Apple RAW {a} (graineo kann HE noch nicht)", a = version),
+        crate::trf!("Entwickelt mit Apple RAW {a}", a = version),
+        crate::trf!("graineo kann Nikon „Hohe Effizienz“ (HE und HE★) noch nicht dekodieren. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.", a = version),
+    )
+}
+
+/// The engine chosen for the photo is not available (title and explanation from the section "Pipeline").
+pub fn engine_missing(title: &str, text: &str) -> Notice {
+    Notice::new(Kind::EngineMissing, title.to_string(), crate::tr("andere Pipeline als festgehalten"), title.to_string(), text.to_string())
 }
 
 /// Sigma's exact processing is not available; `detail` says why.

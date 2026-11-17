@@ -16,7 +16,9 @@ masks = { path = "../masks" }
 # JPEG/HEIC/TIFF/PNG via macOS ImageIO (library::imageio)
 library = { path = "../library" }
 rayon = "1"
+sysdirs = { path = "../sysdirs" }
 serde_json = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 legacy_names = { path = "../legacy_names" }
 # full resolution on the GPU (noise reduction, sharpening, lens); falls back to the CPU without a GPU
 wgpu = { version = "30", features = ["wgsl"] }

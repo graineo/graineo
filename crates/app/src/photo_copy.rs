@@ -66,8 +66,18 @@ enum Source {
 }
 
 /// Remember the developed view of the open photo (called whenever a new one is shown; one copy of the pixels).
-pub fn remember_view(image: i64, copy: Option<String>, width: usize, height: usize, rgb: &[u8]) {
-    *VIEW.lock().unwrap() = Some((image, copy, width, height, Arc::new(rgb.to_vec())));
+/// Returns the shared pixels (the displays at the top of the trays are computed from them, see `histogram_pin`).
+pub fn remember_view(image: i64, copy: Option<String>, width: usize, height: usize, rgb: &[u8]) -> Arc<Vec<u8>> {
+    let px = Arc::new(rgb.to_vec());
+    *VIEW.lock().unwrap() = Some((image, copy, width, height, px.clone()));
+    px
+}
+
+/// The remembered view of photo `image` (virtual copy `copy`): width, height, pixels.
+pub fn view_of(image: i64, copy: Option<&str>) -> Option<(usize, usize, Arc<Vec<u8>>)> {
+    let v = VIEW.lock().unwrap();
+    let (i, c, w, h, px) = v.as_ref()?;
+    (*i == image && c.as_deref() == copy).then(|| (*w, *h, px.clone()))
 }
 
 /// Is a label text selected (then ⌘C copies that text)?

@@ -1,0 +1,98 @@
+key	de	en
+title	graineo im Browser	graineo in the browser
+pair_title	Dieses Gerät koppeln	Pair this device
+pair_hint	Öffne in graineo auf dem Rechner Einstellungen → Browser und tippe auf „Gerät koppeln“. Gib den angezeigten Code hier ein.	In graineo on the computer, open Settings → Browser and tap “Pair device”. Enter the code shown there.
+pair_code	Kopplungscode	Pairing code
+pair_name	Name dieses Geräts	Name of this device
+pair_button	Koppeln	Pair
+pair_wrong	Der Code stimmt nicht.	The code is not correct.
+pair_no_code	Kein gültiger Code. Lass dir in graineo einen neuen anzeigen.	No valid code. Show a new one in graineo.
+pair_blocked	Zu viele Versuche. Bitte später noch einmal.	Too many attempts. Please try again later.
+pair_too_many	Zu viele Geräte gekoppelt. Entferne eines in graineo.	Too many devices paired. Remove one in graineo.
+all_photos	Alle Fotos	All photos
+folders	Ordner	Folders
+collections	Sammlungen	Collections
+sources	Quellen	Sources
+search	Suchen	Search
+filter	Filter	Filter
+min_stars	Mindestens	At least
+any	Alle	Any
+flag_picked	Ausgewählt	Picked
+flag_rejected	Abgelehnt	Rejected
+flag_unrejected	Nicht abgelehnt	Not rejected
+label	Etikett	Label
+label_1	Rot	Red
+label_2	Gelb	Yellow
+label_3	Grün	Green
+label_4	Blau	Blue
+label_5	Lila	Purple
+sort	Sortieren	Sort
+sort_newest	Neueste zuerst	Newest first
+sort_oldest	Älteste zuerst	Oldest first
+sort_name	Dateiname	File name
+sort_stars	Bewertung	Rating
+photos	Fotos	photos
+empty	Keine Fotos.	No photos.
+loading	Lädt …	Loading…
+pick	Auswählen (P)	Pick (P)
+reject	Ablehnen (X)	Reject (X)
+unflag	Markierung aufheben (U)	Remove flag (U)
+stars_n	{n} Sterne	{n} stars
+no_stars	Keine Sterne (0)	No stars (0)
+info	Informationen (I)	Information (I)
+develop	Entwickeln (D)	Develop (D)
+close	Schließen (Esc)	Close (Esc)
+previous	Vorheriges Foto (←)	Previous photo (←)
+next	Nächstes Foto (→)	Next photo (→)
+camera	Kamera	Camera
+lens	Objektiv	Lens
+date	Aufnahme	Captured
+exposure_info	Belichtung	Exposure
+place	Ort	Place
+keywords	Stichwörter	Keywords
+file	Datei	File
+save	Speichern	Save
+reset	Zurücksetzen	Reset
+saved	Gespeichert	Saved
+not_saved	Nicht gespeichert	Not saved
+unsaved	Ungespeicherte Änderungen verwerfen?	Discard unsaved changes?
+busy	graineo rechnet gerade, gleich noch einmal …	graineo is busy, trying again…
+error	Etwas ging schief.	Something went wrong.
+read_only	Dieses Gerät darf nur ansehen.	This device may only view.
+open_in_app	Dieses Foto ist in graineo auf dem Rechner zum Bearbeiten geöffnet. Speichern ist erst möglich, wenn es dort geschlossen ist.	This photo is open for editing in graineo on the computer. Saving is possible once it is closed there.
+changed_elsewhere	Das Foto wurde inzwischen anderswo geändert. Die Werte wurden neu geladen.	The photo was changed elsewhere meanwhile. The values were reloaded.
+original_unreachable	Das Original ist gerade nicht erreichbar (z. B. NAS nicht eingehängt).	The original is not reachable right now (e.g. the NAS is not mounted).
+not_developable	Dieses Foto lässt sich nicht entwickeln.	This photo cannot be developed.
+offline	Keine Verbindung zu graineo. Läuft der Rechner und ist der Browser-Zugriff an?	No connection to graineo. Is the computer running and browser access on?
+white_balance	Weißabgleich	White balance
+tone	Tonwert	Tone
+presence	Präsenz	Presence
+temp	Temperatur	Temperature
+tint	Tönung	Tint
+exposure	Belichtung	Exposure
+contrast	Kontrast	Contrast
+highlights	Lichter	Highlights
+shadows	Tiefen	Shadows
+whites	Weiß	Whites
+blacks	Schwarz	Blacks
+clarity	Klarheit	Clarity
+vibrance	Dynamik	Vibrance
+saturation	Sättigung	Saturation
+monochrome	Schwarzweiß	Black & white
+wb_as_shot	Wie aufgenommen	As shot
+wb_auto	Automatisch	Auto
+wb_daylight	Tageslicht	Daylight
+wb_cloudy	Bewölkt	Cloudy
+wb_shade	Schatten	Shade
+wb_tungsten	Kunstlicht	Tungsten
+wb_fluorescent	Leuchtstoff	Fluorescent
+wb_flash	Blitz	Flash
+wb_custom	Eigener	Custom
+device	Gerät	Device
+logout	Dieses Gerät abmelden	Sign out this device
+logout_confirm	Dieses Gerät abmelden? Danach ist eine neue Kopplung nötig.	Sign out this device? It will need to be paired again.
+menu	Menü	Menu
+history_note	Änderungen erscheinen in graineo im Verlauf als „Im Browser geändert“.	Changes appear in graineo's history as “Changed in the browser”.
+privacy	Alles bleibt in deinem Netz: Fotos kommen direkt von graineo auf deinem Rechner, nichts geht an fremde Server.	Everything stays in your network: photos come straight from graineo on your computer, nothing goes to other servers.
+copy	Kopie	Copy
+video	Video	Video

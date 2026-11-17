@@ -46,10 +46,25 @@ pub fn read(path: &Path, format: &str) -> Option<Capture> {
     #[cfg(target_os = "macos")]
     {
         let e = crate::imageio::properties(path)?;
-        Some(Capture { camera: e.camera, lens: e.lens, aperture: e.aperture, focal: e.focal, iso: e.iso, time: e.time, capture: e.capture, width: None, height: None })
+        let lens = e.lens.or_else(|| if format == "NEF" { nikon_lens(path) } else { None });
+        Some(Capture { camera: e.camera, lens, aperture: e.aperture, focal: e.focal, iso: e.iso, time: e.time, capture: e.capture, width: None, height: None })
     }
     #[cfg(not(target_os = "macos"))]
     None
+}
+
+/// Nikon DSLRs (F mount) and some Coolpix write no EXIF lens name; the lens is only coded in the makernote
+/// (lens data with the lens ID). The RAW reader resolves it with its lens database, e.g. "Nikon AF-S Nikkor 50mm
+/// f/1.4G". Only the metadata is read, not the sensor data.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn nikon_lens(path: &Path) -> Option<String> {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let src = rawler::rawsource::RawSource::new(path).ok()?;
+    let dec = catch_unwind(AssertUnwindSafe(|| rawler::get_decoder(&src))).ok()?.ok()?;
+    let meta = catch_unwind(AssertUnwindSafe(|| dec.raw_metadata(&src, &rawler::decoders::RawDecodeParams::default()))).ok()?.ok()?;
+    let l = meta.lens?;
+    let name = if l.lens_model.to_ascii_lowercase().starts_with(&l.lens_make.to_ascii_lowercase()) { l.lens_model } else { format!("{} {}", l.lens_make, l.lens_model) };
+    Some(name.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 fn date(s: &str) -> Option<String> {
@@ -197,5 +212,22 @@ mod tests {
         assert_eq!(state("da.jpg", "text_read"), 1);
         drop(db);
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// NEF samples (`GRAINEO_TEST_NEF_DIR`, skipped without it): F-mount lenses of Nikon DSLRs have no EXIF lens
+    /// name; the library gets them from the makernote. Checked on the CC0 sample of a D810 (AF-S 50mm f/1.4G).
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn nikon_dslr_lens_from_the_makernote() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_NEF_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_NEF_DIR not set, skipped");
+            return;
+        };
+        let Some(p) = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).find(|p| p.to_string_lossy().contains("D810")) else {
+            eprintln!("no D810 sample, skipped");
+            return;
+        };
+        let c = read(&p, "NEF").expect("readable");
+        assert_eq!(c.lens.as_deref(), Some("Nikon AF-S Nikkor 50mm f/1.4G"), "{}", p.display());
     }
 }

@@ -154,11 +154,36 @@ pub fn render(path: &Path, settings: &Settings, level: u32) -> Result<image::Rgb
         ImageKind::Other => Err(crate::tr("lässt sich nicht entwickeln").into()),
         ImageKind::Foveon => render_foveon(path, settings, level),
         ImageKind::Raw | ImageKind::Done => {
-            let mut doc = rawdev::RawDoc::open(path, &|| true)?.ok_or("abgebrochen")?;
+            let mut doc = rawdev::RawDoc::open_for(path, settings, &|| true)?.ok_or("abgebrochen")?;
             // oriented as on opening (also rotated by hand in Lightroom): the settings (crop, rotation) refer to it;
             // without it a photo rotated in Lightroom got a large preview lying on its side
             rawdev::lightroom::apply_orientation(&mut doc);
             render_doc(&doc, settings, level)
+        }
+    }
+}
+
+/// Develop at full resolution in the mask space (sensor orientation, after lens correction, before crop, rotation and
+/// perspective; for bitmap masks), with the photo's camera orientation in quarter turns.
+pub fn render_mask_space(path: &Path, settings: &Settings) -> Result<(develop::Rgb16, u8), String> {
+    use crate::image_kind::ImageKind;
+    let current = library::apple_photos::current_version(path);
+    let path = current.as_deref().unwrap_or(path);
+    if library::apple_photos::in_photos_library(path) && !path.is_file() {
+        return Err(crate::tr("Original nur in iCloud").into());
+    }
+    let s = for_render(settings)?;
+    match crate::image_kind::of(path) {
+        ImageKind::Other => Err(crate::tr("lässt sich nicht entwickeln").into()),
+        ImageKind::Foveon => {
+            let mut session = develop::Session::open_for(path, settings).map_err(|e| e.to_string())?;
+            let img = session.render_full(&s);
+            Ok((img, session.cal.orientation))
+        }
+        ImageKind::Raw | ImageKind::Done => {
+            let mut doc = rawdev::RawDoc::open_for(path, &s, &|| true)?.ok_or("abgebrochen")?;
+            rawdev::lightroom::apply_orientation(&mut doc);
+            Ok((doc.render_full(&s)?, doc.orientation))
         }
     }
 }
@@ -233,11 +258,12 @@ pub fn render_offline_timed(path: &Path, level: u32) -> (Result<image::RgbImage,
                 wait();
                 true
             };
-            let doc = library::platform::background_run(|| rawdev::RawDoc::open(path, &keep_going));
+            // own settings first: they name the engine of the raw stage (graineo, Apple)
+            let (own, _, stored) = crate::raw_app::load_settings(path, None);
+            let doc = library::platform::background_run(|| rawdev::RawDoc::open_for(path, &own, &keep_going));
             let mut doc = doc?.ok_or("abgebrochen")?;
             // orientation as on opening (also rotated by hand in Lightroom), before initial values and crop
             rawdev::lightroom::apply_orientation(&mut doc);
-            let (own, _, stored) = crate::raw_app::load_settings(path, None);
             let s = if stored { own } else { rawdev::lightroom::initial_settings(&doc).unwrap_or_default() };
             {
                 let mut tm = times.lock().unwrap();

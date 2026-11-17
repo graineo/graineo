@@ -110,7 +110,7 @@ impl Gpu {
             mapped_at_creation: false,
         })
     }
-    fn layer(&self, image: Image<'_>, weights: &[f32], a: Adjustments, view: View) -> Result<Vec<f32>> {
+    fn layer(&self, image: Image<'_>, weights: &[f32], a: &Adjustments, view: View) -> Result<Vec<f32>> {
         let _guard = self.lock.lock().map_err(|_| "GPU-Sperre".to_owned())?;
         let errors_before = pools::gpu_errors();
         let bytes = image.data.len() as u64 * 4;
@@ -135,7 +135,7 @@ impl Gpu {
         let mut enc = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        let base = [
+        let mut base = vec![
             image.width as f32,
             image.height as f32,
             1.0,
@@ -153,6 +153,21 @@ impl Gpu {
             a.noise_reduction,
             0.0,
         ];
+        // sliders of version 4 (flag p[15]): whites, blacks, dehaze, grading offsets 3 × 3, pivot, curve table
+        let extra = crate::correction::Extra::new(a);
+        base.push(a.whites);
+        if extra.any {
+            base[15] = 1.0;
+            base.extend([a.blacks, a.dehaze]);
+            let g = extra.grades.unwrap_or_default();
+            base.extend(g.iter().flatten());
+            base.push(if extra.grades.is_some() { 1.0 } else { 0.0 });
+            base.push(extra.pivot);
+            base.push(if extra.lut.is_empty() { 0.0 } else { 1.0 });
+            base.extend(&extra.lut);
+        } else {
+            base.extend([0.0f32; 15]);
+        }
         let dispatch = |enc: &mut wgpu::CommandEncoder,
                         k: usize,
                         params: &[f32],
@@ -197,7 +212,7 @@ impl Gpu {
                 if !needed[i] {
                     continue;
                 }
-                let mut p = base;
+                let mut p = base.clone();
                 p[2] = *r;
                 dispatch(&mut enc, 0, &p, &src, &temp, [&dummy; 3]);
                 dispatch(&mut enc, 1, &p, &temp, &planes[i], [&dummy; 3]);
@@ -255,7 +270,7 @@ pub fn apply(image: Image<'_>, document: &Document) -> Result<Option<Vec<f32>>> 
 /// Like [`apply`] for a crop of a larger image (see [`View`]).
 pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<Option<Vec<f32>>> {
     document.validate()?;
-    if document.version != 2 || !pools::gpu_allowed() {
+    if document.version < 2 || !pools::gpu_allowed() {
         return Ok(None);
     }
     let Some(gpu) = GPU.get_or_init(Gpu::new).as_ref() else {
@@ -263,12 +278,16 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<O
     };
     let mut data = image.data.to_vec();
     for layer in &document.layers {
-        if layer.adjustments == Adjustments::default() {
+        if !layer.active() {
             continue;
         }
         let im = Image::new(image.width, image.height, &data)?;
-        let weights = rasterize_view(im, &layer.mask, view)?;
-        data = gpu.layer(im, &weights, layer.adjustments, view)?;
+        let mut weights = layer.weights(im, view)?;
+        // strength of the mask: the weights scaled on the processor (the shader stays the same)
+        if layer.amount != 1.0 {
+            weights.par_iter_mut().for_each(|w| *w *= layer.amount);
+        }
+        data = gpu.layer(im, &weights, &layer.adjustments, view)?;
     }
     Ok(Some(data))
 }

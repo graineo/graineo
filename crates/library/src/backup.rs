@@ -302,7 +302,52 @@ pub fn create_backup(db: &Db) -> Result<(PathBuf, u64), String> {
     if let Err(e) = copy_to_second(db, &target) {
         eprintln!("second backup target: {e}");
     }
+    // the learned camera looks live next to the library, not in it: copied along (small, only new or changed files)
+    let looks = db.path.parent().unwrap_or(Path::new(".")).join(LOOKS_DIR);
+    if let Err(e) = mirror(&looks, &dir.join(LOOKS_DIR)) {
+        eprintln!("backup of learned looks: {e}");
+    }
+    if let Some(second) = second_target(db) {
+        if let Err(e) = mirror(&looks, &second.join(LOOKS_DIR)) {
+            eprintln!("second backup target, learned looks: {e}");
+        }
+    }
     Ok((target, n))
+}
+
+/// Folder of the learned camera looks next to the library (see `rawdev::learn`), copied with the daily backup.
+pub const LOOKS_DIR: &str = "looks";
+
+/// Copy the files of `from` (recursively) to `to` where missing or different in size or newer; never deletes in `to`
+/// (a reset look stays in the backup). Missing `from`: nothing to do.
+pub fn mirror(from: &Path, to: &Path) -> Result<(), String> {
+    if !from.is_dir() {
+        return Ok(());
+    }
+    let rd = std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = e.file_name();
+        if name.to_string_lossy().starts_with('.') || name.to_string_lossy().contains(".tmp") {
+            continue;
+        }
+        let target = to.join(&name);
+        if p.is_dir() {
+            mirror(&p, &target)?;
+            continue;
+        }
+        let (a, b) = (std::fs::metadata(&p).ok(), std::fs::metadata(&target).ok());
+        let same = match (&a, &b) {
+            (Some(a), Some(b)) => a.len() == b.len() && a.modified().ok() <= b.modified().ok(),
+            _ => false,
+        };
+        if !same {
+            std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
+            let tmp = to.join(format!(".{}.tmp", name.to_string_lossy()));
+            std::fs::copy(&p, &tmp).and_then(|_| std::fs::rename(&tmp, &target)).map_err(|e| format!("{}: {e}", target.display()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Folder (below the backup target) of the backups made before large actions.
@@ -581,7 +626,20 @@ pub fn rebuild(target: &Path, roots_path: &Path, default_catalog: Option<PathBuf
     prune(&part);
     let report = {
         let db = Db::open(&part).map_err(|e| e.to_string())?;
-        let r = build(&db, &w, default_catalog, progress);
+        let r = build(&db, &w, default_catalog, progress).and_then(|mut report| {
+            // the rasters of bitmap masks and removed objects exist only in the library: take them from the previous
+            // one (next to `roots.json`), the sidecars only name them
+            let previous = roots_path.with_file_name("library.sqlite");
+            if previous.exists() && previous != target && previous != part {
+                progress("Masken-Raster übernehmen …");
+                // a damaged previous library (the reason for many rebuilds) does not stop the rebuild
+                report["rasters"] = match copy_rasters(&db, &previous) {
+                    Ok(n) => json!(n),
+                    Err(e) => json!({ "error": e }),
+                };
+            }
+            Ok(report)
+        });
         drop(db);
         r
     };
@@ -597,6 +655,17 @@ pub fn rebuild(target: &Path, roots_path: &Path, default_catalog: Option<PathBuf
     }
     std::fs::rename(&part, target).map_err(|e| e.to_string())?;
     Ok(report)
+}
+
+/// Copy every raster of the library at `previous` (opened read only) into the rebuilt one: also those of photos
+/// outside the library, whose sidecars name them. Returns: copied.
+fn copy_rasters(db: &Db, previous: &Path) -> Result<usize, String> {
+    let src = rusqlite::Connection::open_with_flags(previous, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| format!("{}: {e}", previous.display()))?;
+    let ids: std::collections::HashSet<String> = match src.prepare("SELECT id FROM mask_raster") {
+        Ok(mut st) => st.query_map([], |r| r.get(0)).map_err(|e| e.to_string())?.collect::<Result<_, _>>().map_err(|e| e.to_string())?,
+        Err(_) => return Ok(0), // older library without the table
+    };
+    crate::mask_raster::copy_from(&src, &db.conn, &ids)
 }
 
 fn build(db: &Db, w: &serde_json::Value, default_catalog: Option<PathBuf>, progress: &dyn Fn(&str)) -> Result<serde_json::Value, String> {
@@ -639,6 +708,8 @@ fn build(db: &Db, w: &serde_json::Value, default_catalog: Option<PathBuf>, progr
     let _ = crate::exif::backfill(db, 1_000_000, &std::sync::atomic::AtomicBool::new(false));
     progress("Texte in den Dateien …");
     let _ = crate::textmeta::backfill(db, 1_000_000, &std::sync::atomic::AtomicBool::new(false));
+    progress("Ortsnamen …");
+    let _ = crate::places::backfill(db, 1_000_000, &std::sync::atomic::AtomicBool::new(false), &|_| {});
     progress("Suchindex …");
     let (n, ms) = crate::search::build_index(db)?;
     report["index"] = json!({"images": n, "ms": ms});
@@ -655,6 +726,43 @@ mod tests {
         let d = std::env::temp_dir().join(format!("graineo-sich-{}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(), TEST_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn mirror_copies_new_and_changed_files_and_never_deletes() {
+        let d = tmp();
+        let (from, to) = (d.join("looks"), d.join("backup").join("looks"));
+        std::fs::create_dir_all(from.join("gr3")).unwrap();
+        std::fs::write(from.join("learned.json"), b"{}").unwrap();
+        std::fs::write(from.join("gr3").join("standard.x3look"), b"one").unwrap();
+        mirror(&from, &to).unwrap();
+        assert_eq!(std::fs::read(to.join("gr3").join("standard.x3look")).unwrap(), b"one");
+        std::fs::write(from.join("gr3").join("standard.x3look"), b"second").unwrap();
+        std::fs::write(to.join("old.x3look"), b"kept").unwrap();
+        mirror(&from, &to).unwrap();
+        assert_eq!(std::fs::read(to.join("gr3").join("standard.x3look")).unwrap(), b"second");
+        assert!(to.join("old.x3look").exists());
+        assert!(mirror(&d.join("missing"), &to).is_ok());
+    }
+
+    /// Rebuilding takes every raster of the previous library (sidecars only name them); a previous library without
+    /// the table copies nothing.
+    #[test]
+    fn rebuild_takes_the_rasters_of_the_previous_library() {
+        let d = tmp();
+        let previous = d.join("library.sqlite");
+        let id = {
+            let old = Db::open(&previous).unwrap();
+            crate::mask_raster::put_rgb_in(&old.conn, 2, 1, &[1, 2, 3, 4, 5, 6], &json!({"file": "x.jpg", "keep": true})).unwrap()
+        };
+        let new = Db::open(&d.join("library-rebuild.sqlite.teil")).unwrap();
+        assert_eq!(copy_rasters(&new, &previous).unwrap(), 1);
+        assert_eq!(crate::mask_raster::get_rgb_in(&new.conn, &id), Some((2, 1, vec![1, 2, 3, 4, 5, 6])));
+        let bare = d.join("bare.sqlite");
+        rusqlite::Connection::open(&bare).unwrap().execute_batch("CREATE TABLE t(x)").unwrap();
+        assert_eq!(copy_rasters(&new, &bare).unwrap(), 0);
+        drop(new);
+        std::fs::remove_dir_all(d).unwrap();
     }
 
     #[test]

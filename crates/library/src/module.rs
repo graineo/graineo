@@ -36,6 +36,36 @@ pub struct Definition {
     pub derived: Option<&'static Derived>,
     /// Facts for the model choice in the settings (`None`: not a search model).
     pub info: Option<&'static ModelInfo>,
+    /// Licence class: open (may be offered like any module) or non-commercial only (see [`LicenseClass`]).
+    pub class: LicenseClass,
+}
+
+/// Licence class of a module's files.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LicenseClass {
+    /// Open licence (Apache-2.0, MIT, BSD …) without a restriction of the use.
+    Open,
+    /// Licence that allows non-commercial use only (e.g. CC BY-NC 4.0). Such a module is optional: graineo never
+    /// hosts or ships its files, it is only downloaded from its original source at the user's explicit wish, after
+    /// the user confirmed non-commercial use ([`confirm_non_commercial`]); every function that can use it also works
+    /// with an open module.
+    NonCommercial(&'static NonCommercial),
+}
+
+/// Terms of a non-commercial module, shown in the settings and in the confirmation (texts German, translated where
+/// displayed).
+#[derive(Debug, PartialEq, Eq)]
+pub struct NonCommercial {
+    /// licence name, e.g. "CC BY-NC 4.0"
+    pub name: &'static str,
+    /// link to the licence text
+    pub url: &'static str,
+    /// the core of the licence in one sentence (German)
+    pub summary: &'static str,
+    /// original source of the model (authors' repository or model card)
+    pub source: &'static str,
+    /// attribution as the licence asks for (authors, title, source)
+    pub attribution: &'static str,
 }
 
 /// What a search model is and does, for a choice understandable without background knowledge.
@@ -126,6 +156,7 @@ pub const TEXT: Definition = Definition {
         quality_source: "XTD10 (1000 COCO-Bilder, deutsche Beschriftungen), Text→Bild, eigene Messung mit graineos Nachbau",
         needs_reindex: false,
     }),
+    class: LicenseClass::Open,
 };
 
 pub const IMAGE: Definition = Definition {
@@ -143,6 +174,7 @@ pub const IMAGE: Definition = Definition {
     purpose: "Foto → Vektor; für Fotos, die noch nicht beschrieben sind",
     derived: None,
     info: None,
+    class: LicenseClass::Open,
 };
 
 /// SigLIP 2 Base (stage "Ausgewogen" of the search, `search_model.rs`): image and text tower in one file.
@@ -176,6 +208,7 @@ pub const SIGLIP_BASE: Definition = Definition {
         quality_source: "XTD10 (1000 COCO-Bilder, deutsche Beschriftungen), Text→Bild, eigene Messung mit graineos Nachbau",
         needs_reindex: true,
     }),
+    class: LicenseClass::Open,
 };
 
 /// SigLIP 2 Large (stage "Beste Treffer").
@@ -209,6 +242,7 @@ pub const SIGLIP_LARGE: Definition = Definition {
         quality_source: "XTD10 (1000 COCO-Bilder, deutsche Beschriftungen), Text→Bild, eigene Messung mit graineos Nachbau",
         needs_reindex: true,
     }),
+    class: LicenseClass::Open,
 };
 
 /// Larger multilingual text model (M-CLIP, XLM-RoBERTa large) for the same image vectors. The F32
@@ -251,6 +285,7 @@ pub const MCLIP: Definition = Definition {
         quality_source: "XTD10 (1000 COCO-Bilder, deutsche Beschriftungen), Text→Bild, eigene Messung mit graineos Nachbau",
         needs_reindex: false,
     }),
+    class: LicenseClass::Open,
 };
 
 // Measured 12.11.2026 on an M-series Mac with 16 GB (other builds running, so the times are rather
@@ -268,7 +303,95 @@ pub const MCLIP_QUALITY: &str = "Top-1 51,9 %, Top-10 88,9 % (Deutsch)";
 const MCLIP_F16_SIZE: u64 = 1_121_528_120;
 const MCLIP_F16_SHA: &str = "c0056b3e571dd06ac232d884ea25b0eaa6692a98571f6012adb45b0e6417f925";
 
-pub const ALL: [&Definition; 3] = [&TEXT, &MCLIP, &IMAGE];
+/// Click selection for masks (MobileSAM: TinyViT image encoder + SAM mask decoder), run with tract on every system.
+pub const MOBILESAM: Definition = Definition {
+    id: "mobilesam",
+    name: "Klick-Auswahl (MobileSAM)",
+    repo: "Acly/MobileSAM",
+    revision: "0d3b403339b4674a82493d5e97964dd78089ddc8",
+    files: &[
+        f("mobile_sam_image_encoder.onnx", "mobile_sam_image_encoder.onnx", 28157093, "580f5fb648ea1062c0aabc26217aed56921985f03f0cbbd852bba81d760cc749"),
+        f("sam_mask_decoder_multi.onnx", "sam_mask_decoder_multi.onnx", 16496559, "8976b90a87ba50a6a72217a5ff994f7d25ce16f2229fcc1ed259e1294c622ffe"),
+    ],
+    license: "Apache-2.0 (code, ChaoningZhang/MobileSAM), MIT (weights, model card Acly/MobileSAM)",
+    purpose: "Masken: Objekt anklicken, Auswahl wird berechnet",
+    derived: None,
+    info: None,
+    class: LicenseClass::Open,
+};
+
+/// Removing objects in the retouch (Big-LaMa inpainting, fixed 512 × 512 input), run with tract on every system.
+pub const LAMA: Definition = Definition {
+    id: "lama",
+    name: "Objekte entfernen (LaMa)",
+    repo: "Carve/LaMa-ONNX",
+    revision: "c3c0c9e468934d62e79c329e35d82dd09ff8c444",
+    files: &[f("lama_fp32.onnx", "lama_fp32.onnx", 208044816, "1faef5301d78db7dda502fe59966957ec4b79dd64e16f03ed96913c7a4eb68d6")],
+    license: "Apache-2.0 (code advimman/lama, model card Carve/LaMa-ONNX); trained on Places2",
+    purpose: "Retusche: markierte Bereiche mit erfundenem Inhalt füllen",
+    derived: None,
+    info: None,
+    class: LicenseClass::Open,
+};
+
+/// Depth masks: relative depth with Depth Anything V2 Small (ViT-S, 24.8 M parameters), run with tract on every
+/// system. Code and Small weights Apache-2.0 (authors' repository and model card); the ONNX export is the one of
+/// onnx-community (model card: Apache-2.0, base model depth-anything/Depth-Anything-V2-Small).
+pub const DEPTH: Definition = Definition {
+    id: "depth",
+    name: "Tiefe (Depth Anything V2 Small)",
+    repo: "onnx-community/depth-anything-v2-small",
+    revision: "4472b7362082ad9968fee890ca0f1e5aca36b93d",
+    files: &[
+        f("onnx/model.onnx", "model.onnx", 99060839, "afb6a5c28f3b6bf1618c6e43f02073ef9dfdc70e937502d51603e57b0a1df10c"),
+        f("README.md", "README.md", 1578, "2fdd0db4eb5d7725fe0f1522e03a63f0b3c7dc93c805669f3322f665fb3b4c86"),
+    ],
+    license: "Apache-2.0 (code and Small weights: DepthAnything/Depth-Anything-V2, model cards depth-anything/Depth-Anything-V2-Small and onnx-community/depth-anything-v2-small)",
+    purpose: "Masken: Entfernung vom Objektiv schätzen (nah ↔ fern)",
+    derived: None,
+    info: None,
+    class: LicenseClass::Open,
+};
+
+/// Terms of the larger Depth Anything V2 models (Base, Large): CC BY-NC 4.0 on the authors' model cards and in their
+/// repository ("Depth-Anything-V2-Base/Large/Giant models are under the CC-BY-NC-4.0 license").
+pub const DEPTH_NC_TERMS: NonCommercial = NonCommercial {
+    name: "CC BY-NC 4.0",
+    url: "https://creativecommons.org/licenses/by-nc/4.0/legalcode",
+    summary: "Das Modell darf mit Namensnennung genutzt und weitergegeben werden, aber nicht für kommerzielle Zwecke.",
+    source: "https://github.com/DepthAnything/Depth-Anything-V2",
+    attribution: "Depth Anything V2 (L. Yang, B. Kang, Z. Huang, Z. Zhao, X. Xu, J. Feng, H. Zhao), https://github.com/DepthAnything/Depth-Anything-V2, CC BY-NC 4.0; ONNX export onnx-community",
+};
+
+/// Optional, better depth (Depth Anything V2 Base, ViT-B, 97.5 M parameters): non-commercial use only.
+pub const DEPTH_BASE: Definition = Definition {
+    id: "depth-base",
+    name: "Tiefe genauer (Depth Anything V2 Base)",
+    repo: "onnx-community/depth-anything-v2-base",
+    revision: "dd4557d492cd7b563738ac8d9ccff9094620983c",
+    files: &[
+        f("onnx/model.onnx", "model.onnx", 388917010, "dab40f67d5ead5e0ed52acfae41a717a708b02bc57f6cb761c5de828f26a7289"),
+        f("README.md", "README.md", 1575, "526657685ec35278fd7dd4ece1008bbd7ae6a6869928648782032802fdcea8e0"),
+    ],
+    license: "CC BY-NC 4.0 (weights: model card depth-anything/Depth-Anything-V2-Base and DepthAnything/Depth-Anything-V2; ONNX export onnx-community/depth-anything-v2-base)",
+    purpose: "Masken: Entfernung genauer schätzen (nur nicht-kommerziell)",
+    derived: None,
+    info: None,
+    class: LicenseClass::NonCommercial(&DEPTH_NC_TERMS),
+};
+
+pub const ALL: [&Definition; 7] = [&TEXT, &MCLIP, &IMAGE, &MOBILESAM, &LAMA, &DEPTH, &DEPTH_BASE];
+
+/// Modules not offered for download (Settings → Modules lists them only once installed, so they can be
+/// removed; the tools that need them stay hidden without the files). Empty: LaMa was withheld for a short
+/// time because its published weights carry no licence of their own (the export's model card says Apache-2.0,
+/// trained on Places2); released again on the user's decision (17.11.2026), graineo does not ship or host the file.
+pub const WITHHELD: [&str; 0] = [];
+
+/// Is the module offered for download in Settings → Modules?
+pub fn offered(d: &Definition) -> bool {
+    !WITHHELD.contains(&d.id)
+}
 
 /// Search models (SigLIP 2): loaded and removed in Settings → Search, not on the modules page.
 pub const SEARCH: [&Definition; 2] = [&SIGLIP_BASE, &SIGLIP_LARGE];
@@ -277,7 +400,8 @@ pub const SEARCH: [&Definition; 2] = [&SIGLIP_BASE, &SIGLIP_LARGE];
 /// signed module list with own mirrors (FAHRPLAN 19): such a list would set a base URL here, the
 /// pinned size and SHA-256 per file stay the check.
 pub fn url_for(d: &Definition, path: &str) -> String {
-    match mirror_base() {
+    // graineo never hosts a non-commercial module: always its original source
+    match mirror_base().filter(|_| non_commercial(d).is_none()) {
         Some(base) => format!("{}/{}/{}/{}", base.trim_end_matches('/'), d.id, d.revision, path),
         None => format!("https://huggingface.co/{}/resolve/{}/{}", d.repo, d.revision, path),
     }
@@ -357,6 +481,10 @@ fn check_download(part: &Path, path: &str, size: u64, sha: &str) -> Result<(), S
 /// Install. `progress(finished, total, file)`; `cancel` aborts (partial files stay
 /// for resuming).
 pub fn install(d: &Definition, progress: &dyn Fn(u64, u64, &str), cancel: &AtomicBool) -> Result<(), String> {
+    // a non-commercial module only after the user's confirmation, and only from its original source (never a mirror)
+    if non_commercial(d).is_some() && confirmation(d).is_none() {
+        return Err("Nur nach Bestätigung der nicht-kommerziellen Nutzung".into());
+    }
     let o = folder(d);
     std::fs::create_dir_all(&o).map_err(|e| e.to_string())?;
     let local = std::env::var_os("GRAINEO_MODULE_SOURCE").map(PathBuf::from);
@@ -469,7 +597,57 @@ pub fn remove(d: &Definition) -> Result<(), String> {
     if o.exists() {
         std::fs::remove_dir_all(&o).map_err(|e| e.to_string())?;
     }
+    // a confirmation of non-commercial use belongs to the installed files
+    forget_non_commercial(d);
     Ok(())
+}
+
+// ───────────────────────────────────────────── Non-commercial modules
+
+/// Key in `settings.json`: confirmations of non-commercial use, per module id `{date, revision, app}`.
+const CONSENTS: &str = "nonCommercialModules";
+
+/// Is the module offered only for non-commercial use?
+pub fn non_commercial(d: &Definition) -> Option<&'static NonCommercial> {
+    match d.class {
+        LicenseClass::NonCommercial(t) => Some(t),
+        LicenseClass::Open => None,
+    }
+}
+
+/// The user's confirmation of non-commercial use for this module at its pinned revision (`None`: not confirmed, or
+/// for another revision).
+pub fn confirmation(d: &Definition) -> Option<Value> {
+    let v = crate::settings::value(CONSENTS).get(d.id).cloned()?;
+    (v.get("revision").and_then(Value::as_str) == Some(d.revision)).then_some(v)
+}
+
+/// Record that the user confirmed non-commercial use of `d` (date, model id, revision, graineo version `app`).
+pub fn confirm_non_commercial(d: &Definition, app: &str) -> Result<(), String> {
+    if non_commercial(d).is_none() {
+        return Ok(());
+    }
+    let mut all = crate::settings::value(CONSENTS);
+    if !all.is_object() {
+        all = json!({});
+    }
+    all[d.id] = json!({"date": crate::now(), "model": d.id, "repo": d.repo, "revision": d.revision, "app": app});
+    crate::settings::set_checked(CONSENTS, all)
+}
+
+/// Remove the confirmation of `d` (the module was removed).
+pub fn forget_non_commercial(d: &Definition) {
+    let mut all = crate::settings::value(CONSENTS);
+    if let Some(o) = all.as_object_mut() {
+        if o.remove(d.id).is_some() {
+            crate::settings::set(CONSENTS, all);
+        }
+    }
+}
+
+/// Can the module be used: installed and, for a non-commercial one, confirmed.
+pub fn usable(d: &Definition) -> bool {
+    status(d).0 == Status::Installed && (non_commercial(d).is_none() || confirmation(d).is_some())
 }
 
 /// Even when resuming, equal size is not enough for LFS files.
@@ -524,6 +702,30 @@ mod integrity_tests {
     }
 
     #[test]
+    fn non_commercial_modules_need_a_confirmation() {
+        let d = &DEPTH_BASE;
+        assert!(non_commercial(d).is_some() && non_commercial(&DEPTH).is_none());
+        assert!(confirmation(d).is_none());
+        // no download without confirmation
+        let e = install(d, &|_, _, _| {}, &AtomicBool::new(true)).unwrap_err();
+        assert!(e.contains("Bestätigung"), "{e}");
+        confirm_non_commercial(d, "9.9.9").unwrap();
+        let c = confirmation(d).unwrap();
+        assert_eq!(c["revision"], d.revision);
+        assert_eq!(c["app"], "9.9.9");
+        assert_eq!(c["model"], d.id);
+        assert!(c["date"].as_i64().unwrap() > 0);
+        // never from a mirror: the original source
+        assert!(url_for(d, "onnx/model.onnx").starts_with("https://huggingface.co/onnx-community/depth-anything-v2-base/resolve/"));
+        // removing the module forgets the confirmation
+        remove(d).unwrap();
+        assert!(confirmation(d).is_none());
+        // open modules need none
+        confirm_non_commercial(&DEPTH, "9.9.9").unwrap();
+        assert!(crate::settings::value(CONSENTS).get(DEPTH.id).is_none());
+    }
+
+    #[test]
     fn definitions_are_pinned() {
         for d in ALL.iter().chain(SEARCH.iter()) {
             assert_eq!(d.revision.len(), 40, "{} not a commit hash", d.id);
@@ -534,6 +736,9 @@ mod integrity_tests {
             if let Some(i) = d.info {
                 assert_eq!(i.disk_bytes, d.installed_size(), "{}", d.id);
                 assert!(i.ms_per_item > 0 && i.memory_mb > 0 && !i.quality.is_empty(), "{}", d.id);
+            }
+            if let LicenseClass::NonCommercial(t) = d.class {
+                assert!(t.url.starts_with("https://") && t.source.starts_with("https://") && !t.summary.is_empty() && !t.attribution.is_empty(), "{}", d.id);
             }
             if let Some(x) = d.derived {
                 assert_eq!(x.sha256.len(), 64, "{}", d.id);

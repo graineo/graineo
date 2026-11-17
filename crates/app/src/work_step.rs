@@ -78,7 +78,10 @@ impl Drop for Step {
 /// Text for the tooltip: the job started last, "Art · Stufe · seit 4 s", "+n" when more are running.
 pub fn describe() -> Option<String> {
     let v = list();
-    let e = v.last()?;
+    let Some(e) = v.last() else {
+        // nothing computes: in the operating mode "Saving" the exact view waits for the dwell – say why
+        return waiting();
+    };
     // what is being done: the stage if known, otherwise the kind of job
     let mut t = e.stage.unwrap_or(e.kind).to_string();
     let secs = e.since.elapsed().as_secs();
@@ -89,6 +92,18 @@ pub fn describe() -> Option<String> {
         t = format!("{t}  +{}", v.len() - 1);
     }
     Some(t)
+}
+
+/// Why nothing computes while the spinner shows: the exact view waits for the dwell of the operating mode "Saving".
+static WAITING: Mutex<Option<String>> = Mutex::new(None);
+
+/// The exact view of the photo shown waits (text for the tooltip) or not (`None`).
+pub fn set_waiting(text: Option<String>) {
+    *WAITING.lock().unwrap_or_else(|e| e.into_inner()) = text;
+}
+
+fn waiting() -> Option<String> {
+    WAITING.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 /// Tooltip of the spinner in the image area (`area`: where the spinner sits, top left of the image).

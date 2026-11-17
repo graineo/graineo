@@ -1,0 +1,414 @@
+# Vocabulary of the content keyword suggestions (content_keywords.rs). One term per line, tab separated:
+# id (English, shown in English, stored for rejections)	prompt (English noun phrase for the text model)	de	es	fr	ja
+# Lines starting with # and empty lines are ignored. Names must be unique per language.
+# landscape and water
+beach	a beach	Strand	playa	plage	ビーチ
+sea	the open sea	Meer	mar	mer	海
+lake	a lake	See	lago	lac	湖
+river	a river	Fluss	río	rivière	川
+waterfall	a waterfall	Wasserfall	cascada	cascade	滝
+pond	a pond	Teich	estanque	étang	池
+canal	a canal	Kanal	canal	canal	運河
+waves	ocean waves	Wellen	olas	vagues	波
+coast	a rocky coastline	Küste	costa	côte	海岸
+island	an island	Insel	isla	île	島
+harbor	a harbor with boats	Hafen	puerto	port	港
+pier	a wooden pier	Steg	muelle	jetée	桟橋
+promenade	a seaside promenade	Promenade	paseo marítimo	promenade	遊歩道
+underwater	an underwater scene	Unterwasser	bajo el agua	sous l'eau	水中
+mountain	a mountain	Berg	montaña	montagne	山
+hill	a hill	Hügel	colina	colline	丘
+valley	a valley	Tal	valle	vallée	谷
+cliff	a cliff	Klippe	acantilado	falaise	崖
+rocks	rocks	Felsen	rocas	rochers	岩
+cave	a cave	Höhle	cueva	grotte	洞窟
+glacier	a glacier	Gletscher	glaciar	glacier	氷河
+volcano	a volcano	Vulkan	volcán	volcan	火山
+desert	a desert	Wüste	desierto	désert	砂漠
+dunes	sand dunes	Düne	duna	dune	砂丘
+sand	sand	Sand	arena	sable	砂
+forest	a forest	Wald	bosque	forêt	森
+meadow	a meadow	Wiese	prado	prairie	草原
+flower field	a field of flowers	Blumenwiese	campo de flores	champ de fleurs	花畑
+field	a farm field	Feld	campo	champ	畑
+vineyard	a vineyard	Weinberg	viñedo	vignoble	ブドウ畑
+hay bales	hay bales on a field	Heuballen	balas de paja	balles de foin	干し草
+park	a park	Park	parque	parc	公園
+garden	a garden	Garten	jardín	jardin	庭
+path	a footpath	Weg	sendero	sentier	小道
+landscape	a landscape	Landschaft	paisaje	paysage	風景
+# sky and weather
+sky	the sky	Himmel	cielo	ciel	空
+clouds	clouds	Wolken	nubes	nuages	雲
+blue sky	a clear blue sky	blauer Himmel	cielo azul	ciel bleu	青空
+rain	rain	Regen	lluvia	pluie	雨
+snow	snow	Schnee	nieve	neige	雪
+fog	fog	Nebel	niebla	brouillard	霧
+storm	a storm	Sturm	tormenta	tempête	嵐
+lightning	lightning	Blitz	relámpago	éclair	稲妻
+rainbow	a rainbow	Regenbogen	arcoíris	arc-en-ciel	虹
+ice	ice	Eis	hielo	glace	氷
+frost	hoarfrost	Raureif	escarcha	givre	霜
+sun	the sun	Sonne	sol	soleil	太陽
+moon	the moon	Mond	luna	lune	月
+starry sky	a starry night sky	Sternenhimmel	cielo estrellado	ciel étoilé	星空
+northern lights	the northern lights	Polarlicht	aurora boreal	aurore boréale	オーロラ
+# time of day and light
+sunset	a sunset	Sonnenuntergang	puesta de sol	coucher de soleil	夕日
+sunrise	a sunrise	Sonnenaufgang	amanecer	lever de soleil	日の出
+dusk	dusk	Dämmerung	anochecer	crépuscule	夕暮れ
+night	a night scene	Nacht	noche	nuit	夜
+backlight	backlighting	Gegenlicht	contraluz	contre-jour	逆光
+silhouette	a silhouette	Silhouette	silueta	silhouette	シルエット
+shadow	shadows	Schatten	sombra	ombre	影
+reflection	a reflection in water	Spiegelung	reflejo	reflet	映り込み
+long exposure	a long exposure photograph	Langzeitbelichtung	larga exposición	pose longue	長時間露光
+city lights	city lights at night	Lichter der Stadt	luces de la ciudad	lumières de la ville	街の灯り
+neon	neon lights	Neonlicht	luces de neón	néons	ネオン
+fireworks	fireworks	Feuerwerk	fuegos artificiales	feu d'artifice	花火
+candle	a candle	Kerze	vela	bougie	ろうそく
+fire	fire	Feuer	fuego	feu	火
+campfire	a campfire	Lagerfeuer	fogata	feu de camp	キャンプファイヤー
+# seasons and holidays
+spring	spring blossoms	Frühling	primavera	printemps	春
+summer	a summer day	Sommer	verano	été	夏
+autumn	autumn foliage	Herbst	otoño	automne	秋
+winter	a winter landscape	Winter	invierno	hiver	冬
+christmas	Christmas decorations	Weihnachten	Navidad	Noël	クリスマス
+christmas tree	a Christmas tree	Weihnachtsbaum	árbol de Navidad	sapin de Noël	クリスマスツリー
+christmas market	a Christmas market	Weihnachtsmarkt	mercado navideño	marché de Noël	クリスマスマーケット
+easter	Easter eggs	Ostern	Pascua	Pâques	イースター
+halloween	a carved Halloween pumpkin	Halloween	Halloween	Halloween	ハロウィン
+carnival	people in carnival costumes	Fasching	carnaval	carnaval	カーニバル
+# architecture
+architecture	architecture	Architektur	arquitectura	architecture	建築
+building	a building	Gebäude	edificio	bâtiment	建物
+house	a house	Haus	casa	maison	家
+half-timbered house	a half-timbered house	Fachwerkhaus	casa con entramado	maison à colombages	木骨造りの家
+skyscraper	a skyscraper	Hochhaus	rascacielos	gratte-ciel	高層ビル
+church	a church	Kirche	iglesia	église	教会
+church tower	a church tower	Kirchturm	campanario	clocher	鐘楼
+cathedral	a cathedral	Kathedrale	catedral	cathédrale	大聖堂
+mosque	a mosque	Moschee	mezquita	mosquée	モスク
+temple	a temple	Tempel	templo	temple	寺院
+castle	a medieval castle	Burg	castillo	château fort	城
+palace	a palace	Schloss	palacio	palais	宮殿
+ruins	ruins	Ruine	ruinas	ruines	遺跡
+tower	a tower	Turm	torre	tour	塔
+lighthouse	a lighthouse	Leuchtturm	faro	phare	灯台
+bridge	a bridge	Brücke	puente	pont	橋
+windmill	a windmill	Windmühle	molino de viento	moulin à vent	風車
+wind turbine	a wind turbine	Windrad	aerogenerador	éolienne	風力発電機
+barn	a barn	Scheune	granero	grange	納屋
+farm	a farm	Bauernhof	granja	ferme	農場
+cabin	a wooden cabin	Hütte	cabaña	cabane	小屋
+tent	a tent	Zelt	tienda de campaña	tente	テント
+monument	a monument	Denkmal	monumento	monument	記念碑
+statue	a statue	Statue	estatua	statue	像
+fountain	a fountain	Brunnen	fuente	fontaine	噴水
+staircase	a staircase	Treppe	escalera	escalier	階段
+door	a door	Tür	puerta	porte	ドア
+window	a window	Fenster	ventana	fenêtre	窓
+wall	a wall	Mauer	muro	mur	壁
+roof	a roof	Dach	tejado	toit	屋根
+facade	a building facade	Fassade	fachada	façade	ファサード
+balcony	a balcony	Balkon	balcón	balcon	バルコニー
+arch	an archway	Torbogen	arco	arche	アーチ
+columns	columns	Säulen	columnas	colonnes	柱
+dome	a dome	Kuppel	cúpula	dôme	ドーム
+fence	a fence	Zaun	valla	clôture	フェンス
+stadium	a stadium	Stadion	estadio	stade	スタジアム
+train station	a train station	Bahnhof	estación de tren	gare	駅
+airport	an airport	Flughafen	aeropuerto	aéroport	空港
+factory	a factory	Fabrik	fábrica	usine	工場
+construction site	a construction site	Baustelle	obra	chantier	工事現場
+crane	a construction crane	Kran	grúa	grue	クレーン
+railway tracks	railway tracks	Gleise	vías del tren	voie ferrée	線路
+# town and street
+city	a city	Stadt	ciudad	ville	都市
+old town	a historic old town	Altstadt	casco antiguo	vieille ville	旧市街
+village	a village	Dorf	pueblo	village	村
+skyline	a city skyline	Skyline	horizonte urbano	skyline	スカイライン
+street	a city street	Straße	calle	rue	通り
+alley	a narrow alley	Gasse	callejón	ruelle	路地
+square	a town square	Platz	plaza	place	広場
+road	a country road	Landstraße	carretera	route	道路
+highway	a highway	Autobahn	autopista	autoroute	高速道路
+parking lot	a parking lot	Parkplatz	aparcamiento	parking	駐車場
+traffic	traffic	Verkehr	tráfico	circulation	交通
+traffic light	a traffic light	Ampel	semáforo	feu de circulation	信号機
+street sign	a traffic sign	Verkehrsschild	señal de tráfico	panneau routier	標識
+street lamp	a street lamp	Straßenlaterne	farola	lampadaire	街灯
+graffiti	graffiti	Graffiti	grafiti	graffiti	グラフィティ
+market	a market	Markt	mercado	marché	市場
+shop	a shop	Geschäft	tienda	magasin	店
+shop window	a shop window	Schaufenster	escaparate	vitrine	ショーウィンドウ
+restaurant	a restaurant	Restaurant	restaurante	restaurant	レストラン
+cafe	a café	Café	cafetería	terrasse de café	カフェ
+bar	a bar	Bar	bar	bar	バー
+playground	a playground	Spielplatz	parque infantil	aire de jeux	遊び場
+cemetery	a cemetery	Friedhof	cementerio	cimetière	墓地
+museum	a museum	Museum	museo	musée	博物館
+zoo	a zoo	Zoo	zoológico	zoo	動物園
+amusement park	an amusement park	Freizeitpark	parque de atracciones	parc d'attractions	遊園地
+ferris wheel	a Ferris wheel	Riesenrad	noria	grande roue	観覧車
+carousel	a carousel	Karussell	carrusel	manège	メリーゴーランド
+swimming pool	a swimming pool	Schwimmbad	piscina	piscine	プール
+school	a school	Schule	escuela	école	学校
+# rooms and furniture
+interior	an interior room	Innenraum	interior	intérieur	室内
+living room	a living room	Wohnzimmer	sala de estar	salon	リビング
+kitchen	a kitchen	Küche	cocina	cuisine	キッチン
+bedroom	a bedroom	Schlafzimmer	dormitorio	chambre	寝室
+bathroom	a bathroom	Badezimmer	baño	salle de bain	浴室
+office	an office	Büro	oficina	bureau	オフィス
+classroom	a classroom	Klassenzimmer	aula	salle de classe	教室
+library	a library with books	Bibliothek	biblioteca	bibliothèque	図書館
+stage	a stage	Bühne	escenario	scène	ステージ
+concert	a concert	Konzert	concierto	concert	コンサート
+table	a table	Tisch	mesa	table	テーブル
+chair	a chair	Stuhl	silla	chaise	椅子
+sofa	a sofa	Sofa	sofá	canapé	ソファ
+bed	a bed	Bett	cama	lit	ベッド
+lamp	a lamp	Lampe	lámpara	lampe	ランプ
+mirror	a mirror	Spiegel	espejo	miroir	鏡
+bookshelf	a bookshelf	Bücherregal	estantería	étagère à livres	本棚
+fireplace	a fireplace	Kamin	chimenea	cheminée	暖炉
+# plants
+tree	a tree	Baum	árbol	arbre	木
+flower	a flower	Blume	flor	fleur	花
+bouquet	a bouquet of flowers	Blumenstrauß	ramo de flores	bouquet de fleurs	花束
+rose	a rose	Rose	rosa	rose	バラ
+tulip	tulips	Tulpe	tulipán	tulipe	チューリップ
+sunflower	a sunflower	Sonnenblume	girasol	tournesol	ひまわり
+cherry blossom	cherry blossoms	Kirschblüte	flor de cerezo	fleur de cerisier	桜
+lavender	lavender	Lavendel	lavanda	lavande	ラベンダー
+leaves	leaves	Blätter	hojas	feuilles	葉
+grass	grass	Gras	hierba	herbe	草
+moss	moss	Moos	musgo	mousse	苔
+mushroom	a mushroom	Pilz	seta	champignon	キノコ
+cactus	a cactus	Kaktus	cactus	cactus	サボテン
+palm tree	a palm tree	Palme	palmera	palmier	ヤシの木
+houseplant	a houseplant	Zimmerpflanze	planta de interior	plante d'intérieur	観葉植物
+grain	a wheat field	Getreide	trigo	blé	小麦
+pumpkin	a pumpkin	Kürbis	calabaza	citrouille	カボチャ
+# animals
+animal	an animal	Tier	animal	animal	動物
+dog	a dog	Hund	perro	chien	犬
+puppy	a puppy	Welpe	cachorro	chiot	子犬
+cat	a cat	Katze	gato	chat	猫
+kitten	a kitten	Kätzchen	gatito	chaton	子猫
+horse	a horse	Pferd	caballo	cheval	馬
+cow	a cow	Kuh	vaca	vache	牛
+sheep	a sheep	Schaf	oveja	mouton	羊
+goat	a goat	Ziege	cabra	chèvre	ヤギ
+pig	a pig	Schwein	cerdo	cochon	豚
+chicken	a chicken	Huhn	gallina	poule	ニワトリ
+donkey	a donkey	Esel	burro	âne	ロバ
+rabbit	a rabbit	Kaninchen	conejo	lapin	ウサギ
+bird	a bird	Vogel	pájaro	oiseau	鳥
+duck	a duck	Ente	pato	canard	カモ
+swan	a swan	Schwan	cisne	cygne	白鳥
+seagull	a seagull	Möwe	gaviota	mouette	カモメ
+pigeon	a pigeon	Taube	paloma	pigeon	ハト
+owl	an owl	Eule	búho	hibou	フクロウ
+eagle	an eagle	Adler	águila	aigle	ワシ
+parrot	a parrot	Papagei	loro	perroquet	オウム
+stork	a stork	Storch	cigüeña	cigogne	コウノトリ
+penguin	a penguin	Pinguin	pingüino	manchot	ペンギン
+flamingo	a flamingo	Flamingo	flamenco	flamant rose	フラミンゴ
+fish	a fish	Fisch	pez	poisson	魚
+insect	an insect	Insekt	insecto	insecte	昆虫
+butterfly	a butterfly	Schmetterling	mariposa	papillon	蝶
+bee	a bee	Biene	abeja	abeille	ハチ
+spider	a spider	Spinne	araña	araignée	クモ
+dragonfly	a dragonfly	Libelle	libélula	libellule	トンボ
+ladybug	a ladybug	Marienkäfer	mariquita	coccinelle	テントウムシ
+snail	a snail	Schnecke	caracol	escargot	カタツムリ
+frog	a frog	Frosch	rana	grenouille	カエル
+lizard	a lizard	Eidechse	lagarto	lézard	トカゲ
+snake	a snake	Schlange	serpiente	serpent	ヘビ
+turtle	a turtle	Schildkröte	tortuga	tortue	カメ
+squirrel	a squirrel	Eichhörnchen	ardilla	écureuil	リス
+hedgehog	a hedgehog	Igel	erizo	hérisson	ハリネズミ
+deer	a deer	Reh	ciervo	cerf	シカ
+fox	a fox	Fuchs	zorro	renard	キツネ
+wolf	a wolf	Wolf	lobo	loup	オオカミ
+bear	a bear	Bär	oso	ours	クマ
+elephant	an elephant	Elefant	elefante	éléphant	ゾウ
+giraffe	a giraffe	Giraffe	jirafa	girafe	キリン
+zebra	a zebra	Zebra	cebra	zèbre	シマウマ
+lion	a lion	Löwe	león	lion	ライオン
+tiger	a tiger	Tiger	tigre	tigre	トラ
+monkey	a monkey	Affe	mono	singe	サル
+camel	a camel	Kamel	camello	chameau	ラクダ
+seal	a seal	Robbe	foca	phoque	アザラシ
+dolphin	a dolphin	Delfin	delfín	dauphin	イルカ
+whale	a whale	Wal	ballena	baleine	クジラ
+jellyfish	a jellyfish	Qualle	medusa	méduse	クラゲ
+crab	a crab	Krebs	cangrejo	crabe	カニ
+# vehicles
+car	a car	Auto	coche	voiture	車
+vintage car	a vintage car	Oldtimer	coche clásico	voiture ancienne	クラシックカー
+truck	a truck	Lastwagen	camión	camion	トラック
+bus	a bus	Bus	autobús	bus	バス
+tram	a tram	Straßenbahn	tranvía	tramway	路面電車
+train	a train	Zug	tren	train	列車
+steam locomotive	a steam locomotive	Dampflok	locomotora de vapor	locomotive à vapeur	蒸気機関車
+motorcycle	a motorcycle	Motorrad	moto	moto	バイク
+bicycle	a bicycle	Fahrrad	bicicleta	vélo	自転車
+tractor	a tractor	Traktor	tractor	tracteur	トラクター
+fire truck	a fire truck	Feuerwehrauto	camión de bomberos	camion de pompiers	消防車
+camper van	a camper van	Wohnmobil	autocaravana	camping-car	キャンピングカー
+stroller	a baby stroller	Kinderwagen	cochecito	poussette	ベビーカー
+skateboard	a skateboard	Skateboard	monopatín	skateboard	スケートボード
+boat	a boat	Boot	barco	bateau	ボート
+sailboat	a sailboat	Segelboot	velero	voilier	ヨット
+ship	a large ship	Schiff	buque	navire	船
+kayak	a kayak	Kajak	kayak	kayak	カヤック
+airplane	an airplane	Flugzeug	avión	avion	飛行機
+helicopter	a helicopter	Hubschrauber	helicóptero	hélicoptère	ヘリコプター
+hot air balloon	a hot air balloon	Heißluftballon	globo aerostático	montgolfière	熱気球
+# food and drink
+food	a meal on a plate	Essen	comida	repas	料理
+breakfast	breakfast	Frühstück	desayuno	petit-déjeuner	朝食
+dinner	a dinner table	Abendessen	cena	dîner	夕食
+cake	a cake	Kuchen	pastel	gâteau	ケーキ
+birthday cake	a birthday cake with candles	Geburtstagstorte	tarta de cumpleaños	gâteau d'anniversaire	バースデーケーキ
+bread	bread	Brot	pan	pain	パン
+pizza	a pizza	Pizza	pizza	pizza	ピザ
+pasta	pasta	Nudeln	pasta	pâtes	パスタ
+salad	a salad	Salat	ensalada	salade	サラダ
+soup	soup	Suppe	sopa	soupe	スープ
+burger	a hamburger	Burger	hamburguesa	hamburger	ハンバーガー
+sushi	sushi	Sushi	sushi	sushi	寿司
+fruit	fruit	Obst	fruta	fruits	果物
+apple	an apple	Apfel	manzana	pomme	りんご
+strawberries	strawberries	Erdbeeren	fresas	fraises	イチゴ
+vegetables	vegetables	Gemüse	verduras	légumes	野菜
+ice cream	ice cream	Eiscreme	helado	crème glacée	アイスクリーム
+chocolate	chocolate	Schokolade	chocolate	chocolat	チョコレート
+cookies	cookies	Kekse	galletas	biscuits	クッキー
+coffee	a cup of coffee	Kaffee	café	café	コーヒー
+tea	a cup of tea	Tee	té	thé	お茶
+wine	wine	Wein	vino	vin	ワイン
+beer	beer	Bier	cerveza	bière	ビール
+cocktail	a cocktail	Cocktail	cóctel	cocktail	カクテル
+barbecue	a barbecue grill	Grillen	barbacoa	barbecue	バーベキュー
+picnic	a picnic	Picknick	pícnic	pique-nique	ピクニック
+# people and occasions
+person	a person	Person	persona	personne	人物
+group	a group of people	Gruppe	grupo	groupe	グループ
+crowd	a crowd	Menschenmenge	multitud	foule	群衆
+portrait	a portrait	Porträt	retrato	portrait	ポートレート
+selfie	a selfie	Selfie	selfi	selfie	自撮り
+child	a child	Kind	niño	enfant	子ども
+baby	a baby	Baby	bebé	bébé	赤ちゃん
+family	a family	Familie	familia	famille	家族
+couple	a couple	Paar	pareja	couple	カップル
+wedding	a wedding	Hochzeit	boda	mariage	結婚式
+bride	a bride in a wedding dress	Braut	novia	mariée	花嫁
+birthday	a birthday party	Geburtstag	cumpleaños	anniversaire	誕生日
+party	a party	Party	fiesta	fête	パーティー
+festival	a festival	Fest	festival	festival	祭り
+parade	a parade	Umzug	desfile	défilé	パレード
+costume	a costume	Kostüm	disfraz	déguisement	仮装
+audience	an audience	Publikum	público	public	観客
+dancing	people dancing	Tanzen	baile	danse	ダンス
+music	a musician playing music	Musik	música	musique	音楽
+guitar	a guitar	Gitarre	guitarra	guitare	ギター
+piano	a piano	Klavier	piano	piano	ピアノ
+reading	a person reading a book	Lesen	lectura	lecture	読書
+book	a book	Buch	libro	livre	本
+playing	children playing	Spielen	juego	jeu	遊び
+toy	a toy	Spielzeug	juguete	jouet	おもちゃ
+teddy bear	a teddy bear	Teddybär	osito de peluche	ours en peluche	テディベア
+building blocks	toy building blocks	Bausteine	bloques de construcción	jeu de construction	積み木
+cooking	cooking in a kitchen	Kochen	cocinar	faire la cuisine	調理
+sleeping	a person sleeping	Schlafen	dormir	sommeil	睡眠
+hiking	hiking	Wandern	senderismo	randonnée	ハイキング
+camping	camping	Camping	acampada	camping	キャンプ
+swimming	swimming	Schwimmen	natación	natation	水泳
+fishing	fishing	Angeln	pesca	pêche	釣り
+gardening	gardening	Gartenarbeit	jardinería	jardinage	ガーデニング
+# sport and play
+sport	sports	Sport	deporte	sport	スポーツ
+football	soccer	Fußball	fútbol	football	サッカー
+basketball	basketball	Basketball	baloncesto	basket-ball	バスケットボール
+tennis	tennis	Tennis	tenis	tennis	テニス
+volleyball	volleyball	Volleyball	voleibol	volley-ball	バレーボール
+golf	golf	Golf	golf	golf	ゴルフ
+skiing	skiing	Skifahren	esquí	ski	スキー
+sledding	sledding	Schlittenfahren	trineo	luge	そり遊び
+ice skating	ice skating	Schlittschuhlaufen	patinaje sobre hielo	patinage	スケート
+cycling	cycling	Radfahren	ciclismo	cyclisme	サイクリング
+running	running	Laufen	correr	course à pied	ランニング
+climbing	rock climbing	Klettern	escalada	escalade	クライミング
+surfing	surfing	Surfen	surf	surf	サーフィン
+sailing	sailing	Segeln	navegación a vela	voile	セーリング
+horse riding	horse riding	Reiten	equitación	équitation	乗馬
+yoga	yoga	Yoga	yoga	yoga	ヨガ
+gym	a gym	Fitnessstudio	gimnasio	salle de sport	ジム
+ball	a ball	Ball	pelota	ballon	ボール
+trampoline	a trampoline	Trampolin	cama elástica	trampoline	トランポリン
+swing	a swing	Schaukel	columpio	balançoire	ブランコ
+slide	a playground slide	Rutsche	tobogán	toboggan	滑り台
+kite	a kite	Drachen	cometa	cerf-volant	凧
+soap bubbles	soap bubbles	Seifenblasen	pompas de jabón	bulles de savon	シャボン玉
+sandcastle	a sandcastle	Sandburg	castillo de arena	château de sable	砂の城
+snowman	a snowman	Schneemann	muñeco de nieve	bonhomme de neige	雪だるま
+beach chair	a hooded wicker beach chair	Strandkorb	silla de playa	fauteuil de plage	ビーチチェア
+# things
+computer	a computer	Computer	ordenador	ordinateur	コンピューター
+laptop	a laptop	Laptop	portátil	ordinateur portable	ノートパソコン
+smartphone	a smartphone	Smartphone	móvil	smartphone	スマートフォン
+camera	a camera	Kamera	cámara	appareil photo	カメラ
+television	a television	Fernseher	televisor	télévision	テレビ
+clock	a clock	Uhr	reloj	horloge	時計
+glasses	eyeglasses	Brille	gafas	lunettes	眼鏡
+sunglasses	sunglasses	Sonnenbrille	gafas de sol	lunettes de soleil	サングラス
+hat	a hat	Hut	sombrero	chapeau	帽子
+umbrella	an umbrella	Regenschirm	paraguas	parapluie	傘
+bag	a bag	Tasche	bolso	sac	バッグ
+backpack	a backpack	Rucksack	mochila	sac à dos	リュック
+shoes	shoes	Schuhe	zapatos	chaussures	靴
+dress	a dress	Kleid	vestido	robe	ドレス
+suitcase	a suitcase	Koffer	maleta	valise	スーツケース
+flag	a flag	Fahne	bandera	drapeau	旗
+balloons	balloons	Luftballons	globos	ballons de baudruche	風船
+gift	a gift box	Geschenk	regalo	cadeau	プレゼント
+painting	a painting	Gemälde	pintura	tableau	絵画
+drawing	a drawing	Zeichnung	dibujo	dessin	絵
+sculpture	a sculpture	Skulptur	escultura	sculpture	彫刻
+text	text	Text	texto	texte	文字
+sign	a sign with text	Schild	letrero	enseigne	看板
+poster	a poster	Plakat	cartel	affiche	ポスター
+document	a document	Dokument	documento	document	書類
+screenshot	a screenshot	Bildschirmfoto	captura de pantalla	capture d'écran	スクリーンショット
+map	a map	Landkarte	mapa	carte	地図
+bottle	a bottle	Flasche	botella	bouteille	ボトル
+glass	a drinking glass	Glas	vaso	verre	グラス
+cup	a cup	Tasse	taza	tasse	カップ
+basket	a basket	Korb	cesta	panier	かご
+lantern	a lantern	Laterne	linterna	lanterne	ランタン
+bench	a bench	Sitzbank	banco	banc	ベンチ
+tools	tools	Werkzeug	herramientas	outils	工具
+wood	wood	Holz	madera	bois	木材
+stones	stones	Steine	piedras	pierres	石
+seashell	a seashell	Muschel	concha	coquillage	貝殻
+# kind of picture
+close-up	a close-up	Nahaufnahme	primer plano	gros plan	クローズアップ
+macro	a macro photograph	Makro	macro	macro	マクロ
+aerial view	an aerial view	Luftbild	vista aérea	vue aérienne	空撮
+panorama	a panorama	Panorama	panorama	panorama	パノラマ
+still life	a still life	Stillleben	bodegón	nature morte	静物
+abstract	an abstract image	Abstrakt	abstracto	abstrait	抽象
+pattern	a repeating pattern	Muster	patrón	motif	模様
+texture	a texture	Textur	textura	texture	質感
+minimalism	a minimalist photograph	Minimalismus	minimalismo	minimalisme	ミニマリズム
+symmetry	symmetry	Symmetrie	simetría	symétrie	対称
+street photography	street photography	Straßenfotografie	fotografía callejera	photographie de rue	ストリートフォト
+black and white	a black and white photograph	Schwarzweiß	blanco y negro	noir et blanc	モノクロ
+old photo	an old faded photograph	Altes Foto	foto antigua	photo ancienne	古い写真
+colorful	a colorful scene	Bunt	colorido	coloré	カラフル
+bokeh	bokeh	Bokeh	bokeh	bokeh	ボケ

@@ -651,7 +651,10 @@ impl LibraryView {
         ui.add_space(((ui.available_height() - block) * 0.42).max(24.0));
         let width = ui.available_width();
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Keine Treffer")).font(lr::semibold(14.0)).color(lr::TEXT));
+            // without a search index (being built in the background) the full text finds nothing yet: say so
+            let indexing = !self.filter.text.trim().is_empty() && super::INDEX_MISSING.load(Ordering::Relaxed);
+            let heading = if indexing { crate::tr("Suchindex wird aufgebaut …") } else { crate::tr("Keine Treffer") };
+            ui.label(egui::RichText::new(heading).font(lr::semibold(14.0)).color(lr::TEXT));
             ui.add_space(6.0);
             ui.add(egui::Label::new(egui::RichText::new(reasons.join("  ·  ")).size(lr::UI_SIZE).color(lr::TEXT_DIM)).truncate());
             ui.add_space(18.0);

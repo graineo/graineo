@@ -196,9 +196,9 @@ pub fn standard(path: &Path, level: u32) -> Result<image::RgbImage, String> {
             crate::large_preview::render(path, &own.unwrap_or_default(), level)
         }
         ImageKind::Raw | ImageKind::Done => {
-            let mut doc = rawdev::RawDoc::open(path, &|| true)?.ok_or("abgebrochen")?;
-            rawdev::lightroom::apply_orientation(&mut doc);
             let (own, _, stored) = crate::raw_app::load_settings(path, None);
+            let mut doc = rawdev::RawDoc::open_for(path, &own, &|| true)?.ok_or("abgebrochen")?;
+            rawdev::lightroom::apply_orientation(&mut doc);
             let s = if stored { own } else { rawdev::lightroom::initial_settings(&doc).unwrap_or_default() };
             crate::large_preview::render_doc(&doc, &s, level)
         }

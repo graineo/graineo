@@ -1,4 +1,4 @@
-//! Export of a non-Sigma RAW: full resolution, crop/straighten, JPEG or 16-bit TIFF
+//! Export of a non-Sigma RAW: full resolution, crop/straighten, JPEG, JPEG XL, 16-bit TIFF or PNG
 //! via the writers of [`develop::export`]. There is no DNG here (yet): the original is
 //! already a RAW.
 
@@ -20,7 +20,7 @@ pub fn export(doc: &RawDoc, s: &Settings, format: Format, path: &Path) -> Result
     match format {
         Format::Jpeg { quality } => develop::export::write_jpeg(&img, path, quality).map_err(|e| e.to_string()),
         Format::Tiff16 => develop::export::write_tiff16(&img, path).map_err(|e| e.to_string()),
-        Format::Png16 => develop::export::write_finished(&img, path, format, graineo_color::Space::Srgb, &Default::default()).map_err(|e| e.to_string()),
+        Format::Png16 | Format::Jxl { .. } => develop::export::write_finished(&img, path, format, graineo_color::Space::Srgb, &Default::default()).map_err(|e| e.to_string()),
         _ => Err("Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)".into()),
     }
 }
@@ -54,6 +54,13 @@ pub fn export_color_opts(doc:&RawDoc,s:&Settings,format:Format,path:&Path,space:
  if !format.is_finished_image(){return Err("Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)".into())}
  let plain=format==Format::Png16||(format==Format::Tiff16&&opts.tiff_compression!=develop::tiffw::Compression::None);
  if space==graineo_color::Space::Srgb&&!plain{return export(doc,s,format,path)}
+ let img=render_color(doc,s,space)?;
+ develop::export::write_finished(&img,path,format,space,opts).map_err(|e|e.to_string())
+}
+
+/// The developed image in `space` (crop, rotation, border and output size of `s` applied) – the rendering of
+/// [`export_color_opts`] for RGB spaces, shared with printing.
+pub fn render_color(doc:&RawDoc,s:&Settings,space:graineo_color::Space)->Result<develop::Rgb16,String>{
  // Film: print and border are defined in sRGB (paper white can be tinted). First compute the complete sRGB image with border,
  // then convert to the target space; otherwise a tinted border would get wrong colors.
  let film=doc.effective_settings(s).film.is_active();
@@ -69,7 +76,7 @@ pub fn export_color_opts(doc:&RawDoc,s:&Settings,format:Format,path:&Path,space:
   // Without film the border is neutral (paper/black); the profile does not change neutrals.
   develop::export::apply_output_size(develop::film::apply_border(img,&s.film),s.output_size)
  };
- develop::export::write_finished(&img,path,format,space,opts).map_err(|e|e.to_string())
+ Ok(img)
 }
 
 /// Shooting data of a non-Sigma RAW as the decoder reads it: written where the original's metadata

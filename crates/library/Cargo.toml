@@ -55,3 +55,6 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 [dev-dependencies]
 # tests write PNG files with transparency (imageio alpha test)
 image = { version = "0.25", default-features = false, features = ["png"] }
+# JPEG XL metadata tests: the encoder of the export and a reference decoder (both in the tree through develop/rawler)
+jixel = { version = "=0.5.10", default-features = false, features = ["neon", "sse", "avx"] }
+jxl-oxide = "=0.12.6"

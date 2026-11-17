@@ -3,6 +3,8 @@
 use super::*;
 fn apply_local(data:&mut[f32],w:usize,h:usize,s:&Settings)->Result<(),String>{
  if !crate::local::active(s){return Ok(())}
+ // retouching (spots, removed objects, red eyes) first, as in `local::apply_view`
+ crate::spots::apply_encoded(data,w,h,s);
  let Some(doc)=s.local.as_ref()else{return Ok(())};
  let linear:Vec<f32>=data.par_iter().map(|&v|graineo_color::srgb_decode(v)).collect();
  let result=masks::gpu::apply_auto(masks::Image::new(w,h,&linear)?,doc)?;

@@ -1,6 +1,7 @@
 //! Local timing log of normal use (setting "Zeitprotokoll", default on): one line per opened photo in `timings.log`
 //! in the logs folder of the app – time, camera family and format, ISO class, time until the first picture and until
-//! the exact view, GPU or processor path, rough load of the system and memory of the app. Never a file name or a path.
+//! the exact view, GPU or processor path, rough load of the system, memory of the app and the operating mode. Never a
+//! file name or a path.
 //!
 //! Written quietly by one background thread (no fsync per line, the UI thread only hands the line over). At 2 MB the
 //! file becomes `timings.log.1` (one previous file, the older one is dropped). The performance report appends the last
@@ -191,7 +192,8 @@ fn writer() -> Option<&'static Mutex<Sender<Msg>>> {
                 for Msg::Line { family, iso, first_ms, exact_ms, sigma, gpu, busy } in rx {
                     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
                     let l = line(&library::platform::local_time(now), &version, &family, iso, first_ms, exact_ms, sigma, gpu, busy, library::platform::info::process_memory());
-                    out.append(&l);
+                    // the operating mode the app computed in (`perf_mode`): "exact" or "saving"
+                    out.append(&format!("{l} mode={}", crate::perf_mode::tier_key()));
                 }
             })
             .ok()?;

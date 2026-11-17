@@ -122,9 +122,12 @@ pub fn transfer_with(old: &Value, new: &Value, target: &mut Value, relative: boo
                 let av = a.get(k).cloned().unwrap_or(Value::Null);
                 match z.get_mut(k) {
                     Some(zv) => transfer_with(&av, nv, zv, relative),
-                    None => {
+                    // only a field that changed goes over: one the active photo had all along (e.g. its pinned
+                    // engine, an own lens profile) stays away from photos without it
+                    None if av != *nv => {
                         z.insert(k.clone(), nv.clone());
                     }
+                    None => {}
                 }
             }
         }

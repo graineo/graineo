@@ -22,6 +22,8 @@ pub mod files;
 pub mod db;
 pub mod manage;
 pub mod duplicates;
+pub mod series;
+pub mod series_quality;
 pub mod duplicate_cleanup;
 pub mod trash_batch;
 pub mod settings;
@@ -58,6 +60,7 @@ pub mod semantic;
 // SigLIP 2 for the semantic search (stages "Ausgewogen" and "Beste Treffer")
 pub mod sentencepiece;
 pub mod siglip;
+pub mod sky_check;
 pub mod search_model;
 pub mod xlmr;
 pub mod semantic_backfill;
@@ -70,10 +73,13 @@ pub mod keywords;
 pub mod keyword_arrange;
 pub mod keyword_rules;
 pub mod keyword_suggest;
+pub mod content_keywords;
 pub mod store;
 pub mod develop_history;
+pub mod mask_raster;
 pub mod sidecar_import;
 pub mod location;
+pub mod places;
 pub mod relocate;
 pub mod move_folder;
 pub mod move_job;
@@ -317,5 +323,21 @@ mod test_safety {
         if std::env::var_os("GRAINEO_DATA_DIR").is_none() {
             assert_eq!(super::data_dir(), dir);
         }
+    }
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::{format_from_extension, is_raw};
+
+    /// Nikon RAWs: NEF and NRW (Coolpix) in any case are one format, a RAW.
+    #[test]
+    fn nikon_extensions_are_raw() {
+        for name in ["DSC_0001.NEF", "dsc_0001.nef", "_DSC0070.Nef", "DSCN2039.NRW", "dscn2039.nrw"] {
+            let f = format_from_extension(name);
+            assert_eq!(f, Some("NEF"), "{name}");
+            assert!(is_raw(f.unwrap()), "{name}");
+        }
+        assert_eq!(format_from_extension("DSC_0001.NEF.xmp"), None);
     }
 }

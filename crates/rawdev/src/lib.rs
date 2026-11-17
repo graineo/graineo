@@ -11,6 +11,7 @@ pub mod false_color;
 pub mod calibration;
 pub mod gpu;
 pub mod lens_shots;
+pub mod learn;
 pub mod look_lut;
 pub mod lightroom;
 pub mod lr_masks;
@@ -18,7 +19,7 @@ pub mod render;
 pub mod wb;
 pub mod timings;
 
-pub use doc::{is_editable, is_image, is_raw, RawDoc, Stage};
+pub use doc::{apple, is_editable, is_image, is_raw, RawDoc, Stage};
 
 pub mod film_profiles;
 

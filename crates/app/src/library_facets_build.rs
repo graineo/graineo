@@ -46,7 +46,7 @@ impl Facets {
         let mut times = BuildTimes::default();
         let t = Instant::now();
         let mut names: [Vec<String>; N] = Default::default();
-        let (mut cameras, mut lenses, mut formats) = (HashMap::new(), HashMap::new(), HashMap::new());
+        let (mut cameras, mut lenses, mut formats, mut places) = (HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new());
         let mut years: HashMap<u16, u32> = HashMap::new();
         let mut months = [NO_VALUE; 13];
         let mut days = [NO_VALUE; 32];
@@ -63,6 +63,9 @@ impl Facets {
             }
             if let Some(o) = &z.lens {
                 w[1] = text_value(&mut lenses, o, &mut names[1]);
+            }
+            if let Some(o) = &z.place {
+                w[PLACE_COL] = text_value(&mut places, o, &mut names[PLACE_COL]);
             }
             if let Some(j) = z.year() {
                 let next = names[2].len() as u32;
@@ -225,6 +228,7 @@ pub fn inputs_fingerprint(rows: &[Row], keywords: &[Keyword], keywords_per_image
         z.image.hash(&mut h);
         z.camera.hash(&mut h);
         z.lens.hash(&mut h);
+        z.place.hash(&mut h);
         z.capture.hash(&mut h);
         z.format.hash(&mut h);
         (z.stars, z.label, z.ai_quality).hash(&mut h);

@@ -98,14 +98,15 @@ fn index_texts(c: &rusqlite::Connection, only: Option<i64>) -> Result<HashMap<i6
             .prepare(&format!(
                 "SELECT b.id, d.name, st.name || ' ' || o.path, coalesce(d.camera,''), coalesce(d.lens,''), coalesce(b.caption,''), coalesce(b.copy,''), d.format,
                         coalesce(b.lr_text,'') || ' ' || coalesce(d.textmeta,''),
-                        coalesce((SELECT group_concat(coalesce(k.keywords,'') || ' ' || coalesce(k.scene,'') || ' ' || coalesce(k.reason,''), ' ') FROM ai k WHERE k.file = d.id), '')
+                        coalesce((SELECT group_concat(coalesce(k.keywords,'') || ' ' || coalesce(k.scene,'') || ' ' || coalesce(k.reason,''), ' ') FROM ai k WHERE k.file = d.id), ''),
+                        coalesce((SELECT p.name FROM place p WHERE p.file = d.id), '')
                  FROM image b JOIN file d ON d.id=b.file JOIN folder o ON o.id=d.folder JOIN root_folder st ON st.id=o.root{w_image}"
             ))
             .map_err(f)?;
         let mut rows = st.query([]).map_err(f)?;
         while let Some(r) = rows.next().map_err(f)? {
             let mut t = String::new();
-            for i in 1..10 {
+            for i in 1..11 {
                 let v: String = r.get(i).map_err(f)?;
                 t.push_str(&v);
                 t.push(' ');
@@ -202,6 +203,36 @@ pub fn update_image(db: &Db, image: i64) -> Result<bool, String> {
         }
     }
     Ok(true)
+}
+
+/// Bring the index entries of the images of these files up to date (e.g. after they got a place name). Few files are
+/// updated one by one in short transactions; many at once rebuild the index (one pass is cheaper then). Does nothing
+/// as long as there is no index. Returns the number of images updated.
+pub fn update_files(db: &Db, files: &[i64]) -> Result<usize, String> {
+    const ONE_BY_ONE: usize = 500;
+    let f = |e: rusqlite::Error| e.to_string();
+    if files.is_empty() || db.info("search_index").is_none() {
+        return Ok(0);
+    }
+    let mut images: Vec<i64> = Vec::new();
+    for chunk in files.chunks(500) {
+        let list = chunk.iter().map(i64::to_string).collect::<Vec<_>>().join(",");
+        // file ids are numbers from the database: safe to put into the statement
+        let mut st = db.conn.prepare(&format!("SELECT id FROM image WHERE file IN ({list})")).map_err(f)?;
+        let r = st.query_map([], |r| r.get::<_, i64>(0)).map_err(f)?.collect::<rusqlite::Result<Vec<_>>>().map_err(f)?;
+        images.extend(r);
+    }
+    if images.len() > ONE_BY_ONE {
+        return build_index(db).map(|(n, _)| n);
+    }
+    for chunk in images.chunks(100) {
+        let tx = db.conn.unchecked_transaction().map_err(f)?;
+        for &b in chunk {
+            update_image(db, b)?;
+        }
+        tx.commit().map_err(f)?;
+    }
+    Ok(images.len())
 }
 
 // ───────────────────────────────────────────── Query language
@@ -712,10 +743,20 @@ pub(crate) fn keyword_ids(db: &Db, t: &str, exact: bool) -> Vec<i64> {
     ids
 }
 
-/// Images with a place keyword (name contains `t`, folded) or one below it.
-fn place_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
+/// Images with a place keyword (name contains `t`, folded) or one below it, and images whose GPS position lies in
+/// a place of that name (city, region, country or the whole "City, Region, Country", see [`crate::places`]).
+pub(crate) fn place_images(db: &Db, t: &str, exact: bool) -> HashSet<i64> {
     let places = place_keywords(db);
     let mut out = HashSet::new();
+    if let Ok(mut st) = db.conn.prepare_cached("SELECT i.id, p.name, p.city, p.region, p.country FROM place p JOIN image i ON i.file = p.file WHERE p.name IS NOT NULL") {
+        if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, [r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?]))) {
+            for (image, names) in rows.flatten() {
+                if names.iter().any(|n| !n.is_empty() && name_ok(n, t, exact)) {
+                    out.insert(image);
+                }
+            }
+        }
+    }
     if let Ok(mut st) = db.conn.prepare_cached("SELECT id, name FROM keyword") {
         if let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))) {
             for (id, _) in rows.flatten().filter(|(id, n)| places.contains(id) && name_ok(n, t, exact)) {

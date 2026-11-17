@@ -584,6 +584,18 @@ impl TextTower {
     }
 }
 
+/// Scale and bias of the training sigmoid: probability that a text describes a photo =
+/// sigmoid(scale · cosine + bias). The file stores the logarithm of the scale.
+pub fn logit_params(dir: &Path) -> Result<(f32, f32), String> {
+    let m = ModelFile::open(&dir.join("model.safetensors"))?;
+    let scale = m.tensor("logit_scale", &[1])?.data[0].exp();
+    let bias = m.tensor("logit_bias", &[1])?.data[0];
+    if !scale.is_finite() || !bias.is_finite() || scale <= 0.0 {
+        return Err("Modell passt nicht: Skala oder Versatz ungültig".into());
+    }
+    Ok((scale, bias))
+}
+
 /// Model folder of a SigLIP module (installed under modules/<id>), or for tests an existing
 /// Hugging Face cache (`GRAINEO_HF_CACHE`, `models--google--<name>`).
 pub fn folder(module_id: &str, repo: &str) -> Option<PathBuf> {

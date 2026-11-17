@@ -267,10 +267,19 @@ pub(crate) fn remove_rows_in(tx: &Connection, table: &str, column: &str, values:
 /// Tables whose rows a change replaces under the same primary key (see [`undo`]).
 const REPLACED_BY_KEY: [&str; 2] = ["collection_order", "keyword_option"];
 
-/// Delete exactly the rows a change added to a table.
+/// Delete exactly the rows a change added to a table. A keyword the change created is deleted only while nothing
+/// else hangs on it: deleting it would take, by cascade, assignments and keywords added later on ways without their
+/// own ⌘Z step (Lightroom import, reading sidecars, pair sync). The step's own assignments and children are gone or
+/// moved back by then (`added` is undone in reverse order, after the moves).
 fn delete_added(tx: &rusqlite::Transaction, t: &TableRows) -> R<()> {
     let cond: Vec<String> = t.columns.iter().enumerate().map(|(i, c)| format!("{} = ?{}", quote(c), i + 1)).collect();
-    let sql = format!("DELETE FROM {} WHERE {}", quote(&t.table), cond.join(" AND "));
+    let mut sql = format!("DELETE FROM {} WHERE {}", quote(&t.table), cond.join(" AND "));
+    if t.table == "keyword" && t.columns == ["id"] {
+        sql.push_str(
+            " AND NOT EXISTS (SELECT 1 FROM image_keyword WHERE keyword = ?1) AND NOT EXISTS (SELECT 1 FROM keyword c WHERE c.parent = ?1)
+              AND NOT EXISTS (SELECT 1 FROM face WHERE person = ?1 OR guessed = ?1)",
+        );
+    }
     let mut st = tx.prepare(&sql).map_err(f)?;
     for r in t.rows.iter().rev() {
         st.execute(params_from_iter(r.iter())).map_err(f)?;

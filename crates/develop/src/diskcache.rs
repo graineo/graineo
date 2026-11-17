@@ -124,12 +124,14 @@ fn file_for(path: &Path, text: &str) -> Option<PathBuf> {
 /// SPP base from the cache or newly computed (and then stored).
 /// Bit-exactly the same result as [`crate::spp::working_key`] with the same arguments.
 pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) -> Result<Linear, String> {
+    LAST_HIT.with(|h| h.set(false));
     let gpu = gpu && pools::gpu_allowed();
     // Grey bases (black and white the Sigma way) are cheap to compute and are not stored
     let entry = if disabled() || key.mono { None } else { key_text(path, key, gpu).and_then(|t| Some((file_for(path, &t)?, t))) };
     if let Some((file, text)) = &entry {
         if let Some(lin) = load(file, text) {
             log(|| format!("Plattencache: Treffer {}", file.display()));
+            LAST_HIT.with(|h| h.set(true));
             return Ok(lin);
         }
     }
@@ -164,6 +166,17 @@ pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) ->
         }
     }
     Ok(lin)
+}
+
+thread_local! {
+    /// Did the last [`working_key`] on this thread read its base from the cache?
+    static LAST_HIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Did the last [`working_key`] on this thread come from the cache? For the app's self-measurement: a hit is no
+/// computing time. Ask on the same thread right after the call.
+pub fn last_was_hit() -> bool {
+    LAST_HIT.with(|h| h.get())
 }
 
 /// Stores running in the background right now ([`wait_for_memory`]).

@@ -39,6 +39,10 @@ fn photographic_noise() {
                 noise_reduction: 0.75,
                 ..Default::default()
             },
+            name: None,
+            enabled: true,
+            amount: 1.0,
+            refine: 0.0,
         }],
     };
     let out = apply(Image::new(w, h, &noisy).unwrap(), &d).unwrap();

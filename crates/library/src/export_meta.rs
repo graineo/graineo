@@ -1,4 +1,4 @@
-//! Metadata of exported images (JPEG, TIFF, PNG): what goes into the file and a small writer that
+//! Metadata of exported images (JPEG, JPEG XL, TIFF, PNG): what goes into the file and a small writer that
 //! works on every platform.
 //!
 //! - [`Shot`]: shooting data in neutral form (camera, lens, exposure, date). Sources: the X3F
@@ -8,6 +8,8 @@
 //!   [`Shot`] fills what ImageIO does not know.
 //! - Without macOS [`write_own`] writes EXIF (camera block) and XMP (copyright, personal fields)
 //!   itself: JPEG APP1, PNG `eXIf`/`iTXt`, TIFF IFD0 + EXIF IFD appended to the file.
+//! - JPEG XL (all platforms): `Exif` and `xml ` boxes of the container ([`jxl_with`]). On macOS their content is
+//!   what ImageIO writes for a JPEG (so exactly the fields of the JPEG export), elsewhere the own writer's.
 //!
 //! Never written: serial numbers of camera and lens, owner names, names of people.
 
@@ -253,7 +255,7 @@ fn has_extension(p: &Path, exts: &[&str]) -> bool {
     p.extension().and_then(|e| e.to_str()).is_some_and(|e| exts.iter().any(|x| e.eq_ignore_ascii_case(x)))
 }
 
-/// Writes the metadata of an exported JPEG/TIFF/PNG (the one entry point for the app and graineo-dev):
+/// Writes the metadata of an exported JPEG/JPEG XL/TIFF/PNG (the one entry point for the app and graineo-dev):
 /// shooting data of `original` and copyright always; personal fields and location as `fields` says.
 /// X3F: shooting data from the X3F properties. Returns: short report.
 pub fn write(target: &Path, original: &Path, fields: &ExportFields) -> Result<String, String> {
@@ -262,6 +264,9 @@ pub fn write(target: &Path, original: &Path, fields: &ExportFields) -> Result<St
         f.shot = Shot::from_x3f(original).or(f.shot);
     } else if f.shot.is_none() && cfg!(not(target_os = "macos")) && has_extension(original, &["jpg", "jpeg"]) {
         f.shot = Shot::from_jpeg(original);
+    }
+    if has_extension(target, &["jxl"]) {
+        return write_jxl(target, original, &f);
     }
     let (w, h) = crate::imageio::properties(target).map(|e| (e.width.unwrap_or(0), e.height.unwrap_or(0))).unwrap_or((0, 0));
     let report = crate::imageio::write_metadata(target, original, w, h, &f)?;
@@ -722,6 +727,201 @@ fn png_chunks(data: &[u8]) -> Result<Vec<(&[u8], &[u8], &[u8])>, String> {
     Ok(v)
 }
 
+// ─────────────────────────────────────────────────────────── JPEG XL container
+
+/// Signature box of the JPEG XL container (ISO/IEC 18181-2).
+const JXL_SIGNATURE: &[u8] = &[0, 0, 0, 0x0C, b'J', b'X', b'L', b' ', 0x0D, 0x0A, 0x87, 0x0A];
+/// Start of a bare JPEG XL codestream.
+const JXL_CODESTREAM: &[u8] = &[0xFF, 0x0A];
+
+/// Is `data` a JPEG XL file (container or bare codestream)?
+pub fn is_jxl(data: &[u8]) -> bool {
+    data.starts_with(JXL_SIGNATURE) || data.starts_with(JXL_CODESTREAM)
+}
+
+/// Boxes of a JPEG XL container: (type, body, whole box).
+fn jxl_boxes(data: &[u8]) -> Result<Vec<([u8; 4], &[u8], &[u8])>, String> {
+    if !data.starts_with(JXL_SIGNATURE) {
+        return Err("not a JPEG XL container".into());
+    }
+    let mut v = Vec::new();
+    let mut i = 0;
+    while i < data.len() {
+        let head = data.get(i..i + 8).ok_or("damaged JPEG XL")?;
+        let kind = [head[4], head[5], head[6], head[7]];
+        let (start, end) = match u32::from_be_bytes([head[0], head[1], head[2], head[3]]) {
+            // size 0: the box runs to the end of the file
+            0 => (i + 8, data.len()),
+            // size 1: 64-bit size follows the type
+            1 => {
+                let b = data.get(i + 8..i + 16).ok_or("damaged JPEG XL")?;
+                let n = u64::from_be_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]]);
+                (i + 16, usize::try_from(n).ok().and_then(|n| i.checked_add(n)).ok_or("damaged JPEG XL")?)
+            }
+            n => (i + 8, i.checked_add(n as usize).ok_or("damaged JPEG XL")?),
+        };
+        if end < start || end > data.len() {
+            return Err("damaged JPEG XL".into());
+        }
+        v.push((kind, &data[start..end], &data[i..end]));
+        i = end;
+    }
+    Ok(v)
+}
+
+fn jxl_box(kind: &[u8; 4], body: &[u8]) -> Result<Vec<u8>, String> {
+    let n = u32::try_from(body.len() + 8).map_err(|_| "metadata too large")?;
+    Ok([&n.to_be_bytes()[..], kind, body].concat())
+}
+
+/// Start of the codestream of a JPEG XL file (bare, `jxlc` or the first `jxlp` box).
+fn jxl_codestream(data: &[u8]) -> Option<&[u8]> {
+    if data.starts_with(JXL_CODESTREAM) {
+        return Some(data);
+    }
+    jxl_boxes(data).ok()?.into_iter().find_map(|(k, b, _)| match &k {
+        b"jxlc" => Some(b),
+        b"jxlp" => b.get(4..),
+        _ => None,
+    })
+}
+
+/// Pixel size of a JPEG XL file (SizeHeader of the codestream, ISO/IEC 18181-1 D.2).
+pub fn jxl_size(data: &[u8]) -> Option<(u32, u32)> {
+    let cs = jxl_codestream(data)?;
+    if !cs.starts_with(JXL_CODESTREAM) {
+        return None;
+    }
+    // bits are read least significant first
+    let mut pos = 16usize;
+    let mut read = |n: usize| -> Option<u64> {
+        let mut v = 0u64;
+        for k in 0..n {
+            let byte = *cs.get(pos / 8)?;
+            v |= (((byte >> (pos % 8)) & 1) as u64) << k;
+            pos += 1;
+        }
+        Some(v)
+    };
+    let small = read(1)? == 1;
+    let dimension = |read: &mut dyn FnMut(usize) -> Option<u64>| -> Option<u64> {
+        if small {
+            return Some((read(5)? + 1) * 8);
+        }
+        let bits = [9, 13, 18, 30][read(2)? as usize];
+        Some(read(bits)? + 1)
+    };
+    let height = dimension(&mut read)?;
+    let ratio = read(3)?;
+    let width = match ratio {
+        0 => dimension(&mut read)?,
+        r => {
+            let (n, d) = [(1, 1), (12, 10), (4, 3), (3, 2), (16, 9), (5, 4), (2, 1)][r as usize - 1];
+            height * n / d
+        }
+    };
+    Some((u32::try_from(width).ok()?, u32::try_from(height).ok()?))
+}
+
+/// JPEG XL with new `Exif` and `xml ` boxes (old ones of the same kind removed), right after `ftyp` (and the level
+/// box). A bare codestream is wrapped into a container first. The codestream itself stays byte for byte.
+pub fn jxl_with(data: &[u8], exif: Option<&[u8]>, xmp: Option<&str>) -> Result<Vec<u8>, String> {
+    let mut inserted = Vec::new();
+    if let Some(e) = exif {
+        // Exif box: 4-byte offset to the TIFF header, then the TIFF block
+        inserted.extend(jxl_box(b"Exif", &[&[0u8; 4][..], e].concat())?);
+    }
+    if let Some(x) = xmp {
+        inserted.extend(jxl_box(b"xml ", x.as_bytes())?);
+    }
+    if data.starts_with(JXL_CODESTREAM) {
+        let mut out = JXL_SIGNATURE.to_vec();
+        out.extend(jxl_box(b"ftyp", b"jxl \0\0\0\0jxl ")?);
+        out.extend(inserted);
+        out.extend(jxl_box(b"jxlc", data)?);
+        return Ok(out);
+    }
+    let boxes = jxl_boxes(data)?;
+    let replaced = |k: &[u8; 4], body: &[u8]| -> bool {
+        // also the Brotli-compressed form ("brob" + original type) of a box we replace
+        let k = if k == b"brob" { body.get(..4).unwrap_or_default() } else { &k[..] };
+        (k == b"Exif" && exif.is_some()) || (k == b"xml " && xmp.is_some())
+    };
+    let mut out = Vec::with_capacity(data.len() + inserted.len());
+    let mut placed = false;
+    for (n, (kind, body, whole)) in boxes.iter().enumerate() {
+        if !placed && !matches!(kind, b"JXL " | b"ftyp" | b"jxll") {
+            out.extend_from_slice(&inserted);
+            placed = true;
+        }
+        if !replaced(kind, body) {
+            out.extend_from_slice(whole);
+        }
+        if n + 1 == boxes.len() && !placed {
+            out.extend_from_slice(&inserted);
+            placed = true;
+        }
+    }
+    Ok(out)
+}
+
+/// Metadata of an exported JPEG XL: EXIF and XMP as boxes of the container, without touching the codestream.
+fn write_jxl(target: &Path, original: &Path, f: &ExportFields) -> Result<String, String> {
+    let data = std::fs::read(target).map_err(|e| e.to_string())?;
+    let (width, height) = jxl_size(&data).ok_or("damaged JPEG XL")?;
+    let (exif, xmp, report) = jxl_metadata(target, original, f, width, height)?;
+    let out = jxl_with(&data, Some(&exif), xmp.as_deref())?;
+    replace_file(target, &out)?;
+    Ok(report)
+}
+
+/// EXIF block and XMP packet for a JPEG XL: on macOS ImageIO writes them into a small JPEG next to the
+/// target (the same function and fields as for the JPEG export), they are taken from there.
+#[cfg(target_os = "macos")]
+fn jxl_metadata(target: &Path, original: &Path, f: &ExportFields, width: u32, height: u32) -> Result<(Vec<u8>, Option<String>, String), String> {
+    let carrier = target.with_file_name(format!(".{}.metadata.jpg", target.file_name().unwrap_or_default().to_string_lossy()));
+    let result = (|| {
+        let mut jpeg = Vec::new();
+        image::DynamicImage::ImageRgb8(image::RgbImage::new(8, 8)).write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg).map_err(|e| e.to_string())?;
+        std::fs::write(&carrier, &jpeg).map_err(|e| e.to_string())?;
+        let report = crate::imageio::write_metadata(&carrier, original, width, height, f)?;
+        let (exif, xmp) = jpeg_app1(&std::fs::read(&carrier).map_err(|e| e.to_string())?);
+        Ok((exif.ok_or("no EXIF written")?, xmp, report))
+    })();
+    let _ = std::fs::remove_file(&carrier);
+    result
+}
+
+#[cfg(not(target_os = "macos"))]
+fn jxl_metadata(_target: &Path, _original: &Path, f: &ExportFields, width: u32, height: u32) -> Result<(Vec<u8>, Option<String>, String), String> {
+    let own = OwnFields { fields: f.clone(), width, height };
+    Ok((exif_block(&own), xmp_packet(&own), own_report(&own)))
+}
+
+/// EXIF (TIFF block) and XMP packet from the APP1 segments of a JPEG.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn jpeg_app1(data: &[u8]) -> (Option<Vec<u8>>, Option<String>) {
+    let (mut exif, mut xmp) = (None, None);
+    let mut i = 2;
+    while i + 4 <= data.len() && data[i] == 0xFF {
+        let m = data[i + 1];
+        if m == 0xDA || m == 0xD9 {
+            break;
+        }
+        let end = (i + 2 + u16::from_be_bytes([data[i + 2], data[i + 3]]) as usize).min(data.len());
+        let body = &data[(i + 4).min(end)..end];
+        if m == 0xE1 {
+            if let Some(b) = body.strip_prefix(b"Exif\0\0") {
+                exif.get_or_insert_with(|| b.to_vec());
+            } else if let Some(b) = body.strip_prefix(XMP_ID) {
+                xmp.get_or_insert_with(|| String::from_utf8_lossy(b).into_owned());
+            }
+        }
+        i = end;
+    }
+    (exif, xmp)
+}
+
 /// TIFF with an EXIF IFD: DateTimeOriginal and DateTimeDigitized added (a copy of the EXIF IFD is appended,
 /// the pointer in IFD0 changed in place; everything else stays where it is). None: nothing to do (no EXIF IFD,
 /// date already there).
@@ -816,7 +1016,7 @@ fn tiff_with(data: &[u8], f: &OwnFields, xmp: Option<&str>) -> Result<Vec<u8>, S
     Ok(out)
 }
 
-/// Writes metadata into a finished JPEG/PNG/TIFF without touching the image data (no recompression).
+/// Writes metadata into a finished JPEG/JPEG XL/PNG/TIFF without touching the image data (no recompression).
 /// Writes to a side file first, then replaces the target. Returns: short report.
 pub fn write_own(target: &Path, f: &OwnFields) -> Result<String, String> {
     let data = std::fs::read(target).map_err(|e| e.to_string())?;
@@ -826,10 +1026,17 @@ pub fn write_own(target: &Path, f: &OwnFields) -> Result<String, String> {
         jpeg_with(&data, &exif, xmp.as_deref())?
     } else if data.starts_with(b"\x89PNG") {
         png_with(&data, Some(&exif), xmp.as_deref())?
+    } else if is_jxl(&data) {
+        jxl_with(&data, Some(&exif), xmp.as_deref())?
     } else {
         tiff_with(&data, f, xmp.as_deref())?
     };
     replace_file(target, &out)?;
+    Ok(own_report(f))
+}
+
+/// Short report of the own writer.
+fn own_report(f: &OwnFields) -> String {
     let mut parts = vec![if f.fields.shot.as_ref().is_some_and(|s| !s.is_empty()) { "shooting data" } else { "software" }.to_string()];
     if f.fields.copyright.is_some() {
         parts.push("copyright".into());
@@ -837,7 +1044,7 @@ pub fn write_own(target: &Path, f: &OwnFields) -> Result<String, String> {
     if f.fields.personal {
         parts.push("stars/keywords".into());
     }
-    Ok(parts.join(", "))
+    parts.join(", ")
 }
 
 #[cfg(test)]
@@ -1113,5 +1320,106 @@ mod tests {
         assert_eq!(tag(&tags, 0xA434).as_deref(), Some("SIGMA 30mm f/2.8"));
         assert_eq!(&t3[8..14], &pixels);
         assert!(tiff_exif_dates(&t3, "2014:07:16 14:02:02").unwrap().is_none());
+    }
+
+    /// A JPEG XL file of `w` × `h` (lossless, 8 bit) from the encoder of the export.
+    fn jxl_bytes(w: usize, h: usize) -> Vec<u8> {
+        let px: Vec<u8> = (0..w * h * 3).map(|i| (i * 37 % 251) as u8).collect();
+        jixel::encode_image(&px, w, h, &jixel::EncodeConfig::default().with_lossless(true).with_speed(jixel::Speed::Fastest)).unwrap()
+    }
+
+    fn jxl_pixels(b: &[u8]) -> Vec<f32> {
+        let img = jxl_oxide::JxlImage::builder().read(std::io::Cursor::new(b)).unwrap();
+        img.render_frame(0).unwrap().image_all_channels().buf().to_vec()
+    }
+
+    /// Bare codestream of a JPEG XL file (as some encoders write it).
+    fn bare(b: &[u8]) -> Vec<u8> {
+        if b.starts_with(JXL_CODESTREAM) {
+            return b.to_vec();
+        }
+        jxl_boxes(b).unwrap().iter().find(|(k, ..)| k == b"jxlc").map(|(_, body, _)| body.to_vec()).expect("jxlc box")
+    }
+
+    #[test]
+    fn jxl_size_from_the_codestream() {
+        // small (multiples of 8), the fixed ratios and free sizes in every coding range
+        for (w, h) in [(1, 1), (8, 8), (16, 24), (40, 30), (64, 36), (300, 200), (513, 7), (9000, 2), (2, 300_000)] {
+            let b = jxl_bytes(w, h);
+            assert_eq!(jxl_size(&b), Some((w as u32, h as u32)), "{w}×{h}");
+            assert_eq!(jxl_size(&bare(&b)), Some((w as u32, h as u32)), "{w}×{h} bare");
+        }
+        assert_eq!(jxl_size(b"\xFF\x0A"), None);
+        assert_eq!(jxl_size(&jpeg_bytes()), None);
+    }
+
+    /// EXIF and XMP as boxes, the codestream unchanged, from a bare codestream and from a container; written
+    /// twice: still one box of each kind.
+    #[test]
+    fn jxl_gets_exif_and_xmp_boxes() {
+        let fields = ExportFields { personal: true, stars: 4, keywords: vec!["Meer & Sand".into()], shot: Some(shot()), copyright: Some("© 2026 Test".into()), ..Default::default() };
+        let f = OwnFields { fields, width: 40, height: 30 };
+        let container = jxl_bytes(40, 30);
+        for data in [bare(&container), container.clone()] {
+            let pixels = jxl_pixels(&data);
+            let out = jxl_with(&data, Some(&exif_block(&f)), xmp_packet(&f).as_deref()).unwrap();
+            let out = jxl_with(&out, Some(&exif_block(&f)), xmp_packet(&f).as_deref()).unwrap();
+            let boxes = jxl_boxes(&out).unwrap();
+            let kinds: Vec<[u8; 4]> = boxes.iter().map(|(k, ..)| *k).collect();
+            assert_eq!(kinds.iter().filter(|k| *k == b"Exif").count(), 1, "{kinds:?}");
+            assert_eq!(kinds.iter().filter(|k| *k == b"xml ").count(), 1);
+            assert_eq!(&kinds[..2], &[*b"JXL ", *b"ftyp"]);
+            let exif = boxes.iter().find(|(k, ..)| k == b"Exif").unwrap().1;
+            let t = read_tags(&exif[4..]);
+            assert_eq!(tag(&t, 0x0110).as_deref(), Some("SIGMA DP2 Merrill"));
+            assert_eq!(tag(&t, 0x9003).as_deref(), Some("2014:07:16 14:02:02"));
+            assert_eq!(tag(&t, 0x8298).as_deref(), Some("© 2026 Test"));
+            assert_eq!(tag(&t, 0xA002).as_deref(), Some("40"));
+            let xmp = String::from_utf8_lossy(boxes.iter().find(|(k, ..)| k == b"xml ").unwrap().1).into_owned();
+            assert!(xmp.contains("xmp:Rating=\"4\"") && xmp.contains("Meer &amp; Sand"));
+            // the reference decoder sees the same image and the metadata boxes
+            assert_eq!(jxl_pixels(&out), pixels);
+            assert_eq!(jxl_size(&out), Some((40, 30)));
+            // without personal fields: the XMP box goes, the EXIF box is replaced
+            let shooting = OwnFields { fields: ExportFields { shot: Some(shot()), ..Default::default() }, width: 40, height: 30 };
+            let out = jxl_with(&out, Some(&exif_block(&shooting)), None).unwrap();
+            assert_eq!(jxl_boxes(&out).unwrap().iter().filter(|(k, ..)| k == b"Exif").count(), 1);
+            assert_eq!(jxl_pixels(&out), pixels);
+        }
+        assert!(jxl_with(&jpeg_bytes(), None, None).is_err());
+    }
+
+    /// The export entry point on a .jxl: metadata of the original in the boxes, on macOS through ImageIO (as for the
+    /// JPEG export), elsewhere through the own writer.
+    #[test]
+    fn write_puts_the_shooting_data_into_a_jxl() {
+        let dir = std::env::temp_dir().join(format!("graineo-jxl-meta-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = dir.join("camera.jpg");
+        let shot = Shot { make: Some("FUJIFILM".into()), model: Some("X-T5".into()), date: Some("2025:06:01 10:20:30".into()), f_number: Some(1.4), ..Default::default() };
+        std::fs::write(&original, jpeg_bytes()).unwrap();
+        write_own(&original, &OwnFields { fields: ExportFields { shot: Some(shot.clone()), ..Default::default() }, width: 16, height: 8 }).unwrap();
+        let target = dir.join("export.jxl");
+        let data = jxl_bytes(64, 48);
+        std::fs::write(&target, &data).unwrap();
+        let fields = ExportFields { personal: true, stars: 3, shot: Some(shot), copyright: Some("C".into()), ..Default::default() };
+        write(&target, &original, &fields).unwrap();
+        let out = std::fs::read(&target).unwrap();
+        let boxes = jxl_boxes(&out).unwrap();
+        let exif = boxes.iter().find(|(k, ..)| k == b"Exif").expect("Exif box").1;
+        let t = read_tags(&exif[4..]);
+        assert_eq!(tag(&t, 0x010F).as_deref(), Some("FUJIFILM"));
+        assert_eq!(tag(&t, 0x0110).as_deref(), Some("X-T5"));
+        assert_eq!(tag(&t, 0x9003).as_deref(), Some("2025:06:01 10:20:30"));
+        assert_eq!(tag(&t, 0xA002).as_deref(), Some("64"));
+        assert_eq!(tag(&t, 0xA003).as_deref(), Some("48"));
+        assert_eq!(tag(&t, 0x0112).as_deref(), Some("1"));
+        let xmp = String::from_utf8_lossy(boxes.iter().find(|(k, ..)| k == b"xml ").expect("xml box").1).into_owned();
+        assert!(xmp.contains("Rating") && xmp.contains('3'), "{xmp}");
+        assert_eq!(jxl_pixels(&out), jxl_pixels(&data));
+        // nothing left next to the file (carrier JPEG, side file)
+        let names: Vec<String> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(names.len(), 2, "{names:?}");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

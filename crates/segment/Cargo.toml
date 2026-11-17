@@ -1,0 +1,17 @@
+[package]
+name = "segment"
+description = "graineo: selection masks from images (subject and people via the system's image analysis on macOS, click selection with a segmentation model); no file or database access"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+# pure-Rust ONNX runtime for the click selection (MIT OR Apache-2.0); no native library, builds for every system
+tract-onnx = "0.23"
+# label format of the segment maps of depth masks
+masks = { path = "../masks" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSData", "NSDictionary", "NSString", "NSValue", "NSError"] }

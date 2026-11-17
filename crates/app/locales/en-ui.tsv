@@ -2222,6 +2222,10 @@ Bild zu klein für die Schärfekarte	Image too small for the sharpness map
 keine eingebettete Vorschau	no embedded preview
 Seitenverhältnis der Vorschau {}×{} passt nicht zum Zuschnitt	Preview aspect ratio {}×{} doesn’t match the crop
 Fuji SuperCCD (gedrehter Sensor) wird nicht unterstützt	Fuji SuperCCD (rotated sensor) isn’t supported
+Nikon High Efficiency (HE/HE*): diese NEF-Kompression wird noch nicht dekodiert	Nikon High Efficiency (HE/HE*): this NEF compression cannot be decoded yet
+NEF-Kompression nicht unterstützt	NEF compression not supported
+Nikon „Hohe Effizienz“ (HE und HE★) kann graineo noch nicht entwickeln. Die Vorschau aus der Kamera bleibt sichtbar. Fotos mit „Verlustfrei komprimiert“, „Komprimiert“ oder „Unkomprimiert“ lassen sich entwickeln.	graineo cannot develop Nikon “High Efficiency” (HE and HE★) files yet. The camera’s preview stays visible. Photos saved as “Lossless compressed”, “Compressed” or “Uncompressed” can be developed.
+NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt	NEF compression “High Efficiency” – not supported yet
 E/A-Fehler: {}	I/O error: {}
 keine X3F-Datei (Kennung {})	not an X3F file (signature {})
 Datei beschädigt: {}	File damaged: {}
@@ -3141,7 +3145,6 @@ Ordner verschieben	Moving folder
 Punkte sichtbar  H	Spots visible  H
 Punkte verborgen  H	Spots hidden  H
 Retusche-Punkt wählen; Ziehen verschiebt Punkt oder Quelle	select a retouch spot; dragging moves the spot or its source
-Retusche-Punkte und Maskenkonturen ein/aus (im Werkzeug „Masken“ sichtbar)	retouch spots and mask outlines on/off (visible in the Masks tool)
 Retusche-Werkzeug und Auswahl beenden	exit the retouch tool and clear the selection
 Sicherung der Bibliothek	Backing up the library
 Abgleich · {a}	Sync · {a}
@@ -3339,7 +3342,7 @@ Entzerrt um die Bildmitte, als wäre die Kamera nicht nach oben oder unten gekip
 Farbrauschen zeigt sich beim Foveon als bunte Flecken in dunklen, gleichmäßigen Flächen. Mehr glättet sie, kann aber feine Farbdetails an Kanten verwischen.\n• **Mitte** – Standard\n• **Ganz links** – schwächste sinnvolle Stufe; ohne Farbglättung zeigen sich schon bei ISO 100 bunte Pünktchen\n\nJede Stufe rechnet die Basis neu.	With Foveon, color noise shows up as colored blotches in dark, even areas. More smooths them but can smear fine color detail at edges.\n• **Middle** – default\n• **Far left** – the weakest useful setting; without color smoothing, colored specks appear even at ISO 100\n\nEach step recomputes the base.
 • **Film** – simuliert Filmmaterial, Entwicklung, Papier, Korn und Lichthof\n• **Look** – gestaltet Farbe und Tonwerte; Looks aus Profilpaketen haben einen Intensitätsregler\n• **Wie Kamera** – der zum Bildstil der Aufnahme passende Look (z. B. Monochrom + Ye); wird nur auf Klick angewandt, unbearbeitete Fotos starten neutral\n\nFilm und Look schließen sich aus: Ein gewählter Look schaltet den Film aus, „Film ausschalten“ bringt den gespeicherten Look zurück.	• **Film** – simulates film stock, development, paper, grain and halation\n• **Look** – shapes color and tones; looks from profile packs have an intensity slider\n• **As camera** – the look matching the shot’s picture style (e.g. Monochrome + Ye); applied only when clicked, unedited photos start neutral\n\nFilm and look are mutually exclusive: choosing a look turns the film off; “Turn film off” restores the saved look.
 Vergleichsknopf (zwei Felder, oben rechts) einschalten und bis zu drei Look-Kacheln anklicken; ein zweiter Klick nimmt einen wieder heraus.\n• **Erstes Feld** – der aktuelle Stand\n• **Weitere Felder** – derselbe Stand mit dem gewählten Look\n\nZoomen und Verschieben wirken in allen Feldern gleich. Ein Klick auf ein Feld übernimmt dessen Look.\n\n### Tasten\n⌘-Klick vergleicht ohne Schalter · ⌘Z rückgängig · Esc beendet	Turn on the compare button (two panes, top right) and click up to three look tiles; click a tile again to remove it.\n• **First pane** – the current state\n• **Other panes** – the same state with the chosen look\n\nZooming and panning apply to all panes. Click a pane to apply its look.\n\n### Keys\n⌘-click compares without the button · ⌘Z undo · Esc exits
-Art wählen und „Neue Maske“: Pinsel, Verlauf und Ellipse werden gleich im Bild gezogen. Die Liste zeigt alle Masken; die Regler darunter gelten für die gewählte.\n• **Addieren, abziehen, schneiden** – weitere Formen kombinieren\n• **Fluss** – baut Deckkraft über überlappende Tupfer auf\n• **Version 2** – begrenzt Kantenhalos\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · Esc Zeichnen beenden · ⌘Z rückgängig	Choose a type and click “New mask”: brushes, gradients and ellipses are drawn directly in the image. The list shows all masks; the sliders below apply to the selected one.\n• **Add, subtract, intersect** – combine with more shapes\n• **Flow** – builds up opacity with overlapping dabs\n• **Version 2** – reduces edge halos\n\nAdjustments follow the image even after cropping and rotating.\n\n### Keys\nH hide outlines · Esc stop drawing · ⌘Z undo
+Oben stehen alle Masken: das Auge schaltet eine aus, ⋯ benennt um, dupliziert, invertiert, verschiebt oder löscht. „+ Neue Maske ▾“ legt eine an: automatisch, als Form oder als Bereich.\n• **Teile** – eine Maske besteht aus Teilen: + hinzufügen, − abziehen, ∩ schneiden\n• **Werkzeug** – der gewählte Teil zeichnet im Bild: Pinsel malt, Verlauf und Ellipse an den Griffen ziehen, Farbbereich nimmt mit der Pipette Proben (⇧ dazu, ⌥ weg), Klick-Auswahl nimmt Klicks oder einen gezogenen Rahmen\n• **Kante** – Bitmap-Masken (Motiv, Personen, Klick-Auswahl) dehnen oder schrumpfen, ohne neu zu rechnen\n• **Tiefe** – wählt ganze Segmente nach ihrer Entfernung (Vorne, Mitte, Hinten); ein Klick ins Bild nimmt ein Segment dazu oder heraus\n• **Kante verfeinern** – gezeichnete Masken und Bereiche folgen in einem schmalen Band den Kanten im Bild\n• **Stärke** – Deckkraft der ganzen Maske\n• **Reihenfolge** – oben wird zuerst angewendet; Helligkeits- und Farbbereiche lesen den Stand davor\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · ⇧O Überlagerung (Rot → Maske → Bild auf Grau → Abdeckfolie → aus) · Esc Werkzeug beenden · ⌫ Maske löschen · ⌘Z rückgängig	All masks are listed at the top: the eye switches one off, ⋯ renames, duplicates, inverts, moves or deletes it. “+ New mask ▾” creates one: automatic, as a shape or as a range.\n• **Parts** – a mask consists of parts: + add, − subtract, ∩ intersect\n• **Tool** – the selected part draws in the photo: the brush paints, gradient and ellipse are dragged by their handles, a colour range takes samples with the eyedropper (⇧ add, ⌥ remove), the click selection takes clicks or a dragged box\n• **Edge** – bitmap masks (subject, people, click selection) grow or shrink without computing again\n• **Depth** – selects whole segments by their distance (front, middle, back); a click in the image adds or removes a segment\n• **Refine edge** – drawn masks and ranges follow the edges in the image within a narrow band\n• **Amount** – opacity of the whole mask\n• **Order** – the top one is applied first; brightness and color ranges read the state before it\n\nThe adjustments follow the photo after cropping and rotating, too.\n\n### Keys\nH outlines off · ⇧O overlay (red → mask → image on grey → masking film → off) · Esc ends the tool · ⌫ deletes the mask · ⌘Z undo
 graineo	graineo
 RAW & Film	RAW & Film
 Version {a}	Version {a}
@@ -3814,7 +3817,7 @@ Standardprogramm	Default App
 Standardprogramm für {a}	Default app for {a}
 graineo verwenden	Use graineo
 keins	none
-Weitere Formate (CR3, RAF, DNG, ARW)	More Formats (CR3, RAF, DNG, ARW)
+Weitere Formate (CR3, RAF, DNG, ARW, NEF, NRW)	More Formats (CR3, RAF, DNG, ARW, NEF, NRW)
 Weniger Formate	Fewer Formats
 Nur in der installierten App einstellbar.	Can only be set in the installed app.
 virtuelle Kopie	virtual copy
@@ -3842,7 +3845,7 @@ Ein Stichwort und eine Person lassen sich nicht zusammenführen.	A keyword and a
 Unter beiden Stichwörtern gibt es „{n}“. Bitte zuerst eines davon umbenennen oder zusammenführen.	Both keywords have “{n}” below them. Please rename or merge one of them first.
 Das Ziel liegt unter dem Stichwort, das zusammengeführt wird.	The destination is below the keyword being merged.
 „Verlustfrei“ heißt bei Foveon-Dateien drei verschiedene Dinge.	“Lossless” means three different things for Foveon files.
-• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **Sensor layers** – TIFF “Sensor layers”: the three layers unchanged as in the X3F, without color; black level and matrix are stored in the file\n• **Linear, nothing clipped** – Linear DNG, TIFF 32 bit, OpenEXR: no tone curve; highlights above white and colors outside the color space are kept\n• **Finished image** – TIFF or PNG 16 bit: tone curve applied, for print and retouching\n\nOnly the X3F itself holds everything – calibration and dark frame exist only there.\n\n### Where to use it\nLightroom and Camera Raw: Linear DNG. Resolve, Nuke, Affinity: OpenEXR. macOS Preview doesn’t open 32-bit DNG.
+• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit, JPEG XL verlustfrei: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **Sensor layers** – TIFF “Sensor layers”: the three layers unchanged as in the X3F, without color; black level and matrix are stored in the file\n• **Linear, nothing clipped** – Linear DNG, TIFF 32 bit, OpenEXR: no tone curve; highlights above white and colors outside the color space are kept\n• **Finished image** – TIFF or PNG 16 bit, lossless JPEG XL: tone curve applied, for print and retouching\n\nOnly the X3F itself holds everything – calibration and dark frame exist only there.\n\n### Where to use it\nLightroom and Camera Raw: Linear DNG. Resolve, Nuke, Affinity: OpenEXR. macOS Preview doesn’t open 32-bit DNG.
 Verlustfrei exportieren	Lossless export
 16 Bit	16 bit
 32 Bit linear	32 bit linear
@@ -3864,8 +3867,6 @@ Rot, Grün und Blau nebeneinander, jeweils über die Bildbreite.	Red, green and 
 Oben ist hell, unten dunkel. Gleich hohe Spuren an einer Stelle bedeuten neutrales Grau; ein Farbstich zeigt sich als Spur, die höher oder tiefer liegt als die anderen.	Top is bright, bottom is dark. Traces at the same height at any one point mean neutral gray; a color cast shows up as one trace sitting higher or lower than the others.
 Rot, Grün und Blau übereinander, über die Bildbreite.	Red, green and blue overlaid, across the image width.
 Links im Bild ist links in der Anzeige. Oben ist hell, unten dunkel; wo sich alle drei Farben decken, wird die Spur weiß (neutral).	The image’s left edge is on the left. Top is bright, bottom is dark; where all three colors overlap, the trace turns white (neutral).
-Farbton als Richtung, Sättigung als Abstand zur Mitte.	Hue as direction, saturation as distance from the center.
-Neutrales Grau liegt in der Mitte; ein Farbstich zieht die Wolke zur Seite.\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Schräge Linie** – die Hauttonlinie: Haut liegt meist nahe daran	Neutral gray sits in the center; a color cast pulls the cloud to one side.\n• **Boxes** – red, magenta, blue, cyan, green and yellow at 75 % saturation\n• **Diagonal line** – the skin tone line: skin tones usually fall close to it
 Gruppe von Reglern zu einem Thema.	A group of related controls.
 Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.	Click the header to expand or collapse the section. Once anything in the section is adjusted, a switch and a reset button appear at the right of the header.
 Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral	Each wheel sets a hue (direction) and its strength (distance from the center); brightness stays the same. Classic looks: cool shadows, warm highlights – or sepia and selenium for black & white.\n\n### Controls\nDrag a wheel: hue and strength · ⇧ while dragging: strength only · double-click: neutral
@@ -5468,3 +5469,944 @@ Schon nach Namen geordnet	Already sorted by name
 Steht schon auf der obersten Ebene	Already on the top level
 Alben aus Apple Fotos bleiben in ihrem Satz	Albums from Apple Photos stay in their set
 In Lightroom: {n} Schritte	In Lightroom: {n} steps
+graineo unterstützen …	Support graineo…
+Fotos einer Serie vergleichen und das beste wählen.	Compare the photos of a series and choose the best one.
+• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **Compare** – 2–4 photos large side by side; double-click or Z zooms all fields together to 1:1 at the sharpest spot\n• **Light table** – all photos of the series; a click puts one into the comparison\n• **Duel** – two photos, ← keeps the left one, → the right one, until one is left\n\nThe hints are relative to the series: sharpness as a share of the sharpest photo, eyes and faces (Apple Vision, macOS only), clipped highlights, motion blur. The suggestion gives its reason and sets nothing; when there is hardly a difference it says so.\n\n### Keys\n↩/Space choose best · ⇧X reject the rest · P/X/U/0–5 as everywhere · Z zoom · H faces · ⌘↩ reviewed, next · ↓/↑ next/previous series · ⌘Z undo · Esc back
+Stapel nicht geändert: {e}	Stack not changed: {e}
+Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	Exposure bracket: {n} photos, {k} steps across {ev} EV
+Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	Series: {n} photos in {t}, same subject (similarity {s})
+Serie: {n} Fotos in {t} (nur nach Zeit, Bildinhalt noch unbekannt)	Series: {n} photos in {t} (by time only, image content not known yet)
+Stapel aus Lightroom: {n} Fotos	Stack from Lightroom: {n} photos
+Stapel: {n} Fotos	Stack: {n} photos
+Noch nicht gesichtet	Not reviewed yet
+Serie aufklappen	Expand series
+Stapel aufklappen	Expand stack
+Serie zuklappen	Collapse series
+Stapel zuklappen	Collapse stack
+Serie sichten …	Review series…
+Stapel sichten …	Review stack…
+Als Titelfoto	Make cover photo
+Aus Serie nehmen	Remove from series
+Aus Stapel nehmen	Remove from stack
+Serie teilen ab hier	Split series here
+Stapel teilen ab hier	Split stack here
+Serie auflösen	Dissolve series
+Stapel auflösen	Unstack
+Zu Stapel bündeln	Group into stack
+Ganze Serie bewertet ({n} Fotos)	Whole series rated ({n} photos)
+Zum Bündeln mindestens zwei Fotos auswählen	Select at least two photos to group
+Stapel aus {n} Fotos	Stack of {n} photos
+Serie teilen	Split series
+Ganze Serie ({n} Fotos)	Whole series ({n} photos)
+{a}: nur oberstes Foto oder ganze Serie?	{a}: only the top photo or the whole series?
+Die Auswahl enthält zugeklappte Serien oder Stapel mit {n} weiteren Fotos.	The selection contains collapsed series or stacks with {n} more photos.
+Nur oberstes Foto	Only the top photo
+Nur oberste Fotos ({n})	Only the top photos ({n})
+Serien	Series
+Alle Serien und Stapel, je eine Kachel; ungesichtete zuerst	All series and stacks, one tile each; not reviewed first
+Serien · {n} noch nicht gesichtet	Series · {n} not reviewed yet
+Serien und Stapel	Series and stacks
+Serien automatisch erkennen	Detect series automatically
+Fotos derselben Kamera, kurz nacheinander und mit gleichem Motiv, leise im Hintergrund.	Photos from the same camera, taken shortly after each other with the same subject, quietly in the background.
+Serien zuklappen	Collapse series
+nach der Sichtung	after review
+⇧X beim Sichten	⇧X when reviewing
+Was mit den übrigen Fotos einer Serie geschieht, wenn das beste gewählt ist. Gelöscht wird nie.	What happens to the other photos of a series once the best one is chosen. Nothing is ever deleted.
+Hinweise zu Gesichtern und Augen gibt es nur unter macOS.	Hints on faces and eyes are only available on macOS.
+Serien erkennen: noch {n} Fotos	Detecting series: {n} photos left
+Serien erkennen	Detecting series
+Zum Sichten eine Serie oder 2–60 Fotos auswählen	Select a series or 2–60 photos to review
+Keine weitere Serie zu sichten	No further series to review
+Als bestes Foto gewählt	Chosen as the best photo
+Erst das beste Foto wählen (Leertaste oder ↩)	Choose the best photo first (Space or ↩)
+Rest abgestuft ({n} Fotos) – ⌘Z macht es rückgängig	Rest lowered ({n} photos) – ⌘Z undoes it
+Rest abgelehnt ({n} Fotos) – ⌘Z macht es rückgängig	Rest rejected ({n} photos) – ⌘Z undoes it
+Serie gesichtet	Series reviewed
+Belichtungsreihe	Exposure bracket
+Serie	Series
+Auswahl	Selection
+Zum Raster	To the grid
+Gesichtet, weiter	Reviewed, next
+Als bestes wählen	Choose as best
+Rest ablehnen	Reject the rest
+Belichtungsreihe: kein Vorschlag (Material zum Zusammenfügen)	Exposure bracket: no suggestion (material for merging)
+Hinweise werden gemessen ({a}/{n}) …	Measuring hints ({a}/{n})…
+Kaum Unterschied – selbst entscheiden	Hardly any difference – decide yourself
+schärfstes Foto	sharpest photo
+alle Augen offen	all eyes open
+ohne Bewegungsunschärfe	no motion blur
+ohne abgeschnittene Lichter	no clipped highlights
+von dir am besten bewertet	rated best by you
+Vorschlag: {k}/{n}{w}	Suggestion: {k}/{n}{w}
+VORSCHLAG	SUGGESTION
+wird gemessen …	measuring…
+Schärfe: {a} % des schärfsten Fotos der Serie (gemessen an der schärfsten Stelle)	Sharpness: {a} % of the sharpest photo of the series (measured at the sharpest spot)
+Augen {n}/{n} offen	Eyes {n}/{n} open
+Augen {a}/{n} zu	Eyes {a}/{n} closed
+Lichter {a} %	Highlights {a} %
+Fokus neben dem Gesicht	Focus beside the face
+Klick: in den Vergleich legen, ⌘-Klick: herausnehmen	Click: put into the comparison, ⌘-click: take out
+{k}/{n} – Klick: in den Vergleich, ⌘-Klick: heraus	{k}/{n} – click: into the comparison, ⌘-click: out
+Gesichter	Faces
+{k}/{n}: Augen zu	{k}/{n}: eyes closed
+{k}/{n}: Gesichtsqualität {q}	{k}/{n}: face quality {q}
+Serie/Stapel des aktiven Fotos auf-/zuklappen	Expand/collapse the series or stack of the active photo
+alle Serien und Stapel auf-/zuklappen	expand/collapse all series and stacks
+Auswahl zu einem Stapel bündeln (Titelfoto = aktives Foto)	Group the selection into a stack (cover = active photo)
+Serie/Stapel auflösen (die Fotos werden nie wieder zusammengelegt)	Dissolve series/stack (the photos are never grouped together again)
+Serie sichten (bzw. die Auswahl von 2–60 Fotos)	Review series (or the selection of 2–60 photos)
+ganze Serie als Auswahl markieren	flag the whole series as pick
+ganze Serie ablehnen	reject the whole series
+Markierung der ganzen Serie aufheben	unflag the whole series
+Sterne der ganzen Serie löschen / setzen	clear / set the stars of the whole series
+Farbetikett der ganzen Serie	color label of the whole series
+fokussiertes Foto als bestes wählen (Titelfoto + Markierung „Auswahl“)	choose the focused photo as best (cover + pick flag)
+fokussiertes Foto als bestes wählen	choose the focused photo as best
+Rest ablehnen: alle Fotos der Serie außer den markierten (ein ⌘Z)	Reject the rest: all photos of the series except the picked ones (one ⌘Z)
+gekoppelter Zoom 1:1 an der schärfsten Stelle ↔ Einpassen	coupled zoom 1:1 at the sharpest spot ↔ fit
+Gesichterleiste ein/aus	faces bar on/off
+Serie als gesichtet abschließen, weiter zur nächsten ungesichteten	finish the series as reviewed, on to the next unreviewed one
+nächste Serie (ohne Abschluss)	next series (without finishing)
+vorige Serie	previous series
+zurück ins Raster	back to the grid
+Feld 1–4 fokussieren (auch ← →)	focus field 1–4 (also ← →)
+fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	switch the focused field; in the duel: keep the left / right photo
+Vergleich	Compare
+Leuchttisch	Light table
+Duell	Duel
+2–4 Fotos groß nebeneinander	2–4 photos large side by side
+Alle Fotos der Serie; Klick legt eins in den Vergleich	All photos of the series; a click puts one into the comparison
+Zwei Fotos: ← behält das linke, → das rechte	Two photos: ← keeps the left one, → the right one
+immer	always
+nie	never
+nichts	nothing
+Serie als gesichtet abschließen und zur nächsten	Finish the series as reviewed and go to the next one
+Fokussiertes Foto als bestes wählen: Titelfoto und Markierung „Auswahl“	Choose the focused photo as best: cover and pick flag
+Alle Fotos außer den markierten ablehnen (ein ⌘Z)	Reject all photos except the picked ones (one ⌘Z)
+Gekoppelter Zoom auf die schärfste Stelle (Doppelklick: an dieser Stelle)	Coupled zoom to the sharpest spot (double-click: at that spot)
+Gesichter und Augen (Apple Vision); geschlossene Augen sind im Foto umrandet	Faces and eyes (Apple Vision); closed eyes are outlined in the photo
+Anteil abgeschnittener Lichter in der Vorschau	Share of clipped highlights in the preview
+Die Kanten sind in einer Richtung verwischt (Bewegungsunschärfe)	The edges are smeared in one direction (motion blur)
+Das Fokusfeld der Kamera berührt keines der gefundenen Gesichter (nur ein Hinweis)	The camera’s focus area touches none of the faces found (just a hint)
+verwischt	blurred
+Serien sichten	Reviewing series
+Das Foto liegt in keinem Stapel	The photo is in no stack
+Hier lässt sich nicht teilen	Cannot split here
+Bildstile lesen	Reading picture styles
+{a} (Startwert von {b})	{a} (starting point from {b})
+{a} (gelernt)	{a} (learned)
+Gelernter Look	Learned look
+Als Standard dieser Kamera und dieses Bildstils verwenden (aus: eingebaute Entwicklung)	Use as the default for this camera and picture style (off: built-in rendering)
+Stärke des gelernten Looks	Amount of the learned look
+Wirklich zurücksetzen?	Really reset?
+Gelernten Look entfernen: wieder die eingebaute Entwicklung dieser Kamera	Remove the learned look: back to this camera’s built-in rendering
+Look dieser Kamera lernen …	Learn This Camera’s Look …
+Look je Kamera und Bildstil aus RAW und Kamera-JPEG der eigenen Fotos lernen	Learn a look per camera and picture style from the RAW and camera JPEG of your own photos
+Alle Fotos aus einem Ordner	All photos from one folder
+{n} Fotos mit „{a}“ ausgelassen	{n} photos with “{a}” left out
+{n} Fotos mit „{a}“ einbezogen (adaptive Kamera-Einstellung)	{n} photos with “{a}” included (adaptive camera setting)
+Gemischte Weißabgleiche (Kunstlicht und Tageslicht)	Mixed white balances (artificial light and daylight)
+Kaum Hauttöne unter den Fotos	Hardly any skin tones among the photos
+Kaum kräftige Farben unter den Fotos	Hardly any strong colors among the photos
+Lesen der Bildstile abgebrochen	Reading the picture styles was cancelled
+Lernen abgebrochen	Learning cancelled
+Look dieser Kamera lernen	Learn This Camera’s Look
+Vergleicht die Entwicklung mit dem Kamera-JPEG derselben Aufnahme und lernt daraus den Look je Kamera und Bildstil. Fotos werden nur gelesen; nichts verlässt den Rechner.	Compares the rendering with the camera JPEG of the same shot and learns the look per camera and picture style from it. Photos are only read; nothing leaves the computer.
+{a}: {d} von {n} Fotos	{a}: {d} of {n} photos
+Keine geeigneten RAW-Fotos in der Bibliothek (Sigma/Foveon und eigene Bildstile bleiben außen vor).	No suitable RAW photos in the library (Sigma/Foveon and custom picture styles are left out).
+Fotos mit adaptiven Kamera-Einstellungen einbeziehen	Include photos with adaptive camera settings
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches passen das Kamera-JPEG an die Szene an; ohne Haken bleiben solche Fotos außen vor	DR Auto, shadow correction, auto optimization and the like adapt the camera JPEG to the scene; unchecked, such photos are left out
+{a}: Foto {d} von {n}	{a}: photo {d} of {n}
+Übernehmen und weiteres Lernen warten darauf.	Applying and further learning wait for it.
+Startwert übernommen: Look von {a} für {b}	Starting point applied: look of {a} for {b}
+Startwert nicht übernommen: {a}	Starting point not applied: {a}
+Look exportieren (.cube)	Export Look (.cube)
+Gespeichert: {a}	Saved: {a}
+Nicht gespeichert: {a}	Not saved: {a}
+Übernommen: {a} ist jetzt der Standard dieser Kamera. Vorschauen werden im Leerlauf erneuert.	Applied: {a} is now this camera’s default. Previews are renewed while the app is idle.
+Kamera · Bildstil	Camera · picture style
+Empfehlung	Recommendation
+Hinweise	Notes
+{a} ({b} nutzbar)	{a} ({b} usable)
+Geeignete Fotos; in Klammern die genutzten (höchstens 4 je Aufnahmetag)	Suitable photos; in brackets the ones used (at most 4 per shooting day)
+zu wenig	too few
+gelernt, aus	learned, off
+ein Ordner	one folder
+{n} adaptiv	{n} adaptive
+Fotos mit adaptiven Kamera-Einstellungen (z. B. DR Auto, Auto-Optimierung) werden ausgelassen	Photos with adaptive camera settings (e.g. DR Auto, auto optimization) are left out
+Lernen	Learn
+Gerade läuft ein anderer Lernvorgang	Another learning run is in progress
+Mindestens 20 Fotos an mindestens zwei Aufnahmetagen nötig	At least 20 photos from at least two shooting days needed
+Look aus diesen Fotos lernen (im Hintergrund, jederzeit abbrechbar)	Learn the look from these photos (in the background, can be cancelled at any time)
+Ergebnis · {a}	Result · {a}
+Nicht gelernt: {a}	Not learned: {a}
+Kein besserer Look gefunden: an den herausgehaltenen Fotos war keine Stufe deutlich besser als die heutige Entwicklung.	No better look found: on the held-out photos no stage was clearly better than the current rendering.
+Farbmatrix	Color matrix
+Farbmatrix und Kurven	Color matrix and curves
+Farbmatrix, Kurven und 3D-Tabelle	Color matrix, curves and 3D table
+Übernommen ({a})	Applied ({a})
+Besserer Look gefunden ({a})	Better look found ({a})
+ΔE00 Mittel / p95	ΔE00 mean / p95
+Training ({a} Fotos)	Training ({a} photos)
+Fotos, aus denen gelernt wurde	Photos the look was learned from
+Kontrolle ({a} Fotos)	Check ({a} photos)
+Herausgehaltene Fotos anderer Aufnahmetage: der ehrliche Kontrollwert	Held-out photos from other shooting days: the honest check
+Heute	Current
+Gelernt	Learned
+Look exportieren (.cube) …	Export Look (.cube) …
+Gelernten Look als 3D-LUT (.cube, sRGB) speichern	Save the learned look as a 3D LUT (.cube, sRGB)
+Look lernen · {a}	Learning look · {a}
+Standardentwicklung · gelernter Look dieser Kamera	Default rendering · learned look of this camera
+Startwert …	Starting point …
+Zu wenige Fotos: den Look von {a} als Startwert übernehmen (deutlich gekennzeichnet)	Too few photos: take the look of {a} as a starting point (clearly marked)
+; {a} Fotos mit adaptiver Kamera-Einstellung ausgelassen	; {a} photos with an adaptive camera setting left out
+Nur {n} nutzbare Fotos, mindestens {m} sind nötig{rest}.	Only {n} usable photos, at least {m} are needed{rest}.
+Alle Fotos stammen von einem Aufnahmetag: eine Kontrolle an anderen Tagen ist nicht möglich.	All photos are from one shooting day: a check on other days is not possible.
+nur {d} Aufnahmetage	only {d} shooting days
+alle aus einem Ordner	all from one folder
+knapp genug Fotos	barely enough photos
+kaum kräftige Farben	hardly any strong colours
+{n} Fotos an {d} Tagen in {f} Ordnern	{n} photos on {d} days in {f} folders
+, kaum Hauttöne	, hardly any skin tones
+lernbar: ja	learnable: yes
+lernbar: eingeschränkt	learnable: limited
+lernbar: nein	learnable: no
+sehr nah	very close
+mäßig	moderate
+ΔE00 {d} ({c})	ΔE00 {d} ({c})
+an Kontrollfotos geprüft	checked on check photos
+aus der Kamera-Makernote, ohne Messung	from the camera makernote, not measured
+Basis ohne Messung	basis without measurement
+Startwert von {a}	starting point from {a}
+Kamera-Looks	Camera Looks
+Kamera oder Bildstil suchen …	Search camera or picture style…
+nur lernbare	learnable only
+Nur Bildstile zeigen, aus deren Fotos sich ein Look lernen lässt	Show only picture styles whose photos a look can be learned from
+nur ohne Look	without look only
+Nur Bildstile ohne mitgelieferten und ohne gelernten Look	Only picture styles without a bundled and without a learned look
+Bildstile lesen: {d} von {n} Fotos	Reading picture styles: {d} of {n} photos
+Keine RAW-Fotos in der Bibliothek (Sigma/Foveon bleibt außen vor).	No RAW photos in the library (Sigma/Foveon is left out).
+RAW-Fotos dieser Kamera in der Bibliothek	RAW photos of this camera in the library
+{n} neue Fotos seit dem Lernen	{n} new photos since learning
+Mit den neuen Fotos lässt sich der Look neu lernen; er wird nur ersetzt, wenn er an denselben Kontrollfotos besser ist	The look can be learned again with the new photos; it is only replaced if it is better on the same check photos
+Bildstile werden gelesen …	Reading picture styles…
+kein lesbarer Bildstil	no readable picture style
+GELERNT	LEARNED
+AUS	OFF
+MITGELIEFERT	BUNDLED
+FARBTONTABELLE	HUE TABLE
+KEINER	NONE
+Gelernt: {a}	Learned: {a}
+Mitgeliefert: {a}	Bundled: {a}
+Eingebaute Farbtontabelle der Standardentwicklung (an Kontrollfotos gemessen)	Built-in hue table of the standard development (measured on check photos)
+Links eine Kamera und einen Bildstil wählen.	Choose a camera and picture style on the left.
+Erfahrungswert: an Kontrollfotos meist nah am Kamera-JPEG (ΔE00 etwa 0,7–1,7). Zugesagt ist nichts: angeboten wird nur, was messbar besser ist.	From experience: on check photos usually close to the camera JPEG (ΔE00 about 0.7–1.7). Nothing is promised: only what is measurably better is offered.
+Ergebnis unsicher: angeboten wird nur, was an Kontrollfotos messbar besser ist.	Result uncertain: only what is measurably better on check photos is offered.
+STATISTIK	STATISTICS
+Teilen	Share
+Gelernten Look als .x3look (für graineo) oder .cube (auch für andere Programme) speichern: nur Farbwerte mit Herkunft und Güte, keine Bilder, keine Aufnahmedaten	Save the learned look as .x3look (for graineo) or .cube (also for other programs): colour values with origin and quality only, no images, no shooting data
+Geteilten Look (.x3look oder .cube) für diese Kamera und diesen Bildstil laden; ein vorhandener gelernter Look wird aufbewahrt	Load a shared look (.x3look or .cube) for this camera and picture style; an existing learned look is kept
+Den neuen Look als Standard dieser Kamera und dieses Bildstils verwenden; ein bisheriger gelernter Look wird aufbewahrt	Use the new look as the standard of this camera and picture style; a previous learned look is kept
+Erneut lernen	Learn again
+Noch einmal lernen (verwirft das Ergebnis, nicht den Look in Gebrauch)	Learn once more (discards the result, not the look in use)
+Erst eine Kamera und einen Bildstil wählen	Choose a camera and picture style first
+Gerade läuft ein Lernvorgang	A learning run is in progress
+Zu wenige geeignete Fotos (siehe Einschätzung)	Too few suitable photos (see the estimate)
+Mit aktuellen Fotos neu lernen: das Ergebnis wird an denselben Kontrollfotos gegen den bisherigen Look und gegen heute gemessen und nur angeboten, wenn es besser ist	Learn again with current photos: the result is measured on the same check photos against the previous look and against today and only offered if it is better
+Look aus RAW und Kamera-JPEG dieser Fotos lernen (leise im Hintergrund, jederzeit abbrechbar)	Learn a look from RAW and camera JPEG of these photos (quietly in the background, can be cancelled at any time)
+adaptive einbeziehen	include adaptive
+Auch Fotos mit adaptiven Kamera-Einstellungen nutzen (DR Auto, Schattenkorrektur, Auto-Optimierung …); sie passen das Kamera-JPEG an die Szene an, daher sonst ausgelassen	Also use photos with adaptive camera settings (DR Auto, shadow correction, Auto Lighting Optimizer …); they adapt the camera JPEG to the scene and are therefore left out otherwise
+Ausrichtung	Alignment
+Paare	Pairs
+Matrix	Matrix
+Kurven	Curves
+Tabelle	Table
+Kontrolle	Check
+Bisher gelernt	Previous learned
+Lernen · {a}	Learning · {a}
+Anpassen und kontrollieren	Fitting and checking
+Foto {d} von {n} · {a}	Photo {d} of {n} · {a}
+Zuletzt entwickeltes Foto	Last developed photo
+Heute bisher: ΔE00 {a}	Today so far: ΔE00 {a}
+Median der Fotos so weit: Abstand der heutigen Entwicklung zum Kamera-JPEG	Median of the photos so far: distance of today's development to the camera JPEG
+Lernen beenden; es wird nichts geändert	Stop learning; nothing is changed
+Läuft leise weiter, auch wenn das Fenster geschlossen wird.	Keeps running quietly, even when the window is closed.
+Ergebnis	Result
+Der bisherige Look bleibt: an denselben Kontrollfotos war der neue nicht deutlich besser.	The previous look stays: on the same check photos the new one was not clearly better.
+Kein besserer Look gefunden: an den Kontrollfotos war keine Stufe deutlich besser als die heutige Entwicklung.	No better look found: on the check photos no stage was clearly better than today's development.
+ΔE00 Median / p90	ΔE00 median / p90
+Kontrolle ({a})	Check ({a})
+Training ({a})	Training ({a})
+Neu	New
+Gemessen an denselben Kontrollfotos wie der bisherige Look.	Measured on the same check photos as the previous look.
+ausgeschaltet (Look-Fach)	switched off (look panel)
+Mitgeliefert	Bundled
+Eingebaut	Built-in
+Farbtontabelle der Standardentwicklung, an Kontrollfotos gemessen	hue table of the standard development, measured on check photos
+neutrale Entwicklung mit der Farbmatrix der Kamera	neutral development with the camera's colour matrix
+Look von {a} als Startwert …	Look of {a} as starting point…
+Zu wenige Fotos: den Look einer verwandten Kamera übernehmen, gekennzeichnet als Basis ohne Messung	Too few photos: take over the look of a related camera, marked as basis without measurement
+Fotos der Kamera	Photos of the camera
+in diesem Bildstil	in this picture style
+Bei mehr als 400 Fotos einer Kamera wird eine über die Aufnahmetage verteilte Auswahl gelesen	For more than 400 photos of a camera, a selection spread over the shooting days is read
+Ohne Fotos mit adaptiven Kamera-Einstellungen (außer sie sind einbezogen)	Without photos with adaptive camera settings (unless included)
+davon zum Lernen	of which for learning
+Höchstens 4 je Aufnahmetag und 80 insgesamt, über den Tag verteilt	At most 4 per shooting day and 80 in total, spread over the day
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches	DR Auto, shadow correction, Auto Lighting Optimizer and the like
+Aufnahmetage	Shooting days
+Kontrollfotos stammen von anderen Tagen als die Trainingsfotos	Check photos are from other days than the training photos
+mit Kamera-JPEG	with camera JPEG
+RAW+JPEG; sonst dient die im RAW eingebettete Vorschau als Kamera-Bild	RAW+JPEG; otherwise the preview embedded in the RAW serves as the camera image
+Farbabdeckung wird aus den Vorschauen ermittelt …	Determining colour coverage from the previews…
+Keine Vorschauen für die Farbabdeckung	No previews for the colour coverage
+aus den Lernblöcken (Kamera-JPEG)	from the learning blocks (camera JPEG)
+aus den Vorschauen der Bibliothek	from the library's previews
+Abdeckung, {a}	Coverage, {a}
+Anteil dunkler bis heller Bildteile (fünf Stufen)	Share of dark to bright image areas (five steps)
+Farben	Colours
+Anteil farbiger Bildteile je Farbton (Rot, Gelb, Grün, Cyan, Blau, Magenta)	Share of colourful image areas per hue (red, yellow, green, cyan, blue, magenta)
+Hauttöne {a} %	Skin tones {a} %
+Anteil hauttonähnlicher Farben; unter 1 % lernt der Look Hauttöne kaum	Share of skin-like colours; below 1 % the look hardly learns skin tones
+kräftige Farben {a} %	strong colours {a} %
+Anteil stark gesättigter Farben; unter 1 % bleiben kräftige Farben unsicher	Share of strongly saturated colours; below 1 % strong colours remain uncertain
+ · gemischt (Kunstlicht und Tageslicht)	 · mixed (artificial light and daylight)
+Weißabgleich {a}–{b} K{c}	White balance {a}–{b} K{c}
+Weißabgleich-Streuung: wird beim Lernen gemessen	White balance spread: measured while learning
+10. bis 90. Perzentil des Weißabgleichs der Aufnahmen	10th to 90th percentile of the shots' white balance
+Fassungen	Versions
+ohne Messung	not measured
+in Gebrauch	in use
+Wirklich?	Really?
+Zurück zu dieser	Back to this one
+Diese frühere Fassung wieder verwenden; die jetzige wird aufbewahrt	Use this earlier version again; the current one is kept
+Frühere Fassung wieder in Gebrauch; die bisherige ist aufbewahrt.	Earlier version in use again; the previous one is kept.
+Nicht zurückgesetzt: {a}	Not reset: {a}
+Look exportieren	Export look
+graineo-Look	graineo look
+Look importieren	Import look
+Geladen als Look von {a}	Loaded as the look of {a}
+Nicht geladen: {a}	Not loaded: {a}
+Hier erscheint der Vergleich eines Fotos: neutral, aktuell, neu gelernt und Kamera-JPEG.	The comparison of a photo appears here: neutral, current, newly learned and camera JPEG.
+Entwicklung ohne kameraeigene Farbkorrektur: die Grundlage, auf der gelernt wird	Development without camera-specific colour correction: the basis learning works on
+Standardentwicklung, wie sie jetzt ist (mit eingeschaltetem gelernten Look)	Standard development as it is now (with a switched-on learned look)
+Grundlage mit dem neu gelernten Look (oder dem gelernten Look in Gebrauch)	Basis with the newly learned look (or the learned look in use)
+Das Bild der Kamera: JPEG neben dem RAW oder die eingebettete Vorschau	The camera's image: JPEG next to the RAW or the embedded preview
+Wischen	Wipe
+Nebeneinander	Side by side
+Ein Bild, links und rechts der Trennlinie verschieden (Linie ziehen)	One image, different left and right of the dividing line (drag the line)
+Beide Bilder nebeneinander, Zoomen und Verschieben gekoppelt	Both images side by side, zoom and pan coupled
+Zwischen eingepasst und 100 % der Vorschau wechseln (auch Doppelklick ins Bild); Scrollrad oder Zwei-Finger-Geste zoomt, Ziehen verschiebt	Switch between fitted and 100 % of the preview (also double-click the image); scroll wheel or two-finger gesture zooms, dragging pans
+Kamera-JPEG neben dem RAW	camera JPEG next to the RAW
+eingebettete Vorschau	embedded preview
+{a} · Belichtung an das Kamera-Bild angeglichen ({b} EV) · {c}	{a} · exposure matched to the camera image ({b} EV) · {c}
+{a} · wird entwickelt …	{a} · developing…
+Foto wird entwickelt …	Developing photo…
+Kein Foto zum Vergleichen	No photo to compare
+Noch kein neuer Look: erst lernen	No new look yet: learn first
+Kontrollfoto: nicht zum Lernen benutzt, daran wird gemessen	Check photo: not used for learning, measured on
+Trainingsfoto: daraus wird gelernt	Training photo: learned from
+Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)	Photo that learning would use (training or check is decided when learning)
+{a} (geladen)	{a} (loaded)
+Kamera-Looks …	Camera Looks…
+Looks der Kameras der Bibliothek: Übersicht, Vergleich mit dem Kamera-JPEG, Lernen aus RAW und Kamera-JPEG der eigenen Fotos, Fassungen und Teilen	Looks of the library's cameras: overview, comparison with the camera JPEG, learning from RAW and camera JPEG of your own photos, versions and sharing
+Nicht gelernt: nur {n} brauchbare Fotos, mindestens {m} sind nötig.	Not learned: only {n} usable photos, at least {m} are needed.
+Nicht gelernt: zu wenige Aufnahmetage für eine getrennte Kontrolle.	Not learned: too few shooting days for a separate check.
+Neu lernen	Learn again
+„Motiv“ und „Personen“ wählen mit der Bildanalyse des Systems aus, was im Foto vorne steht. Die Maske ist nur eine Auswahl: Pixel ändern erst die Regler darunter.	“Subject” and “People” use the system's image analysis to select what stands out in the photo. The mask is only a selection: the sliders below are what change pixels.
+• **Motiv 1, 2 …** – mehrere erkannte Motive einzeln an- und abwählen\n• **Weiche Kante** – weicher Übergang am Rand der Auswahl\n• **+ Hinzufügen / − Abziehen → Pinsel** – vergessene Teile ergänzen, zu viel Ausgewähltes abziehen\n• **Überlagerung** – zeigt die Wirkung der Maske rot im Bild\n\nGrenzen: Haare, Fell, Glas, feine Zweige und Bilder ohne klares Hauptmotiv werden oft ungenau. Die Berechnung läuft auf dem Rechner, nichts verlässt ihn. Die Auswahl wird in der Bibliothek gespeichert; beim Einfügen auf andere Fotos wird sie dort neu berechnet.\n\nNur unter macOS (Motiv: ab macOS 14).	• **Subject 1, 2 …** – select or deselect several detected subjects one by one\n• **Feather** – soft transition at the edge of the selection\n• **+ Add / − Subtract → Brush** – add missed parts, subtract too much selection\n• **Overlay** – shows the effect of the mask in red in the image\n\nLimits: hair, fur, glass, fine branches and images without a clear main subject are often imprecise. The computation runs on this computer; nothing leaves it. The selection is stored in the library; when pasted onto other photos it is computed again there.\n\nmacOS only (Subject: macOS 14 or newer).
+„Stelle entfernen“ füllt eine angeklickte Stelle mit Inhalt, den ein Modell aus der Umgebung erfindet. Das ist keine Fotografie mehr, sondern eine Vermutung.	“Remove spot” fills a clicked spot with content a model invents from the surroundings. That is no longer a photograph but a guess.
+• **Gut** – Himmel, Wasser, Wiese, Wand, Muster\n• **Schlecht** – Gesichter, Schrift, Kanten von Gegenständen, große Flächen\n• **Größe** – Radius des nächsten Kreises\n\nDie Füllung wird einmal berechnet und in der Bibliothek gespeichert; Helligkeit und Farbe passen sich beim Entwickeln der Umgebung an. Für kleine Flecken auf echtem Bildinhalt ist „Heilen“ meist besser. Das Modell („Objekte entfernen“, Einstellungen → Module) rechnet auf dem Rechner, nichts verlässt ihn.	• **Good** – sky, water, grass, walls, patterns\n• **Poor** – faces, lettering, edges of objects, large areas\n• **Size** – radius of the next circle\n\nThe fill is computed once and stored in the library; brightness and colour follow the surroundings when developing. For small spots on real image content “Heal” is usually better. The model (“Remove objects”, Settings → Modules) runs on this computer; nothing leaves it.
+Klick-Auswahl	Click selection
+Überlagerung	Overlay
+Entfernen fehlgeschlagen: {e}	Removing failed: {e}
+OBJEKTE ENTFERNEN	REMOVE OBJECTS
+Alle entfernen	Remove all
+{n} entfernte Stellen	{n} removed spots
+Wirkung der gewählten Maske rot zeigen (im Werkzeug „Masken“)	Show the effect of the selected mask in red (in the “Masks” tool)
+Berechnung fehlgeschlagen: {e}	Computation failed: {e}
+Auswahl nicht gespeichert: {e}	Selection not saved: {e}
+Kein Motiv erkannt	No subject found
+Keine Person erkannt	No person found
+{n} gefunden · {t} s	{n} found · {t} s
+Auswahl fehlt – Modul „Klick-Auswahl“ nicht installiert	Selection missing – module “Click selection” not installed
+Auswahl steht aus	Selection pending
+Auswahl fehlt – auf diesem System nicht berechenbar	Selection missing – cannot be computed on this system
+Auswahl fehlt in der Bibliothek	Selection missing in the library
+Motiv {n}	Subject {n}
+Person {n}	Person {n}
+Neu berechnen	Compute again
+Pinsel +	Brush +
+Pinsel −	Brush −
+Motiv	Subject
+Auswahl per Klick	Click selection
+Bitmap	Bitmap
+Motiv und Personen	Subject and people
+Objekte entfernen	Remove objects
+Klick-Auswahl (MobileSAM)	Click selection (MobileSAM)
+Objekte entfernen (LaMa)	Remove objects (LaMa)
+Masken: Objekt anklicken, Auswahl wird berechnet	Masks: click an object, the selection is computed
+Retusche: markierte Bereiche mit erfundenem Inhalt füllen	Retouch: fill marked areas with invented content
+Hauptmotiv auswählen (Bildanalyse des Systems, ändert keine Pixel)	Select the main subject (system image analysis, changes no pixels)
+Personen auswählen (Bildanalyse des Systems, ändert keine Pixel)	Select people (system image analysis, changes no pixels)
+Braucht macOS 14 oder neuer	Needs macOS 14 or newer
+Gibt es nur unter macOS	Only available on macOS
+Wird gerade berechnet (wenige Sekunden)	Being computed (a few seconds)
+Auswahl mit der Bildanalyse neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	Compute the selection again (e.g. after a changed lens correction)
+Mit dem Pinsel zur Auswahl hinzufügen	Add to the selection with the brush
+Mit dem Pinsel aus der Auswahl entfernen	Remove from the selection with the brush
+Objekt im Bild anklicken; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	Click an object in the image; ⌥-click excludes areas (runs on this computer)
+Braucht das Modul „Klick-Auswahl“ (Einstellungen → Module)	Needs the module “Click selection” (Settings → Modules)
+Wirkung der gewählten Maske rot im Bild zeigen	Show the effect of the selected mask in red
+Stelle anklicken: der Bereich wird mit erfundenem Inhalt aus der Umgebung gefüllt (rechnet auf dem Rechner)	Click a spot: the area is filled with content invented from the surroundings (runs on this computer)
+Braucht das Modul „Objekte entfernen“ (Einstellungen → Module)	Needs the module “Remove objects” (Settings → Modules)
+Alle entfernten Stellen wiederherstellen	Restore all removed spots
+Ortsnamen: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)	Place names: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)
+Ortsnamen bestimmen …	Determining place names…
+Vorschläge aus dem Bildinhalt brauchen das Suchmodell „Beste Treffer“ (SigLIP 2 Base). Installieren unter Einstellungen → Suche; es wird nichts von selbst geladen.	Suggestions from the picture content need the search model “Best results” (SigLIP 2 Base). Install it under Settings → Search; nothing is downloaded by itself.
+Die Begriffe werden einmal für das Suchmodell vorbereitet (wenige Sekunden).	The terms are prepared once for the search model (a few seconds).
+Die Vorschläge konnten nicht berechnet werden.	The suggestions could not be computed.
+Dieses Foto ist für das Suchmodell „Beste Treffer“ noch nicht eingelesen. Das geschieht im Hintergrund; danach erscheinen hier Vorschläge.	This photo has not been read by the search model “Best results” yet. That happens in the background; suggestions appear here afterwards.
+Begriffe, die das Suchmodell im Bild erkennt. Klick übernimmt das Stichwort für dieses Foto, × lehnt den Vorschlag für dieses Foto ab. Nie automatisch vergeben.	Terms the search model recognizes in the picture. A click assigns the keyword to this photo, × rejects the suggestion for this photo. Never assigned automatically.
+keine sicheren	none certain
+Vorschlag „{a}“ abgelehnt	Suggestion “{a}” rejected
+Als Stichwort für dieses Foto übernehmen	Assign as keyword to this photo
+Vorschlag für dieses Foto ablehnen	Reject suggestion for this photo
+Basis aus Fremdbeispielen, nicht geprüft	basis from other photographers' samples, not checked
+Quelle: {a} Dateien	source: {a} files
+An Kamera-JPEG angleichen	Match camera JPEG
+Kein passendes Kamera-JPEG – neutral entwickelt	No matching camera JPEG – developed neutral
+Tonkurve dieses Fotos aus seinem Kamera-JPEG	Tone curve of this photo from its camera JPEG
+DRUCKEN …	PRINT…
+Im Druckraum in voller Auflösung drucken (Filmstreifen-Vorlage)	Print at full resolution in the print room (film strip template)
+Druckauflösung	Print resolution
+Ausdruck schärfen	Sharpen print
+Farbraum der Seite	Page color space
+Pixel je Zoll auf dem Papier.	Pixels per inch on paper.
+graineo rechnet jede Seite genau in dieser Auflösung, damit der Druckertreiber nicht mit einfacherem Verfahren nachskaliert. Epson-Drucker arbeiten intern mit 360 oder 720 ppi, viele Canon- und HP-Drucker mit 300 oder 600. Mehr als 360 ppi zeigt sich nur bei genauem Hinsehen und kostet Zeit und Speicher.	graineo renders every page at exactly this resolution, so the printer driver does not rescale it with a simpler method. Epson printers work internally at 360 or 720 ppi, many Canon and HP printers at 300 or 600. More than 360 ppi only shows on close inspection and costs time and memory.
+Ausgleich für die Unschärfe von Tinte und Papier.	Compensates for the softness of ink and paper.
+Wirkt nach dem Skalieren auf die Helligkeit, mit einem Radius in Millimetern auf dem Papier – bei jeder Auflösung gleich. Mattes Papier lässt die Tinte stärker verlaufen und bekommt mehr. Am Bildschirm wirkt die Schärfung zu kräftig; maßgeblich ist der Ausdruck.	Applied to the brightness after scaling, with a radius in millimetres on paper – the same at every resolution. Matte paper lets the ink spread more and gets more. On screen the sharpening looks too strong; what counts is the print.
+Farbraum der Seite; die Farben rechnet der Drucker um.	Color space of the page; the printer converts the colors.
+Die Seite trägt ihr Farbprofil (Adobe RGB oder sRGB). Im Druckdialog übernimmt der Treiber die Umrechnung auf Drucker und Papier – dort Papiersorte und Qualität wählen und die Farbanpassung des Druckers eingeschaltet lassen. Adobe RGB erhält kräftige Grün- und Cyantöne, die gute Tintenstrahldrucker drucken können.	The page carries its color profile (Adobe RGB or sRGB). In the print dialog the driver converts to printer and paper – choose the paper type and quality there and leave the printer's color matching on. Adobe RGB keeps strong greens and cyans that good inkjet printers can print.
+Drucken …	Print…
+Keine Seite zu drucken	No page to print
+leeres Bild	empty image
+{name}: keine Vorschau für den Entwurf	{name}: no preview for the draft
+Abstand	Spacing
+Als Vorlage sichern …	Save as Template…
+An den Druckdialog übergeben	Handed to the print dialog
+Ausfüllen	Fill
+Bildeinstellung	Image Settings
+Drehen und einpassen	Rotate to fit
+Druckauftrag	Print Job
+Druckdialog im Testlauf übersprungen	Print dialog skipped in test run
+Drucken	Print
+Drucker …	Printer…
+Drucker: {a}	Printer: {a}
+ENTWURF	DRAFT
+Ein Foto pro Seite wiederholen	Repeat one photo per page
+Entwurfsmodus	Draft mode
+Farbmanagement: vom Drucker verwaltet	Color management: managed by printer
+Fotoinfo	Photo info
+Fotos ({n})	Photos ({n})
+Hilfslinien	Guides
+Hintergrund	Background
+In Datei drucken …	Print to File…
+In Datei drucken	Print to File
+In den Papierkorb legen	Move to Trash
+Kein Platz für eine Zelle: Ränder oder Abstände verkleinern	No room for a cell: reduce margins or spacing
+Kontur	Stroke
+Konturbreite	Stroke width
+Konturfarbe	Stroke color
+Mit aktuellen Einstellungen aktualisieren	Update with Current Settings
+Nicht gedruckt: {e}	Not printed: {e}
+PDF für den Druck geschrieben: {a}	Print PDF written: {a}
+PDF	PDF
+Rand der Dunkelkammer mitdrucken	Print the darkroom border
+Rand links	Left margin
+Rand oben	Top margin
+Rand rechts	Right margin
+Rechnet Seite {a} von {n} …	Rendering page {a} of {n}…
+Rechnet …	Rendering…
+Reihen × Spalten	Rows × columns
+Ränder auf den bedruckbaren Bereich des Druckers angehoben	Margins raised to the printer's printable area
+Schnittmarken	Crop marks
+Schriftgrad	Font size
+Schärfen {a} · {m}	Sharpen {a} · {m}
+Seite und Raster	Page and Grid
+Seite {a} von {n}	Page {a} of {n}
+Seite	Page
+Seiteneinrichtung nicht verfügbar	Page setup not available
+Seiteninformationen	Page info
+Seitennummern	Page numbers
+TIFF	TIFF
+Vorlage nicht entfernt: {e}	Template not removed: {e}
+Vorlage nicht gesichert: {e}	Template not saved: {e}
+Vorlage „{a}“ gesichert	Template “{a}” saved
+Vorlagen	Templates
+Zelle B × H	Cell W × H
+mind. {a} mm	min. {a} mm
+ohne Schärfung	no sharpening
+{name}: nicht mehr in der Liste	{name}: no longer in the list
+{n} Fotos · {p} Seiten	{n} photos · {p} pages
+{n} Seiten gespeichert: {a} …	{n} pages saved: {a} …
+{s}, vom Drucker verwaltet	{s}, managed by printer
+{w} × {h} px je Seite · {mb} MB	{w} × {h} px per page · {mb} MB
+Druckraum schließen	Close print room
+Aktuelle Einstellungen als eigene Vorlage sichern	Save the current settings as your own template
+Zelle ganz füllen, Überstand abschneiden; im Bild ziehen verschiebt den Ausschnitt	Fill the whole cell and crop the overhang; drag in the photo to move the crop
+Foto um 90° drehen, wenn es dann größer wird	Rotate the photo by 90° when it gets larger that way
+Jede Zelle einer Seite zeigt dasselbe Foto	Every cell of a page shows the same photo
+Linie außen um jedes Foto	Line around the outside of each photo
+Ränder, Zellen und Maße in der Vorschau (werden nicht gedruckt)	Margins, cells and sizes in the preview (not printed)
+Unten in der Mitte	Bottom center
+Datum, Vorlage, Farbraum, Auflösung und Schärfung klein unten links	Date, template, color space, resolution and sharpening, small at the bottom left
+Kurze Linien im Rand an den Bildkanten	Short lines in the margin at the photo edges
+Papier- und Filmrand der Dunkelkammer gehören zum Bild; sonst macht das Seitenlayout den Rand	The darkroom's paper and film border belong to the photo; otherwise the page layout makes the border
+Schnell: Bibliotheksvorschau statt voller Entwicklung, 150 ppi, ohne Schärfung, 8 Bit	Quick: library preview instead of full development, 150 ppi, no sharpening, 8 bit
+16 Bit je Kanal (PDF, TIFF); nicht jeder Druckertreiber nutzt sie	16 bits per channel (PDF, TIFF); not every printer driver uses them
+Auf diesem System über die PDF-Datei drucken	On this system, print from the PDF file
+Drucker, Papier und Ausrichtung wählen (Seiteneinrichtung)	Choose printer, paper and orientation (page setup)
+Seiten in voller Qualität in eine Datei schreiben	Write the pages in full quality to a file
+Seiten in voller Qualität rechnen und an den Druckdialog geben	Render the pages in full quality and hand them to the print dialog
+Nächste Seite	Next page
+Vorige Seite	Previous page
+Grau	Gray
+Eigener Text	Custom text
+Glanz	Glossy
+Matt	Matte
+Niedrig	Low
+Drucker	Printer
+Drucken (Druckraum)	Print (print room)
+1 Foto, A4, 10 mm Rand	1 photo, A4, 10 mm margin
+1 Foto, A3+, 15 mm Rand	1 photo, A3+, 15 mm margin
+1 Foto, A3, 15 mm Rand	1 photo, A3, 15 mm margin
+Randlos 10 × 15	Borderless 10 × 15
+13 × 18, 5 mm Rand	13 × 18, 5 mm margin
+2 Fotos, A4	2 photos, A4
+4 Fotos, A4	4 photos, A4
+Kontaktabzug A4 5 × 6	Contact sheet A4 5 × 6
+Kontaktabzug A3+ 6 × 8	Contact sheet A3+ 6 × 8
+Filmstreifen A4 (Kontaktabzug)	Film strips A4 (contact sheet)
+ · JPEG XL ohne HDR-Gain-Map	 · JPEG XL without HDR gain map
+JPEG XL (.jxl): kleiner als JPEG bei gleicher Qualität, auch verlustfrei und mit 16 Bit	JPEG XL (.jxl): smaller than JPEG at the same quality, also lossless and with 16 bit
+8 Bit	8 bit
+Fertiges Bild ohne Verlust, kleiner als TIFF und PNG.	Finished image without loss, smaller than TIFF and PNG.
+Fertiges Bild, kleiner als JPEG bei gleicher Qualität.	Finished image, smaller than JPEG at the same quality.
+Im Browser: {name}	In the browser: {name}
+Browser-Zugriff: rechnet für ein Gerät	Browser access: computing for a device
+Browser-Zugriff an	Browser access on
+in {n} h	in {n} h
+vor {n} h	{n} h ago
+in {n} Tagen	in {n} days
+Browser-Zugriff	Browser access
+Konnte nicht starten: {e}	Could not start: {e}
+Geräte	Devices
+Kopplungscode	Pairing code
+gültig noch {m}:{s}	valid for {m}:{s}
+QR-Code mit der Kamera des Tablets scannen oder die Adresse öffnen und den Code eingeben. Der Code gilt einmal und fünf Minuten.	Scan the QR code with the tablet’s camera, or open the address and enter the code. The code works once and for five minutes.
+Gerät koppeln …	Pair device…
+darf ändern	may change
+nur ansehen	view only
+gültig bis	valid until
+Widerruf	revoked
+Sicherheit	Security
+zuletzt	last seen
+Nie	Never
+1 Tag	1 day
+7 Tage	7 days
+30 Tage	30 days
+90 Tage	90 days
+1 h	1 h
+4 h	4 h
+12 h	12 h
+Zertifikat	Certificate
+Browser-Zugriff erlauben	Allow browser access
+Diese Bibliothek im Browser eines Tablets oder anderen Rechners in deinem Heimnetz ansehen, bewerten und einfach entwickeln, solange graineo hier läuft. Zugreifen kann nur ein Gerät, das du hier mit einem Code koppelst; die Verbindung ist verschlüsselt (HTTPS). Nichts geht an fremde Server.	View, rate and simply develop this library in the browser of a tablet or another computer in your home network while graineo runs here. Only a device you pair here with a code can connect; the connection is encrypted (HTTPS). Nothing goes to other servers.
+Adresse im Browser	Address in the browser
+Auf dem Tablet eine dieser Adressen öffnen (gleiches WLAN). Beim ersten Mal warnt der Browser vor dem Zertifikat: Fingerabdruck vergleichen oder das Zertifikat installieren (siehe unten).	Open one of these addresses on the tablet (same Wi-Fi). The first time, the browser warns about the certificate: compare the fingerprint or install the certificate (see below).
+Fingerabdruck des Zertifikats	Certificate fingerprint
+Neue Geräte dürfen ändern	New devices may make changes
+Bewerten und die einfachen Regler. Aus: nur ansehen.	Rating and the simple sliders. Off: view only.
+Neues Gerät	New device
+Alle Geräte	All devices
+Gekoppelte Geräte gelten	Paired devices stay valid for
+Danach ist eine neue Kopplung nötig. Gilt für neu gekoppelte Geräte.	After that the device must be paired again. Applies to newly paired devices.
+Automatisch ausschalten	Switch off automatically
+Der Browser-Zugriff schaltet sich nach dieser Zeit selbst ab.	Browser access switches itself off after this time.
+Auch von außerhalb des Heimnetzes	Also from outside the home network
+Nur nötig für ein VPN mit öffentlichen Adressen. Unterwegs immer über ein VPN ins Heimnetz (z. B. das VPN des Routers oder NAS), nie über eine Portfreigabe im Router.	Only needed for a VPN with public addresses. On the road, always connect through a VPN into the home network (e.g. the VPN of the router or NAS), never through a port forward on the router.
+Neu erzeugen, wenn du ihm nicht mehr traust. Geräte müssen danach dem neuen Zertifikat vertrauen.	Create a new one if you no longer trust it. Devices then have to trust the new certificate.
+Zugriffsprotokoll	Access log
+Anmeldungen, Kopplungen, Änderungen und abgewiesene Anfragen mit Zeit, Adresse und Gerät, ohne Inhalte.	Sign-ins, pairings, changes and refused requests with time, address and device, without contents.
+Zertifikat auf dem iPad: die Adresse öffnen, …/ca.crt laden, unter Einstellungen → Allgemein → VPN und Geräteverwaltung das Profil installieren und unter Info → Zertifikatsvertrauenseinstellungen einschalten. Fingerabdruck dabei vergleichen.	Certificate on the iPad: open the address, load …/ca.crt, install the profile under Settings → General → VPN & Device Management, then turn it on under About → Certificate Trust Settings. Compare the fingerprint while doing so.
+Fotos auf dem NAS: Das NAS muss auf diesem Rechner eingehängt sein, damit Originale entwickelt werden können. Zum Ansehen genügen die Vorschauen und Offline-Kopien, die hier liegen.	Photos on the NAS: the NAS must be mounted on this computer for originals to be developed. For viewing, the previews and offline copies stored here are enough.
+Ruhezustand: Schläft der Rechner oder ist graineo beendet, ist der Browser-Zugriff nicht erreichbar.	Sleep: while the computer sleeps or graineo is closed, browser access is not reachable.
+Genau	Exact
+Sparsam	Economical
+Leistung	Performance
+Betriebsart	Operating mode
+Rechnet jetzt	Computing now
+Neu messen	Measure again
+von Hand gewählt	chosen by hand
+Startwert nach der Hardware (Rechenfaktor ≈ {f}); noch keine Messung	start value from the hardware (computing factor ≈ {f}); not measured yet
+gemessen: Rechenfaktor {f} aus {n} Rechnungen	measured: computing factor {f} from {n} computations
+vorübergehend: Akkubetrieb	temporarily: on battery
+vorübergehend: Stromsparmodus	temporarily: Low Power Mode
+vorübergehend: Rechner ist heiß	temporarily: computer is hot
+vorübergehend: Arbeitsspeicher knapp	temporarily: memory is short
+Betriebsart jetzt {t} ({c}) · Einstellungen → Entwickeln → Leistung	Operating mode now {t} ({c}) · Settings → Develop → Performance
+{t}: genaue Ansicht in {n} s, beim Zoomen sofort ({c})	{t}: exact view in {n} s, at once when zooming ({c})
+Sparsam wartet auf einem Foto etwas länger, bevor die genaue Ansicht gerechnet wird, rechnet nichts im Voraus und hält weniger Fotos im Speicher. Das Ergebnis bleibt gleich: Zoom, Rauschregler und Export rechnen sofort genau. Automatisch wählt nach den gemessenen Rechenzeiten dieses Rechners und rechnet bei Akku, Stromsparmodus, Wärme oder knappem Speicher vorübergehend sparsam	Economical waits a little longer on a photo before the exact view is computed, computes nothing ahead and keeps fewer photos in memory. The result stays the same: zoom, noise sliders and export compute exactly at once. Automatic chooses from the measured computing times of this computer and computes economically for a while on battery, in Low Power Mode, when hot or when memory is short
+auf 0 Sterne (außer 4–5)	set to 0 stars (except 4–5)
+{a} gibt es schon und bleibt unverändert	{a} already exists and stays unchanged
+Vorlage „{a}“ gibt es schon.	Template “{a}” already exists.
+Ersetzen	Replace
+{n} mit 4–5 Sternen unverändert	{n} with 4–5 stars unchanged
+interner Fehler	internal error
+Seite zu groß zum Drucken: {w} × {h} Pixel bei {ppi} ppi, höchstens {max} MP und {edge} Pixel je Seite. Bitte kleineres Papier oder weniger ppi wählen.	Page too large to print: {w} × {h} pixels at {ppi} ppi, at most {max} MP and {edge} pixels per page. Please choose smaller paper or fewer ppi.
+Suchindex wird aufgebaut …	Search index is being built…
+Seite {a}	Page {a}
+Druckraum	Print room
+vorheriges Foto im Filmstreifen (die Vorschau zeigt seine Seite)	previous photo in the filmstrip (the preview shows its page)
+nächstes Foto im Filmstreifen (die Vorschau zeigt seine Seite)	next photo in the filmstrip (the preview shows its page)
+Auswahl im Filmstreifen erweitern / verkleinern	extend / shrink the selection in the filmstrip
+vorige Seite	previous page
+nächste Seite	next page
+Klick / ⇧-Klick / ⌘-Klick im Filmstreifen	Click / ⇧-click / ⌘-click in the filmstrip
+Foto wählen / Bereich wählen / einzeln dazu oder weg	select a photo / select a range / add or remove single photos
+Ermittle …	Detecting…
+Bild wird entwickelt …	Developing the photo…
+Modell wird geladen …	Loading the model…
+Motiv wird gesucht …	Looking for the subject…
+Personen werden gesucht …	Looking for people…
+Bild wird analysiert …	Analysing the photo…
+Auswahl wird berechnet …	Computing the selection…
+Bereich wird gefüllt …	Filling the area…
+Wird abgebrochen (nach diesem Schritt) …	Cancelling (after this step)…
+Berechnung abbrechen (ein laufender Rechenschritt endet noch)	Cancel the computation (a running step still finishes)
+Auswahl berechnet · {t} s	Selection computed · {t} s
+Auswahl berechnet	Selection computed
+Stelle entfernt · {t} s	Spot removed · {t} s
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter	Being detected – progress and Cancel in the line below
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter; weitere Stellen erst danach	Being computed – progress and Cancel in the line below; more spots afterwards
+Erst möglich, wenn die laufende Bildanalyse fertig ist	Possible once the running image analysis has finished
+Erst möglich, wenn die laufende Berechnung fertig ist	Possible once the running computation has finished
+Weiche Kante (%)	Feather (%)
+Größe (%)	Size (%)
+Histogramm oben festhalten	Pin the histogram at the top
+Histogramm oben festhalten (Bearbeiten, Masken) ein/aus	Pin the histogram at the top (Edit, Masks) on/off
+Füllung	Fill
+Gelesen wird nur der Dateikopf, mehrere Fotos gleichzeitig, je Kamera höchstens {n} über die Aufnahmetage verteilt; die Liste füllt sich Kamera für Kamera. Einmal gelesen, bleibt das Ergebnis gespeichert (neue Fotos werden im Leerlauf vorab gelesen).	Only the start of each file is read, several photos at a time, at most {n} per camera spread over the shooting days; the list fills camera by camera. Once read, the result is kept (new photos are read ahead in idle time).
+Bildstile: {d} von {n} gelesen	Picture styles: {d} of {n} read
+Die Zahlen dieser Kamera sind vorläufig, bis ihre Auswahl ganz gelesen ist; Lernen geht danach	The numbers of this camera are provisional until its selection is read completely; learning is possible then
+Die Bildstile dieser Kamera werden noch gelesen ({d} von {n}); gelernt wird mit der ganzen Auswahl	The picture styles of this camera are still being read ({d} of {n}); learning uses the whole selection
+Als Stapel bündeln	Group as Stack
+Serien werden gesucht … sie erscheinen links unter „Serien“	Looking for series … they appear on the left under “Series”
+Noch keine Serien oder Stapel	No series or stacks yet
+Erst ein Foto auswählen	Select a photo first
+Das Foto liegt in keiner Serie und keinem Stapel	The photo is in no series and no stack
+Serien: warten auf den Suchindex	Series: waiting for the search index
+Serien werden gesucht … {d} von {n} Tagen	Looking for series … {d} of {n} days
+gedrosselt: Stromsparmodus	slowed down: Low Power Mode
+Serien sind Fotos kurz nacheinander mit gleichem Motiv. Die Erkennung läuft leise im Hintergrund und nutzt nur die Vorschauen. Eigene Stapel: Fotos auswählen, Foto → Als Stapel bündeln ({g}); sichten: Foto → Serie sichten ({r}).	Series are photos taken shortly after one another of the same subject. Detection runs quietly in the background and only uses the previews. Your own stacks: select photos, Photo → Group as Stack ({g}); review: Photo → Review Series ({r}).
+Erkennung aus	Detection off
+Serienerkennung ist aus	Series detection is off
+Einstellungen → Bibliothek → Serien automatisch erkennen	Settings → Library → Detect series automatically
+wartet auf den Suchindex	waiting for the search index
+Serien: warten auf den Suchindex …	Series: waiting for the search index …
+Der Suchindex wird zuerst gebaut (höchstens 5 Minuten), danach beginnt die Suche nach Serien.	The search index is built first (at most 5 minutes); then the search for series begins.
+Suche … {d} von {n} Fotos{s}	Searching … {d} of {n} photos{s}
+Serien werden gesucht … {d} von {n} Fotos{s}	Looking for series … {d} of {n} photos{s}
+Der Bildinhalt der Fotos wird aus den Vorschauen verglichen.	The content of the photos is compared using the previews.
+Suche … {d} von {n} Tagen{s}	Searching … {d} of {n} days{s}
+Serien werden gesucht … {d} von {n} Tagen{s}	Looking for series … {d} of {n} days{s}
+Die Fotos jedes Aufnahmetags werden zu Serien gruppiert.	The photos of each shooting day are grouped into series.
+Suche …{s}	Searching …{s}
+Serien werden gesucht …{s}	Looking for series …{s}
+noch keine gefunden	none found yet
+Noch keine Serien gefunden	No series found yet
+Keine Fotos kurz nacheinander mit gleichem Motiv gefunden; Fotos ohne Vorschau kommen später dran.	No photos taken shortly after one another of the same subject found; photos without a preview follow later.
+Suche beginnt …	Search starting …
+Serien werden gesucht …	Looking for series …
+Die Suche beginnt kurz nachdem die Bibliothek geladen ist.	The search begins shortly after the library has loaded.
+noch etwa {n} s	about {n} s left
+noch etwa {n} min	about {n} min left
+gedrosselt	slowed down
+Korrekturen	Corrections
+Licht	Light
+Flecken & rote Augen	Spots & red eyes
+Punkte sichtbar	Spots visible
+Punkte verborgen	Spots hidden
+Retusche-Punkte im Bild zeigen oder verbergen	Show or hide the retouch spots in the photo
+Gewählten löschen	Delete selected
+Gewählten Punkt löschen	Delete the selected spot
+Fleck anklicken: Struktur von einer Quelle daneben, an die Umgebung angepasst	Click a spot: texture from a source beside it, matched to the surroundings
+Fleck anklicken: kopiert die Quelle genau	Click a spot: copies the source exactly
+Auf die Pupille klicken	Click the pupil
+Stelle entfernen	Remove spot
+Alle wiederherstellen	Restore all
+Retusche: Heilen, Klonen, rote Augen, Objekte entfernen	Retouch: heal, clone, red eyes, remove objects
+rechte Leiste: Werkzeug „Retusche“	right panel: “Retouch” tool
+Retusche-Punkte und Maskenkonturen ein/aus (in den Werkzeugen „Masken“ und „Retusche“ sichtbar)	retouch spots and mask outlines on/off (visible in the Masks and Retouch tools)
+Maske umbenannt	Mask renamed
+Maske ein/aus	Mask on/off
+Stärke der Maske	Mask amount
+Reihenfolge der Masken	Order of masks
+Radial	Radial
+Im Bild malen	Paint in the photo
+Linearer Verlauf: im Bild ziehen	Linear gradient: drag in the photo
+Radialer Verlauf (Ellipse): im Bild ziehen	Radial gradient (ellipse): drag in the photo
+Bereich nach Helligkeit	Range by brightness
+Bereich nach Farbe	Range by color
+Formen	Shapes
+Bereiche	Ranges
+Zusammengesetzt	Composed
+{n} Teile	{n} parts
+{n} Striche	{n} strokes
+Erst „Filter auf Version 2 umstellen“	First “Switch filters to version 2”
+Erst „Filter auf Version 2 umstellen“ (⋯)	First “Switch filters to version 2” (⋯)
+Maske invertieren	Invert mask
+Regler zurücksetzen	Reset sliders
+Maske löschen	Delete mask
+Maske ausschalten (bleibt erhalten)	Switch the mask off (it is kept)
+Maske einschalten	Switch the mask on
+Wirkung	Effect
+Klick-Auswahl: Objekt im Bild anklicken – legt eine neue Maske an · Esc beendet	Click selection: click an object in the photo – creates a new mask · Esc ends
+Klick-Auswahl: Klick ergänzt diese Maske, ⌥-Klick nimmt heraus · Esc beendet	Click selection: a click adds to this mask, ⌥-click removes · Esc ends
+Masken	Masks
+Maske: umbenennen, duplizieren, invertieren, verschieben, löschen	Mask: rename, duplicate, invert, move, delete
+Im Bild zeichnen: Pinsel malt, Verlauf und Ellipse ziehen · Esc beendet	Drawing in the photo: the brush paints, gradient and ellipse are dragged · Esc ends
+Pinsel malen, Verlauf und Ellipse im Bild ziehen (Esc beendet)	Paint with the brush, drag gradient and ellipse in the photo (Esc ends)
+Himmel	Sky
+Härte (%)	Hardness (%)
+Fluss (%)	Flow (%)
+Stärke (%)	Amount (%)
+Gilt für die nächsten Striche · ⌘Z nimmt einen Strich zurück	Applies to the next strokes · ⌘Z takes back a stroke
+Aus mehreren Formen zusammengesetzt; einzelne Formen lassen sich hier nicht ändern	Composed of several shapes; single shapes cannot be changed here
+Anfang und Ende im Bild ziehen	Drag start and end in the photo
+Teile · {name} · invertiert	Parts · {name} · inverted
+Teile · {name}	Parts · {name}
+Teil: invertieren, Verknüpfung ändern, löschen	Part: invert, change combination, delete
+Teil invertieren	Invert part
+Als „Hinzufügen“	As “Add”
+Als „Abziehen“	As “Subtract”
+Als „Schneiden“	As “Intersect”
+Der erste Teil ist die Grundlage	The first part is the base
+Einziger Teil: „Maske löschen“ (⋯ der Maske)	Only part: “Delete mask” (⋯ of the mask)
+Ohne die Grundlage wirkte der nächste Teil auf das ganze Foto	Without the base the next part would act on the whole photo
+Teil löschen	Delete part
++ Hinzufügen ▾	+ Add ▾
+− Abziehen ▾	− Subtract ▾
+Teil hinzufügen: vergrößert die Maske	Add a part: enlarges the mask
+Teil abziehen: nimmt aus der Maske heraus	Subtract a part: takes it out of the mask
+Mit einem Teil schneiden: wirkt nur, wo beide wirken	Intersect with a part: acts only where both act
+Klick-Auswahl: Objekt im Bild anklicken – wird ein neuer Teil dieser Maske · Esc beendet	Click selection: click an object in the photo – becomes a new part of this mask · Esc ends
+Klick-Auswahl: Klick ergänzt diesen Teil, ⌥-Klick nimmt heraus · Esc beendet	Click selection: a click adds to this part, ⌥-click removes · Esc ends
+Pinsel: im Bild malen · Esc beendet	Brush: paint in the photo · Esc ends
+Im Bild ziehen, um die Form zu setzen · Esc beendet	Drag in the photo to place the shape · Esc ends
+Griffe im Bild ziehen · Esc beendet	Drag the handles in the photo · Esc ends
+Teil anklicken, um im Bild zu zeichnen	Click a part to draw in the photo
+gewählte Maske löschen (im Werkzeug „Masken“, statt des Fotos)	delete the selected mask (in the Masks tool, instead of the photo)
+Werkzeug der Maske beenden (Pinsel, Griffe, Klick-Auswahl)	end the mask tool (brush, handles, click selection)
+Wähle Fotos im Filmstreifen	Choose photos in the filmstrip
+Keine Fotos in der Ansicht	No photos in the view
+Keine Fotos ausgewählt: „Alle“ zeigt alle Fotos der Ansicht	No photos selected: “All” shows all photos of the view
+{a} (lässt sich nicht drucken)	{a} (cannot be printed)
+alle Fotos der Ansicht auswählen	select all photos of the view
+Haupt-Foto aus der Auswahl nehmen (nichts wird gelöscht)	remove the main photo from the selection (nothing is deleted)
+Nur die ausgewählten Fotos zeigen	Show only the selected photos
+Alle Fotos der Ansicht zeigen	Show all photos of the view
+Für den Druck um 90° gedreht („Drehen und einpassen“)	Turned by 90° for the print (“Rotate to fit”)
+Kante (%)	Edge (%)
+Noch keine Probe: Farbe im Bild anklicken	No sample yet: click a colour in the photo
+Probe entfernen	Remove sample
+Toleranz	Tolerance
+Weichheit	Softness
+Pipette: Bild wird für die Probe entwickelt …	Eyedropper: developing the photo for the sample…
+Pipette: Farbe anklicken · ⇧ dazu · ⌥ weg	Eyedropper: click a colour · ⇧ add · ⌥ remove
+Farbprobe	Colour sample
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neue Maske · Esc beendet	Click selection: click the object or drag a box – new mask · Esc ends
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neuer Teil · Esc beendet	Click selection: click the object or drag a box – new part · Esc ends
+Klick-Auswahl: Klick ergänzt, ⌥-Klick nimmt heraus, Ziehen setzt den Rahmen	Click selection: click adds, ⌥-click removes, dragging sets the box
+Objekt im Bild anklicken oder einen Rahmen darum ziehen; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	Click an object in the photo or drag a box around it; ⌥-click removes areas (computed on this computer)
+Maske Schwarz-Weiß	Mask black and white
+Bild auf Grau	Image on grey
+Abdeckfolie (Rest rot)	Masking film (rest red)
+Darstellung der Überlagerung wählen	Choose how the overlay is shown
+Wirkung der gewählten Maske im Bild zeigen: {kind}	Show the effect of the selected mask in the photo: {kind}
+Überlagerung der Maske: an, Darstellung wechseln, aus (im Werkzeug „Masken“)	Mask overlay: on, change display, off (in the “Masks” tool)
+Alles außer dem Hauptmotiv (Motiv, invertiert)	Everything but the main subject (subject, inverted)
+Bereich nach Farbe (Pipette)	Range by colour (eyedropper)
+Personen-Teile	Parts of people
+Gesicht	Face
+Gesichtshaut	Facial skin
+Augen	Eyes
+Augenbrauen	Eyebrows
+Lippen	Lips
+Zähne	Teeth
+Gesichter vom Kinn bis zur Stirn (Gesichtslandmarken der Bildanalyse des Systems)	Faces from chin to forehead (face landmarks of the system’s image analysis)
+Haut der Gesichter: ohne Augen, Brauen und Mund, nach der Farbe des Gesichts	Skin of the faces: without eyes, brows and mouth, by the colour of the face
+Augen (Kontur aus den Gesichtslandmarken)	Eyes (contour from the face landmarks)
+Augenbrauen (aus den Gesichtslandmarken)	Eyebrows (from the face landmarks)
+Lippen ohne die Mundöffnung	Lips without the opening of the mouth
+Mundöffnung (Zähne), innere Lippenkontur	Opening of the mouth (teeth), inner lip contour
+Nur auf dem Mac (Gesichtslandmarken der Bildanalyse des Systems)	Only on the Mac (face landmarks of the system’s image analysis)
+Kein Gesicht erkannt	No face found
+{n} Gesichter gefunden	{n} faces found
+Nicht gefunden	Not found
+Auswahl fehlt – nur auf dem Mac berechenbar	Selection missing – can only be computed on the Mac
+Zeigt, welche Farben im Bild stecken: Winkel = Farbton, Abstand von der Mitte = Sättigung.	Shows which colors are in the image: angle = hue, distance from the center = saturation.
+Jeder Bildpunkt landet an einer Stelle im Kreis. Die Richtung sagt, welche Farbe er hat (oben Rot, rechts Blau, unten Cyan, links Gelb), der Abstand von der Mitte, wie kräftig sie ist. Je heller ein Fleck, desto mehr Pixel haben diese Farbe.\n• **Mitte** – neutrales Grau, Weiß und Schwarz; ein Farbstich schiebt die ganze Wolke zur Seite\n• **Ringe** – Sättigung in Prozent (die Zahlen unten links)\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Haut** – die Hauttonlinie: Haut aller Menschen liegt nahe daran; weicht sie ab, hat die Haut einen Stich\n• **×1 · ×2 · ×4** – vergrößert die Mitte, denn die meisten Fotos sind nur wenig gesättigt\n• **S · M · L** – Größe der Anzeige im Kopf; ein Doppelklick auf die Anzeige wählt die nächste\n\nÜber der Anzeige steht oben links Farbton und Sättigung an der Zeigerposition.	Every pixel lands somewhere in the circle. Its direction tells which color it has (red at the top, blue on the right, cyan at the bottom, yellow on the left), its distance from the center how strong the color is. The brighter a spot, the more pixels have that color.\n• **Center** – neutral gray, white and black; a color cast pushes the whole cloud to one side\n• **Rings** – saturation in percent (the numbers at the lower left)\n• **Boxes** – red, magenta, blue, cyan, green and yellow at 75 % saturation\n• **Skin** – the skin tone line: everyone's skin lies close to it; if it strays, the skin has a cast\n• **×1 · ×2 · ×4** – enlarges the center, since most photos are only slightly saturated\n• **S · M · L** – size of the display in the header; a double click on the display picks the next one\n\nAt the top left of the display, hue and saturation at the pointer are shown.
+Winkel = Farbton	Angle = hue
+Abstand = Sättigung	Distance = saturation
+Mitte = neutral	Center = neutral
+Helligkeit = Anzahl Pixel	Brightness = number of pixels
+Größe der Anzeige: {s} (Doppelklick auf die Anzeige: nächste Größe)	Display size: {s} (double-click the display: next size)
+Gelbgrün	Yellow-green
+Türkisgrün	Spring green
+Cyan	Cyan
+Azurblau	Azure
+Violett	Violet
+Rosa	Rose
+Mg	Mg
+Cy	Cy
+Gb	Yl
+Haut	Skin
+Zoom auf die Sättigung (×1, ×2, ×4): Fotos liegen meist nahe der Mitte	Zoom on saturation (×1, ×2, ×4): photos usually sit near the center
+Hauttonlinie zeigen: Hauttöne aller Menschen liegen nahe daran	Show the skin tone line: everyone's skin tones lie close to it
+Neutral (Grau)	Neutral (gray)
+Sättigung {s} %	Saturation {s} %
+Vektorskop: Farbton = Winkel, Sättigung = Abstand von der Mitte (Doppelklick: Größe)	Vectorscope: hue = angle, saturation = distance from the center (double-click: size)
+Tiefe	Depth
+Genauer	More accurate
+Tiefe wird geschätzt …	Estimating depth …
+Himmel wird gesucht …	Looking for the sky …
+Braucht das Modul „Tiefe“ (Einstellungen → Module)	Needs the module “Depth” (Settings → Modules)
+Braucht die Module „Klick-Auswahl“ und „Tiefe“ (Einstellungen → Module)	Needs the modules “Click selection” and “Depth” (Settings → Modules)
+Himmel automatisch auswählen (Tiefe und Klick-Auswahl, ändert keine Pixel)	Select the sky automatically (depth and click selection, changes no pixels)
+Tiefe (Modul): Depth Anything V2 Small, L. Yang et al. (Apache-2.0)	Depth (module): Depth Anything V2 Small, L. Yang et al. (Apache-2.0)
+Optional, nicht mitgeliefert, nur nicht-kommerziell: {a}	Optional, not shipped, non-commercial use only: {a}
+Kein Tiefenbild im Foto – Modul „Tiefe“ laden (Einstellungen → Module)	No depth map in the photo – load the module “Depth” (Settings → Modules)
+Himmel gefunden	Sky found
+Kein Himmel erkannt	No sky found
+Tiefe aus dem Foto gelesen	Depth read from the photo
+Tiefe geschätzt	Depth estimated
+Auswahl fehlt – {why}	Selection missing – {why}
+Tiefe aus dem Foto (gemessen)	Depth from the photo (measured)
+Tiefe berechnet	Depth computed
+Himmel berechnet	Sky computed
+Tiefenbild aus dem Foto, sonst geschätzt mit Depth Anything V2 Small (Apache-2.0)	Depth map from the photo, otherwise estimated with Depth Anything V2 Small (Apache-2.0)
+Geschätzt mit Depth Anything V2 Base: feinere Kanten, etwa viermal langsamer; nur für nicht-kommerzielle Nutzung	Estimated with Depth Anything V2 Base: finer edges, about four times slower; non-commercial use only
+Braucht das Modul „Tiefe genauer“ (Einstellungen → Module; nur nicht-kommerziell)	Needs the module “Depth, more accurate” (Settings → Modules; non-commercial only)
+Auswahl neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	Compute the selection again (e.g. after a changed lens correction)
+„{name}“ laden?	Load “{name}”?
+Nur für nicht-kommerzielle Nutzung	Non-commercial use only
+Lizenz: {l}. {s}	Licence: {l}. {s}
+Lizenztext lesen	Read the licence text
+Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	The model is not provided by graineo but loaded from its original source at your request ({s}). Every function also works with the open model.
+Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	I use graineo with this model for non-commercial purposes only
+Nur für nicht-kommerzielle Nutzung · {l}	Non-commercial use only · {l}
+{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}. Licence: {l} · Source: huggingface.co/{r} · not provided by graineo{c}
+ · nicht-kommerzielle Nutzung bestätigt	 · non-commercial use confirmed
+Tiefe (Depth Anything V2 Small)	Depth (Depth Anything V2 Small)
+Tiefe genauer (Depth Anything V2 Base)	Depth, more accurate (Depth Anything V2 Base)
+Masken: Entfernung vom Objektiv schätzen (nah ↔ fern)	Masks: estimate the distance from the lens (near ↔ far)
+Masken: Entfernung genauer schätzen (nur nicht-kommerziell)	Masks: estimate the distance more accurately (non-commercial only)
+Das Modell darf mit Namensnennung genutzt und weitergegeben werden, aber nicht für kommerzielle Zwecke.	The model may be used and shared with attribution, but not for commercial purposes.
+Apple-RAW ist auf diesem System nicht verfügbar	Apple RAW is not available on this system
+Datei nicht gefunden	File not found
+Nicht unterstützt: Kamera {a} (macOS kennt das Modell nicht)	Not supported: camera {a} (unknown to macOS)
+Nicht unterstützt: {a}	Not supported: {a}
+Fehler: {a}	Error: {a}
+Apple RAW {a} · {b}	Apple RAW {a} · {b}
+Apple RAW	Apple RAW
+graineo · {a}	graineo · {a}
+wird geprüft …	checking…
+wird entwickelt …	developing…
+fertig	done
+Neueste ({a})	Newest ({a})
+Neueste	Newest
+Apple RAW {a}	Apple RAW {a}
+Decoder-Version von Apple festhalten (nur für diese Ansicht); „Neueste“ folgt macOS-Updates	Pin Apple's decoder version (this view only); “Newest” follows macOS updates
+Apple RAW {a} nicht verfügbar	Apple RAW {a} not available
+Für dieses Foto bietet macOS die gepinnte Version nicht an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen.	macOS does not offer the pinned version for this photo; rendered with Apple RAW {a}. The image may differ.
+Apple-Version	Apple version
+erster Lauf {a} (Shader)	first run {a} (shaders)
+Decoder	Decoder
+Zeit graineo	Time graineo
+Zeit Apple	Time Apple
+Status	Status
+Nur zum Vergleichen – ändert die Entwicklung nicht	For comparison only – does not change the development
+Pipeline	Pipeline
+Apple	Apple
+Schritte	Steps
+neutral	neutral
+Sensoransicht mit graineos Entwicklung	Sensor view with graineo's development
+Das Foto mit der RAW-Engine von macOS (Core Image) entwickelt – nur zum Ansehen	The photo developed by the macOS RAW engine (Core Image) – for viewing only
+Links graineo, rechts Apple; Zoomen und Verschieben wirken auf beide	graineo on the left, Apple on the right; zoom and pan act on both
+Rauschminderung, Schärfen und Objektivkorrektur auf beiden Seiten aus; Weißabgleich und Belichtung aus dem Foto	Noise reduction, sharpening and lens correction off on both sides; white balance and exposure from the photo
+Jede Pipeline mit ihren eigenen Vorgaben – Apple und graineo machen dann nicht dieselben Schritte	Each pipeline with its own defaults – Apple and graineo then do not perform the same steps
+Segmente werden gebildet …	Forming segments …
+Vorne	Front
+Hinten	Back
+Ganze Segmente, deren mittlere Tiefe im nächsten Drittel des Fotos liegt	Whole segments whose median depth lies in the nearest third of the photo
+Ganze Segmente, deren mittlere Tiefe im mittleren Drittel des Fotos liegt	Whole segments whose median depth lies in the middle third of the photo
+Ganze Segmente, deren mittlere Tiefe im fernsten Drittel des Fotos liegt	Whole segments whose median depth lies in the farthest third of the photo
+Segmente zeigen	Show segments
+Grenzen der Segmente im Bild zeigen; ein Klick ins Bild nimmt ein Segment dazu oder heraus	Show the segment borders in the image; a click in the image adds or removes a segment
+Klicks zurücksetzen ({n})	Reset clicks ({n})
+Angeklickte Segmente vergessen: nur die gewählten Bereiche zählen	Forget clicked segments: only the chosen ranges count
+Tiefe: Klick nimmt ein Segment dazu oder weg · Esc beendet	Depth: a click adds or removes a segment · Esc ends
+Ganze Segmente nach ihrer Entfernung vom Objektiv (vorne, Mitte, hinten; Tiefenbild aus dem Foto oder geschätzt, ändert keine Pixel)	Whole segments by their distance from the lens (front, middle, back; depth map from the photo or estimated, changes no pixels)
+Kante verfeinern (%)	Refine edge (%)
+Kante verfeinern	Refine edge
+Nur für gezeichnete Masken und Bereiche; Masken aus der Bildanalyse (Motiv, Personen, Klick-Auswahl, Tiefe, Himmel) behalten ihre Kante	Only for drawn masks and ranges; masks from the image analysis (subject, people, click selection, depth, sky) keep their edge
+Die Maskenkante folgt in einem schmalen Band den Kanten im Bild (geführter Filter); mehr = breiteres Band	The mask edge follows the edges in the image within a narrow band (guided filter); more = wider band
+Apple RAW gibt es nur unter macOS – hier entwickelt graineo	Apple RAW is only available on macOS – graineo develops here
+Für Sigma/Foveon nur graineo – Apple kennt das Format nicht	Sigma/Foveon: graineo only – Apple does not know the format
+Nur für RAW-Dateien	RAW files only
+Für diese Kamera nur graineo – Apple kennt das Modell nicht	This camera: graineo only – Apple does not know the model
+nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren	not possible (HE): graineo cannot decode Nikon “High Efficiency” yet
+Dieses Foto mit graineos eigener Pipeline entwickeln	Develop this photo with graineo's own pipeline
+Dieses Foto mit der RAW-Engine von macOS dekodieren; Farbe, Ton, Looks, Film und Masken rechnet graineo	Decode this photo with the macOS RAW engine; graineo computes colour, tone, looks, film and masks
+Automatik	Automatic
+Zurück auf Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Back to automatic: graineo, Apple only for files graineo cannot decode
+Entwickelt mit	Developed with
+Apple RAW {a} fehlt – mit {b} gerechnet	Apple RAW {a} missing – computed with {b}
+Automatik · HE-Rückfall	Automatic · HE fallback
+festgehalten · HE	pinned · HE
+Apple RAW {a} nicht verfügbar – graineo	Apple RAW {a} not available – graineo
+Automatik · nur graineo	Automatic · graineo only
+unbekannte Pipeline „{a}“ – graineo	unknown pipeline “{a}” – graineo
+Für dieses Foto bietet macOS die festgehaltene Version nicht mehr an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen. Der Eintrag bleibt, bis du eine Version wählst.	macOS no longer offers the pinned version for this photo; computed with Apple RAW {a}. The image may differ. The entry stays until you choose a version.
+Dieses Foto ist für Apple RAW {a} eingestellt. {b}. Entwickelt mit graineo – das Bild kann abweichen. Der Eintrag bleibt erhalten.	This photo is set to Apple RAW {a}. {b}. Developed with graineo – the image may differ. The entry is kept.
+macOS hat die Datei nicht entwickelt	macOS did not develop the file
+Apple RAW {a} · HE	Apple RAW {a} · HE
+entwickelt mit Apple RAW {a} (graineo kann HE noch nicht)	developed with Apple RAW {a} (graineo cannot do HE yet)
+Entwickelt mit Apple RAW {a}	Developed with Apple RAW {a}
+graineo kann Nikon „Hohe Effizienz“ (HE und HE★) noch nicht dekodieren. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	graineo cannot decode Nikon “High Efficiency” (HE and HE★) yet. macOS decodes this photo (Apple RAW {a}); graineo computes colour, tone, looks, film and masks. Colour and sharpness may differ from graineo's own development. The version is pinned for this photo; change it in the Sensor tray under “Pipeline”.
+andere Pipeline als festgehalten	pipeline differs from the pinned one
+festgehalten	pinned
+voll	full
+Die Entwicklung dieses Fotos	The development of this photo
+Decoder-Version für dieses Foto festhalten (ändert die Entwicklung)	Pin the decoder version for this photo (changes the development)
+Decoder-Version für den Vergleich; „Neueste“ folgt macOS-Updates	Decoder version for the comparison; “Newest” follows macOS updates
+linear	linear
+Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Automatic: graineo, Apple only for files graineo cannot decode
+Apple-Version für Nikon HE	Apple version for Nikon HE
+Nikon „Hohe Effizienz“ kann graineo noch nicht dekodieren; dann dekodiert macOS. „Bis RAW 8“ ist schneller und entrauscht nicht zusätzlich, „Neueste“ nimmt RAW 9, wo macOS es anbietet (3- bis 7-mal langsamer). Gilt für Fotos ohne festgehaltene Version	graineo cannot decode Nikon “High Efficiency” yet; macOS decodes it then. “Up to RAW 8” is faster and does not denoise on its own, “Newest” takes RAW 9 where macOS offers it (3 to 7 times slower). Applies to photos without a pinned version
+Bis RAW 8	Up to RAW 8
+Diese Bearbeitung stammt aus einer neueren Version und wird nicht überschrieben	This edit comes from a newer version and will not be overwritten
+Bearbeitung aus neuerer Version	Edit from a newer version
+Bearbeitung aus neuerer Version – geschützt	edit from a newer version – protected
+Bearbeitung aus einer neueren Version	Edit from a newer version
+Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	This edit comes from a newer version of graineo and will not be overwritten. This version cannot read it and shows the initial values; changes to this photo are not saved, ratings and flags are. The newer version opens the edit again.
+Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	This folder is only open, it is not in the library. graineo never changes the photos themselves.
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### What is saved\n• **Develop** – every slider change (virtual copies too) is saved as a sidecar NAME.xmp next to the photo\n• **Rating** (stars, flag, label) – locked while “Ratings as XMP” is off; when on, ratings are also written as XMP next to the photos\n\n### What works here\n• Viewing, developing, exporting\n• Filtering by stars, flag and label (values from existing XMP)\n• Searching by file name\n\n### Only after adding\nColumn filters (camera, lens, date …), search by content, keywords and places, collections, people, duplicates and series. When adding, the library takes over ratings and develop settings from the XMP.\n\n### Leaving\n**Close** in the band, or choose a source on the left, e.g. “All Photos”. **Add to Library…** opens the import with this folder.
+Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	You are viewing the folder “{a}” – it is not in the library
+Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	Stop viewing the folder – back to “All Photos”
+Öffnet den Import mit diesem Ordner	Opens the import with this folder
+Bewertungen als XMP	Ratings as XMP
+Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	Write stars, flags and labels as sidecar files (XMP) next to the photos. Off: rating is locked here.
+Deine Bibliothek – der angesehene Ordner gehört nicht dazu	Your library – the viewed folder is not part of it
+Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	To rate, add to the library or turn on “Ratings as XMP” in the band at the top

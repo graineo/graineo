@@ -335,12 +335,27 @@ pub fn background_threads() -> usize {
     efficiency_cores().clamp(2, 4)
 }
 
-/// Threads for the work the user is waiting for (global compute pool of the app): one per core. Measured: two fewer
-/// (leaving the efficiency cores to the background pool) made paging through RAWs noticeably slower (the next image
-/// was preloaded less often in time). The two pools do not compete: background work pauses while the user works
+/// Threads for the work the user is waiting for (global compute pool of the app): one per physical core. Measured: two
+/// fewer (leaving the efficiency cores to the background pool) made paging through RAWs noticeably slower (the next
+/// image was preloaded less often in time). The two pools do not compete: background work pauses while the user works
 /// (`jobs::wait_for_foreground` in the app) and runs with the lowest priority, which the scheduler gives way at once.
+///
+/// Hyper-threads do not count: the computing is SIMD-heavy and gains little from a second thread on the same core,
+/// but twice the threads keep every core busy and the fan loud (Intel and most Windows computers). On Apple silicon
+/// physical and logical cores are the same. Never more than the system lets this process use.
 pub fn foreground_threads() -> usize {
-    std::thread::available_parallelism().map_or(4, |n| n.get()).max(2)
+    threads_for(info::physical_cores(), std::thread::available_parallelism().map(|n| n.get()).ok())
+}
+
+/// [`foreground_threads`] from the physical cores and the logical ones the process may use (pure, for tests).
+pub fn threads_for(physical: Option<usize>, logical: Option<usize>) -> usize {
+    let n = match (physical, logical) {
+        (Some(p), Some(l)) => p.min(l),
+        (Some(p), None) => p,
+        (None, Some(l)) => l,
+        (None, None) => 4,
+    };
+    n.max(2)
 }
 
 /// Processor time (user + system, seconds) this process has used so far; for measurements and lock-up checks.
@@ -439,6 +454,21 @@ mod tests {
         background_as_utility(false);
         assert!(lifted.iter().all(|&q| q == 0x11), "utility while lifted: {lifted:x?}");
         assert!(qos().iter().all(|&q| q == 0x09), "background again");
+    }
+
+    #[test]
+    fn threads_follow_physical_cores() {
+        // Intel with hyper-threading: 4 cores, 8 logical → 4
+        assert_eq!(threads_for(Some(4), Some(8)), 4);
+        // Apple silicon: physical = logical
+        assert_eq!(threads_for(Some(10), Some(10)), 10);
+        // the process may use fewer (container, affinity) → those
+        assert_eq!(threads_for(Some(8), Some(3)), 3);
+        // unknown physical cores: the logical ones as before
+        assert_eq!(threads_for(None, Some(6)), 6);
+        assert_eq!(threads_for(None, None), 4);
+        assert_eq!(threads_for(Some(1), Some(1)), 2);
+        assert!(foreground_threads() >= 2);
     }
 
     #[test]

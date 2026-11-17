@@ -37,6 +37,7 @@ pub mod film;
 pub mod grain_detail;
 pub mod geometry;
 pub mod inspect;
+pub mod jxl;
 pub mod analog;
 pub mod layers;
 pub mod lens;

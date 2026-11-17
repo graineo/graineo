@@ -60,29 +60,63 @@ pub struct Options {
 /// hue shift in degrees and chroma factor; linear in between, faded out for small chroma.
 pub type Look = [[f32; 2]; 18];
 
-/// Camera look (hue/chroma per sector), measured from 5 unedited reference previews each
-/// (median per 20° sector in Oklab after our tone curve, smoothed, tool `lookfit.py` of the
-/// test bench). Only where a cross-validation (fit on 3 images, test on 2 and vice versa)
-/// showed a gain: X100 and GR III. EOS RP: inconsistent; GR IV: the reference uses the
-/// embedded matrix profile there, no gain. Own measurement, no Adobe profile data.
+/// Camera look (hue/chroma per sector) of the standard development, in Oklab after our tone curve and the
+/// saturation factor of [`camera_saturation`]. FinePix X100, X100V, Ricoh GR and GR III (16.11.2026, `graineo-dev
+/// camera-color --fit-look`): fitted on camera JPEGs/embedded previews of own shots in the camera's standard style
+/// (Fujifilm Provia with color 0 and DR 100, Ricoh "Standard") of whole shooting days, checked on photos of other days
+/// that were left out of the fit; ΔE00 median of the check photos X100 2.69 → 2.21, X100V 2.05 → 1.95, GR 2.47 → 2.33,
+/// GR III 2.47 → 2.25 (against the previous development), the 90th percentile lower each time. GR IV: no hue
+/// error worth a table; EOS RP: inconsistent. Own measurement, no Adobe profile data.
+/// Test hook (measurements, `graineo-dev camera-color`): `GRAINEO_CAMERA_LOOK=off` switches the table off for every
+/// camera, `GRAINEO_CAMERA_LOOK=<file>` uses the table in the file for every camera (18 lines "hue shift chroma factor").
 pub fn camera_look(maker: &str, model: &str) -> Option<Look> {
+    if let Some(v) = std::env::var_os("GRAINEO_CAMERA_LOOK") {
+        return if v == "off" { None } else { std::fs::read_to_string(&v).ok().and_then(|t| parse_look(&t)) };
+    }
     let m = model.to_ascii_uppercase();
     let h = maker.to_ascii_uppercase();
     if h.contains("FUJI") && m.contains("X100") && !m.contains("X100F") && !m.contains("X100V") && !m.contains("X100S") && !m.contains("X100T") {
         return Some([
-            [4.0, 1.132], [0.6, 1.241], [-2.2, 1.176], [-3.1, 1.079], [-4.0, 1.057], [-2.6, 1.031],
-            [0.8, 1.032], [1.7, 1.053], [0.3, 1.047], [-1.7, 1.039], [-5.2, 1.090], [-8.4, 1.157],
-            [-8.9, 1.089], [-6.0, 0.965], [-1.6, 0.944], [1.5, 0.971], [2.9, 0.998], [4.1, 1.028],
+            [2.4, 1.001], [1.0, 1.057], [-1.2, 1.103], [-3.4, 1.126], [-4.4, 1.126], [-4.0, 1.101],
+            [-3.5, 1.065], [-2.9, 1.034], [-1.5, 1.013], [-0.7, 1.003], [-0.6, 1.010], [-0.2, 1.017],
+            [0.5, 0.971], [0.5, 0.904], [-0.6, 0.890], [-0.9, 0.923], [0.2, 0.957], [1.9, 0.971],
+        ]);
+    }
+    if h.contains("FUJI") && m.contains("X100V") && !m.contains("X100VI") {
+        return Some([
+            [1.6, 0.984], [0.8, 0.985], [0.1, 0.989], [0.6, 0.984], [3.0, 0.993], [6.9, 1.025],
+            [7.7, 1.056], [4.3, 1.057], [1.1, 1.033], [0.1, 1.014], [0.5, 1.009], [2.2, 1.006],
+            [3.7, 0.988], [3.2, 0.973], [1.6, 0.985], [0.7, 0.999], [0.9, 1.001], [1.4, 0.994],
         ]);
     }
     if h.contains("RICOH") && m.contains("GR III") && !m.contains("GR IIIX") {
         return Some([
-            [1.9, 0.928], [0.0, 0.942], [-5.4, 0.971], [-9.7, 0.955], [-8.7, 0.938], [-4.4, 0.943],
-            [-1.9, 0.953], [-0.9, 0.971], [-0.2, 0.987], [-0.0, 0.995], [0.0, 0.999], [-0.4, 0.991],
-            [-2.2, 0.952], [-3.1, 0.926], [-1.5, 0.962], [-0.1, 0.991], [0.0, 0.987], [0.9, 0.963],
+            [0.3, 0.994], [-0.1, 0.990], [-0.1, 0.977], [0.5, 0.958], [1.3, 0.960], [1.9, 0.985],
+            [1.5, 1.010], [-0.1, 1.024], [-1.5, 1.026], [-1.4, 1.021], [-0.8, 1.012], [-0.5, 1.008],
+            [0.1, 1.015], [0.6, 1.008], [0.5, 0.997], [0.2, 0.996], [0.2, 0.997], [0.4, 0.997],
+        ]);
+    }
+    if h.contains("RICOH") && m.trim().strip_prefix("RICOH ").unwrap_or(m.trim()) == "GR" {
+        return Some([
+            [1.3, 1.027], [0.6, 1.043], [-0.9, 1.050], [-1.5, 1.042], [-0.6, 1.034], [1.0, 1.021],
+            [1.9, 1.005], [1.2, 1.002], [0.1, 1.006], [-0.1, 1.003], [1.8, 0.989], [5.6, 0.981],
+            [8.0, 0.990], [6.5, 0.999], [3.3, 1.004], [1.4, 1.011], [0.9, 1.015], [0.9, 1.020],
         ]);
     }
     None
+}
+
+/// Table of 18 lines "hue shift chroma factor" (format of `GRAINEO_CAMERA_LOOK`, see [`camera_look`]).
+pub fn parse_look(text: &str) -> Option<Look> {
+    let rows: Vec<[f32; 2]> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        .map(|l| {
+            let v: Vec<f32> = l.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            (v.len() == 2).then(|| [v[0], v[1]])
+        })
+        .collect::<Option<Vec<_>>>()?;
+    rows.try_into().ok()
 }
 
 /// Even saturation factor after the tone curve (around the luminance, all hues alike) for the
@@ -123,7 +157,7 @@ pub const STANDARD_LOOK: Look = [
     [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0], [0.0, 1.0],
 ];
 
-fn srgb_lin_to_oklab(c: [f32; 3]) -> [f32; 3] {
+pub fn srgb_lin_to_oklab(c: [f32; 3]) -> [f32; 3] {
     let l = 0.412_221_46 * c[0] + 0.536_332_55 * c[1] + 0.051_445_995 * c[2];
     let m = 0.211_903_5 * c[0] + 0.680_699_5 * c[1] + 0.107_396_96 * c[2];
     let s = 0.088_302_46 * c[0] + 0.281_718_85 * c[1] + 0.629_978_7 * c[2];
@@ -135,7 +169,7 @@ fn srgb_lin_to_oklab(c: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-fn oklab_to_srgb_lin(c: [f32; 3]) -> [f32; 3] {
+pub fn oklab_to_srgb_lin(c: [f32; 3]) -> [f32; 3] {
     let l = c[0] + 0.396_337_78 * c[1] + 0.215_803_76 * c[2];
     let m = c[0] - 0.105_561_346 * c[1] - 0.063_854_17 * c[2];
     let s = c[0] - 0.089_484_18 * c[1] - 1.291_485_5 * c[2];
@@ -297,7 +331,12 @@ pub fn fuji_dr_ev(dr: Option<u16>) -> f32 {
 /// shorter; the reference exports brighten them by different amounts depending on the model. The values are chosen so that the midtones of the development
 /// match those of the reference exports for unedited photos (own measurement on 191 photos, midtones, process version 2012 and
 /// newer; the value acts before the tone curve, so the output does not change 1:1):
-/// - FinePix X100: from ISO 2500 +1.2 EV, the dynamic range has no effect (DR100/200/400 equal; 94 photos).
+/// - FinePix X100: from ISO 2500 +1.2 EV. Below that the dynamic range modes by their underexposure (+1 EV at DR200,
+///   +2 EV at DR400): the reference exports (Lightroom) do not brighten them, but the camera's own rendering and the
+///   system RAW engine of macOS do; against the embedded camera previews of 58 own DR200/DR400 shots (ISO 400–2000,
+///   training and holdout on separate days) the full compensation lowered the median ΔE00 from 12.3 to 3.4 on the
+///   holdout (own measurement, 17.11.2026). Photos with Lightroom start values keep the exports'
+///   brightness ([`fuji_lightroom_offset`]).
 /// - X-Pro1: from ISO 2500 +0.55 EV (28 photos); DR200/400 1.3 times the underexposure (only 8 photos).
 /// - X-E2: DR200 +1.2 EV (36 photos); DR400 double (not measured); without DR mode from ISO 2500 +0.35 EV.
 /// - X-Pro2: DR200 +0.5 EV (7 photos, few).
@@ -310,8 +349,8 @@ pub fn fuji_compensation(maker: &str, model: &str, iso: Option<u32>, dr: Option<
     let m = model.to_ascii_uppercase();
     let high = iso.is_some_and(|i| i >= 2500);
     let dr_ev = fuji_dr_ev(dr);
-    if m.contains("X100") && !m.contains("X100F") && !m.contains("X100V") && !m.contains("X100S") && !m.contains("X100T") {
-        return if high { 1.2 } else { 0.0 };
+    if is_first_x100(&m) {
+        return if high { 1.2 } else { dr_ev };
     }
     if m.contains("X-PRO1") {
         return if dr_ev > 0.0 { 1.3 * dr_ev } else if high { 0.55 } else { 0.0 };
@@ -329,6 +368,21 @@ pub fn fuji_compensation(maker: &str, model: &str, iso: Option<u32>, dr: Option<
     } else {
         0.0
     }
+}
+
+/// The original FinePix X100 (not X100S/T/F/V).
+fn is_first_x100(model_upper: &str) -> bool {
+    let m = model_upper;
+    m.contains("X100") && !m.contains("X100F") && !m.contains("X100V") && !m.contains("X100S") && !m.contains("X100T") && !m.contains("X100VI")
+}
+
+/// Part of [`fuji_compensation`] that Lightroom does not apply (EV): the dynamic range modes of the FinePix X100 below
+/// ISO 2500. Photos developed with Lightroom start values subtract it, so their brightness stays as in Lightroom.
+pub fn fuji_lightroom_offset(maker: &str, model: &str, iso: Option<u32>, dr: Option<u16>) -> f32 {
+    if !maker.to_ascii_uppercase().contains("FUJI") || !is_first_x100(&model.to_ascii_uppercase()) || iso.is_some_and(|i| i >= 2500) {
+        return 0.0;
+    }
+    fuji_dr_ev(dr)
 }
 
 /// Hook for a demosaic outside the CPU version: (mosaic, width, height, pattern, method) → RGB.
@@ -848,7 +902,7 @@ mod camera_saturation_tests {
 
 #[cfg(test)]
 mod iso_compensation_tests {
-    use super::{fuji_compensation, camera_ev};
+    use super::{fuji_compensation, fuji_lightroom_offset, camera_ev};
 
     #[test]
     fn only_fuji_gets_compensation() {
@@ -863,9 +917,18 @@ mod iso_compensation_tests {
 
     #[test]
     fn fuji_models_by_measurement() {
-        // X100: high ISO only, dynamic range without effect
-        assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(400), Some(400)), 0.0);
+        // X100: dynamic range modes by their underexposure (camera rendering), high ISO as measured against the exports
+        assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(400), Some(400)), 2.0);
+        assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(400), Some(200)), 1.0);
+        assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(200), Some(100)), 0.0);
         assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(6400), Some(100)), 1.2);
+        assert_eq!(fuji_compensation("FUJIFILM", "FinePix X100", Some(3200), Some(400)), 1.2);
+        // Lightroom start values keep the exports' brightness: only the X100's dynamic range part is taken back
+        assert_eq!(fuji_lightroom_offset("FUJIFILM", "FinePix X100", Some(400), Some(200)), 1.0);
+        assert_eq!(fuji_lightroom_offset("FUJIFILM", "FinePix X100", Some(3200), Some(400)), 0.0);
+        assert_eq!(fuji_lightroom_offset("FUJIFILM", "X100V", Some(400), Some(200)), 0.0);
+        assert_eq!(fuji_lightroom_offset("FUJIFILM", "X-E2", Some(400), Some(200)), 0.0);
+        assert_eq!(fuji_lightroom_offset("Canon", "X100", Some(400), Some(200)), 0.0);
         // X-Pro1 and X-E2
         assert_eq!(fuji_compensation("FUJIFILM", "X-Pro1", Some(6400), Some(100)), 0.55);
         assert_eq!(fuji_compensation("FUJIFILM", "X-E2", Some(400), Some(200)), 1.2);
@@ -888,5 +951,19 @@ mod iso_compensation_tests {
         assert_eq!(camera_ev("Canon", "Canon EOS RP"), 0.20);
         assert_eq!(camera_ev("Canon", "Canon EOS 5D Mark II"), 0.0);
         assert_eq!(camera_ev("SIGMA", "SIGMA DP2 Merrill"), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod parse_look_tests {
+    use super::parse_look;
+
+    #[test]
+    fn reads_eighteen_rows_and_rejects_others() {
+        let ok: String = (0..18).map(|i| format!("{} 1.0{}\n", i as f32 * 0.5, i)).collect();
+        let l = parse_look(&format!("# comment\n{ok}")).expect("18 rows");
+        assert_eq!(l[2], [1.0, 1.02]);
+        assert!(parse_look(&ok.lines().take(17).collect::<Vec<_>>().join("\n")).is_none());
+        assert!(parse_look("1 2 3\n").is_none());
     }
 }

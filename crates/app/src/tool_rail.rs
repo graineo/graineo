@@ -1,6 +1,6 @@
 //! Tool rail at the right edge: a narrow icon bar selects what the right panel shows.
 //!
-//! Groups (from the top): Edit, Film & Look · Crop, Masks · Presets; Info at the top, Sensor at the bottom.
+//! Groups (from the top): Edit, Film & Look · Crop, Masks, Retouch · Presets; Info at the top, Sensor at the bottom.
 //! Tools that can be opened and left again (crop) open their panel on the right and the
 //! mode in the image; a click on another tool applies and leaves them.
 
@@ -41,9 +41,9 @@ impl App {
                 }
             }
             // Masks and retouching are drawn into the image: in the grid the active photo opens in single image view
-            ToolTab::Masks if self.in_grid() => {
+            ToolTab::Masks | ToolTab::Retouch if self.in_grid() => {
                 self.to_single_image();
-                self.tool_tab = ToolTab::Masks;
+                self.tool_tab = w;
             }
             ToolTab::Sensor => {
                 if self.crop_mode.is_some() {
@@ -80,9 +80,9 @@ impl App {
                     self.to_single_image();
                     self.tool_tab = w;
                 }
-                if w == ToolTab::Masks && self.in_grid() {
+                if matches!(w, ToolTab::Masks | ToolTab::Retouch) && self.in_grid() {
                     self.to_single_image();
-                    self.tool_tab = ToolTab::Masks;
+                    self.tool_tab = w;
                 }
             }
         }
@@ -107,10 +107,11 @@ impl App {
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
             let (t_info, t_edit, t_crop) = (lr::with_shortcut("Info: Metadaten, Stichwörter, Bewertung", "tab_info"), lr::with_shortcut("Bearbeiten", "tab_edit"), lr::with_shortcut("Freistellen & Ausrichten", "crop"));
+            let t_retouch = lr::with_shortcut("Retusche: Heilen, Klonen, rote Augen, Objekte entfernen", crate::shortcuts::RETOUCH);
             let groups: [&[(ToolTab, lr::Icon, &str)]; 4] = [
                 &[(ToolTab::Info, lr::Icon::Info, t_info.as_str())],
                 &[(ToolTab::Edit, lr::Icon::Sliders, t_edit.as_str()), (ToolTab::FilmLook, lr::Icon::Film, crate::tr("Film & Look"))],
-                &[(ToolTab::Crop, lr::Icon::Crop, t_crop.as_str()), (ToolTab::Masks, lr::Icon::Mask, crate::tr("Masken: lokale Korrekturen"))],
+                &[(ToolTab::Crop, lr::Icon::Crop, t_crop.as_str()), (ToolTab::Masks, lr::Icon::Mask, crate::tr("Masken: lokale Korrekturen")), (ToolTab::Retouch, lr::Icon::Bandaids, t_retouch.as_str())],
                 &[(ToolTab::Presets, lr::Icon::Sparkle, crate::tr("Vorgaben & Verlauf")), (ToolTab::Versions, lr::Icon::Stack, crate::tr("Versionen: virtuelle Kopien"))],
             ];
             for (n, g) in groups.iter().enumerate() {
@@ -151,6 +152,7 @@ impl App {
             ToolTab::FilmLook => crate::tr("FILM & LOOK"),
             ToolTab::Crop => crate::tr("FREISTELLEN & AUSRICHTEN"),
             ToolTab::Masks => crate::tr("MASKEN"),
+            ToolTab::Retouch => crate::tr("RETUSCHE"),
             ToolTab::Presets => crate::tr("VORGABEN & VERLAUF"),
             ToolTab::Sensor => crate::tr("SENSOR"),
             ToolTab::Versions => crate::tr("VERSIONEN"),

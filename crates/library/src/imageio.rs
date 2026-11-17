@@ -82,6 +82,7 @@ extern "C" {
     static kCGImagePropertyExifDictionary: CFTypeRef;
     static kCGImagePropertyExifDateTimeOriginal: CFTypeRef;
     static kCGImagePropertyTIFFDictionary: CFTypeRef;
+    static kCGImagePropertyGPSDictionary: CFTypeRef;
     static kCGImagePropertyTIFFModel: CFTypeRef;
     static kCGImagePropertyTIFFCopyright: CFTypeRef;
     static kCGImagePropertyTIFFMake: CFTypeRef;
@@ -223,6 +224,28 @@ pub fn properties(path: &Path) -> Option<Properties> {
         }
     }
     Some(e)
+}
+
+/// GPS position (latitude, longitude in degrees, north and east positive) from the EXIF GPS block of a file;
+/// `None` without a usable position. Reads the file header only.
+pub fn gps_position(path: &Path) -> Option<(f64, f64)> {
+    let src = source(path)?;
+    let props = Cf(unsafe { CGImageSourceCopyPropertiesAtIndex(src.0, 0, std::ptr::null()) });
+    if props.0.is_null() {
+        return None;
+    }
+    let gps = unsafe { CFDictionaryGetValue(props.0, kCGImagePropertyGPSDictionary) };
+    if gps.is_null() {
+        return None;
+    }
+    let value = |key: &str, reference: &str, negative: &str| -> Option<f64> {
+        let v = float_of(gps, cf_text(key).0)?;
+        let negative_ref = text(gps, cf_text(reference).0).is_some_and(|r| r.trim().eq_ignore_ascii_case(negative));
+        Some(if negative_ref { -v.abs() } else { v.abs() })
+    };
+    let (lat, lon) = (value("Latitude", "LatitudeRef", "S")?, value("Longitude", "LongitudeRef", "W")?);
+    // (0, 0) is what cameras write without a fix
+    (lat.abs() <= 90.0 && lon.abs() <= 180.0 && (lat != 0.0 || lon != 0.0)).then_some((lat, lon))
 }
 
 /// Thumbnail with at most `max` pixels edge length, upright (EXIF rotation applied),

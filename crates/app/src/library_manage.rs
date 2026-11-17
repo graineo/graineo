@@ -60,6 +60,8 @@ pub(super) enum Undo {
     Quick { label: String, images: Vec<i64> },
     /// photos taken out of the quick collection: ⌘Z puts them back in
     QuickRemoved { label: String, images: Vec<i64> },
+    /// a change of series and stacks (library_series.rs)
+    Stack { label: String, change: library::series::Change },
 }
 
 #[derive(Default)]
@@ -78,6 +80,13 @@ impl Manage {
         self.undo.push(u);
         self.undo_at.push(crate::undo_order::tick());
     }
+
+    /// Put a step back that could not be undone (its order kept: steps made meanwhile stay newer).
+    pub(super) fn put_back(&mut self, u: Undo, at: u64) {
+        let k = self.undo_at.iter().position(|&t| t > at).unwrap_or(self.undo_at.len()).min(self.undo.len());
+        self.undo.insert(k, u);
+        self.undo_at.insert(k, at);
+    }
 }
 
 impl Undo {
@@ -86,6 +95,7 @@ impl Undo {
         match self {
             Undo::Snap { snap, .. } | Undo::Order { snap, .. } | Undo::Added { snap, .. } => snap.size(),
             Undo::Quick { images, .. } | Undo::QuickRemoved { images, .. } => images.len(),
+            Undo::Stack { .. } => 1,
         }
     }
 }
@@ -449,8 +459,25 @@ impl LibraryView {
     /// ⌘Z of the management: the newest step. Returns: something was undone.
     pub(super) fn manage_undo(&mut self) -> bool {
         let Some(u) = self.manage.undo.pop() else { return false };
-        self.manage.undo_at.pop();
+        let at = self.manage.undo_at.pop().unwrap_or_else(crate::undo_order::tick);
         match u {
+            Undo::Stack { label, change } => {
+                let kept = change.clone();
+                self.in_background(
+                    move |db| library::series::restore(db, &change),
+                    move |b, actions, r| match r {
+                        Ok(()) => {
+                            crate::series_job::changed();
+                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                        }
+                        Err(e) => {
+                            // nothing was changed (one transaction): the step stays, ⌘Z can try again
+                            b.manage.put_back(Undo::Stack { label, change: kept }, at);
+                            actions.push(Action::Status(crate::trf!("Stapel nicht geändert: {e}", e = e)));
+                        }
+                    },
+                );
+            }
             Undo::Quick { label, images } => {
                 for b in &images {
                     self.quick.remove(b);
@@ -1304,4 +1331,29 @@ pub(crate) fn keyword_status(label: &str, snap: &Snapshot) -> String {
         parts.push(crate::trf!("Gespeichert, aber nicht alles nachgezogen: {e}", e = w));
     }
     parts.join(" · ")
+}
+
+#[cfg(test)]
+mod put_back_tests {
+    use super::*;
+
+    /// A step put back after a failed ⌘Z keeps its place: newer steps stay newer.
+    #[test]
+    fn put_back_keeps_the_order() {
+        let mut m = Manage::default();
+        let step = |n: &str| Undo::Quick { label: n.into(), images: Vec::new() };
+        m.push(step("a"));
+        m.push(step("b"));
+        let at = m.undo_at[1];
+        let b = m.undo.pop().unwrap();
+        m.undo_at.pop();
+        m.push(step("c"));
+        m.put_back(b, at);
+        let labels: Vec<&str> = m.undo.iter().map(|u| match u {
+            Undo::Quick { label, .. } => label.as_str(),
+            _ => "",
+        }).collect();
+        assert_eq!(labels, ["a", "b", "c"]);
+        assert!(m.undo_at.windows(2).all(|w| w[0] <= w[1]));
+    }
 }

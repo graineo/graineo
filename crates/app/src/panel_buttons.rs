@@ -26,6 +26,11 @@ const WAY_BACK_ORDER: egui::Order = egui::Order::Tooltip;
 /// Pointer zone around the corner in which the way-back button gets stronger.
 const CORNER_ZONE: egui::Vec2 = egui::vec2(120.0, 130.0);
 
+/// Memory key of the rectangle of the lights switch in the top bar.
+fn lights_switch_id() -> egui::Id {
+    egui::Id::new("lights-switch-rect")
+}
+
 fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Color32) {
     let stroke = Stroke::new(1.2, color);
     let frame = Rect::from_center_size(rect.center(), egui::vec2(15.0, 11.0));
@@ -43,7 +48,7 @@ fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Colo
 }
 
 /// One switch: fill and white symbol when on (the one treatment for "active" in the bars), grey when it does nothing here.
-fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str) -> bool {
+fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str) -> (bool, Rect) {
     let (rect, resp) = ui.allocate_exact_size(SIZE, egui::Sense::click());
     let (fill, fg) = if !enabled {
         (Color32::TRANSPARENT, Color32::from_gray(0x5c))
@@ -61,7 +66,7 @@ fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str)
     }
     paint_symbol(painter, rect, symbol, fg);
     lr::hover_tip(ui, &resp, tip);
-    resp.clicked() && enabled
+    (resp.clicked() && enabled, rect)
 }
 
 /// Tooltip texts of the two switches (with the shortcut from the central table in brackets).
@@ -142,11 +147,14 @@ impl App {
     pub(crate) fn panel_buttons(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.x = 2.0;
         let usable = self.lights_usable();
-        if switch(ui, Symbol::Lights, self.lights > 0, usable, &lights_tip(self.lights, usable)) {
+        let (clicked, rect) = switch(ui, Symbol::Lights, self.lights > 0, usable, &lights_tip(self.lights, usable));
+        // the place of the lights switch: while the lights are dimmed it stays there, above the shade (never moves)
+        ui.ctx().data_mut(|d| d.insert_temp(lights_switch_id(), rect));
+        if clicked {
             self.cycle_lights();
         }
         let hidden = self.panels_hidden();
-        if switch(ui, Symbol::Panels, hidden, true, &panels_tip(hidden)) {
+        if switch(ui, Symbol::Panels, hidden, true, &panels_tip(hidden)).0 {
             self.toggle_panels(false);
         }
         ui.add_space(12.0);
@@ -165,6 +173,30 @@ impl App {
         let t = ctx.animate_bool_with_time(egui::Id::new("way-back-near"), near, 0.15);
         let strength = 0.4 + 0.6 * t;
         let hidden = self.panels_hidden() || !self.show_top || self.preview_full.is_some();
+        // only the lights are dimmed and the top bar is there: the switch stays where it is (top right), now drawn above
+        // the shade as the active switch it is; a click steps on like the key L (dimmed → off → normal)
+        if !hidden && self.lights > 0 {
+            if let Some(rect) = ctx.data(|d| d.get_temp::<Rect>(lights_switch_id())) {
+                let tip = lights_tip(self.lights, true);
+                let area = egui::Area::new(egui::Id::new("lights-switch-above-shade"))
+                    .order(WAY_BACK_ORDER)
+                    .fixed_pos(rect.min)
+                    .constrain(false)
+                    .show(ctx, |ui| {
+                        let (r, resp) = ui.allocate_exact_size(rect.size(), egui::Sense::click());
+                        let fill = if resp.hovered() { Color32::from_gray(0x44) } else { Color32::from_gray(0x38) };
+                        ui.painter().rect_filled(r, 0.0, fill);
+                        paint_symbol(ui.painter(), r, Symbol::Lights, Color32::WHITE);
+                        lr::hover_tip(ui, &resp, &tip);
+                        resp.clicked()
+                    });
+                ctx.move_to_top(area.response.layer_id);
+                if area.inner {
+                    self.cycle_lights();
+                }
+                return;
+            }
+        }
         let (symbol, tip) = match (hidden, self.lights > 0) {
             (true, true) => (Symbol::Panels, lr::with_shortcut("Alles wieder einblenden", "all_panels")),
             (true, false) => (Symbol::Panels, lr::with_shortcut("Bedienfelder einblenden", "all_panels")),
@@ -225,8 +257,7 @@ mod tests {
 
     /// Position in the paint order (later = on top) of the way-back button's fill and of the last opaque shade
     /// over its place.
-    fn way_back_and_shade(out: &egui::FullOutput) -> (Option<usize>, Option<usize>) {
-        let button = Rect::from_min_size((SCREEN - SIZE - CORNER_GAP).to_pos2(), SIZE);
+    fn way_back_and_shade(out: &egui::FullOutput, button: Rect) -> (Option<usize>, Option<usize>) {
         let (mut b, mut shade) = (None, None);
         for (i, c) in out.shapes.iter().enumerate() {
             if let egui::Shape::Rect(r) = &c.shape {
@@ -279,10 +310,17 @@ mod tests {
         a.cycle_lights();
         assert_eq!(a.lights, 2);
         frame(&ctx, &mut a);
-        // lights fully out: the way-back button is painted above the black shade, not hidden under it
-        let (button, shade) = way_back_and_shade(&frame(&ctx, &mut a));
-        let (button, shade) = (button.expect("way-back button painted"), shade.expect("shade over the corner"));
-        assert!(button > shade, "way-back button (shape {button}) under the lights-out shade (shape {shade})");
+        // lights fully out: the lights switch stays at its place in the top bar (top right, not in the corner below),
+        // painted above the black shade, not hidden under it
+        let switch_rect = ctx.data(|d| d.get_temp::<Rect>(lights_switch_id())).expect("lights switch drawn in the top bar");
+        assert!(switch_rect.top() < 60.0 && switch_rect.right() > SCREEN.x - 120.0, "lights switch at the top right: {switch_rect:?}");
+        let (button, shade) = way_back_and_shade(&frame(&ctx, &mut a), switch_rect);
+        let (button, shade) = (button.expect("lights switch painted above the shade"), shade.expect("shade over the switch"));
+        assert!(button > shade, "lights switch (shape {button}) under the lights-out shade (shape {shade})");
+        // and nothing is left in the bottom right corner for the lights case
+        let corner = Rect::from_min_size((SCREEN - SIZE - CORNER_GAP).to_pos2(), SIZE);
+        let out = frame(&ctx, &mut a);
+        assert!(!out.shapes.iter().any(|c| matches!(&c.shape, egui::Shape::Rect(r) if r.rect == corner && r.fill != Color32::from_black_alpha(255))), "no way-back button in the corner while only the lights are out");
         a.cycle_lights();
         assert_eq!(a.lights, 0);
         assert!(!a.needs_way_back());

@@ -20,6 +20,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 mod manager;
 mod cube;
+pub use cube::table as cube_table;
 pub use manager::{
     generation, installed, load_failed, reread, visible_profiles, Storage, Report, Options, Package, Source,
     NOTICE,

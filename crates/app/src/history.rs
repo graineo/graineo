@@ -954,8 +954,14 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("wb_temp", "Temperatur", true),
     ("wb_tint", "Tönung", true),
     ("local", "Lokale Korrekturen", false),
+    ("local.name", "Maske umbenannt", false),
+    ("local.enabled", "Maske ein/aus", false),
+    ("local.amount", "Stärke der Maske", false),
+    ("local.refine", "Kante verfeinern", false),
+    ("local.order", "Reihenfolge der Masken", false),
     ("spots", "Retusche", false),
     ("red_eyes", "Rote Augen", false),
+    ("removals", "Objekte entfernen", false),
     ("raw.wb_mode", "Weißabgleich", false),
     ("raw.temperature", "Temperatur", false),
     ("raw.tint", "Tönung", true),
@@ -974,6 +980,7 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("raw.lens_ca", "Objektivkorrekturen", false),
     ("raw.lens_image", "Objektivkorrekturen", false),
     ("raw.lens_profile", "Objektivkorrekturen", false),
+    ("raw.engine", "Pipeline", false),
     ("raw.look", "Profil", false),
     ("raw.lookName", "Profil", false),
     ("raw.lookPackage", "Profil", false),
@@ -1002,6 +1009,36 @@ fn section_defaults(k: &str) -> serde_json::Map<String, Value> {
     text.ok().and_then(|t| serde_json::from_str::<Value>(&t).ok()).and_then(|v| v.as_object().cloned()).unwrap_or_default()
 }
 
+/// What changed in the local corrections, when it is one thing of the mask list: the name, on/off, the strength or
+/// the order of the masks (`local.name` …); otherwise `local`.
+fn local_change(a: Option<&Value>, b: Option<&Value>) -> &'static str {
+    let layers = |v: Option<&Value>| v.and_then(|v| v.get("layers")).and_then(Value::as_array).cloned().unwrap_or_default();
+    let (la, lb) = (layers(a), layers(b));
+    if la.len() != lb.len() || la.is_empty() {
+        return "local";
+    }
+    // the same masks in another order
+    if la.len() > 1 && la.iter().all(|l| lb.contains(l)) && lb.iter().all(|l| la.contains(l)) {
+        return "local.order";
+    }
+    let strip = |l: &Value, key: &str| {
+        let mut l = l.clone();
+        if let Some(o) = l.as_object_mut() {
+            o.remove(key);
+        }
+        l
+    };
+    let diff: Vec<(&Value, &Value)> = la.iter().zip(&lb).filter(|(x, y)| x != y).collect();
+    if let [(x, y)] = diff.as_slice() {
+        for (key, name) in [("name", "local.name"), ("enabled", "local.enabled"), ("amount", "local.amount"), ("refine", "local.refine")] {
+            if strip(x, key) == strip(y, key) {
+                return name;
+            }
+        }
+    }
+    "local"
+}
+
 /// Fields that differ between two stored states (`raw`, `film`, `bypass` one level deeper).
 fn changed_fields(a: &Value, b: &Value) -> Vec<String> {
     let (Some(a), Some(b)) = (a.as_object(), b.as_object()) else { return Vec::new() };
@@ -1015,6 +1052,7 @@ fn changed_fields(a: &Value, b: &Value) -> Vec<String> {
             continue;
         }
         match (k.as_str(), x.and_then(Value::as_object), y.and_then(Value::as_object)) {
+            ("local", _, _) => out.push(local_change(x, y).to_string()),
             ("raw" | "film" | "bypass", xo, yo) if xo.is_some() || yo.is_some() => {
                 // a section left out of the stored JSON is at its defaults (`raw` while untouched)
                 let defaults = section_defaults(k);
@@ -1041,9 +1079,9 @@ pub fn describe(before: &Settings, after: &Settings) -> (&'static str, Value) {
     let (a, b) = (value(before), value(after));
     let fields = changed_fields(&a, &b);
     let only = |set: &[&str]| !fields.is_empty() && fields.iter().all(|f| set.contains(&f.as_str()));
-    let k = if fields.iter().any(|f| f == "local") {
+    let k = if fields.iter().any(|f| f == "local" || f.starts_with("local.")) {
         kind::MASK
-    } else if only(&["spots", "red_eyes"]) {
+    } else if only(&["spots", "red_eyes", "removals"]) {
         kind::RETOUCH
     } else if only(&["crop", "crop_angle", "perspective_v", "perspective_h", "rotate"]) {
         kind::CROP
@@ -1110,6 +1148,7 @@ pub fn step_name(s: &Step) -> String {
         "rotate" => crate::tr("Drehen").to_string(),
         "wb_picker" => crate::tr("Weißabgleich-Pipette").to_string(),
         "lightroom" => crate::tr("Aus Lightroom übernommen").to_string(),
+        "remote" => crate::trf!("Im Browser: {name}", name = fields_name(&l)),
         _ => fields_name(&l),
     }
 }
@@ -1198,6 +1237,36 @@ mod tests {
     fn named(before: &Settings, after: &Settings) -> String {
         let (k, l) = describe(before, after);
         step_name(&Step { seq: 1, time: 0, kind: k.into(), label: Some(l.to_string()), patch: json!({}), count: 1, command: None })
+    }
+
+    /// Steps of the mask list get their own names (rename, on/off, strength, order); everything else stays
+    /// "Lokale Korrekturen".
+    #[test]
+    fn mask_list_steps_are_named() {
+        let radial = |x: f32| masks::Layer::new(masks::Mask::Radial { center: [x, 0.5], radii: [0.2, 0.2], angle: 0.0, feather: 0.5 }, masks::Adjustments { exposure: 0.5, ..Default::default() });
+        let with = |layers: Vec<masks::Layer>| {
+            let mut d = masks::Document { version: 2, layers };
+            d.settle_version();
+            Settings { local: Some(d), ..Settings::default() }
+        };
+        let base = with(vec![radial(0.3), radial(0.6)]);
+        let renamed = with(vec![masks::Layer { name: Some("Himmel".into()), ..radial(0.3) }, radial(0.6)]);
+        let off = with(vec![radial(0.3), masks::Layer { enabled: false, ..radial(0.6) }]);
+        let weaker = with(vec![masks::Layer { amount: 0.5, ..radial(0.3) }, radial(0.6)]);
+        let order = with(vec![radial(0.6), radial(0.3)]);
+        let moved = with(vec![radial(0.35), radial(0.6)]);
+        assert_eq!(named(&base, &renamed), crate::tr("Maske umbenannt"));
+        assert_eq!(named(&base, &off), crate::tr("Maske ein/aus"));
+        assert_eq!(named(&base, &weaker), crate::tr("Stärke der Maske"));
+        let mut finer = weaker.clone();
+        if let Some(d) = finer.local.as_mut() {
+            d.layers[0].refine = 0.4;
+        }
+        assert_eq!(named(&weaker, &finer), crate::tr("Kante verfeinern"));
+        assert_eq!(named(&base, &order), crate::tr("Reihenfolge der Masken"));
+        assert_eq!(named(&base, &moved), crate::tr("Lokale Korrekturen"));
+        assert_eq!(describe(&base, &weaker).0, kind::MASK);
+        assert_eq!(named(&Settings::default(), &base), crate::tr("Lokale Korrekturen"));
     }
 
     #[test]
@@ -1401,7 +1470,7 @@ mod tests {
         let with = |n: usize| {
             let strokes: Vec<masks::Mask> = (0..n).map(stroke).collect();
             let adjustments: masks::Adjustments = serde_json::from_value(json!({ "exposure": 0.3 })).unwrap_or_default();
-            Settings { local: Some(masks::Document { version: 2, layers: vec![masks::Layer { mask: tree(&strokes), adjustments }] }), ..base.clone() }
+            Settings { local: Some(masks::Document { version: 2, layers: vec![masks::Layer::new(tree(&strokes), adjustments)] }), ..base.clone() }
         };
         let mask_whole = dh::patch_text(&value(&with(50))).len();
         let mask = size(&with(50), &with(51));

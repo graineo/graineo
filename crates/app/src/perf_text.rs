@@ -240,6 +240,9 @@ fn system_rows(t: &mut String, r: &Report, privacy: &Privacy) {
     row(t, "App caches on", &privacy.scrub(&r.caches_drive));
     let th = r.threads.iter().map(|(k, n)| format!("{k} {n}")).collect::<Vec<_>>().join(" · ");
     row(t, "Thread pools", &th);
+    for (k, v) in &r.mode {
+        row(t, &format!("Operating mode: {k}"), &privacy.scrub(v));
+    }
     row(t, "Switches", &if r.switches.is_empty() { "none".to_string() } else { privacy.scrub(&r.switches.join(", ")) });
 }
 
@@ -388,6 +391,7 @@ pub fn json(r: &Report, privacy: &Privacy) -> String {
             "setting_on": g.setting_on, "available": g.available,
         },
         "threads": r.threads.iter().map(|(k, n)| json!({"pool": k, "threads": n})).collect::<Vec<_>>(),
+        "operating_mode": r.mode.iter().map(|(k, v)| json!({"item": k, "value": privacy.scrub(v)})).collect::<Vec<_>>(),
         "switches": r.switches, "caches_drive": r.caches_drive, "photos": photos,
         "notes": r.notes.iter().map(|n| privacy.message(n)).collect::<Vec<_>>(),
         "timing_log_on": r.timing_log_on, "timing_log": r.timing_log,

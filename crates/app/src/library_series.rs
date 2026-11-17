@@ -1,0 +1,877 @@
+//! Series and stacks in the grid (and the filmstrip, which shows the same list).
+//!
+//! - A collapsed stack shows one tile: the cover (or, under a filter, the matching member with the best rating) with
+//!   two thin edges behind the photo and a number at its bottom right ("7", filtered "3/7"); a small symbol says the
+//!   kind (series, exposure bracket, own stack), a dot "not reviewed yet". Same tile size as every photo.
+//! - An expanded stack: the cover first, then the other members in capture order (in the grid's direction: newest
+//!   first when the grid shows the newest first), numbered 1/7 … 7/7 in that order, on a slightly lighter ground with a
+//!   thin bracket line below, across line breaks.
+//! - Commands: S toggles the stack of the active photo, ⇧S all stacks, ⌘G bundles the selection, ⇧⌘G dissolves,
+//!   ⌥ + rating key rates the whole series; context menu "Als Titelfoto", "Aus Serie nehmen", "Serie teilen ab hier",
+//!   "Serie sichten …". Changes go through `library::series` in the background and are undone with ⌘Z.
+//! - Exporting, deleting or moving a collapsed stack asks: only the top photo, or the whole series?
+//!
+//! Submodule of `library_ui` (accesses its fields).
+
+use super::*;
+use library::series::{self as ser, Kind as StackKind, Stack};
+
+/// Place of a shown photo in its stack.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Mark {
+    /// index into `SeriesView::stacks`
+    pub stack: usize,
+    /// 1-based place in the shown order (cover = 1)
+    pub pos: usize,
+    pub total: usize,
+    /// collapsed: members matching the filter
+    pub shown: usize,
+    pub collapsed: bool,
+    /// expanded: first / last tile of the stack in the grid (ends of the bracket line)
+    pub first: bool,
+    pub last: bool,
+}
+
+/// What an export, delete or move should do with a collapsed stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScopeKind {
+    Export,
+    Delete,
+    Move,
+}
+
+pub(super) struct ScopeAsk {
+    kind: ScopeKind,
+    /// members hidden behind the collapsed tiles of the target
+    hidden: Vec<i64>,
+    /// stacks to open when the whole series is meant
+    stacks: Vec<i64>,
+}
+
+/// Commands on stacks (keys, context menu, number on the tile).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum StackCmd {
+    Toggle,
+    Cover,
+    TakeOut,
+    Split,
+    Review,
+    Group,
+    Dissolve,
+}
+
+#[derive(Default)]
+pub(super) struct SeriesView {
+    pub(super) stacks: Vec<Stack>,
+    /// image → index into `stacks`
+    pub(super) by_image: HashMap<i64, usize>,
+    /// shown image → its place (filled by the filter)
+    pub(super) marks: HashMap<i64, Mark>,
+    loading: Option<std::sync::mpsc::Receiver<Vec<Stack>>>,
+    seen: Option<u64>,
+    pub(super) ask: Option<ScopeAsk>,
+    /// the question was answered: the next export/delete goes through without asking
+    answered: bool,
+    /// series review (centre view)
+    pub(super) review: Option<series_review::Review>,
+}
+
+impl SeriesView {
+    fn set(&mut self, stacks: Vec<Stack>) {
+        self.by_image.clear();
+        for (k, s) in stacks.iter().enumerate() {
+            for &i in &s.images {
+                self.by_image.insert(i, k);
+            }
+        }
+        self.stacks = stacks;
+    }
+
+    /// Stack (index) of an image.
+    pub(super) fn of(&self, image: i64) -> Option<usize> {
+        self.by_image.get(&image).copied()
+    }
+
+    /// Number of series not reviewed yet.
+    pub(super) fn open_count(&self) -> usize {
+        self.stacks.iter().filter(|s| s.is_series() && s.reviewed.is_none()).count()
+    }
+}
+
+/// Text for the length of a series ("12 s", "2 min 5 s").
+fn span_text(s: i64) -> String {
+    if s < 60 {
+        format!("{s} s")
+    } else if s % 60 == 0 {
+        format!("{} min", s / 60)
+    } else {
+        format!("{} min {} s", s / 60, s % 60)
+    }
+}
+
+/// Explanation of a stack: why the photos belong together.
+pub(super) fn reason_text(s: &Stack) -> String {
+    let n = s.images.len();
+    let r = &s.reason;
+    match s.kind {
+        StackKind::Bracket => crate::trf!(
+            "Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV",
+            n = n,
+            k = r.ev_steps.unwrap_or(0),
+            ev = format!("{:.1}", r.ev_range.unwrap_or(0.0))
+        ),
+        StackKind::Series => {
+            let span = span_text(r.span_s);
+            match r.sim_min {
+                Some(sim) if r.model != "time" => crate::trf!("Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})", n = n, t = span, s = format!("{sim:.2}")),
+                _ => crate::trf!("Serie: {n} Fotos in {t} (nur nach Zeit, Bildinhalt noch unbekannt)", n = n, t = span),
+            }
+        }
+        StackKind::Manual if s.origin == "lightroom" => crate::trf!("Stapel aus Lightroom: {n} Fotos", n = n),
+        StackKind::Manual => crate::trf!("Stapel: {n} Fotos", n = n),
+    }
+}
+
+/// Is the stack collapsed in the grid? The source "Serien" shows every stack as one tile.
+fn collapsed(s: &Stack, forced: bool) -> bool {
+    forced || s.collapsed
+}
+
+impl LibraryView {
+    /// Every frame: read the stacks again when the series job or a command changed them (background, read-only).
+    pub(super) fn series_poll(&mut self) {
+        if let Some(rx) = &self.series.loading {
+            match rx.try_recv() {
+                Ok(v) => {
+                    self.series.loading = None;
+                    let first = self.series.stacks.is_empty() && !v.is_empty();
+                    self.series.set(v);
+                    self.series_review_refresh();
+                    self.refilter = true;
+                    if first {
+                        self.series_test();
+                    }
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.series.loading = None,
+            }
+        }
+        let g = crate::series_job::generation();
+        if self.series.loading.is_some() || self.series.seen == Some(g) {
+            return;
+        }
+        let Some(path) = self.db.as_ref().map(|d| d.path.clone()) else { return };
+        self.series.seen = Some(g);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ctx = self.quick_ctx.clone();
+        let started = std::thread::Builder::new()
+            .name("serien-laden".into())
+            .spawn(move || {
+                let v = Db::read_only(&path).map_err(|e| e.to_string()).and_then(|db| ser::load(&db.conn));
+                match v {
+                    Ok(v) => {
+                        let _ = tx.send(v);
+                    }
+                    Err(e) => crate::log(&format!("series: loading failed: {e}")),
+                }
+                if let Some(c) = ctx {
+                    c.request_repaint();
+                }
+            })
+            .is_ok();
+        if started {
+            self.series.loading = Some(rx);
+        }
+    }
+
+    /// The filtered list with stacks applied: a collapsed stack keeps one tile, an expanded one shows its members
+    /// together (cover first, then capture order in the grid's direction: newest first in a grid sorted newest first). Fills the marks for drawing. "Ähnliche Fotos" and "Duplikate"
+    /// show every photo on its own.
+    pub(super) fn series_collapse(&mut self, v: Vec<usize>) -> Vec<usize> {
+        self.series.marks.clear();
+        let forced = self.source == Source::Series;
+        if self.series.stacks.is_empty() || matches!(self.source, Source::Similar(_) | Source::Duplicates) {
+            return if forced { Vec::new() } else { v };
+        }
+        let rows = &self.rows;
+        let st = &self.series;
+        // the members follow the cover in the direction of the grid: newest first when the grid shows the newest first
+        let backwards = matches!(self.sort_order, SortOrder::CaptureTime) && !matches!(self.source, Source::Collection(_));
+        let backwards = backwards != self.sort_reversed;
+        // place of each member's file in its stack, 0 = cover, then in the grid's direction (virtual copies follow
+        // their original)
+        let mut rank: HashMap<i64, (usize, usize)> = HashMap::new();
+        for (k, s) in st.stacks.iter().enumerate() {
+            let top = s.top();
+            let present: Vec<(i64, bool)> = s.images.iter().filter_map(|img| self.index.get(img).map(|&ri| (rows[ri].file, *img == top))).collect();
+            let last = present.iter().filter(|x| !x.1).count();
+            let mut place = 0;
+            for (file, is_top) in present {
+                let p = if is_top {
+                    0
+                } else {
+                    place += 1;
+                    if backwards { last + 1 - place } else { place }
+                };
+                rank.insert(file, (k, p));
+            }
+        }
+        let stack_of = |z: &Row| -> Option<(usize, usize)> {
+            if let Some(&k) = st.by_image.get(&z.image) {
+                return rank.get(&z.file).copied().filter(|r| r.0 == k);
+            }
+            z.copy.as_ref().and_then(|_| rank.get(&z.file).copied())
+        };
+        let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
+        for &i in &v {
+            if let Some((k, _)) = stack_of(&rows[i]) {
+                members.entry(k).or_default().push(i);
+            }
+        }
+        let mut out = Vec::with_capacity(v.len());
+        let mut marks = HashMap::new();
+        let mut done: HashSet<usize> = HashSet::new();
+        for &i in &v {
+            let Some((k, _)) = stack_of(&rows[i]) else {
+                if !forced {
+                    out.push(i);
+                }
+                continue;
+            };
+            if !done.insert(k) {
+                continue;
+            }
+            let s = &st.stacks[k];
+            let vis = &members[&k];
+            let total = s.images.len();
+            if collapsed(s, forced) {
+                let top = s.top();
+                // the cover if it matches the filter, else the matching original rated best
+                let rep = vis
+                    .iter()
+                    .copied()
+                    .find(|&r| rows[r].image == top)
+                    .or_else(|| vis.iter().copied().filter(|&r| rows[r].copy.is_none()).max_by_key(|&r| ((rows[r].flag == 1) as u8, rows[r].stars, std::cmp::Reverse(stack_of(&rows[r]).map_or(0, |x| x.1)))))
+                    .unwrap_or(vis[0]);
+                let shown = vis.iter().filter(|&&r| rows[r].copy.is_none()).count();
+                out.push(rep);
+                marks.insert(rows[rep].image, Mark { stack: k, pos: stack_of(&rows[rep]).map_or(1, |x| x.1 + 1), total, shown, collapsed: true, first: true, last: true });
+            } else {
+                let mut ordered = vis.clone();
+                ordered.sort_by_key(|&r| (stack_of(&rows[r]).map_or(usize::MAX, |x| x.1), rows[r].copy.is_some(), rows[r].image));
+                let n = ordered.len();
+                for (j, &r) in ordered.iter().enumerate() {
+                    out.push(r);
+                    marks.insert(rows[r].image, Mark { stack: k, pos: stack_of(&rows[r]).map_or(1, |x| x.1 + 1), total, shown: n, collapsed: false, first: j == 0, last: j + 1 == n });
+                }
+            }
+        }
+        if forced {
+            // "Serien": not reviewed first, newest first
+            out.sort_by_key(|&r| {
+                let s = marks.get(&rows[r].image).map(|m| &st.stacks[m.stack]);
+                (s.is_some_and(|s| s.reviewed.is_some()), std::cmp::Reverse(s.and_then(|s| s.day.clone())), rows[r].image)
+            });
+        }
+        self.series.marks = marks;
+        out
+    }
+
+    /// Lighter ground behind the tiles of an expanded stack (before the cell is drawn).
+    pub(super) fn paint_series_ground(&self, p: &egui::Painter, rect: egui::Rect, image: i64) {
+        if self.series.marks.get(&image).is_some_and(|m| !m.collapsed) {
+            p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+        }
+    }
+
+    /// Stack marks on a drawn cell: edges and number (collapsed), place and bracket line (expanded). Returns a
+    /// command when the number was clicked.
+    pub(super) fn paint_series_mark(&self, ui: &egui::Ui, rect: egui::Rect, z: &Row, tex: Option<&TextureHandle>) -> Option<StackCmd> {
+        let m = *self.series.marks.get(&z.image)?;
+        let s = &self.series.stacks[m.stack];
+        let p = ui.painter();
+        let inner = rect.shrink(3.0);
+        let area = egui::Rect::from_min_max(inner.min + egui::vec2(8.0, 25.0), inner.max - egui::vec2(8.0, 22.0));
+        let r = match tex {
+            Some(t) => {
+                let sz = crate::library_turn::turned_size(t.size_vec2(), self.turned.quarters(z.image));
+                let k = (area.width() / sz.x).min(area.height() / sz.y);
+                egui::Rect::from_center_size(area.center(), sz * k)
+            }
+            None => egui::Rect::from_center_size(area.center(), egui::vec2(area.width() * 0.8, area.width() * 0.55).min(area.size())),
+        };
+        if m.collapsed {
+            // two thin edges behind the photo (a pile of prints)
+            for (d, g) in [(3.0, 0x70), (6.0, 0x4c)] {
+                let c = Color32::from_gray(g);
+                let pts = vec![egui::pos2(r.left() + d, r.top() - d), egui::pos2(r.right() + d, r.top() - d), egui::pos2(r.right() + d, r.bottom() - d)];
+                p.add(egui::Shape::line(pts, egui::Stroke::new(1.0, c)));
+            }
+        } else {
+            // bracket line below the tiles of the stack
+            let y = inner.bottom() + 1.5;
+            let (x0, x1) = (if m.first { inner.left() + 4.0 } else { rect.left() }, if m.last { inner.right() - 4.0 } else { rect.right() });
+            let c = Color32::from_gray(0x6a);
+            p.line_segment([egui::pos2(x0, y), egui::pos2(x1, y)], egui::Stroke::new(1.0, c));
+            if m.first {
+                p.line_segment([egui::pos2(x0, y), egui::pos2(x0, y - 4.0)], egui::Stroke::new(1.0, c));
+            }
+            if m.last {
+                p.line_segment([egui::pos2(x1, y), egui::pos2(x1, y - 4.0)], egui::Stroke::new(1.0, c));
+            }
+        }
+        // number at the bottom right of the photo: "7" / "3/7" collapsed, "2/7" expanded
+        let text = if m.collapsed {
+            if m.shown < m.total { format!("{}/{}", m.shown, m.total) } else { m.total.to_string() }
+        } else {
+            format!("{}/{}", m.pos, m.total)
+        };
+        let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), Color32::from_gray(if m.collapsed { 0xf0 } else { 0xc0 }));
+        let symbol_w = if m.collapsed || m.first { 12.0 } else { 0.0 };
+        let dot_w = if s.is_series() && s.reviewed.is_none() && (m.collapsed || m.first) { 8.0 } else { 0.0 };
+        let size = egui::vec2(g.size().x + 10.0 + symbol_w + dot_w, 16.0);
+        let field = egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(3.0, 3.0), size);
+        let resp = ui.interact(field, egui::Id::unique(("stapel-zahl", z.image)), egui::Sense::click());
+        let bg = if resp.hovered() { Color32::from_black_alpha(230) } else { Color32::from_black_alpha(170) };
+        p.rect_filled(field, 0.0, bg);
+        let mut x = field.left() + 5.0;
+        let cy = field.center().y;
+        if dot_w > 0.0 {
+            p.circle_filled(egui::pos2(x + 2.0, cy), 2.0, Color32::from_gray(0xd8));
+            x += dot_w;
+        }
+        if symbol_w > 0.0 {
+            paint_kind(p, egui::pos2(x + 4.5, cy), s);
+            x += symbol_w;
+        }
+        p.galley(egui::pos2(x, cy - g.size().y / 2.0), g, Color32::WHITE);
+        let toggle = match (s.is_series(), m.collapsed) {
+            (true, true) => "Serie aufklappen",
+            (true, false) => "Serie zuklappen",
+            (false, true) => "Stapel aufklappen",
+            (false, false) => "Stapel zuklappen",
+        };
+        let mut tip = lr::with_shortcut(toggle, "stack_toggle");
+        tip.push('\n');
+        tip.push_str(&reason_text(s));
+        if s.is_series() && s.reviewed.is_none() {
+            tip.push('\n');
+            tip.push_str(crate::tr("Noch nicht gesichtet"));
+        }
+        lr::hover_tip(ui, &resp, &tip);
+        resp.clicked().then_some(StackCmd::Toggle)
+    }
+
+    /// Context menu entries for a photo in a stack (and "bundle" for a selection). Returns the chosen command.
+    pub(super) fn series_menu(&self, ui: &mut egui::Ui, image: i64) -> Option<StackCmd> {
+        use crate::shortcuts::display;
+        let mut chosen = None;
+        let stack = self.series.of(image).map(|k| &self.series.stacks[k]);
+        let several = self.selection.len() > 1 && self.selection.contains(&image);
+        // a selection of 2–60 photos can be reviewed like a series
+        let reviewable = several && stack.is_none() && (2..=60).contains(&self.selection.len());
+        if stack.is_none() && !several {
+            return None;
+        }
+        ui.separator();
+        let mut item = |ui: &mut egui::Ui, c: StackCmd, text: &str, key: String, enabled: bool| {
+            if lr::menu_item(ui, text, &key, enabled) {
+                chosen = Some(c);
+            }
+        };
+        if let Some(s) = stack {
+            let series = s.is_series();
+            let toggle = if self.series.marks.get(&image).is_some_and(|m| m.collapsed) {
+                if series { crate::tr("Serie aufklappen") } else { crate::tr("Stapel aufklappen") }
+            } else if series {
+                crate::tr("Serie zuklappen")
+            } else {
+                crate::tr("Stapel zuklappen")
+            };
+            item(ui, StackCmd::Toggle, toggle, display("stack_toggle"), true);
+            item(ui, StackCmd::Review, if series { crate::tr("Serie sichten …") } else { crate::tr("Stapel sichten …") }, display("stack_review"), true);
+            item(ui, StackCmd::Cover, crate::tr("Als Titelfoto"), String::new(), s.top() != image);
+            item(ui, StackCmd::TakeOut, if series { crate::tr("Aus Serie nehmen") } else { crate::tr("Aus Stapel nehmen") }, String::new(), true);
+            item(ui, StackCmd::Split, if series { crate::tr("Serie teilen ab hier") } else { crate::tr("Stapel teilen ab hier") }, String::new(), s.images.first() != Some(&image));
+            item(ui, StackCmd::Dissolve, if series { crate::tr("Serie auflösen") } else { crate::tr("Stapel auflösen") }, display("stack_dissolve"), true);
+        }
+        if reviewable {
+            item(ui, StackCmd::Review, crate::tr("Serie sichten …"), display("stack_review"), true);
+        }
+        if several {
+            item(ui, StackCmd::Group, crate::tr("Als Stapel bündeln"), display("stack_group"), true);
+        }
+        chosen
+    }
+
+    /// Keys of the grid for stacks (S, ⇧S, ⌘G, ⇧⌘G, N, ⌥ + rating key).
+    pub(super) fn series_keys(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(active) = self.active else { return };
+        if crate::shortcuts::pressed(ctx, "stack_toggle") {
+            self.series_command(StackCmd::Toggle, active, actions);
+        }
+        if crate::shortcuts::pressed(ctx, "stack_toggle_all") {
+            self.series_toggle_all();
+        }
+        if crate::shortcuts::pressed(ctx, "stack_group") {
+            self.series_command(StackCmd::Group, active, actions);
+        }
+        if crate::shortcuts::pressed(ctx, "stack_dissolve") {
+            self.series_command(StackCmd::Dissolve, active, actions);
+        }
+        if crate::shortcuts::pressed(ctx, "stack_review") {
+            self.series_command(StackCmd::Review, active, actions);
+        }
+        // ⌥ + P/X/U/0–9: the whole series of the target photos
+        let change = if crate::shortcuts::pressed(ctx, "stack_pick") {
+            Some((None, Some(1), None))
+        } else if crate::shortcuts::pressed(ctx, "stack_reject") {
+            Some((None, Some(-1), None))
+        } else if crate::shortcuts::pressed(ctx, "stack_unflag") {
+            Some((None, Some(0), None))
+        } else if let Some(n) = crate::shortcuts::which(ctx, "stack_stars") {
+            Some((Some(n as u8), None, None))
+        } else {
+            crate::shortcuts::which(ctx, "stack_label").map(|n| (None, None, Some(n as u8 + 1)))
+        };
+        if let Some((s, f, l)) = change {
+            let mut target: Vec<i64> = Vec::new();
+            for b in self.target() {
+                match self.series.of(b) {
+                    Some(k) => target.extend(self.series.stacks[k].images.iter().copied()),
+                    None => target.push(b),
+                }
+            }
+            target.sort_unstable();
+            target.dedup();
+            let new = self.rate_images(&target, s, f, l);
+            if !new.is_empty() {
+                actions.push(Action::Status(crate::trf!("Ganze Serie bewertet ({n} Fotos)", n = new.len())));
+                actions.push(Action::Rated(new));
+            }
+        }
+    }
+
+    /// ⇧S: collapse all stacks when any shown one is open, else open all.
+    pub(super) fn series_toggle_all(&mut self) {
+        let any_open = self.series.marks.values().any(|m| !m.collapsed);
+        for s in self.series.stacks.iter_mut() {
+            s.collapsed = any_open;
+        }
+        self.refilter = true;
+        self.in_background(move |db| ser::set_all_collapsed(db, any_open), |_, _, _| {});
+    }
+
+    /// Run a stack command for a photo (the selection for "bundle").
+    pub(super) fn series_command(&mut self, cmd: StackCmd, image: i64, actions: &mut Vec<Action>) {
+        let k = self.series.of(image);
+        match cmd {
+            StackCmd::Toggle => {
+                let Some(k) = k else { return };
+                let now_collapsed = self.series.marks.values().any(|m| m.stack == k && m.collapsed) || !self.series.marks.values().any(|m| m.stack == k);
+                let s = &mut self.series.stacks[k];
+                s.collapsed = !now_collapsed;
+                let (id, c, top) = (s.id, s.collapsed, s.top());
+                // collapsing: the tile left is the cover – it becomes the active photo
+                if c {
+                    self.active = Some(top);
+                }
+                self.refilter = true;
+                self.in_background(move |db| ser::set_collapsed(db, id, c), |_, _, _| {});
+            }
+            StackCmd::Review => self.series_review_open(k.map(|k| self.series.stacks[k].id), actions),
+            StackCmd::Group => {
+                let mut sel: Vec<i64> = self.target();
+                // the photos of collapsed stacks in the selection come along
+                let extra: Vec<i64> = sel.iter().filter(|b| self.series.marks.get(b).is_some_and(|m| m.collapsed)).filter_map(|b| self.series.of(*b)).flat_map(|k| self.series.stacks[k].images.clone()).collect();
+                sel.extend(extra);
+                // originals only (virtual copies follow their original)
+                sel.retain(|b| self.index.get(b).is_some_and(|&i| self.rows[i].copy.is_none()));
+                sel.sort_unstable();
+                sel.dedup();
+                if sel.len() < 2 {
+                    actions.push(Action::Status(crate::tr("Zum Bündeln mindestens zwei Fotos auswählen").into()));
+                    return;
+                }
+                let cover = if sel.contains(&image) { image } else { sel[0] };
+                // capture order behind the cover
+                let time = |b: &i64| self.index.get(b).and_then(|&i| self.rows[i].capture.clone()).unwrap_or_default();
+                sel.sort_by_key(time);
+                let n = sel.len();
+                self.series_change(move |db| ser::create(db, &sel, cover).map(|(c, _)| c), crate::trf!("Stapel aus {n} Fotos", n = n));
+            }
+            StackCmd::Dissolve => {
+                let Some(k) = k else { return };
+                let id = self.series.stacks[k].id;
+                let label = if self.series.stacks[k].is_series() { crate::tr("Serie auflösen") } else { crate::tr("Stapel auflösen") }.to_string();
+                self.series_change(move |db| ser::dissolve(db, id), label);
+            }
+            StackCmd::Cover => {
+                let Some(k) = k else { return };
+                let id = self.series.stacks[k].id;
+                self.series.stacks[k].cover = Some(image);
+                self.refilter = true;
+                self.series_change(move |db| ser::set_cover(db, id, image), crate::tr("Als Titelfoto").to_string());
+            }
+            StackCmd::TakeOut => {
+                self.series_change(move |db| ser::take_out(db, image)?.ok_or_else(|| crate::tr("Das Foto liegt in keinem Stapel").to_string()), crate::tr("Aus Serie nehmen").to_string());
+            }
+            StackCmd::Split => {
+                self.series_change(move |db| ser::split_at(db, image)?.ok_or_else(|| crate::tr("Hier lässt sich nicht teilen").to_string()), crate::tr("Serie teilen").to_string());
+            }
+        }
+    }
+
+    /// A change of stacks in the background: ⌘Z takes it back, the grid reads the stacks again.
+    pub(super) fn series_change(&mut self, work: impl FnOnce(&Db) -> Result<ser::Change, String> + Send + 'static, label: String) {
+        self.in_background(work, move |b, actions, r| match r {
+            Ok(change) => {
+                b.manage.push(library_manage::Undo::Stack { label: label.clone(), change });
+                crate::series_job::changed();
+                actions.push(Action::Status(crate::trf!("{a} – ⌘Z macht es rückgängig", a = label)));
+            }
+            Err(e) => actions.push(Action::Status(crate::trf!("Stapel nicht geändert: {e}", e = e))),
+        });
+    }
+
+    /// Before an export, delete or move: does the target hold collapsed stacks with hidden photos? Then ask once
+    /// (`true`: the question is open, the caller stops; the answer repeats the action).
+    pub fn series_ask_scope(&mut self, kind: ScopeKind) -> bool {
+        if std::mem::take(&mut self.series.answered) {
+            return false;
+        }
+        let mut hidden = Vec::new();
+        let mut stacks = Vec::new();
+        for b in self.target() {
+            let Some(m) = self.series.marks.get(&b).filter(|m| m.collapsed) else { continue };
+            let s = &self.series.stacks[m.stack];
+            stacks.push(s.id);
+            hidden.extend(s.images.iter().copied().filter(|&i| i != b));
+        }
+        if hidden.is_empty() {
+            return false;
+        }
+        self.series.ask = Some(ScopeAsk { kind, hidden, stacks });
+        true
+    }
+
+    /// The question "only the top photo / the whole series".
+    pub(super) fn series_dialogs(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let Some(ask) = &self.series.ask else { return };
+        let n_top = self.target().len();
+        let n_all = n_top + ask.hidden.len();
+        let what = match ask.kind {
+            ScopeKind::Export => crate::tr("Exportieren"),
+            ScopeKind::Delete => crate::tr("In den Papierkorb"),
+            ScopeKind::Move => crate::tr("Verschieben"),
+        };
+        let all = crate::trf!("Ganze Serie ({n} Fotos)", n = n_all);
+        let mut only_top = false;
+        let a = crate::dialog::show(
+            ctx,
+            "stapel-umfang",
+            &crate::trf!("{a}: nur oberstes Foto oder ganze Serie?", a = what),
+            440.0,
+            |ui| {
+                crate::dialog::text(ui, &crate::trf!("Die Auswahl enthält zugeklappte Serien oder Stapel mit {n} weiteren Fotos.", n = ask.hidden.len()));
+                ui.add_space(4.0);
+                let label = if n_top == 1 { crate::tr("Nur oberstes Foto").to_string() } else { crate::trf!("Nur oberste Fotos ({n})", n = n_top) };
+                if ui.add(egui::Button::new(label).corner_radius(0.0)).clicked() {
+                    only_top = true;
+                }
+            },
+            crate::dialog::Buttons::confirm(&all, true),
+        );
+        let kind = ask.kind;
+        let action = |actions: &mut Vec<Action>, b: &mut LibraryView| match kind {
+            ScopeKind::Export => actions.push(Action::Export),
+            ScopeKind::Delete => actions.push(Action::Delete),
+            ScopeKind::Move => b.menu_move(ctx),
+        };
+        if only_top {
+            self.series.ask = None;
+            self.series.answered = true;
+            action(actions, self);
+        } else if a == crate::dialog::Answer::Primary {
+            let ask = self.series.ask.take().unwrap();
+            // open the stacks and select all their photos: the action then sees every one of them
+            for s in self.series.stacks.iter_mut().filter(|s| ask.stacks.contains(&s.id)) {
+                s.collapsed = false;
+            }
+            for b in self.target() {
+                self.selection.insert(b);
+            }
+            self.selection.extend(ask.hidden.iter().copied());
+            self.nothing_selected = false;
+            self.refilter = true;
+            self.apply_filter();
+            let ids = ask.stacks.clone();
+            self.in_background(move |db| ids.iter().try_for_each(|&id| ser::set_collapsed(db, id, false)), |_, _, _| {});
+            self.series.answered = true;
+            action(actions, self);
+        } else if a == crate::dialog::Answer::Cancel {
+            self.series.ask = None;
+        }
+    }
+
+    /// Left panel: row "Serien" with the number of series not reviewed yet. Always there: without series yet a small
+    /// line below says what the detection is doing (searching, n of m, waiting for the search index, none found).
+    pub(super) fn series_row(&mut self, ui: &mut egui::Ui) {
+        let open = self.series.open_count();
+        let text = crate::tr("Serien");
+        let empty = self.series.stacks.is_empty();
+        let (click, _, resp) = Self::list_row_icon(ui, Some(lr::Icon::CopySimple), text, (open > 0).then(|| crate::trf!("{n} offen", n = thousands(open))), self.source_marked(&Source::Series), 0, None, empty);
+        let (phase, done, total) = crate::series_job::progress();
+        let st = crate::series_job::empty_state(crate::series_job::enabled(), phase, done, total, crate::series_job::passed(), crate::perf_mode::power() == crate::perf_mode::Power::LowPower);
+        let searching = phase != crate::series_job::Phase::Idle;
+        // below the row, in the indent of the names; always there (also empty), so nothing below moves when the
+        // first series is found
+        let line = if empty || searching { st.short.clone() } else { String::new() };
+        let r = ui
+            .horizontal(|ui| {
+                ui.add_space(24.0);
+                ui.add(egui::Label::new(egui::RichText::new(if line.is_empty() { " " } else { line.as_str() }).small().color(lr::TEXT_DIM)).truncate().sense(egui::Sense::hover()))
+            })
+            .inner;
+        if empty {
+            let tip = format!("{}\n{}", st.title, st.tip);
+            lr::hover_tip(ui, &resp, &tip);
+            lr::hover_tip(ui, &r, &tip);
+        } else {
+            lr::hover_tip(ui, &resp, crate::tr("Alle Serien und Stapel, je eine Kachel; ungesichtete zuerst"));
+        }
+        // the search runs: the line follows it
+        if searching {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        if click {
+            self.enter_special_source();
+            self.source = Source::Series;
+            self.source_ids = None;
+            self.loupe = false;
+            self.refilter = true;
+        }
+    }
+
+    /// Once ever (first start with the series detection): when it begins searching and there are no series yet, a
+    /// quiet line in the status bar says where they will appear. No dialog.
+    pub(super) fn series_first_hint(&mut self, actions: &mut Vec<Action>) {
+        const KEY: &str = "seriesSearchHintShown";
+        static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if DONE.load(std::sync::atomic::Ordering::Relaxed) || !self.series.stacks.is_empty() || crate::series_job::progress().0 == crate::series_job::Phase::Idle {
+            return;
+        }
+        DONE.store(true, std::sync::atomic::Ordering::Relaxed);
+        if library::settings::value(KEY).as_bool().unwrap_or(false) {
+            return;
+        }
+        library::settings::set(KEY, serde_json::json!(true));
+        actions.push(Action::Status(crate::tr("Serien werden gesucht … sie erscheinen links unter „Serien“").into()));
+    }
+
+    /// Middle of the grid for the source "Serien" while there are none: the state of the detection and the ways in.
+    pub(super) fn series_empty(&mut self, ui: &mut egui::Ui) {
+        let (phase, done, total) = crate::series_job::progress();
+        let st = crate::series_job::empty_state(crate::series_job::enabled(), phase, done, total, crate::series_job::passed(), crate::perf_mode::power() == crate::perf_mode::Power::LowPower);
+        ui.add_space(36.0);
+        ui.vertical_centered(|ui| {
+            ui.label(egui::RichText::new(&st.title).size(16.0).color(lr::TEXT));
+            ui.add_space(6.0);
+            for t in st.tip.lines() {
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+            }
+        });
+        if phase != crate::series_job::Phase::Idle {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+        }
+    }
+
+    /// Commands from the menu bar (Foto → Serie sichten, Als Stapel bündeln, Stapel auflösen, Serien auf-/zuklappen)
+    /// for the active photo or the selection.
+    pub fn stack_menu_command(&mut self, cmd: StackMenu) -> Vec<Action> {
+        let mut actions = Vec::new();
+        if cmd == StackMenu::ToggleAll {
+            if self.series.stacks.is_empty() {
+                actions.push(Action::Status(crate::tr("Noch keine Serien oder Stapel").into()));
+            } else {
+                self.series_toggle_all();
+            }
+            return actions;
+        }
+        let Some(active) = self.active.or_else(|| self.target().first().copied()) else {
+            actions.push(Action::Status(crate::tr("Erst ein Foto auswählen").into()));
+            return actions;
+        };
+        match cmd {
+            StackMenu::Review => self.series_command(StackCmd::Review, active, &mut actions),
+            StackMenu::Group => self.series_command(StackCmd::Group, active, &mut actions),
+            StackMenu::Dissolve if self.series.of(active).is_none() => actions.push(Action::Status(crate::tr("Das Foto liegt in keiner Serie und keinem Stapel").into())),
+            StackMenu::Dissolve => self.series_command(StackCmd::Dissolve, active, &mut actions),
+            StackMenu::ToggleAll => {}
+        }
+        actions
+    }
+}
+
+/// Stack commands of the menu bar.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StackMenu {
+    Review,
+    Group,
+    Dissolve,
+    ToggleAll,
+}
+
+impl LibraryView {
+    /// Test aid `GRAINEO_SERIES_TEST` (only with `GRAINEO_DATA_DIR`), once the stacks are there:
+    /// `collapse` (all stacks collapsed), `source` (source "Serien"), `review[:light|:duel]` (review of the first series).
+    fn series_test(&mut self) {
+        if crate::env::var_os("GRAINEO_DATA_DIR").is_none() {
+            return;
+        }
+        let Ok(spec) = crate::env::var("GRAINEO_SERIES_TEST") else { return };
+        let mut actions = Vec::new();
+        for part in spec.split(';') {
+            match part.trim() {
+                "collapse" => {
+                    for s in self.series.stacks.iter_mut() {
+                        s.collapsed = true;
+                    }
+                }
+                "source" => {
+                    self.enter_special_source();
+                    self.source = Source::Series;
+                }
+                p if p.starts_with("review") => {
+                    let id = self.series.stacks.iter().filter(|s| s.kind == StackKind::Series).max_by_key(|s| s.images.len()).map(|s| s.id);
+                    self.series_review_open(id, &mut actions);
+                    self.series_review_test_mode(p.strip_prefix("review:").unwrap_or(""));
+                }
+                _ => {}
+            }
+        }
+        self.refilter = true;
+    }
+}
+
+/// Small symbol of the kind: two rectangles (series), a step (exposure bracket), three sheets (own stack).
+fn paint_kind(p: &egui::Painter, c: egui::Pos2, s: &Stack) {
+    let w = egui::Stroke::new(1.0, Color32::from_gray(0xd0));
+    match s.kind {
+        StackKind::Series => {
+            p.rect_stroke(egui::Rect::from_center_size(c + egui::vec2(-1.0, 1.0), egui::vec2(6.0, 5.0)), 0.0, w, egui::StrokeKind::Inside);
+            p.rect_stroke(egui::Rect::from_center_size(c + egui::vec2(1.5, -1.5), egui::vec2(6.0, 5.0)), 0.0, w, egui::StrokeKind::Inside);
+        }
+        StackKind::Bracket => {
+            let pts = vec![c + egui::vec2(-4.0, 3.0), c + egui::vec2(-1.5, 3.0), c + egui::vec2(-1.5, 0.0), c + egui::vec2(1.5, 0.0), c + egui::vec2(1.5, -3.0), c + egui::vec2(4.0, -3.0)];
+            p.add(egui::Shape::line(pts, w));
+        }
+        StackKind::Manual => {
+            for dy in [-3.0, 0.0, 3.0] {
+                p.line_segment([c + egui::vec2(-4.0, dy), c + egui::vec2(4.0, dy)], w);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::series_job::{empty_state, Phase};
+
+    fn texts(output: &egui::FullOutput) -> Vec<String> {
+        output.shapes.iter().filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.text().to_string()) } else { None }).collect()
+    }
+
+    #[test]
+    fn series_row_is_there_without_series_and_says_what_happens() {
+        let ctx = egui::Context::default();
+        let mut library = LibraryView::new(&ctx);
+        assert!(library.series.stacks.is_empty());
+        let out = crate::ui_test::run(&ctx, egui::RawInput::default(), |ui| library.series_row(ui));
+        let t = texts(&out);
+        assert!(t.iter().any(|s| s == "Serien"), "{t:?}");
+        // a second line with the state of the detection (not started in this test: about to begin)
+        assert!(t.len() >= 2, "{t:?}");
+    }
+
+    /// The row keeps its height when the first series is found (review 1.3.0, logic N5: everything below moved up).
+    #[test]
+    fn series_row_keeps_its_height() {
+        let ctx = egui::Context::default();
+        let mut library = LibraryView::new(&ctx);
+        let mut height = |library: &mut LibraryView| {
+            let mut hgt = 0.0;
+            crate::ui_test::run(&ctx, egui::RawInput::default(), |ui| {
+                let top = ui.cursor().top();
+                library.series_row(ui);
+                hgt = ui.cursor().top() - top;
+            });
+            hgt
+        };
+        let without = height(&mut library);
+        library.series.set(vec![Stack {
+            id: 1,
+            kind: StackKind::Series,
+            origin: "auto".into(),
+            cover: None,
+            cover_by_user: false,
+            collapsed: true,
+            reviewed: None,
+            reason: Default::default(),
+            day: None,
+            images: vec![1, 2],
+        }]);
+        let with = height(&mut library);
+        assert!(without > 0.0);
+        assert_eq!(with, without);
+    }
+
+    #[test]
+    fn empty_state_lines() {
+        let s = empty_state(true, Phase::Grouping, 3, 120, false, false);
+        assert_eq!(s.short, "Suche … 3 von 120 Tagen");
+        assert_eq!(s.title, "Serien werden gesucht … 3 von 120 Tagen");
+        let s = empty_state(true, Phase::Signatures, 40, 2321, false, true);
+        assert_eq!(s.short, "Suche … 40 von 2321 Fotos · gedrosselt");
+        assert!(s.title.ends_with("gedrosselt: Stromsparmodus"));
+        let s = empty_state(true, Phase::WaitIndex, 0, 0, false, false);
+        assert_eq!(s.short, "wartet auf den Suchindex");
+        assert!(s.tip.contains("5 Minuten"));
+        assert_eq!(empty_state(true, Phase::Idle, 0, 0, true, false).title, "Noch keine Serien gefunden");
+        assert_eq!(empty_state(true, Phase::Idle, 0, 0, false, false).title, "Serien werden gesucht …");
+        assert_eq!(empty_state(false, Phase::Idle, 0, 0, true, false).short, "Erkennung aus");
+        // the ways in are always named
+        assert!(empty_state(true, Phase::Idle, 0, 0, true, false).tip.contains("⌘G"));
+    }
+
+    #[test]
+    fn menu_commands_without_series() {
+        assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
+        let dir = std::env::temp_dir().join(format!("graineo-series-menu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..3 {
+            image::RgbImage::from_pixel(24, 16, image::Rgb([60, 100, 80])).save(dir.join(format!("image-{i}.png"))).unwrap();
+        }
+        let ctx = egui::Context::default();
+        let mut library = LibraryView::new(&ctx);
+        library.browse_folder(&dir, None);
+        let ids: Vec<i64> = library.visible.iter().map(|&i| library.rows[i].image).collect();
+        assert_eq!(ids.len(), 3);
+        let status = |a: &[Action]| a.iter().find_map(|a| if let Action::Status(s) = a { Some(s.clone()) } else { None });
+        // nothing to collapse, nothing to dissolve: said in the status bar
+        assert_eq!(status(&library.stack_menu_command(StackMenu::ToggleAll)).as_deref(), Some("Noch keine Serien oder Stapel"));
+        library.active = Some(ids[0]);
+        assert_eq!(status(&library.stack_menu_command(StackMenu::Dissolve)).as_deref(), Some("Das Foto liegt in keiner Serie und keinem Stapel"));
+        // one photo cannot be bundled
+        library.selection = HashSet::from([ids[0]]);
+        library.nothing_selected = false;
+        assert_eq!(status(&library.stack_menu_command(StackMenu::Group)).as_deref(), Some("Zum Bündeln mindestens zwei Fotos auswählen"));
+        // a selection of three photos opens the review like a series
+        library.selection = ids.iter().copied().collect();
+        let a = library.stack_menu_command(StackMenu::Review);
+        assert!(status(&a).is_none(), "{:?}", status(&a));
+        assert!(library.series.review.is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

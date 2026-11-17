@@ -12,6 +12,14 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod print_job;
+mod print_dialog;
+mod print_room;
+mod camera_looks_ui;
+mod learn_look_ui;
+mod series_job;
+mod style_scan;
+mod support;
 mod spp_accept;
 mod start_migration;
 mod backup_view_ui;
@@ -24,6 +32,7 @@ mod narrow_window;
 mod default_app;
 mod mem_budget;
 mod photo_state;
+mod develop_guard;
 /// What the zoomed view asks for at full resolution (crop, whole image, nothing) – testable without egui
 mod detail_plan;
 mod filmstrip_layout;
@@ -34,6 +43,8 @@ mod browse;
 mod view_folder;
 mod frame_watch;
 mod grid_scroll_test;
+mod grid_bench;
+mod import_bench;
 #[cfg(test)]
 mod library_store_tests;
 mod library_select;
@@ -82,6 +93,7 @@ mod paste;
 mod settings_group;
 mod display_color;
 mod help;
+mod vectorscope;
 // develop history of the open photo (steps, cursor, kept in the library)
 mod history;
 mod history_panel;
@@ -91,7 +103,16 @@ mod jobs;
 mod lr;
 mod presets;
 mod raw_app;
+mod mask_list_ui;
+mod mask_parts;
 mod masks_ui;
+mod mask_sample;
+mod face_parts;
+mod subject_ui;
+mod depth_ui;
+mod histogram_pin;
+mod analysis_progress;
+mod remove_ui;
 mod prefs;
 // choice of the search model in stages, text model included (Settings → Search)
 mod prefs_search_model;
@@ -111,6 +132,7 @@ mod video_ui;
 mod film_profiles_ui;
 mod film_look;
 mod compare_view;
+mod apple_raw;
 #[cfg(test)] mod ui_test;
 #[cfg(test)] mod list_switch_test;
 #[cfg(test)] mod people_develop_test;
@@ -144,6 +166,7 @@ mod semantic_ui;
 mod lightroom_state;
 mod move_folder_ui;
 mod relink_ui;
+mod remote_access;
 mod library_filter;
 mod keyword_export;
 mod test_image;
@@ -154,6 +177,7 @@ mod crossfade;
 mod file_migration;
 mod bug_report;
 mod perf_measure;
+mod perf_mode;
 mod perf_report;
 mod perf_text;
 mod timing_log;
@@ -177,8 +201,6 @@ use jobs::{Job, JobResult, Loaded, Worker};
 const SPP_EXPECTED_SECS: f64 = 1.3;
 /// Delay on an image before the SPP base starts.
 const SPP_DELAY_SECS: f64 = 0.12;
-/// Maximum number of cached images (besides the current one).
-const CACHE_LIMIT: usize = 4;
 /// Preloads of neighbours up to this distance from the selected image keep running when switching
 const PREFETCH_REACH: usize = 1;
 
@@ -205,6 +227,10 @@ fn main() -> eframe::Result {
         // the copy of a viewed backup (back from the view, or left after a crash during it)
         library::backup_view::cleanup();
     }
+    // rasters of bitmap masks come from the library
+    subject_ui::install_provider();
+    // operating mode for slower computers: setting, stored measurements, system state (`perf_mode`)
+    perf_mode::init();
     // background film computations (offline copies, thumbnails) stay out of the film gate while the user works
     pools::gate::FILM.set_hold_back(jobs::foreground_busy);
     // Quick Look processes for video previews left over from an earlier run (they can hang for days)
@@ -546,6 +572,8 @@ struct App {
     before: compare_view::BeforeChoice,
     /// Previews and crops of the comparison panes that do not show the current settings
     panes: compare_view::PaneTextures,
+    /// pipeline comparison graineo | Apple in the sensor tray (macOS, apple_raw.rs)
+    apple: apple_raw::AppleView,
     /// Look comparison (switch "Compare" in "Film & Look")
     look_compare: compare_view::LookCompare,
     show_clipping: bool,
@@ -647,6 +675,8 @@ struct App {
     curve_channel: usize,
     /// Learned duration of the SPP base (moving average) for the progress bar
     spp_expected: f64,
+    /// dwell before the exact base of the photo shown starts (s; operating mode, see `perf_mode`) – for the progress ring
+    spp_wait: f64,
     /// How often the watchdog has already re-requested the base for the current image
     refine_retries: u8,
     /// Time the image was selected (for timing in the log)
@@ -702,6 +732,8 @@ struct App {
     strip_layout: Option<((u64, usize, u32), filmstrip_layout::Layout)>,
     /// Test hook: after loading, open crop, the About window or the preferences
     test_open: Option<&'static str>,
+    /// the print room (⌘P, `print_room.rs`)
+    print_room: print_room::PrintRoom,
     /// Loupe magnification (1 = 100 %, 2 = 200 %, 4 = 400 %), scrolling switches
     loupe_scale: f32,
     /// Time of switching on/over (the hint fades out afterwards)
@@ -899,6 +931,7 @@ impl App {
             show_before: false,
             before: Default::default(),
             panes: Default::default(),
+            apple: Default::default(),
             look_compare: Default::default(),
             show_clipping: false,
             show_faces: crate::env::var_os("GRAINEO_FACES").is_some(),
@@ -958,6 +991,7 @@ impl App {
             strip_height: library::settings::value("filmstripHeight").as_f64().map_or(filmstrip_layout::PANEL_DEFAULT, |h| (h as f32).clamp(filmstrip_layout::PANEL_MIN, filmstrip_layout::PANEL_MAX)),
             strip_layout: None,
             test_open: None,
+            print_room: Default::default(),
             loupe_scale: 1.0,
             loupe_hint_at: 0.0,
             loupe_scroll: 0.0,
@@ -965,6 +999,7 @@ impl App {
             peeks: Default::default(),
             panel_rects: [None; 4],
             spp_expected: SPP_EXPECTED_SECS,
+            spp_wait: SPP_DELAY_SECS,
             refine_retries: 0,
             selected_at: None,
             saved: HashMap::new(),
@@ -1063,6 +1098,7 @@ impl App {
             app.export_format = match ev["format"].as_str() {
                 Some("tiff") => Format::Tiff16,
                 Some("dng") => Format::Dng,
+                Some("jxl") => Format::JXL_DEFAULT,
                 _ => Format::Jpeg { quality: ev["quality"].as_u64().unwrap_or(92).clamp(1, 100) as u8 },
             };
             app.export_engine = if ev["engine"] == "own" { Engine::Own } else { Engine::Spp };
@@ -1118,6 +1154,7 @@ impl App {
             Ok("prefs") => app.test_open = Some("prefs"),
             Ok(t) if t.starts_with("prefs:") => prefs::open_section(&t[6..]),
             Ok("zoom") => { app.tab = Tab::Develop; app.test_open = Some("zoom"); }
+            Ok("print") => { app.tab = Tab::Develop; app.test_open = Some("print"); }
             Ok("grid") => app.grid = true,
             Ok("export") => app.show_export = true,
             Ok("library") => app.tab = Tab::Library,
@@ -1186,6 +1223,7 @@ impl App {
             Ok("edit") => { app.tab = Tab::Develop; app.tool_tab = workspace::ToolTab::Edit; }
             Ok("filmlook") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::FilmLook); }
             Ok("masks") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Masks); }
+            Ok("retouch") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Retouch); }
             Ok("versions") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Versions); }
             Ok("presets") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Presets); }
             Ok("loupe") => {
@@ -1430,6 +1468,7 @@ impl App {
         self.spp_due = None;
         self.spp_settle = None;
         self.spp_seconds = None;
+        self.spp_wait = SPP_DELAY_SECS;
         self.refine = Refine::None;
         self.refine_retries = 0;
         self.prefetch_due = None;
@@ -1466,7 +1505,7 @@ impl App {
         self.trim_cache(index);
         self.open_generation.fetch_add(1, Ordering::SeqCst);
         // a preloaded photo with another binning (settings changed since) is opened again
-        self.cache.retain(|(i, l)| *i != index || binning_ui::fits(l, &self.entries[index].settings));
+        self.cache.retain(|(i, l)| *i != index || (binning_ui::fits(l, &self.entries[index].settings) && apple_raw::engine_fits(l, &self.entries[index].settings)));
         if let Some(pos) = self.cache.iter().position(|(i, _)| *i == index) {
             let (_, loaded) = self.cache.remove(pos);
             self.loading = None;
@@ -1480,25 +1519,32 @@ impl App {
         }
         // the selected image is opened: nothing else reads RAWs meanwhile (preloads compete for processor and NAS)
         self.cancel_prefetches(|n| n == index);
-        if image_kind::of(&self.entries[index].path) != image_kind::ImageKind::Foveon {
-            // other formats: the stored preview is on screen; the RAW only after a short dwell (paging on cancels it)
-            self.status = crate::trf!("Lade {a} …", a = self.entries[index].name);
-            self.browse.open_due = Some((index, self.now() + browse::OPEN_DWELL));
-            self.worker.ctx().request_repaint_after(std::time::Duration::from_secs_f64(browse::OPEN_DWELL));
+        // Sigma X3F chosen on its own (not while paging): opened at once, as the user waits for exactly this photo
+        // (measured: the dwell cost 0.25–0.4 s until the first picture, the stored preview of other formats hides it)
+        if image_kind::of(&self.entries[index].path) == image_kind::ImageKind::Foveon && !self.browse.paging(self.now()) {
+            self.start_open(index);
             return;
         }
-        self.start_open(index);
+        // paging (and every other format): the stored preview is on screen; the photo is opened only after a short
+        // dwell (paging on cancels it), so paging past a photo reads and computes nothing for it
+        self.status = crate::trf!("Lade {a} …", a = self.entries[index].name);
+        self.browse.open_due = Some((index, self.now() + browse::OPEN_DWELL));
+        self.worker.ctx().request_repaint_after(std::time::Duration::from_secs_f64(browse::OPEN_DWELL));
     }
 
-    /// Open the selected image (after the dwell, see [`browse::OPEN_DWELL`]; Sigma X3F at once).
+    /// Open the selected image (after the dwell, see [`browse::OPEN_DWELL`]).
     fn start_open(&mut self, index: usize) {
         // the photo the user looks at now: only its Sigma base goes into the disk cache (if the user stays with it)
         develop::diskcache::set_current(&self.entries[index].path);
-        // Start the SPP base immediately, in parallel with opening (rather than after opening)
+        // Start the SPP base immediately, in parallel with opening (rather than after opening) – unless the user is
+        // paging fast (then it starts once they stay, see `schedule`) or the operating mode waits for a longer dwell
         self.spp_counts = None;
         self.spp_early = None;
+        let now = self.now();
         // (not for Classic cameras: they open with the exact view, see `jobs::classic_exact_preview`)
-        if develop::Session::uses_spp(&self.entries[index].settings)
+        if perf_mode::plan().early_base
+            && !self.browse.fast(now)
+            && develop::Session::uses_spp(&self.entries[index].settings)
             && image_kind::of(&self.entries[index].path) == image_kind::ImageKind::Foveon
             && self.spp_prefetching.as_ref().is_none_or(|(i, _)| *i != index)
             && !develop::quattro::is_classic_cached(&self.entries[index].path)
@@ -1566,7 +1612,7 @@ impl App {
 
     /// Limit the cache to the nearest neighbours of the target.
     fn trim_cache(&mut self, target: usize) {
-        while self.cache.len() > CACHE_LIMIT {
+        while self.cache.len() > perf_mode::plan().cache_limit {
             let far = self
                 .cache
                 .iter()
@@ -1678,7 +1724,10 @@ impl App {
             self.spp_pending = Some(self.entries[index].settings.spp_key(&self.entries[index].path));
             self.refine = Refine::Working { since: now - SPP_DELAY_SECS };
         } else if develop::Session::uses_spp(&self.entries[index].settings) && !foreign {
-            self.spp_due = Some(now + SPP_DELAY_SECS);
+            // the exact base after the dwell of the operating mode (`perf_mode`); the spinner says it is coming
+            let wait = perf_mode::plan().base_dwell.max(SPP_DELAY_SECS);
+            self.spp_due = Some(now + wait);
+            self.spp_wait = wait;
             self.refine = Refine::Working { since: now };
         } else {
             // non-Sigma RAW: preload the neighbours after a short dwell (never while paging fast, see `schedule`)
@@ -1686,7 +1735,7 @@ impl App {
             // and prepare the full resolution once the image has been looked at for a moment
             if foreign {
                 let since = self.selected_at.filter(|(i, _)| *i == index).map_or(0.0, |(_, t)| now - t);
-                self.browse.full_due = Some((index, now + (browse::FULL_DWELL - since).max(0.3)));
+                self.browse.full_due = Some((index, now + (perf_mode::plan().full_dwell - since).max(0.3)));
             }
         }
     }
@@ -1738,9 +1787,7 @@ impl App {
             self.darkroom.zones.remember(width, height, &rgb);
         }
         // the view of the open photo for ⌘C (photo_copy.rs)
-        if let Some(e) = self.entries.get(index).filter(|_| self.current.as_ref().is_some_and(|c| c.index == index)) {
-            photo_copy::remember_view(e.image, e.copy.clone(), width, height, &rgb);
-        }
+        let view = self.entries.get(index).filter(|_| self.current.as_ref().is_some_and(|c| c.index == index)).map(|e| photo_copy::remember_view(e.image, e.copy.clone(), width, height, &rgb));
         if let Some(c) = self.current.as_mut().filter(|c| c.index == index) {
             c.out_hist = Some(rgb_histogram(&rgb));
             // compute parade/waveform only in the Sensor module (a few ms)
@@ -1753,17 +1800,9 @@ impl App {
             } else {
                 c.scope_tex = None;
             }
-            // RGB waveform in the header of the Develop panel (a few ms)
-            if self.tab == Tab::Develop && self.dev_scope > 0 {
-                let img = match self.dev_scope {
-                    1 => lr::scope_image(&rgb, width, height, lr::Scope::Parade),
-                    2 => lr::scope_image(&rgb, width, height, lr::Scope::RgbWaveform),
-                    _ => lr::vectorscope_image(&rgb, width, height),
-                };
-                match &mut c.wave_tex {
-                    Some(t) => t.set(img, TextureOptions::LINEAR),
-                    None => c.wave_tex = Some(ctx.load_texture("wave", img, TextureOptions::LINEAR)),
-                }
+            // parade, waveform or vectorscope in the header of the Develop panel: on a worker (histogram_pin::request)
+            if let (true, Some(px)) = (self.tab == Tab::Develop && self.dev_scope > 0, view) {
+                histogram_pin::request(ctx, index, self.dev_scope, width, height, px);
             }
             let clip = clipping_mask(&rgb, width, height);
             match &mut c.clip_tex {
@@ -2556,8 +2595,14 @@ impl App {
     /// Re-render or re-denoise the preview when settings have changed;
     /// start the SPP base and preloading at the right time.
     fn schedule(&mut self, now: f64) {
+        // the automatic operating mode switched: say so once in the title bar (never silently, see `perf_mode`)
+        if let Some(st) = perf_mode::take_change() {
+            self.notes.done(perf_mode::change_text(&st), now);
+        }
         // binning switched: the photo has another size, open it again (see binning_ui.rs)
         self.binning_check();
+        // engine of the raw stage switched (graineo ↔ Apple, other Apple version): open the photo again (apple_raw.rs)
+        self.engine_check();
         // dwell over: open the selected image now
         if let Some((i, due)) = self.browse.open_due {
             if now >= due {
@@ -2578,7 +2623,9 @@ impl App {
                 let c = self.current.as_ref().unwrap();
                 if let Some(doc) = c.loaded.previews.foreign.clone() {
                     let settings = self.entries[i].settings.clone();
-                    if !doc.full_ready(&settings) && crate::env::var_os("GRAINEO_NO_FULL_AHEAD").is_none() {
+                    let need = (doc.full_size[0] * doc.full_size[1]) as u64 * mem_budget::FULL_BYTES_PER_PIXEL;
+                    // ahead only with room in memory; zooming prepares it anyway (the same result)
+                    if !doc.full_ready(&settings) && crate::env::var_os("GRAINEO_NO_FULL_AHEAD").is_none() && mem_budget::room_ahead("full resolution ahead", need) {
                         log(&format!("full resolution ahead {i}"));
                         self.worker.send(Job::PrepareFull { index: i, doc, settings, generation: self.open_generation.load(Ordering::SeqCst), current: self.open_generation.clone() });
                     }
@@ -2640,6 +2687,11 @@ impl App {
         // Crop at full resolution is waiting for Sigma's base: request it if nothing is running
         // (for images from the cache usually a hit in the disk cache, ≈ 0.2 s)
         if std::mem::take(&mut self.detail_wants_spp) && self.loading.is_none() {
+            // zoomed while the operating mode still waits for the dwell: the user needs the exact base now
+            if self.spp_due.is_some_and(|due| due > now) && self.spp_settle.is_none() {
+                log("detail: dwell for the SPP base cut short (zoom)");
+                self.spp_due = Some(now);
+            }
             if let Some(idx) = self.current.as_ref().map(|c| c.index) {
                 let busy = self.spp_pending.is_some() || self.spp_due.is_some() || self.spp_early == Some(idx) || self.spp_prefetching.as_ref().is_some_and(|(i, _)| *i == idx);
                 if !busy && self.refine_retries < 2 {
@@ -2647,6 +2699,10 @@ impl App {
                     self.request_spp(idx);
                 }
             }
+        }
+        // paging fast: no exact base yet (it would be cancelled again by the next photo); it starts once the user stays
+        if self.spp_due.is_some_and(|due| now >= due) && self.spp_settle.is_none() && self.zoom <= 1.0 && self.browse.fast(now) {
+            self.spp_due = Some(now + 0.2);
         }
         if let Some(due) = self.spp_due {
             if now >= due && self.loading.is_none() {
@@ -2659,6 +2715,15 @@ impl App {
                 }
             }
         }
+        // the exact view waits for the dwell of the operating mode: the spinner's tooltip says why and how long
+        let waiting = match (self.refine, self.spp_due, &self.spp_settle) {
+            (Refine::Working { .. }, Some(due), None) if due > now && self.spp_wait > SPP_DELAY_SECS => {
+                let st = perf_mode::status();
+                Some(crate::trf!("{t}: genaue Ansicht in {n} s, beim Zoomen sofort ({c})", t = st.tier.name(), n = (due - now).ceil().max(1.0) as u32, c = st.cause.text()))
+            }
+            _ => None,
+        };
+        work_step::set_waiting(waiting);
         // Library: preload the clicked image immediately (see `preload_selection`)
         if self.in_grid() {
             let b = self.lib.active_image();
@@ -2821,6 +2886,10 @@ impl App {
         if self.spp_prefetching.is_some() || self.spp_pending.is_some() || self.spp_due.is_some() {
             return;
         }
+        // operating mode "Saving": nothing computed ahead (`perf_mode`)
+        if !perf_mode::plan().base_ahead {
+            return;
+        }
         let Some(cur) = self.current.as_ref().map(|c| c.index) else { return };
         let vis = self.visible();
         let Some(next) = next_in_direction(&vis, cur, self.nav_dir) else { return };
@@ -2836,6 +2905,10 @@ impl App {
             return;
         }
         let Some(session) = loaded.session.clone() else { return };
+        let need = (loaded.full_size[0] * loaded.full_size[1]) as u64 * mem_budget::BASE_BYTES_PER_PIXEL;
+        if !mem_budget::room_ahead("Sigma base ahead", need) {
+            return;
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         self.spp_prefetching = Some((next, cancel.clone()));
         log(&format!("spp precompute {next}"));
@@ -2894,13 +2967,19 @@ impl App {
     fn prefetch_neighbors(&mut self) {
         let Some(i) = self.current.as_ref().map(|c| c.index) else { return };
         let d = self.nav_dir;
-        // with the large previews decoded ahead one RAW in the direction of travel is enough (and the one behind)
+        // with the large previews decoded ahead one RAW in the direction of travel is enough (and the one behind; not
+        // in the operating mode "Saving")
+        let behind = perf_mode::plan().neighbours_behind;
         let order = [i as isize + d, i as isize - d];
-        for n in order.into_iter().filter(|&n| n >= 0 && (n as usize) < self.entries.len()).map(|n| n as usize) {
+        let order = &order[..if behind { 2 } else { 1 }];
+        for n in order.iter().copied().filter(|&n| n >= 0 && (n as usize) < self.entries.len()).map(|n| n as usize) {
             if self.preload_running.contains(&n) {
                 return; // one preload at a time; this one reports back and continues the chain
             }
             if !self.cache.iter().any(|(c, _)| *c == n) && image_kind::of(&self.entries[n].path).editable() && self.entries[n].state == 0 {
+                if !mem_budget::room_ahead("preloading the neighbour", mem_budget::OPEN_BYTES) {
+                    return;
+                }
                 self.ensure_entry(n);
                 self.preload_running.push(n);
                 let cancel = self.prefetch_flag(n);
@@ -3233,6 +3312,10 @@ impl App {
             log(&format!("menu command: {cmd:?}"));
         }
         let has = self.current.is_some();
+        // the print room only chooses what to print: deleting or removing from a collection does not belong there
+        if self.print_room.open && matches!(cmd, TrashSelected | DeleteRejected | RemoveFromCollection) {
+            return;
+        }
         match cmd {
             Settings => {
                 prefs::open();
@@ -3247,6 +3330,20 @@ impl App {
             Lightroom => library_ui::request_lightroom(),
             Export => self.open_export(),
             VirtualCopy => self.create_virtual_copy(None),
+            StackReview | StackGroup | StackDissolve | StackToggleAll => {
+                // series and stacks live in the grid: from a single view the grid comes first
+                if !self.in_grid() {
+                    self.to_grid();
+                }
+                let c = match cmd {
+                    StackReview => library_ui::StackMenu::Review,
+                    StackGroup => library_ui::StackMenu::Group,
+                    StackDissolve => library_ui::StackMenu::Dissolve,
+                    _ => library_ui::StackMenu::ToggleAll,
+                };
+                let a = self.lib.stack_menu_command(c);
+                self.library_actions(a);
+            }
             DeleteRejected => self.confirm_delete = true,
             TrashSelected if !self.confirm_delete => self.request_delete(),
             TrashSelected => {}
@@ -3310,6 +3407,11 @@ impl App {
                     ctx.input_mut(|i| {
                         i.events.push(egui::Event::Key { key: egui::Key::A, physical_key: Some(egui::Key::A), pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
                     });
+                } else if self.print_room.open {
+                    // the print room: all photos of its filmstrip
+                    if !ctx.memory(|m| m.top_modal_layer().is_some()) {
+                        self.print_select_all();
+                    }
                 } else if self.in_grid() && people_ui::is_open() {
                     people_ui::request(people_ui::Request::SelectAll);
                 } else {
@@ -3317,6 +3419,7 @@ impl App {
                 }
             }
             SelectNone if self.in_grid() && people_ui::is_open() => people_ui::request(people_ui::Request::SelectNone),
+            SelectNone if self.print_room.open => self.print_select_none(),
             SelectNone => {
                 self.lib.clear_selection();
                 self.entries.iter_mut().for_each(|e| e.selected = false);
@@ -3333,8 +3436,12 @@ impl App {
                 self.tab = Tab::Library;
                 self.lib.open_arrange(None);
             }
+            // in the print room ⌘P is its main button
+            Print if self.print_room.open => self.print_room_main_key(ctx),
+            Print => self.open_print_room(None, None),
             ContactPrint => self.open_contact_print(),
             LensRoom => lens_assign::request(lens_assign::Request::Room),
+            CameraLooks => camera_looks_ui::open(self.lib.learn_candidates(), self.current_learn_key()),
             Compare => {
                 self.compare = !self.compare;
                 self.end_look_compare();
@@ -3361,6 +3468,8 @@ impl App {
             ReportBug => bug_report::open(false),
             // Help → Create Performance Report: measures this computer, writes a local text file
             PerfReport => perf_report::open(),
+            // Help → Support graineo …: only opens the browser, the app sends nothing
+            Support => support::open(),
             About => self.brand.show_about(),
             // colour proof: display only – the layer draws again with another uniform, nothing is computed
             ProofToggle => {
@@ -3400,7 +3509,7 @@ impl App {
         let (cmd, shift, alt) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift, i.modifiers.alt));
         let pressed = |k: egui::Key| ctx.input(|i| i.key_pressed(k));
         // Esc back to the grid – only if no tool needs Esc for itself (state before anything else)
-        if pressed(egui::Key::Escape) && masks_ui::finish(ctx) {
+        if pressed(egui::Key::Escape) && (masks_ui::finish(ctx) | remove_ui::finish(ctx)) {
             self.navigation.click.cancel();
             return;
         }
@@ -3520,6 +3629,9 @@ impl App {
         }
         if !cmd && pressed(egui::Key::H) && self.current.is_some() {
             retouch_ui::toggle_overlays(ctx);
+        }
+        if shortcuts::pressed(ctx, shortcuts::RETOUCH) && self.current.is_some() {
+            self.choose_tool(workspace::ToolTab::Retouch);
         }
         if pressed(egui::Key::Backslash) {
             self.show_before = !self.show_before;
@@ -3945,6 +4057,7 @@ impl eframe::App for App {
             ui.ctx().on_end_pass("frame-watch", std::sync::Arc::new(|_| frame_watch::end()));
         });
         zoom_test_frame(true, self.zoom); // Test hook: frame times with GRAINEO_ZOOM_TEST
+        remote_access::frame(self, ui.ctx()); // browser access: start by setting, changes made in the browser
         // narrow window: collapse a side panel once when the window falls below the threshold
         if self.preview_full.is_none() {
             let dark = self.darkroom_active();
@@ -3959,7 +4072,7 @@ impl eframe::App for App {
         }
         // closing while changes are still on their way into the library: wait visibly (quit.rs)
         {
-            let pending = !self.lib.writes_finished() || library::store::saving() || library_turn::writing() || self.multi_busy();
+            let pending = !self.lib.writes_finished() || library::store::saving() || library_turn::writing() || self.multi_busy() || subject_ui::storing();
             if self.turn_ops != self.lib.ops {
                 // a move or another library operation came after the last turn: ⌘Z first undoes that
                 self.turn_ops = self.lib.ops;
@@ -3995,7 +4108,7 @@ impl eframe::App for App {
             self.hover_tex = None;
         }
         let ctx = ui.ctx().clone();
-        if film_profiles_ui::frame(&ctx) {
+        if film_profiles_ui::frame(&ctx) | learn_look_ui::generation_changed(&ctx) {
             self.film_previews.forget();
             self.hover_preset = None; self.film_hover = false;
             self.rendered_for = None;
@@ -4051,7 +4164,7 @@ impl eframe::App for App {
         // open dialog (egui modal): its keys belong to it alone
         // likewise the People view in the library: its keys (↩, ⌫, arrows, N …) belong to it
         // likewise "RAW+JPEG doppelt" (its list and review take arrows and space)
-        let dialog_open = ctx.memory(|m| m.top_modal_layer().is_some()) || (self.in_grid() && (people_ui::is_open() || self.lib.pairs_view_open()));
+        let dialog_open = ctx.memory(|m| m.top_modal_layer().is_some()) || camera_looks_ui::is_open() || (self.in_grid() && (people_ui::is_open() || self.lib.pairs_view_open())) || self.print_room.open;
         // Menu shortcuts that reach egui: on Windows always (the menu bar there only shows them), on the Mac when
         // AppKit did not match the key (e.g. punctuation on some keyboard layouts). A key the menu took never
         // reaches egui. Taken (consumed) before every other key handler, so nothing runs twice.
@@ -4061,6 +4174,7 @@ impl eframe::App for App {
             self.sync_source(false);
         }
         self.sensor_raw_update(&ctx);
+        self.apple_update(&ctx);
         if !dialog_open {
             self.sensor_shortcuts(&ctx);
             self.shortcuts_ordered(&ctx);
@@ -4113,6 +4227,15 @@ impl eframe::App for App {
                 }
                 Some("about") => self.brand.show_about(),
                 Some("prefs") => prefs::open(),
+                // Test hook: GRAINEO_TAB=print opens the print room (GRAINEO_PRINT_TEMPLATE=<built-in name>, GRAINEO_PRINT_PAGE=<n>)
+                Some("print") => {
+                    let name = crate::env::var("GRAINEO_PRINT_TEMPLATE").ok();
+                    self.open_print_room(None, name.as_deref());
+                    self.print_room_test_hooks();
+                    if let Some(p) = crate::env::var("GRAINEO_PRINT_PAGE").ok().and_then(|v| v.parse::<usize>().ok()) {
+                        self.print_room.set_page(p.saturating_sub(1));
+                    }
+                }
                 // Test hook: GRAINEO_ZOOM=<factor> magnifies beyond 100 % (e.g. 2 = 200 %)
                 Some("zoom") if self.one_to_one > 1.0 => self.set_zoom(self.one_to_one * crate::env::var("GRAINEO_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(1.0)),
                 Some("zoom") => self.test_open = Some("zoom"),
@@ -4127,17 +4250,28 @@ impl eframe::App for App {
         for cmd in commands {
             self.run_cmd(cmd, &ctx);
         }
-        self.darkroom_shortcuts(&ctx);
+        self.print_room_poll(&ctx);
+        if !self.print_room.open {
+            self.darkroom_shortcuts(&ctx);
+        }
         self.darkroom_compare_update();
         self.darkroom_strip_update(&ctx);
         self.darkroom_contact_update(&ctx);
         self.darkroom_marker_update();
-        // retouch circles: visible while the "Masks" tool is open (H inverts)
-        retouch_ui::set_panel_open(&ctx, !self.in_grid() && self.show_right && self.tool_rail_active() == workspace::ToolTab::Masks && !self.darkroom_active());
+        // retouch circles: visible while the "Retouch" tool is open, mask outlines while "Masks" is open (H inverts)
+        {
+            let tool = (!self.in_grid() && self.show_right && !self.darkroom_active()).then(|| self.tool_rail_active());
+            retouch_ui::set_panel_open(&ctx, tool == Some(workspace::ToolTab::Retouch), tool == Some(workspace::ToolTab::Masks));
+        }
         if !self.lib.import_open() && self.tab != Tab::Library && !dialog_open {
             self.shortcuts(&ctx);
         }
 
+        // the print room takes the whole window (Esc goes back to the view before)
+        if self.print_room.open {
+            self.print_room_ui(ui);
+            return;
+        }
         // viewing a backup: fixed band at the very top (above everything, also in the darkroom)
         backup_view_ui::band(ui);
         let full = self.preview_full.is_some();
@@ -4168,6 +4302,8 @@ impl eframe::App for App {
             let r = egui::Panel::top("top").resizable(false).show(ui, |ui| self.top_bar(ui)).response.rect;
             self.panel_rects[0] = Some(r);
         }
+        // a folder only being viewed (⌘O): fixed band below the navigation, the same place in grid, Develop and darkroom
+        self.lib.view_folder_band(ui, full, darkroom && self.darkroom.image_only);
         // no status bar any more: image info in the image (I), messages and background work in the one status in the title bar,
         // export and shortcuts in the menu (File, Help)
         // update notice (overlay at the bottom right)
@@ -4436,6 +4572,10 @@ impl eframe::App for App {
         }
         preview_repair::maybe_start(&self.lib);
         sigma_refresh::maybe_start(&self.lib);
+        sigma_refresh::maybe_start_learned(&self.lib);
+        camera_looks_ui::test_hook(|| self.lib.learn_candidates());
+        camera_looks_ui::auto_learn();
+        camera_looks_ui::show(&ctx);
         stack::test_helper();
         crash_log::test_panic(&ctx);
         bug_report::frame(&ctx);
@@ -4483,7 +4623,7 @@ impl eframe::App for App {
         quit::test_hang();
         self.save_current();
         quit::ON_EXIT_WAITING.store(true, std::sync::atomic::Ordering::SeqCst);
-        let written = quit::wait_until(quit::WRITES.saturating_sub(t.elapsed()), || self.lib.writes_finished() && !library::store::saving());
+        let written = quit::wait_until(quit::WRITES.saturating_sub(t.elapsed()), || self.lib.writes_finished() && !library::store::saving() && !subject_ui::storing());
         quit::ON_EXIT_WAITING.store(false, std::sync::atomic::Ordering::SeqCst);
         log(&format!("quit: saved after {} ms{}", t.elapsed().as_millis(), if written { "" } else { ", library writes still pending" }));
     }
@@ -4614,7 +4754,7 @@ impl App {
                     if let Some(s) = self.settings().cloned() {
                         self.presets.push(presets::Preset {
                             name: self.new_preset_name.trim().to_string(),
-                            settings: Settings { view: View::Developed, ..s },
+                            settings: presets::own_preset_settings(Settings { view: View::Developed, ..s }),
                             scope: presets::Scope::Look,
                             hint: crate::tr("Eigene Vorgabe").into(),
                         });
@@ -5302,7 +5442,7 @@ impl App {
                 Some(_) if self.damaged.is_some() && self.damaged == self.not_developable => crate::tr("Datei beschädigt – Vorschau aus der Kamera").to_string(),
                 Some(e) if e.state != 0 && self.lib.work_running() => crate::tr("Bibliothek wird gerade abgeglichen …").to_string(),
                 Some(e) if e.state != 0 => state_message(e.state),
-                Some(e) => crate::trf!("{a} – lässt sich hier nicht entwickeln", a = e.format),
+                Some(e) => photo_state::unsupported_text(&e.path).unwrap_or_else(|| crate::trf!("{a} – lässt sich hier nicht entwickeln", a = e.format)),
                 None => crate::tr("Wird geladen …").to_string(),
             };
             if offline.is_some() && fallback.is_none() {
@@ -5994,6 +6134,10 @@ impl App {
         if self.quiet_spinners[0].0 > 0.0 || self.quiet_spinners[1].0 > 0.0 || self.detail_spinner.0 > 0.0 {
             work_step::spinner_tip(ui, area);
         }
+        // the AI tools of the Masks tray at work (subject, people, click selection, removal): hint at the top edge
+        if let Some(e) = self.current.as_ref().and_then(|c| self.entries.get(c.index)) {
+            analysis_progress::image_hint(ui, &painter, area, &e.path);
+        }
         // Refinement indicator at the bottom right
         if self.show_camera_jpeg {
             badge(&painter, area, crate::tr("Referenz: Kamera-JPEG – ⇧R zum Umschalten"), None);
@@ -6003,7 +6147,7 @@ impl App {
             match self.refine {
                 Refine::Working { since } => {
                     // The delay before the start counts too; slower near the end (in case it takes longer)
-                    let t = ((now - since) / (SPP_DELAY_SECS + self.spp_expected)).max(0.0);
+                    let t = ((now - since) / (self.spp_wait.max(SPP_DELAY_SECS) + self.spp_expected)).max(0.0);
                     let p = (if t < 0.9 { t } else { 0.9 + 0.09 * (1.0 - (-(t - 0.9) * 4.0).exp()) }) as f32;
                     // quiet spinner with a progress ring instead of words
                     quiet_spinner(&mut self.quiet_spinners[1], ui.ctx(), &painter, area, true, Some(p), now);
@@ -6084,7 +6228,7 @@ impl App {
         if self.crop_mode.is_none() && !self.compare && !self.show_before && !self.show_camera_jpeg && !self.measure && !self.wb_picker {
             let index=self.current.as_ref().unwrap().index;
             masks_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut self.entries[index].settings.local,index);
-            { let st = &mut self.entries[index].settings; retouch_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut st.spots,&mut st.red_eyes,index); }
+            { let st = &mut self.entries[index].settings; retouch_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut st.spots,&mut st.red_eyes,index); remove_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut st.removals); }
         }
 
     }
@@ -6124,64 +6268,12 @@ impl App {
 
     fn develop_sections(&mut self, ui: &mut egui::Ui, split: workspace::ToolTab) {
         use workspace::ToolTab;
-        let Some(c) = &self.current else { return };
-        // Histogram header with clipping triangles, shooting data and values under the mouse pointer
-        let mut hist_drag = None;
-        // Display at the top: histogram, RGB parade, waveform or vectorscope – selection on the right in the
-        // header (as in x3fuse), all the same height so nothing jumps when switching
-        const NAMES: [&str; 4] = ["Histogramm", "RGB-Parade", "Waveform", "Vektorskop"];
-        let mut sel = self.dev_scope.min(3);
-        ui.horizontal(|ui| {
-            let g = lr::caps(ui.painter(), "Anzeige", egui::FontId::proportional(10.0), lr::TEXT_DIM);
-            let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 18.0), egui::Sense::hover());
-            ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                egui::ComboBox::from_id_salt("dev-scope").selected_text(crate::tr(NAMES[sel as usize])).width(118.0).show_ui(ui, |ui| {
-                    for (i, n) in NAMES.iter().enumerate() {
-                        ui.selectable_value(&mut sel, i as u8, crate::tr(n));
-                    }
-                });
-            });
-        });
-        let h = 110.0;
-        let tex = c.wave_tex.clone();
-        match sel {
-            0 => {
-                if let Some(hist) = &c.out_hist {
-                    let r = lr::histogram(ui, hist, self.show_clipping);
-                    if r.toggle_clipping {
-                        self.show_clipping = !self.show_clipping;
-                    }
-                    hist_drag = r.drag;
-                }
-            }
-            1 => lr::scope_view_h(ui, tex.as_ref(), lr::Scope::Parade, h, true),
-            2 => lr::scope_view_h(ui, tex.as_ref(), lr::Scope::RgbWaveform, h, true),
-            _ => lr::vectorscope_view(ui, tex.as_ref(), h),
+        if self.current.is_none() {
+            return;
         }
-        if sel != self.dev_scope {
-            self.dev_scope = sel;
-            if let Some(c) = &mut self.current {
-                c.wave_tex = None;
-            }
-            self.rendered_for = None;
-            if let Some(f) = app_file("develop-view.txt") {
-                let _ = std::fs::write(f, ["histogram", "parade", "waveform", "vectorscope"][sel as usize]);
-            }
-        } else if sel > 0 && tex.is_none() && !self.rendering {
-            self.rendered_for = None;
-        }
-        let Some(c) = &self.current else { return };
-        // One fixed line: shooting data, and when hovering the image the
-        // sensor values in the same place – nothing below shifts.
-        let line = match &self.readout {
-            Some(r) => egui::RichText::new(r).small().monospace().color(lr::TEXT),
-            None => egui::RichText::new(&c.loaded.summary).small().color(lr::TEXT_DIM),
-        };
-        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 16.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.add(egui::Label::new(line).truncate());
-        });
-        ui.separator();
+        // Display at the top (histogram header with clipping triangles, shooting data and values under the mouse
+        // pointer); above the scroll area when pinned (histogram_pin.rs)
+        let hist_drag = self.histogram_display(ui);
         // several photos selected in the grid: "Apply to n photos" right below the histogram
         self.multi_band_slot(ui);
         // Film & Look: profile cards and – for film – its fine sliders; in "Edit" only one line
@@ -6262,8 +6354,25 @@ impl App {
 
         if split == ToolTab::Masks {
             masks_ui::import_hint(ui, s.raw.lightroom_masks.as_ref());
-            masks_ui::panel(ui, &mut s.local, index);
+            let path = self.entries[index].path.clone();
+            let s = &mut self.entries[index].settings;
+            match masks_ui::panel(ui, &mut s.local, index, &path) {
+                Some(subject_ui::Request::Analyse(kind)) => subject_ui::start(ui.ctx(), kind, &path, s),
+                Some(subject_ui::Request::Click(points, rect)) => subject_ui::start_click(ui.ctx(), &path, s, points, rect),
+                Some(subject_ui::Request::Scene(what, model)) => depth_ui::start(ui.ctx(), what, &model, &path, s),
+                Some(subject_ui::Request::Sample) => mask_sample::ensure(ui.ctx(), index, &path, s),
+                Some(subject_ui::Request::Parts) => face_parts::start(ui.ctx(), &path, s),
+                None => {}
+            }
+            return;
+        }
+        if split == ToolTab::Retouch {
+            let path = self.entries[index].path.clone();
+            let s = &mut self.entries[index].settings;
             retouch_ui::panel(ui, &mut s.spots, &mut s.red_eyes, index);
+            if let Some(i) = remove_ui::panel(ui, &mut s.removals, &path) {
+                remove_ui::start(ui.ctx(), &path, s, i);
+            }
             return;
         }
         lr::category(ui, crate::tr("Licht & Farbe"));
@@ -7948,6 +8057,10 @@ impl App {
     }
 
     fn sensor_controls(&mut self, ui: &mut egui::Ui) {
+        // Sigma/Foveon: the section "Pipeline" stays visible (greyed out, only graineo), as for the other RAWs
+        if self.current.as_ref().is_some_and(|c| c.loaded.session.is_some()) {
+            self.apple_section(ui);
+        }
         let Some(c) = &self.current else {
             ui.label(crate::tr("Kein Bild geöffnet"));
             return;
@@ -8269,6 +8382,7 @@ impl App {
         #[derive(Clone, Copy, PartialEq)]
         enum Kind {
             Jpeg,
+            Jxl,
             Tiff,
             Png,
             Dng,
@@ -8279,27 +8393,34 @@ impl App {
         let mut kind = match self.export_format {
             _ if self.export_original => Kind::Original,
             Format::Jpeg { .. } => Kind::Jpeg,
+            Format::Jxl { .. } => Kind::Jxl,
             Format::Tiff16 | Format::TiffFloat | Format::RawLayers => Kind::Tiff,
             Format::Png16 => Kind::Png,
             Format::DngProfiles => Kind::Dng,
             Format::Dng => Kind::Linear,
             Format::Exr { .. } => Kind::Exr,
         };
-        let mut kinds = vec![(Kind::Jpeg, "JPEG"), (Kind::Tiff, "TIFF"), (Kind::Png, "PNG")];
+        let mut kinds = vec![(Kind::Jpeg, "JPEG"), (Kind::Jxl, "JPEG XL"), (Kind::Tiff, "TIFF"), (Kind::Png, "PNG")];
         if x3f_only {
             kinds.push((Kind::Dng, "DNG (Raw)"));
             kinds.push((Kind::Linear, crate::tr("Lineares DNG")));
             kinds.push((Kind::Exr, "OpenEXR"));
         }
         kinds.push((Kind::Original, crate::tr("Original")));
+        // tooltip only where the label alone does not say what the format is
+        let tips: Vec<&str> = kinds.iter().map(|(k, _)| if *k == Kind::Jxl { crate::tr("JPEG XL (.jxl): kleiner als JPEG bei gleicher Qualität, auch verlustfrei und mit 16 Bit") } else { "" }).collect();
         export_row(ui, "Format", |ui| {
-            lr::segmented(ui, &mut kind, &kinds);
+            lr::segmented_tips(ui, &mut kind, &kinds, &tips, if x3f_only { 7.0 } else { 10.0 });
             crate::help::info(ui, "export-verlustfrei", crate::tr("Verlustfrei exportieren"), &crate::help::EXPORT_LOSSLESS);
         });
         self.export_original = kind == Kind::Original;
         let before_options = self.export_options.clone();
         self.export_format = match kind {
             Kind::Jpeg => Format::Jpeg { quality: q },
+            Kind::Jxl => match self.export_format {
+                f @ Format::Jxl { .. } => f,
+                _ => Format::JXL_DEFAULT,
+            },
             Kind::Tiff => match self.export_format {
                 Format::TiffFloat | Format::RawLayers if x3f_only => self.export_format,
                 _ => Format::Tiff16,
@@ -8349,6 +8470,19 @@ impl App {
                 });
                 self.export_format = Format::Exr { half };
             }
+            Kind::Jxl => {
+                if let Format::Jxl { quality, mut lossless, mut bits16 } = self.export_format {
+                    export_row(ui, "Kompression", |ui| {
+                        lr::segmented(ui, &mut lossless, &[(false, crate::tr("verlustbehaftet")), (true, crate::tr("verlustfrei"))]);
+                    });
+                    if lossless {
+                        export_row(ui, "Bit-Tiefe", |ui| {
+                            lr::segmented(ui, &mut bits16, &[(false, crate::tr("8 Bit")), (true, crate::tr("16 Bit"))]);
+                        });
+                    }
+                    self.export_format = Format::Jxl { quality, lossless, bits16 };
+                }
+            }
             Kind::Linear => {
                 export_row(ui, "Bit-Tiefe", |ui| {
                     lr::segmented(ui, &mut self.export_options.dng_float, &[(false, crate::tr("16 Bit")), (true, crate::tr("32 Bit Gleitkomma"))]);
@@ -8378,6 +8512,8 @@ impl App {
         }
         let format_hint = match (kind, self.export_format) {
             (Kind::Jpeg, _) => crate::tr("Fertiges Bild zum Teilen, für Web und Handy."),
+            (Kind::Jxl, Format::Jxl { lossless: true, .. }) => crate::tr("Fertiges Bild ohne Verlust, kleiner als TIFF und PNG."),
+            (Kind::Jxl, _) => crate::tr("Fertiges Bild, kleiner als JPEG bei gleicher Qualität."),
             (Kind::Tiff, Format::TiffFloat) => crate::tr("Szenenlinear ohne Tonkurve, nichts beschnitten."),
             (Kind::Tiff, Format::RawLayers) => crate::tr("Die drei Sensorschichten unverändert, ohne Farbe."),
             (Kind::Tiff | Kind::Png, _) => crate::tr("Fertiges Bild ohne Verlust, für Druck und Bildbearbeitung."),
@@ -8407,6 +8543,15 @@ impl App {
                 ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
             });
             self.export_format = Format::Jpeg { quality: v };
+        }
+        if let (Format::Jxl { quality, lossless: false, bits16 }, false) = (self.export_format, self.export_original) {
+            let mut v = quality;
+            export_row(ui, "Qualität", |ui| {
+                ui.spacing_mut().slider_width = 220.0;
+                ui.add(egui::Slider::new(&mut v, 60..=100));
+                ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
+            });
+            self.export_format = Format::Jxl { quality: v, lossless: false, bits16 };
         }
         let finished_image = self.export_format.is_finished_image() && !self.export_original;
         if finished_image {

@@ -51,6 +51,23 @@ const fn card(short: &'static str, text: &'static str, example: Option<Example>)
     Card { short, text, example, extra: None }
 }
 
+// ── Print room ──
+static PRINT_RESOLUTION: Card = card(
+    "Pixel je Zoll auf dem Papier.",
+    "graineo rechnet jede Seite genau in dieser Auflösung, damit der Druckertreiber nicht mit einfacherem Verfahren nachskaliert. Epson-Drucker arbeiten intern mit 360 oder 720 ppi, viele Canon- und HP-Drucker mit 300 oder 600. Mehr als 360 ppi zeigt sich nur bei genauem Hinsehen und kostet Zeit und Speicher.",
+    None,
+);
+static PRINT_SHARPEN: Card = card(
+    "Ausgleich für die Unschärfe von Tinte und Papier.",
+    "Wirkt nach dem Skalieren auf die Helligkeit, mit einem Radius in Millimetern auf dem Papier – bei jeder Auflösung gleich. Mattes Papier lässt die Tinte stärker verlaufen und bekommt mehr. Am Bildschirm wirkt die Schärfung zu kräftig; maßgeblich ist der Ausdruck.",
+    None,
+);
+static PRINT_COLOR: Card = card(
+    "Farbraum der Seite; die Farben rechnet der Drucker um.",
+    "Die Seite trägt ihr Farbprofil (Adobe RGB oder sRGB). Im Druckdialog übernimmt der Treiber die Umrechnung auf Drucker und Papier – dort Papiersorte und Qualität wählen und die Farbanpassung des Druckers eingeschaltet lassen. Adobe RGB erhält kräftige Grün- und Cyantöne, die gute Tintenstrahldrucker drucken können.",
+    None,
+);
+
 pub static LENS_DEFAULT: Card = card("", "Die Vorgabe gilt auch für künftige Importe. Ein Foto mit eigener Zuweisung behält sie.", None);
 
 // ── Basic ──
@@ -81,11 +98,51 @@ pub static SCOPE_RGB_WAVE: Card = card(
     "Links im Bild ist links in der Anzeige. Oben ist hell, unten dunkel; wo sich alle drei Farben decken, wird die Spur weiß (neutral).",
     None,
 );
-pub static VECTORSCOPE: Card = card(
-    "Farbton als Richtung, Sättigung als Abstand zur Mitte.",
-    "Neutrales Grau liegt in der Mitte; ein Farbstich zieht die Wolke zur Seite.\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Schräge Linie** – die Hauttonlinie: Haut liegt meist nahe daran",
-    None,
-);
+pub static VECTORSCOPE: Card = Card {
+    short: "Zeigt, welche Farben im Bild stecken: Winkel = Farbton, Abstand von der Mitte = Sättigung.",
+    text: "Jeder Bildpunkt landet an einer Stelle im Kreis. Die Richtung sagt, welche Farbe er hat (oben Rot, rechts Blau, unten Cyan, links Gelb), der Abstand von der Mitte, wie kräftig sie ist. Je heller ein Fleck, desto mehr Pixel haben diese Farbe.\n• **Mitte** – neutrales Grau, Weiß und Schwarz; ein Farbstich schiebt die ganze Wolke zur Seite\n• **Ringe** – Sättigung in Prozent (die Zahlen unten links)\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Haut** – die Hauttonlinie: Haut aller Menschen liegt nahe daran; weicht sie ab, hat die Haut einen Stich\n• **×1 · ×2 · ×4** – vergrößert die Mitte, denn die meisten Fotos sind nur wenig gesättigt\n• **S · M · L** – Größe der Anzeige im Kopf; ein Doppelklick auf die Anzeige wählt die nächste\n\nÜber der Anzeige steht oben links Farbton und Sättigung an der Zeigerposition.",
+    example: None,
+    extra: Some(vectorscope_sketch),
+};
+
+/// Small sketch in the vectorscope card: the colour circle in the orientation of the scope, with the two readings.
+fn vectorscope_sketch(ui: &mut egui::Ui) {
+    let size = 128.0;
+    ui.add_space(6.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width().max(size), size), egui::Sense::hover());
+    let c = egui::pos2(rect.left() + size / 2.0 + 4.0, rect.center().y);
+    let r = size / 2.0 - 6.0;
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(c, Color32::from_gray(0x80));
+    let n = 72;
+    for i in 0..=n {
+        let a = i as f32 / n as f32 * std::f32::consts::TAU;
+        let h = crate::vectorscope::hue_deg(a.cos() * 0.5, a.sin() * 0.5);
+        mesh.colored_vertex(c + egui::vec2(a.cos(), -a.sin()) * r, Color32::from(egui::ecolor::Hsva::new(h / 360.0, 0.85, 0.8, 1.0)));
+    }
+    for i in 1..=n as u32 {
+        mesh.add_triangle(0, i, i + 1);
+    }
+    let p = ui.painter();
+    p.add(egui::Shape::mesh(mesh));
+    p.circle_stroke(c, r, egui::Stroke::new(1.0, Color32::from_gray(0x50)));
+    // saturation: an arrow from the centre outwards; hue: an arc along the rim
+    let a = (-30f32).to_radians();
+    let dir = egui::vec2(a.cos(), -a.sin());
+    let white = egui::Stroke::new(1.5, Color32::WHITE);
+    p.arrow(c, dir * (r - 4.0), white);
+    let arc: Vec<egui::Pos2> = (0..=20).map(|k| {
+        let t = (60.0 + k as f32 * 4.0).to_radians();
+        c + egui::vec2(t.cos(), -t.sin()) * (r + 3.0)
+    }).collect();
+    p.add(egui::Shape::line(arc, white));
+    let font = egui::FontId::proportional(10.5);
+    let x = c.x + r + 14.0;
+    p.text(egui::pos2(x, c.y - 24.0), egui::Align2::LEFT_CENTER, crate::tr("Winkel = Farbton"), font.clone(), lr::TEXT);
+    p.text(egui::pos2(x, c.y - 8.0), egui::Align2::LEFT_CENTER, crate::tr("Abstand = Sättigung"), font.clone(), lr::TEXT);
+    p.text(egui::pos2(x, c.y + 8.0), egui::Align2::LEFT_CENTER, crate::tr("Mitte = neutral"), font.clone(), lr::TEXT_DIM);
+    p.text(egui::pos2(x, c.y + 24.0), egui::Align2::LEFT_CENTER, crate::tr("Helligkeit = Anzahl Pixel"), font, lr::TEXT_DIM);
+}
 /// Edit sections without a card of their own: the operation of the header comes from the controls line.
 pub static EDIT_SECTION: Card = card(
     "Gruppe von Reglern zu einem Thema.",
@@ -285,6 +342,16 @@ pub static DUPLICATES: Card = card(
     None,
 );
 
+/// "Ordner ansehen" (⌘O): the "?" in the band (view_folder_band.rs). Says only what the code does: develop edits are
+/// saved as a sidecar next to the photo (`raw_app::save_to_sidecar`), ratings only with the switch, filters on stars,
+/// flags and labels work, the search finds file names only (the rows of a viewed folder have no camera, date or
+/// keywords), everything kept in the library comes only after adding.
+pub static VIEW_FOLDER: Card = card(
+    "Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.",
+    "### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.",
+    None,
+);
+
 /// Search field of the library: syntax, typed suggestions and the fields with all their names.
 pub static SEARCH: Card = Card {
     short: "Freie Wörter und Feldbegriffe, kombinierbar.",
@@ -316,7 +383,7 @@ pub static RELINK_FOLDER: Card = card(
 /// Export dialog: what "lossless" means for Foveon data (three levels).
 pub static EXPORT_LOSSLESS: Card = card(
     "„Verlustfrei“ heißt bei Foveon-Dateien drei verschiedene Dinge.",
-    "• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.",
+    "• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit, JPEG XL verlustfrei: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.",
     None,
 );
 
@@ -464,6 +531,9 @@ static NR_COLOR: Card = card("Stärke der Farbrausch-Unterdrückung, in fünf St
 pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
     Some(match label {
         "Intensität" => &INTENSITY,
+        "Druckauflösung" => &PRINT_RESOLUTION,
+        "Ausdruck schärfen" => &PRINT_SHARPEN,
+        "Farbraum der Seite" => &PRINT_COLOR,
         "Temperatur" if hint.contains("Kelvin") => &RAW_TEMPERATURE,
         "Tönung" if hint == "− grüner, + magenta" => &RAW_TINT,
         "Belichtung" if hint.contains("linear") => &RAW_EXPOSURE,
@@ -781,12 +851,19 @@ mod tests {
     }
 }
 
- pub static LOCAL_MASKS: Card=Card {short:"Lokale Korrekturen",text:"Art wählen und „Neue Maske“: Pinsel, Verlauf und Ellipse werden gleich im Bild gezogen. Die Liste zeigt alle Masken; die Regler darunter gelten für die gewählte.\n• **Addieren, abziehen, schneiden** – weitere Formen kombinieren\n• **Fluss** – baut Deckkraft über überlappende Tupfer auf\n• **Version 2** – begrenzt Kantenhalos\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · Esc Zeichnen beenden · ⌘Z rückgängig",example:None,extra:None};
+ pub static LOCAL_MASKS: Card=Card {short:"Masken",text:"Oben stehen alle Masken: das Auge schaltet eine aus, ⋯ benennt um, dupliziert, invertiert, verschiebt oder löscht. „+ Neue Maske ▾“ legt eine an: automatisch, als Form oder als Bereich.\n• **Teile** – eine Maske besteht aus Teilen: + hinzufügen, − abziehen, ∩ schneiden\n• **Werkzeug** – der gewählte Teil zeichnet im Bild: Pinsel malt, Verlauf und Ellipse an den Griffen ziehen, Farbbereich nimmt mit der Pipette Proben (⇧ dazu, ⌥ weg), Klick-Auswahl nimmt Klicks oder einen gezogenen Rahmen\n• **Kante** – Bitmap-Masken (Motiv, Personen, Klick-Auswahl) dehnen oder schrumpfen, ohne neu zu rechnen\n• **Tiefe** – wählt ganze Segmente nach ihrer Entfernung (Vorne, Mitte, Hinten); ein Klick ins Bild nimmt ein Segment dazu oder heraus\n• **Kante verfeinern** – gezeichnete Masken und Bereiche folgen in einem schmalen Band den Kanten im Bild\n• **Stärke** – Deckkraft der ganzen Maske\n• **Reihenfolge** – oben wird zuerst angewendet; Helligkeits- und Farbbereiche lesen den Stand davor\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · ⇧O Überlagerung (Rot → Maske → Bild auf Grau → Abdeckfolie → aus) · Esc Werkzeug beenden · ⌫ Maske löschen · ⌘Z rückgängig",example:None,extra:None};
 
 /// The split changes no stored edit or processing order.
 pub static FILM_AND_LOOK: Card = card(
     "Film simuliert Filmmaterial, Entwicklung und Papier. Ein Look gestaltet Farbe und Tonwerte.",
     "• **Film** – simuliert Filmmaterial, Entwicklung, Papier, Korn und Lichthof\n• **Look** – gestaltet Farbe und Tonwerte; Looks aus Profilpaketen haben einen Intensitätsregler\n• **Wie Kamera** – der zum Bildstil der Aufnahme passende Look (z. B. Monochrom + Ye); wird nur auf Klick angewandt, unbearbeitete Fotos starten neutral\n\nFilm und Look schließen sich aus: Ein gewählter Look schaltet den Film aus, „Film ausschalten“ bringt den gespeicherten Look zurück.",
+    None,
+);
+
+/// Series review (series_review.rs).
+pub static SERIES_REVIEW: Card = card(
+    "Fotos einer Serie vergleichen und das beste wählen.",
+    "• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück",
     None,
 );
 
@@ -893,3 +970,17 @@ pub fn notice_mark(ui: &mut egui::Ui, salt: &str, heading: &str, items: &[Notice
         ui.ctx().data_mut(|d| d.remove::<egui::Id>(open_id));
     }
 }
+
+/// Subject and people masks (bitmap masks from the system's image analysis).
+pub static SUBJECT_MASKS: Card = card(
+    "„Motiv“ und „Personen“ wählen mit der Bildanalyse des Systems aus, was im Foto vorne steht. Die Maske ist nur eine Auswahl: Pixel ändern erst die Regler darunter.",
+    "• **Motiv 1, 2 …** – mehrere erkannte Motive einzeln an- und abwählen\n• **Weiche Kante** – weicher Übergang am Rand der Auswahl\n• **+ Hinzufügen / − Abziehen → Pinsel** – vergessene Teile ergänzen, zu viel Ausgewähltes abziehen\n• **Überlagerung** – zeigt die Wirkung der Maske rot im Bild\n\nGrenzen: Haare, Fell, Glas, feine Zweige und Bilder ohne klares Hauptmotiv werden oft ungenau. Die Berechnung läuft auf dem Rechner, nichts verlässt ihn. Die Auswahl wird in der Bibliothek gespeichert; beim Einfügen auf andere Fotos wird sie dort neu berechnet.\n\nNur unter macOS (Motiv: ab macOS 14).",
+    None,
+);
+
+/// Removing objects (inpainting model LaMa).
+pub static REMOVE_OBJECTS: Card = card(
+    "„Stelle entfernen“ füllt eine angeklickte Stelle mit Inhalt, den ein Modell aus der Umgebung erfindet. Das ist keine Fotografie mehr, sondern eine Vermutung.",
+    "• **Gut** – Himmel, Wasser, Wiese, Wand, Muster\n• **Schlecht** – Gesichter, Schrift, Kanten von Gegenständen, große Flächen\n• **Größe** – Radius des nächsten Kreises\n\nDie Füllung wird einmal berechnet und in der Bibliothek gespeichert; Helligkeit und Farbe passen sich beim Entwickeln der Umgebung an. Für kleine Flecken auf echtem Bildinhalt ist „Heilen“ meist besser. Das Modell („Objekte entfernen“, Einstellungen → Module) rechnet auf dem Rechner, nichts verlässt ihn.",
+    None,
+);

@@ -16,7 +16,9 @@
 //!
 //! Third renewal ([`COLOR`], marker `cameraColorPreviewRevision`): the standard development of some cameras got an even
 //! saturation correction after the tone curve ([`raw::development::camera_saturation`]: Ricoh GR, GR II, GR III, GR IIIx,
-//! GR IV, Fujifilm X100). Only RAWs of these cameras with a stored developed preview are developed again.
+//! GR IV, Fujifilm X100). Only RAWs of these cameras with a stored developed preview are developed again. Revision 2
+//! (1.3.0): new hue table of the standard development for FinePix X100, X100V, Ricoh GR and GR III; after revision 1
+//! only these four.
 //!
 //! Classic stage ([`CLASSIC`], marker `classicPreviewRevision`): in 0.107.0 the processing of all older Foveon
 //! cameras (SD9, SD10, SD14, SD15, DP1, DP1s, DP1x, DP2, DP2s, DP2x) follows dcraw in most steps (sensor correction,
@@ -62,13 +64,18 @@ pub const CLASSIC: Stage = Stage { name: "classic", marker: "classicPreviewRevis
 /// Non-Sigma RAWs with an empty look whose old previews show the former automatic camera look. Raise the revision to
 /// repeat it.
 pub const LOOK: Stage = Stage { name: "camera look", marker: "cameraLookPreviewRevision", revision: 1, done_name: "look-refresh", selects: |g| g == Group::CameraLook };
-/// Non-Sigma RAWs of the cameras with a saturation correction of the standard development (see [`color_changed`]).
-/// Raise the revision when these factors change visibly.
-pub const COLOR: Stage = Stage { name: "camera color", marker: "cameraColorPreviewRevision", revision: 1, done_name: "color-refresh", selects: |g| g == Group::CameraLook };
+/// Non-Sigma RAWs of the cameras whose standard development changed (see [`color_changed`]).
+/// Raise the revision when these factors or tables change visibly, and name the cameras in [`color_changed`].
+pub const COLOR: Stage = Stage { name: "camera color", marker: "cameraColorPreviewRevision", revision: 2, done_name: "color-refresh", selects: |g| g == Group::CameraLook };
 /// Photos with an active film after the grain model and the spektrafilm corrections of 0.107.0.
 pub const FILM: Stage = Stage { name: "film grain", marker: "filmGrainPreviewRevision", revision: 1, done_name: "film-grain-refresh", selects: |g| g == Group::FilmGrain };
 
 static STARTED: AtomicBool = AtomicBool::new(false);
+/// the startup renewals are running (the learned-look renewal waits for them, they share the status counters)
+static MAIN_RUNNING: AtomicBool = AtomicBool::new(false);
+static LEARNED_RUNNING: AtomicBool = AtomicBool::new(false);
+/// revision of the learned looks handled last (see [`maybe_start_learned`])
+static LEARNED_SEEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(u64::MAX);
 static TOTAL: AtomicUsize = AtomicUsize::new(0);
 static DONE: AtomicUsize = AtomicUsize::new(0);
 static LOOK_STAGE: AtomicBool = AtomicBool::new(false);
@@ -121,9 +128,12 @@ pub struct Candidate {
     pub camera: String,
 }
 
-/// Did the standard development of this camera (library camera name) get a saturation correction?
-pub fn color_changed(camera: &str) -> bool {
-    raw::development::model_saturation(camera).is_some()
+/// Did the standard development of this camera (library camera name) change since revision `done` of [`COLOR`]?
+/// Revision 1: saturation correction ([`raw::development::model_saturation`]); revision 2 (1.3.0): new hue table of
+/// the standard development for FinePix X100, X100V, Ricoh GR and GR III ([`raw::development::camera_look`]).
+pub fn color_changed(camera: &str, done: u64) -> bool {
+    let m = camera.trim().to_ascii_uppercase();
+    (done < 1 && raw::development::model_saturation(camera).is_some()) || (done < 2 && matches!(m.as_str(), "FINEPIX X100" | "X100V" | "GR" | "RICOH GR" | "GR III" | "RICOH GR III"))
 }
 
 /// Does the development of this photo differ from before? (Merrill up to ISO 1600: reads a few KB of the header.)
@@ -189,9 +199,17 @@ pub fn maybe_start(lib: &crate::library_ui::LibraryView) {
     }
     let Some((cache, cands)) = lib.sigma_refresh_candidates() else { return };
     STARTED.store(true, Ordering::Relaxed);
+    MAIN_RUNNING.store(true, Ordering::Relaxed);
     std::thread::Builder::new()
         .name("sigma-refresh".into())
         .spawn(move || {
+            struct Done;
+            impl Drop for Done {
+                fn drop(&mut self) {
+                    MAIN_RUNNING.store(false, Ordering::Relaxed);
+                }
+            }
+            let _done = Done;
             library::platform::background_priority();
             pools::set_intent(pools::Intent::Idle);
             for stage in stages {
@@ -202,7 +220,8 @@ pub fn maybe_start(lib: &crate::library_ui::LibraryView) {
                     list.retain(|c| has_stored(&cache, c));
                 }
                 if stage.name == COLOR.name {
-                    list.retain(|c| color_changed(&c.camera) && has_stored(&cache, c));
+                    let done_revision = library::settings::value(COLOR.marker).as_u64().unwrap_or(0);
+                    list.retain(|c| color_changed(&c.camera, done_revision) && has_stored(&cache, c));
                 }
                 let every: &dyn Fn(&Candidate) -> bool = &|_| true;
                 let r = run_stage(stage, &cache, &list, if stage.name == COLOR.name { every } else { &affected }, true);
@@ -213,6 +232,79 @@ pub fn maybe_start(lib: &crate::library_ui::LibraryView) {
             }
         })
         .ok();
+}
+
+/// Every frame from the app: renew the stored developed previews of the camera and style whose learned look was
+/// switched, changed or reset ([`rawdev::learn::stale`]). Only unedited photos (empty look, no film) of that key show
+/// it; the picture style is read from the start of the file. Quiet like the other renewals, after them; started again
+/// whenever the learned looks change.
+pub fn maybe_start_learned(lib: &crate::library_ui::LibraryView) {
+    if cfg!(test) || MAIN_RUNNING.load(Ordering::Relaxed) || LEARNED_RUNNING.load(Ordering::Relaxed) || !STARTED.load(Ordering::Relaxed) {
+        return;
+    }
+    let generation = rawdev::learn::generation();
+    if LEARNED_SEEN.load(Ordering::Relaxed) == generation {
+        return;
+    }
+    // read once per generation, not in every frame while the library is still loading (the list is a file)
+    static STALE: Mutex<Option<(u64, Vec<String>, u64)>> = Mutex::new(None);
+    let (keys, revision) = {
+        let mut g = STALE.lock().unwrap_or_else(|e| e.into_inner());
+        match g.as_ref().filter(|s| s.0 == generation) {
+            Some(s) => (s.1.clone(), s.2),
+            None => {
+                let (k, r) = rawdev::learn::stale();
+                *g = Some((generation, k.clone(), r));
+                (k, r)
+            }
+        }
+    };
+    if keys.is_empty() {
+        LEARNED_SEEN.store(generation, Ordering::Relaxed);
+        return;
+    }
+    let Some((cache, cands)) = lib.sigma_refresh_candidates() else { return };
+    LEARNED_SEEN.store(generation, Ordering::Relaxed);
+    LEARNED_RUNNING.store(true, Ordering::Relaxed);
+    let cameras: HashSet<String> = keys.iter().filter_map(|k| k.split('/').next().map(str::to_string)).collect();
+    let started = std::thread::Builder::new()
+        .name("learned-look-refresh".into())
+        .spawn(move || {
+            // not running any more also after a panic (else the renewal of learned looks stopped until the next start)
+            struct Done;
+            impl Drop for Done {
+                fn drop(&mut self) {
+                    LEARNED_RUNNING.store(false, Ordering::Relaxed);
+                }
+            }
+            let _done = Done;
+            library::platform::background_priority();
+            pools::set_intent(pools::Intent::Idle);
+            let list: Vec<Candidate> = cands.into_iter().filter(|c| c.group == Group::CameraLook && maybe_camera(&c.camera, &cameras) && has_stored(&cache, &c)).collect();
+            let stage = Stage { name: LOOK.name, marker: "", revision, done_name: "learned-refresh", selects: |g| g == Group::CameraLook };
+            let keys2 = keys.clone();
+            let affected = move |c: &Candidate| {
+                let (settings, _) = crate::sidecar::load(&c.path);
+                settings.raw.look.is_empty()
+                    && !settings.film.is_active()
+                    && raw::picture_style::read(&c.path).filter(raw::learn_look::learnable_style).is_some_and(|b| keys2.contains(&format!("{}/{}", b.camera_short(), raw::learn_look::style_key(&b))))
+            };
+            let r = run_stage(&stage, &cache, &list, &affected, true);
+            crate::log(&format!("learned look previews: {r:?}"));
+            if r.unreachable == 0 {
+                rawdev::learn::mark_fresh(&keys, revision);
+            }
+            let _ = std::fs::remove_file(done_file(&stage));
+        });
+    if started.is_err() {
+        LEARNED_RUNNING.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Could the library camera name (model, e.g. "RICOH GR III", "FinePix X100") belong to one of these short camera
+/// names (`gr3`, `x100`)? The library does not store the maker, so the usual makers are tried.
+fn maybe_camera(model: &str, cameras: &HashSet<String>) -> bool {
+    ["", "RICOH", "PENTAX", "FUJIFILM", "Canon", "SONY", "NIKON", "LEICA", "OLYMPUS", "Panasonic"].iter().any(|m| cameras.contains(&raw::picture_style::camera_short(m, model)))
 }
 
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -266,7 +358,13 @@ pub fn run_stage(stage: &Stage, cache: &preview::Cache, cands: &[Candidate], is_
             DONE.fetch_add(1, Ordering::Relaxed);
             if write && remember {
                 use std::io::Write;
-                if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(done_file(stage)) {
+                // the folder may not exist yet (fresh data folder): without it the progress was lost silently and every
+                // start checked all candidates again
+                let path = done_file(stage);
+                if let Some(dir) = path.parent() {
+                    let _ = std::fs::create_dir_all(dir);
+                }
+                if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
                     let _ = writeln!(f, "{}", c.file);
                 }
             }
@@ -427,14 +525,21 @@ mod tests {
         preview::remove_developed(b, &[512]);
     }
 
-    /// The color renewal picks only the cameras with a saturation correction (library camera names).
+    /// The color renewal picks only the cameras whose standard development changed (library camera names): from
+    /// scratch the saturation cameras and the new hue tables, after revision 1 only X100, X100V, GR and GR III.
     #[test]
     fn color_renewal_selects_by_camera() {
-        for cam in ["GR", "GR II", "RICOH GR III", "RICOH GR IIIx", "RICOH GR IV", "RICOH GR IV                     ", "FinePix X100"] {
-            assert!(color_changed(cam), "{cam}");
+        for cam in ["GR", "GR II", "RICOH GR III", "RICOH GR IIIx", "RICOH GR IV", "RICOH GR IV                     ", "FinePix X100", "X100V"] {
+            assert!(color_changed(cam, 0), "{cam}");
         }
-        for cam in ["GR DIGITAL 4", "X100F", "X100V", "X-T30", "DSC-RX100M3", "PENTAX Optio 550", "", "SIGMA DP2 Merrill"] {
-            assert!(!color_changed(cam), "{cam}");
+        for cam in ["GR DIGITAL 4", "X100F", "X-T30", "DSC-RX100M3", "PENTAX Optio 550", "", "SIGMA DP2 Merrill"] {
+            assert!(!color_changed(cam, 0), "{cam}");
+        }
+        for cam in ["FinePix X100", "X100V", "GR", "RICOH GR III"] {
+            assert!(color_changed(cam, 1) && !color_changed(cam, 2), "{cam}");
+        }
+        for cam in ["GR II", "RICOH GR IIIx", "RICOH GR IV", "X100F", "X-T30"] {
+            assert!(!color_changed(cam, 1), "{cam}");
         }
         assert!((COLOR.selects)(Group::CameraLook) && !(COLOR.selects)(Group::Quattro));
     }

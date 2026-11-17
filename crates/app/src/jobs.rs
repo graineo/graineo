@@ -1314,11 +1314,22 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 return;
             }
             let t = std::time::Instant::now();
-            let ok = doc.full_base().is_ok() && live() && doc.full_stage(&settings).is_ok();
+            let probe = crate::perf_mode::Probe::start();
+            let px = doc.full_size[0] * doc.full_size[1];
+            let gpu = pools::gpu_allowed() && pools::gpu_fits_memory(px);
+            // the raw stage of these settings: on the Apple path it depends on the white balance (`full_base` would
+            // render the engine a second time with the white balance as shot and replace the cached stage)
+            let ok = doc.full_base_for(&settings).is_ok() && live() && doc.full_stage(&settings).is_ok();
             if !live() {
                 // image changed meanwhile: do not keep half a gigabyte for an image no longer shown
                 doc.release_memory();
                 return;
+            }
+            // graineo's own demosaicing only: the Apple engine's times would distort the measured speed of this Mac
+            if ok && !doc.finished && doc.apple.is_none() {
+                crate::perf_mode::simulate_slow(probe.seconds());
+                let xtrans = matches!(doc.info.sensor, raw::Sensor::XTrans);
+                crate::perf_mode::record(crate::perf_mode::Work::RawFull { xtrans }, px as f64 / 1e6, probe.seconds(), gpu, None, probe.foreign_load());
             }
             crate::log(&format!("full resolution ahead {index}: {} in {:.0?}", if ok { "ready" } else { "failed" }, t.elapsed()));
         }
@@ -1481,9 +1492,29 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 }
                 return;
             }
-            crate::work_step::stage_here(if pools::gpu_allowed() { crate::tr("Rauschminderung (Grafikkarte)") } else { crate::tr("Rauschminderung (Prozessor)") });
-            let result = spp_pool().install(|| develop::diskcache::working_key(&path, &mode, true, &cancel));
+            let gpu = pools::gpu_allowed();
+            crate::work_step::stage_here(if gpu { crate::tr("Rauschminderung (Grafikkarte)") } else { crate::tr("Rauschminderung (Prozessor)") });
+            // computing time without the wait at the gate, for the operating mode's self-measurement (`perf_mode`)
+            let probe = crate::perf_mode::Probe::start();
+            let (result, hit) = spp_pool().install(|| (develop::diskcache::working_key(&path, &mode, true, &cancel), develop::diskcache::last_was_hit()));
+            if !hit && result.is_ok() {
+                crate::perf_mode::simulate_slow(probe.seconds());
+            }
             drop(gate);
+            // black and white bases are cheap and not comparable; cancelled ones end with an error
+            if let (Ok(counts), false, false) = (&result, mode.mono, cancel.load(Ordering::SeqCst)) {
+                let mp = (counts.width * counts.height) as f64 / 1e6;
+                let skip = if hit {
+                    Some("cache hit")
+                } else if mode.prepared {
+                    // Quattro: the preparation is shared with opening (running in parallel or done before), so the
+                    // time of this job varies between 0.7 and 2.7 s on the reference computer – not comparable
+                    Some("Quattro, preparation shared with opening")
+                } else {
+                    None
+                };
+                crate::perf_mode::record(crate::perf_mode::Work::SigmaBase { quattro: mode.prepared }, mp, probe.seconds(), gpu, skip, probe.foreign_load());
+            }
             crate::work_step::stage_here(crate::tr("Vorschau erzeugen"));
             match result {
                 Ok(counts) => {
@@ -1760,32 +1791,16 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     return;
                 }
                 let source = path.clone();
-                // Apple Photos: original (from iCloud if necessary) as a working copy, name as in Apple Photos (IMG_1234)
-                let apple_name = library::apple_photos::in_photos_library(&path).then(|| db.as_ref().and_then(|d| d.file_of(image)).and_then(crate::apple_photos_ui::original_name)).flatten();
-                let path = if library::apple_photos::in_photos_library(&path) {
-                    match crate::apple_photos_ui::original(&path) {
-                        Ok(p) => p,
-                        Err(e) => {
-                            errors += 1;
-                            send(JobResult::ExportProgress { done: i + 1, total, message: crate::trf!("Fehler bei {stem}: {reason}", stem = apple_name.clone().unwrap_or_default(), reason = e), failed: Some(source.clone()) });
-                            continue;
-                        }
+                let OutputSource { path, stem, settings: s } = match output_source(&path, settings, image, db.as_ref(), as_print, allow_missing_profiles) {
+                    Ok(o) => o,
+                    Err(message) => {
+                        errors += 1;
+                        send(JobResult::ExportProgress { done: i + 1, total, message, failed: Some(source.clone()) });
+                        continue;
                     }
-                } else {
-                    path
                 };
-                let stem = apple_name.as_deref().map(std::path::Path::new).unwrap_or(&path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-                let suffix = if settings.monochrome { "_mono" } else { "" };
+                let suffix = if s.monochrome { "_mono" } else { "" };
                 let out = dir.join(format!("{stem}{suffix}{}.{}", format.name_suffix(), format.extension()));
-                let mut s = Settings { view: View::Developed, ..settings };
-                // Darkroom border only when exporting "as print"
-                if !as_print {
-                    s = crate::darkroom_border::without_border(s);
-                }
-                let s = match rawdev::film_profiles::for_export(&s, allow_missing_profiles) {
-                    Ok(s) => s,
-                    Err(e) => { errors += 1; send(JobResult::ExportProgress { done: i+1, total, message: e, failed: Some(source.clone()) }); continue; }
-                };
                 // Existing files do not belong to the export job: in particular, for JPEG/TIFF in the original folder
                 // the destination can be the original itself. Instead of overwriting, the new file
                 // gets a free name ("Name-2.jpg").
@@ -1816,7 +1831,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 // Output color space only applies to finished images (JPEG/TIFF); sRGB takes the existing, unchanged path
                 let color_space = if format.is_finished_image() { color_space } else { graineo_color::Space::Srgb };
                 let result = if crate::image_kind::of(&path) != crate::image_kind::ImageKind::Foveon {
-                    rawdev::RawDoc::open(&path, &|| true)
+                    rawdev::RawDoc::open_for(&path, &s, &|| true)
                         .and_then(|d| d.ok_or_else(|| "abgebrochen".to_string()))
                         .and_then(|mut doc| {
                             // oriented as on opening (also rotated by hand in Lightroom): crop and rotation refer to it
@@ -1836,7 +1851,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 };
                 // Metadata (shooting data of the original, copyright; personal fields as chosen) without recompressing
                 let (meta_report, meta_note) = match (&result, format) {
-                    (Ok(_), Format::Jpeg { .. } | Format::Tiff16 | Format::Png16) => write_export_metadata(&out, &path, image, &meta, &options, decoder_shot.take()),
+                    (Ok(_), Format::Jpeg { .. } | Format::Jxl { .. } | Format::Tiff16 | Format::Png16) => write_export_metadata(&out, &path, image, &meta, &options, decoder_shot.take()),
                     _ => (String::new(), String::new()),
                 };
                 if crate::env::var_os("GRAINEO_LOG").is_some() && !meta_report.is_empty() {
@@ -1850,6 +1865,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     },
                     (Ok(_), Format::Jpeg { .. }, Some(_)) => crate::tr(" · ohne HDR-Gain-Map (Option aus)"),
                     (Ok(_), Format::Tiff16, Some(_)) => crate::tr(" · TIFF ohne HDR-Gain-Map"),
+                    (Ok(_), Format::Jxl { .. }, Some(_)) => crate::tr(" · JPEG XL ohne HDR-Gain-Map"),
                     _ => "",
                 };
                 // Move the finished side file to the destination name. If the name has been taken in the meantime,
@@ -1893,6 +1909,47 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
     }
 }
 
+/// A photo ready for output (export, print): the local original, its file stem and the settings for the full development.
+pub(crate) struct OutputSource {
+    pub path: PathBuf,
+    pub stem: String,
+    pub settings: Settings,
+}
+
+/// First step of every output (export, print): the Apple Photos original (from iCloud if necessary) as a working copy
+/// with its name there (IMG_1234), the view "developed", the darkroom border only with `with_border` ("as print"),
+/// film profiles checked. Err: message for the user.
+pub(crate) fn output_source(path: &std::path::Path, settings: Settings, image: i64, db: Option<&library::db::Db>, with_border: bool, allow_missing_profiles: bool) -> Result<OutputSource, String> {
+    let apple = library::apple_photos::in_photos_library(path);
+    let apple_name = apple.then(|| db.and_then(|d| d.file_of(image)).and_then(crate::apple_photos_ui::original_name)).flatten();
+    let path = if apple {
+        crate::apple_photos_ui::original(path).map_err(|e| crate::trf!("Fehler bei {stem}: {reason}", stem = apple_name.clone().unwrap_or_default(), reason = e))?
+    } else {
+        path.to_path_buf()
+    };
+    let stem = apple_name.as_deref().map(std::path::Path::new).unwrap_or(&path).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut s = Settings { view: View::Developed, ..settings };
+    if !with_border {
+        s = crate::darkroom_border::without_border(s);
+    }
+    let settings = rawdev::film_profiles::for_export(&s, allow_missing_profiles)?;
+    Ok(OutputSource { path, stem, settings })
+}
+
+/// The developed photo of `src` in full resolution, encoded in `space` (crop, rotation, border, output size of its
+/// settings applied): the rendering of the export, shared with printing. Other cameras through `rawdev`, Sigma
+/// through a session.
+pub(crate) fn render_for_output(src: &OutputSource, engine: Engine, space: graineo_color::Space) -> Result<develop::Rgb16, String> {
+    if crate::image_kind::of(&src.path) != crate::image_kind::ImageKind::Foveon {
+        let mut doc = rawdev::RawDoc::open_for(&src.path, &src.settings, &|| true)?.ok_or_else(|| "abgebrochen".to_string())?;
+        rawdev::lightroom::apply_orientation(&mut doc);
+        rawdev::export::render_color(&doc, &src.settings, space)
+    } else {
+        let mut sess = Session::open_for(&src.path, &src.settings).map_err(|e| e.to_string())?;
+        develop::export::color::render(&mut sess, &src.settings, engine, space).map(|(img, _)| img).map_err(|e| e.to_string())
+    }
+}
+
 /// Renames the finished side file `finished` to the destination name without overwriting anything. If the name
 /// is taken in the meantime, the next free one is used ("Name-2.jpg" …). Returns: the final path.
 fn publish_side_file(finished: &std::path::Path, desired: &std::path::Path) -> Result<PathBuf, String> {
@@ -1909,7 +1966,7 @@ fn publish_side_file(finished: &std::path::Path, desired: &std::path::Path) -> R
 
 /// Destination path that does not exist yet (not even a broken link): the requested one, otherwise "Name-2", "Name-3" …
 /// Nothing is overwritten or deleted.
-fn free_target_name(out: &std::path::Path) -> Result<PathBuf, String> {
+pub(crate) fn free_target_name(out: &std::path::Path) -> Result<PathBuf, String> {
     let is_free = |p: &std::path::Path| match std::fs::symlink_metadata(p) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(true),
         Err(e) => Err(crate::trf!("Zieldatei nicht prüfbar: {e}", e = e)),
@@ -2465,6 +2522,46 @@ mod export_safety_tests {
                 }
             }
         }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// JPEG XL through the whole export path: lossy and lossless, colour spaces, metadata levels; the original stays.
+    #[test]
+    fn export_jxl_with_metadata_and_colour_spaces() {
+        use develop::export::Metadata;
+        let root = tmp("export-jxl");
+        let source = root.join("camera.jpg");
+        let data: Vec<u16> = (0..96 * 64).flat_map(|i| [(i * 13 % 65536) as u16, 40000, (i * 7 % 65536) as u16]).collect();
+        develop::export::write_jpeg(&develop::Rgb16 { width: 96, height: 64, data }, &source, 95).unwrap();
+        let shot = library::export_meta::Shot { make: Some("FUJIFILM".into()), model: Some("X-T5".into()), date: Some("2025:06:01 10:20:30".into()), f_number: Some(1.4), ..Default::default() };
+        library::export_meta::write_own(&source, &library::export_meta::OwnFields { fields: library::imageio::ExportFields { shot: Some(shot), ..Default::default() }, width: 96, height: 64 }).unwrap();
+        let before = std::fs::read(&source).unwrap();
+        let meta = crate::sidecar::Meta { rating: 4, ..Default::default() };
+        let cases = [
+            ("lossy-srgb", Format::JXL_DEFAULT, graineo_color::Space::Srgb, Metadata::All),
+            ("lossy-adobe", Format::JXL_DEFAULT, graineo_color::Space::AdobeRgb, Metadata::Shooting),
+            ("lossless-p3", Format::Jxl { quality: 92, lossless: true, bits16: true }, graineo_color::Space::DisplayP3, Metadata::Shooting),
+            ("lossless8-none", Format::Jxl { quality: 92, lossless: true, bits16: false }, graineo_color::Space::Srgb, Metadata::None),
+        ];
+        for (name, format, color_space, metadata) in cases {
+            let dir = root.join(name);
+            let options = develop::export::Options { metadata, ..Default::default() };
+            run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, meta.clone())], format, engine: Engine::Own, dir: dir.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space, options }, &|_| {});
+            let out = dir.join("camera.jxl");
+            let bytes = std::fs::read(&out).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(library::export_meta::is_jxl(&bytes), "{name}");
+            assert_eq!(library::export_meta::jxl_size(&bytes), Some((96, 64)), "{name}");
+            let has = |kind: &[u8]| bytes.windows(4).any(|w| w == kind);
+            assert_eq!(has(b"Exif"), metadata != Metadata::None, "{name}");
+            let r = |p: &str| library::imageio::read_metadata(&out, p);
+            if metadata != Metadata::None && cfg!(target_os = "macos") {
+                assert_eq!(r("tiff:Model").as_deref(), Some("X-T5"), "{name}");
+                assert_eq!(r("xmp:Rating").as_deref(), (metadata == Metadata::All).then_some("4"), "{name}");
+            }
+            let hidden: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name()).filter(|n| n.to_string_lossy().starts_with('.')).collect();
+            assert!(hidden.is_empty(), "{name}: {hidden:?}");
+        }
+        assert_eq!(std::fs::read(&source).unwrap(), before);
         std::fs::remove_dir_all(root).unwrap();
     }
 

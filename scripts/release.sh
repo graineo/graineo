@@ -21,6 +21,8 @@ cd "$(dirname "$0")/.."
 source scripts/app-identity.sh
 export PATH=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$PATH
 export MACOSX_DEPLOYMENT_TARGET=12.0
+# packages for publication leave out the maintainer's personal camera looks (crates/raw/build.rs)
+export GRAINEO_PUBLIC_BUILD=1
 VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 T=${CARGO_TARGET_DIR:-target}
 # Source paths of this machine (panic places of all libraries, debug info) contain the user name: map the home

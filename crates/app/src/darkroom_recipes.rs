@@ -431,7 +431,7 @@ mod tests {
         let mut time = 0.0;
         for language in crate::menu::i18n::Language::ALL {
             let _guard = crate::menu::i18n::locale::TestLanguage::set(language);
-            for tool in [ToolTab::Info, ToolTab::Edit, ToolTab::FilmLook, ToolTab::Crop, ToolTab::Masks, ToolTab::Presets, ToolTab::Sensor, ToolTab::Versions] {
+            for tool in [ToolTab::Info, ToolTab::Edit, ToolTab::FilmLook, ToolTab::Crop, ToolTab::Masks, ToolTab::Retouch, ToolTab::Presets, ToolTab::Sensor, ToolTab::Versions] {
                 app.tool_tab = tool;
                 for _ in 0..2 {
                     time += 0.5;

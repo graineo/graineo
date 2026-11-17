@@ -1,24 +1,117 @@
 //! Resolution-independent local adjustments; CPU reference, no file access.
 //! Linear RGB with sRGB/Rec.709 primaries.
 mod correction;
+pub mod curve;
 mod filters;
 pub mod gpu;
-pub use correction::{apply, apply_view, margin, Adjustments};
+pub mod raster;
+pub mod refine;
+pub use raster::{DepthClass, DepthData, Instances, PersonPart, RasterData, RasterSource};
+pub use correction::{apply, apply_view, margin, Adjustments, CURVE_POINTS_MAX};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 pub type Result<T> = std::result::Result<T, String>;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, from = "StoredDocument")]
 pub struct Document {
     pub version: u32,
     pub layers: Vec<Layer>,
+}
+
+/// A document as stored, repaired on reading (see [`Document::repair`]).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredDocument {
+    version: u32,
+    layers: Vec<Layer>,
+}
+
+impl From<StoredDocument> for Document {
+    fn from(s: StoredDocument) -> Self {
+        let mut d = Document { version: s.version, layers: s.layers };
+        d.repair();
+        d
+    }
+}
+
+impl Document {
+    /// Repairs what a short-lived development state wrote and the checks now refuse, so that one leaf never blocks
+    /// the whole document (rendering and every save): a depth leaf with a value range (instead of depth classes)
+    /// loses the range and its segment map, which is then computed again.
+    pub fn repair(&mut self) {
+        for l in &mut self.layers {
+            l.mask.visit_mut(&mut |m| {
+                if let Mask::Raster { raster, source, range, .. } = m {
+                    if source.wide() && range.is_some() {
+                        *range = None;
+                        raster.clear();
+                    }
+                }
+            });
+        }
+    }
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Layer {
     pub mask: Mask,
     pub adjustments: Adjustments,
+    /// own name of the mask (`None`: named after its kind); needs document version 4
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// switched off: kept, but not applied; needs document version 4 when `false`
+    #[serde(default = "on", skip_serializing_if = "is_on")]
+    pub enabled: bool,
+    /// opacity of the whole mask, 0…1 (weight × amount); needs document version 4 when below 1
+    #[serde(default = "full", skip_serializing_if = "is_full")]
+    pub amount: f32,
+    /// "Kante verfeinern", 0…1: the edge of the mask follows the edges of the picture in a narrow band (see
+    /// [`refine`]); needs document version 4 when above 0
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub refine: f32,
+}
+fn on() -> bool {
+    true
+}
+fn is_on(v: &bool) -> bool {
+    *v
+}
+fn full() -> f32 {
+    1.0
+}
+fn is_full(v: &f32) -> bool {
+    *v == 1.0
+}
+/// Longest own name of a mask (characters).
+pub const NAME_MAX: usize = 64;
+impl Layer {
+    /// A switched-on layer at full strength without an own name (the only kind before document version 4).
+    pub fn new(mask: Mask, adjustments: Adjustments) -> Self {
+        Self { mask, adjustments, name: None, enabled: true, amount: 1.0, refine: 0.0 }
+    }
+    /// Does the layer use a field of document version 4 (own name, switched off, strength below 100 %, refined edge)?
+    pub fn uses_layer_fields(&self) -> bool {
+        self.name.is_some() || !self.enabled || self.amount != 1.0 || self.refine != 0.0
+    }
+    /// Does the refined edge act? Only for masks without a raster of an image analysis: the guided filter is not used
+    /// behind such masks (patent review), and the own edge snap measured no gain (see [`refine`]).
+    pub fn refines(&self) -> bool {
+        self.refine > 0.0 && !self.mask.has_raster()
+    }
+    /// The weights of the layer's mask for the picture `image` it sees (a crop `view` of the whole), with the refined
+    /// edge when it acts, without the strength.
+    pub fn weights(&self, image: Image<'_>, view: View) -> Result<Vec<f32>> {
+        let mut w = rasterize_view(image, &self.mask, view)?;
+        if self.refines() {
+            refine::refine(&mut w, image.data, image.width, image.height, view.short(), self.refine, false);
+        }
+        Ok(w)
+    }
+    /// Does the layer change the image (switched on, strength above 0, a slider away from neutral)?
+    pub fn active(&self) -> bool {
+        self.enabled && self.amount > 0.0 && self.adjustments != Adjustments::default()
+    }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -56,6 +149,14 @@ pub enum Mask {
         radius: f32,
         feather: f32,
     },
+    /// Colour range by perceived colour (needs document version 4): Oklab distance of a pixel to the nearest of the
+    /// `samples` (linear RGB, at most [`SAMPLES_MAX`]; none = weight 0, waiting for the first sample), lightness
+    /// counted half; full weight up to `radius`, then the soft edge `feather` (Oklab units).
+    ColorRange {
+        samples: Vec<[f32; 3]>,
+        radius: f32,
+        feather: f32,
+    },
     Combine {
         operation: Operation,
         left: Box<Mask>,
@@ -64,11 +165,146 @@ pub enum Mask {
     Invert {
         mask: Box<Mask>,
     },
+    /// Weight map stored elsewhere (see [`raster`]); needs document version 3.
+    Raster {
+        /// content name of the raster (`sha256:<hex>`), empty while pending (computed again from `source`)
+        raster: String,
+        /// how the raster was made and can be made again
+        source: RasterSource,
+        /// soft edge in units of the short image side (0 = as stored), applied when rendering
+        feather: f32,
+        /// optional window over the raster value `[low, high, feather]`; `None` = the value itself
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        range: Option<[f32; 3]>,
+        /// edge shift in units of the short image side (−[`EDGE_MAX`] … +[`EDGE_MAX`]): above 0 the mask grows
+        /// (grey-value dilation), below 0 it shrinks (erosion), applied when rendering before the soft edge;
+        /// needs document version 4 when not 0
+        #[serde(default, skip_serializing_if = "is_zero")]
+        edge: f32,
+    },
 }
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
+}
+/// Most colour samples of a colour range.
+pub const SAMPLES_MAX: usize = 8;
+/// Linear sRGB/Rec.709 to Oklab (Ottosson 2020, Oklab, public domain); cube root keeps the sign (negative and HDR
+/// values stay finite).
+pub fn oklab(c: [f32; 3]) -> [f32; 3] {
+    let l = 0.4122214708 * c[0] + 0.5363325363 * c[1] + 0.0514459929 * c[2];
+    let m = 0.2119034982 * c[0] + 0.6806995451 * c[1] + 0.1073969566 * c[2];
+    let s = 0.0883024619 * c[0] + 0.2817188376 * c[1] + 0.6299787005 * c[2];
+    let (l, m, s) = (l.cbrt(), m.cbrt(), s.cbrt());
+    [
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    ]
+}
+/// Distance of two Oklab colours for colour ranges: lightness counted half (a colour in shade stays the colour).
+pub fn color_distance(a: [f32; 3], b: [f32; 3]) -> f32 {
+    (0.5 * (a[0] - b[0])).hypot(a[1] - b[1]).hypot(a[2] - b[2])
+}
+/// Largest edge shift of a raster leaf (share of the short image side).
+pub const EDGE_MAX: f32 = 0.05;
+/// Highest document version this program reads. 3: raster leaves (same filters as 2). 4: name, on/off and strength
+/// per layer (includes 3).
+pub const VERSION_MAX: u32 = 4;
 impl Document {
+    /// Does any layer contain a raster leaf?
+    pub fn has_raster(&self) -> bool {
+        self.layers.iter().any(|l| l.mask.has_raster())
+    }
+    /// Does any layer use a field of version 4 (name, off, strength)?
+    pub fn uses_layer_fields(&self) -> bool {
+        self.layers.iter().any(Layer::uses_layer_fields)
+    }
+    /// Does any raster leaf use a rule added with version 4 (depth, scene part)?
+    pub fn uses_new_sources(&self) -> bool {
+        let mut found = false;
+        for l in &self.layers {
+            l.mask.visit(&mut |m| found |= matches!(m, Mask::Raster { source, .. } if source.needs_version_4()));
+        }
+        found
+    }
+    /// Can the layers get a name, be switched off or weakened? Not in version 1: version 4 would change its filters
+    /// (the user switches it to version 2 first).
+    pub fn allows_layer_fields(&self) -> bool {
+        self.version >= 2
+    }
+    /// Does any layer use something of version 4: a layer field (name, off, strength), a slider of version 4 or mask
+    /// content of version 4 (see [`Mask::uses_version_4`]; also the raster rules of version 4: depth, scene part,
+    /// person part)?
+    pub fn uses_version_4(&self) -> bool {
+        self.layers.iter().any(|l| l.uses_layer_fields() || l.adjustments.uses_version_4() || l.mask.uses_version_4())
+    }
+    /// Version after an edit: 4 exactly when something of version 4 is used, otherwise 3 exactly when a raster leaf is
+    /// present, otherwise 2 (version 1 stays 1 without rasters, so that older documents keep their filters; like a
+    /// raster leaf, mask content of version 4 (also depth and scene parts) switches it, layer fields and sliders of
+    /// version 4 stay locked there). Older programs refuse versions they do not know instead of misreading them, so
+    /// the lowest sufficient one is written.
+    pub fn settle_version(&mut self) {
+        let content = self.uses_new_sources() || self.layers.iter().any(|l| l.mask.uses_version_4());
+        let fields = self.layers.iter().any(|l| l.uses_layer_fields() || l.adjustments.uses_version_4());
+        if content || (self.version >= 2 && fields) {
+            self.version = 4;
+        } else if self.has_raster() {
+            self.version = 3;
+        } else if self.version >= 3 {
+            self.version = 2;
+        }
+    }
+    /// The document for another photo (paste, sync, several photos at once): a raster belongs to one image, so
+    /// leaves whose rule works on any photo (subject, people) become pending and are computed again there; leaves
+    /// without such a rule (click points, painted) are left out. Returns the document (`None`: nothing left) and the
+    /// number of leaves left out.
+    pub fn for_other_photo(&self) -> (Option<Self>, usize) {
+        fn prune(m: &Mask, dropped: &mut usize) -> Option<Mask> {
+            match m {
+                Mask::Raster { source, .. } if !source.transferable() => {
+                    *dropped += 1;
+                    None
+                }
+                Mask::Raster { source, feather, range, edge, .. } => {
+                    // the classes of a depth mask work on any photo, the clicked segments belong to this one
+                    let source = match source {
+                        RasterSource::Depth { model, classes, .. } => RasterSource::Depth { model: model.clone(), classes: classes.clone(), toggled: Vec::new() },
+                        s => s.clone(),
+                    };
+                    Some(Mask::Raster { raster: String::new(), source, feather: *feather, range: *range, edge: *edge })
+                }
+                Mask::Combine { operation, left, right } => match (prune(left, dropped), prune(right, dropped)) {
+                    (Some(l), Some(r)) => Some(Mask::Combine { operation: *operation, left: Box::new(l), right: Box::new(r) }),
+                    // without its base the rest of a subtraction or intersection would act on the whole photo
+                    (None, _) if *operation != Operation::Add => None,
+                    (Some(l), None) => Some(l),
+                    (None, r) => r,
+                },
+                Mask::Invert { mask } => prune(mask, dropped).map(|m| Mask::Invert { mask: Box::new(m) }),
+                m => Some(m.clone()),
+            }
+        }
+        let mut dropped = 0;
+        let layers: Vec<Layer> = self.layers.iter().filter_map(|l| prune(&l.mask, &mut dropped).map(|mask| Layer { mask, ..l.clone() })).collect();
+        if layers.is_empty() {
+            return (None, dropped);
+        }
+        let mut d = Self { version: self.version, layers };
+        d.settle_version();
+        (Some(d), dropped)
+    }
     pub fn validate(&self) -> Result<()> {
-        if ![1, 2].contains(&self.version) {
+        if !(1..=VERSION_MAX).contains(&self.version) {
             return Err("Unbekannte Maskenversion".into());
+        }
+        if self.version < 3 && self.has_raster() {
+            return Err("Bitmap-Masken brauchen Maskenversion 3".into());
+        }
+        if self.version < 4 && self.uses_version_4() {
+            return Err("Name, Aus, Stärke, Kante, Farbproben und neue Regler einer Maske brauchen Maskenversion 4".into());
+        }
+        if self.version < 4 && self.uses_new_sources() {
+            return Err("Tiefen- und Himmelsmasken brauchen Maskenversion 4".into());
         }
         if self.layers.len() > 64 {
             return Err("Mehr als 64 Ebenen".into());
@@ -76,6 +312,15 @@ impl Document {
         for layer in &self.layers {
             layer.mask.validate()?;
             layer.adjustments.validate()?;
+            if !unit(layer.amount) {
+                return Err("Stärke einer Maske außerhalb 0…1".into());
+            }
+            if !unit(layer.refine) {
+                return Err("„Kante verfeinern“ außerhalb 0…1".into());
+            }
+            if layer.name.as_ref().is_some_and(|n| n.chars().count() > NAME_MAX || n.chars().any(char::is_control)) {
+                return Err("Ungültiger Maskenname".into());
+            }
         }
         Ok(())
     }
@@ -103,6 +348,47 @@ fn point(p: &[f32; 2]) -> bool {
     p.iter().all(|&v| v.is_finite() && v.abs() <= 16.0)
 }
 impl Mask {
+    /// Visit this node and all nodes below it.
+    pub fn visit(&self, f: &mut impl FnMut(&Mask)) {
+        f(self);
+        match self {
+            Self::Combine { left, right, .. } => {
+                left.visit(f);
+                right.visit(f);
+            }
+            Self::Invert { mask } => mask.visit(f),
+            _ => (),
+        }
+    }
+    /// Visit this node and all nodes below it, mutably.
+    pub fn visit_mut(&mut self, f: &mut impl FnMut(&mut Mask)) {
+        f(self);
+        match self {
+            Self::Combine { left, right, .. } => {
+                left.visit_mut(f);
+                right.visit_mut(f);
+            }
+            Self::Invert { mask } => mask.visit_mut(f),
+            _ => (),
+        }
+    }
+    /// Does the mask use content of document version 4 (an edge shift of a raster leaf …)?
+    pub fn uses_version_4(&self) -> bool {
+        let mut found = false;
+        self.visit(&mut |m| {
+            found |= match m {
+                Self::Raster { edge, source, .. } => *edge != 0.0 || matches!(source, RasterSource::Click { rect: Some(_), .. }) || source.needs_version_4(),
+                Self::ColorRange { .. } => true,
+                _ => false,
+            }
+        });
+        found
+    }
+    pub fn has_raster(&self) -> bool {
+        let mut found = false;
+        self.visit(&mut |m| found |= matches!(m, Self::Raster { .. }));
+        found
+    }
     pub fn validate(&self) -> Result<()> {
         let mut nodes = 0;
         self.check(0, &mut nodes)
@@ -168,6 +454,14 @@ impl Mask {
                     && *feather >= 0.0
                     && *feather <= 1e6
             }
+            Self::ColorRange { samples, radius, feather } => {
+                samples.len() <= SAMPLES_MAX
+                    && samples.iter().flatten().all(|v| v.is_finite() && v.abs() <= 1e6)
+                    && radius.is_finite()
+                    && (0.0..=2.0).contains(radius)
+                    && feather.is_finite()
+                    && (0.0..=2.0).contains(feather)
+            }
             Self::Combine { left, right, .. } => {
                 left.check(depth + 1, nodes)?;
                 right.check(depth + 1, nodes)?;
@@ -176,6 +470,17 @@ impl Mask {
             Self::Invert { mask } => {
                 mask.check(depth + 1, nodes)?;
                 true
+            }
+            Self::Raster { raster: id, source, feather, range, edge } => {
+                raster::valid_id(id)
+                    && source.valid()
+                    // a depth mask selects whole segments, never a window over the depth
+                    && !(source.wide() && range.is_some())
+                    && feather.is_finite()
+                    && (0.0..=0.25).contains(feather)
+                    && range.is_none_or(|r| r.iter().all(|v| unit(*v)) && r[0] <= r[1])
+                    && edge.is_finite()
+                    && edge.abs() <= EDGE_MAX
             }
         };
         if valid {
@@ -243,7 +548,7 @@ fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
 }
-fn falloff(d: f32, r: f32, feather: f32) -> f32 {
+pub(crate) fn falloff(d: f32, r: f32, feather: f32) -> f32 {
     if d <= r {
         1.0
     } else if feather == 0.0 {
@@ -263,6 +568,10 @@ pub(crate) struct Prepared<'a> {
     scale: [f32; 2],
     tiles: Vec<Vec<usize>>,
     grid: usize,
+    /// raster leaf: prepared weights (`None`: missing or pending → weight 0)
+    raster: Option<std::sync::Arc<raster::Sampler>>,
+    /// colour range: the samples in Oklab
+    labs: Vec<[f32; 3]>,
 }
 impl<'a> Prepared<'a> {
     pub(crate) fn new(mask: &'a Mask, w: usize, h: usize) -> Result<Self> {
@@ -275,8 +584,17 @@ impl<'a> Prepared<'a> {
             scale,
             tiles: Vec::new(),
             grid: 1,
+            raster: None,
+            labs: Vec::new(),
         };
         match mask {
+            Mask::ColorRange { samples, .. } => result.labs = samples.iter().map(|c| oklab(*c)).collect(),
+            Mask::Raster { raster: id, feather, edge, source, .. } => {
+                result.raster = match source {
+                    RasterSource::Depth { classes, toggled, .. } => raster::Sampler::new_segments(id, classes, toggled, *feather, *edge, [w, h]),
+                    _ => raster::Sampler::new(id, *feather, *edge, [w, h]),
+                };
+            }
             Mask::Brush { points, radius, .. } => {
                 let pts: Vec<_> = points
                     .iter()
@@ -417,6 +735,14 @@ impl<'a> Prepared<'a> {
                     .hypot(rgb[2] - reference[2]);
                 falloff(d, *radius, *feather)
             }
+            Mask::ColorRange { radius, feather, .. } => {
+                if self.labs.is_empty() {
+                    return 0.0;
+                }
+                let q = oklab([rgb[0], rgb[1], rgb[2]]);
+                let d = self.labs.iter().map(|s| color_distance(q, *s)).fold(f32::INFINITY, f32::min);
+                falloff(d, *radius, *feather)
+            }
             Mask::Combine { operation, .. } => {
                 let a = self.children[0].sample(p, rgb);
                 let b = self.children[1].sample(p, rgb);
@@ -427,6 +753,7 @@ impl<'a> Prepared<'a> {
                 }
             }
             Mask::Invert { .. } => 1.0 - self.children[0].sample(p, rgb),
+            Mask::Raster { range, .. } => self.raster.as_ref().map_or(0.0, |r| raster::window(r.sample(p), range)),
         }
     }
 }

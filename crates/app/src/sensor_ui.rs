@@ -35,7 +35,14 @@ impl App {
                 }
             }
         }
+        // developed by the Apple engine because graineo cannot decode the file (Nikon HE): there is no sensor data to
+        // read, say why instead of waiting
+        let blocked = self.current.as_ref().and_then(|c| c.loaded.previews.foreign.as_ref()).and_then(|d| d.apple.as_ref()).and_then(|a| a.graineo_blocked.clone());
+        let path = if blocked.is_some() { None } else { path };
         self.sensor_raw.for_stage(path.as_deref(), ctx);
+        if let Some(why) = blocked.filter(|_| self.sensor_raw.error.is_none()) {
+            self.sensor_raw.error = Some(crate::menu::i18n::tr_msg(&why).into_owned());
+        }
         if let Some(factor) = ctx.data_mut(|d| d.remove_temp::<f32>(egui::Id::new("sensor-zoom-request"))) {
             let target = self.one_to_one.max(1.0) * factor;
             let now = self.now();
@@ -173,6 +180,8 @@ impl App {
     /// Fixed rows throughout – switching something never moves the controls.
     pub(crate) fn sensor_raw_sidebar(&mut self, ui: &mut egui::Ui) {
         let ready = self.sensor_raw.ready();
+        // pipeline graineo | Apple | compare (macOS only, apple_raw.rs)
+        self.apple_section(ui);
         if let Some(e) = self.sensor_raw.error.clone() {
             ui.label(egui::RichText::new(crate::trf!("Sensordaten nicht lesbar: {e}", e = e)).small().color(lr::TEXT_DIM));
         }

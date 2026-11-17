@@ -40,9 +40,18 @@ pub enum Cmd {
     Import,
     Lightroom,
     Export,
+    /// ⌘P: the print room with the selection (`print_room.rs`)
+    Print,
     ContactPrint,
     LensRoom,
+    /// window "Kamera-Looks" (`camera_looks_ui.rs`)
+    CameraLooks,
     VirtualCopy,
+    /// series and stacks (grid): review (N), group the selection (⌘G), dissolve (⇧⌘G), expand/collapse all (⇧S)
+    StackReview,
+    StackGroup,
+    StackDissolve,
+    StackToggleAll,
     DeleteRejected,
     /// ⌘⌫: the selected photos to the trash (with confirmation), also in a collection
     TrashSelected,
@@ -83,6 +92,8 @@ pub enum Cmd {
     ShowLogs,
     ReportBug,
     PerfReport,
+    /// Help → Support graineo …: opens the support page in the browser (`support.rs`; hidden while no address is set)
+    Support,
     About,
     CheckUpdates,
     TabInfo,
@@ -161,9 +172,11 @@ fn code(k: egui::Key) -> Option<Code> {
         K::D => Code::KeyD,
         K::E => Code::KeyE,
         K::F => Code::KeyF,
+        K::G => Code::KeyG,
         K::I => Code::KeyI,
         K::N => Code::KeyN,
         K::O => Code::KeyO,
+        K::P => Code::KeyP,
         K::Q => Code::KeyQ,
         K::R => Code::KeyR,
         K::U => Code::KeyU,
@@ -331,8 +344,10 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
         Some("export"),
         Some("square.and.arrow.up"),
     ),
+    (Cmd::Print, Text::MenuPrint, Some("print"), Some("printer")),
     (Cmd::ContactPrint, Text::MenuContactPrint, None, Some("film")),
     (Cmd::LensRoom, Text::MenuLensRoom, None, Some("camera.aperture")),
+    (Cmd::CameraLooks, Text::MenuCameraLooks, None, Some("camera.filters")),
     (
         Cmd::ShowInFinder,
         Text::MenuShowInFinder,
@@ -448,6 +463,10 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
         Some("virtual_copy"),
         Some("plus.square.on.square"),
     ),
+    (Cmd::StackReview, Text::MenuStackReview, Some("stack_review"), Some("square.stack")),
+    (Cmd::StackGroup, Text::MenuStackGroup, Some("stack_group"), Some("square.stack.3d.down.right")),
+    (Cmd::StackDissolve, Text::MenuStackDissolve, Some("stack_dissolve"), Some("square.stack.3d.up.slash")),
+    (Cmd::StackToggleAll, Text::MenuStackToggleAll, Some("stack_toggle_all"), Some("rectangle.expand.vertical")),
     (Cmd::Pick, Text::MenuPick, Some("pick"), Some("checkmark.circle.fill")),
     (
         Cmd::Reject,
@@ -549,6 +568,7 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
     (Cmd::ShowLogs, Text::MenuShowLogs, None, Some("doc.text.magnifyingglass")),
     (Cmd::ReportBug, Text::MenuReportBug, None, Some("exclamationmark.bubble")),
     (Cmd::PerfReport, Text::MenuPerfReport, None, Some("speedometer")),
+    (Cmd::Support, Text::MenuSupport, None, Some("heart")),
     (Cmd::NewCollection, Text::MenuNewCollection, Some("new_collection"), Some("rectangle.stack.badge.plus")),
     (Cmd::NewSmartCollection, Text::MenuNewSmartCollection, None, Some("gearshape.2")),
     (Cmd::NewCollectionSet, Text::MenuNewCollectionSet, None, Some("folder.badge.plus")),
@@ -753,6 +773,7 @@ impl AppMenu {
             Box::new(item(Cmd::OpenFolder)),
             Box::new(PredefinedMenuItem::separator()),
             Box::new(item(Cmd::Export)),
+            Box::new(item(Cmd::Print)),
             Box::new(item(Cmd::ContactPrint)),
             Box::new(PredefinedMenuItem::separator()),
             Box::new(item(Cmd::ShowInFinder)),
@@ -829,7 +850,13 @@ impl AppMenu {
                 &PredefinedMenuItem::separator(),
                 &item(Cmd::VirtualCopy),
                 &PredefinedMenuItem::separator(),
+                &item(Cmd::StackReview),
+                &item(Cmd::StackGroup),
+                &item(Cmd::StackDissolve),
+                &item(Cmd::StackToggleAll),
+                &PredefinedMenuItem::separator(),
                 &item(Cmd::LensRoom),
+                &item(Cmd::CameraLooks),
                 &PredefinedMenuItem::separator(),
                 &item(Cmd::Pick),
                 &item(Cmd::Reject),
@@ -933,6 +960,10 @@ impl AppMenu {
             &[&item(Cmd::Shortcuts), &PredefinedMenuItem::separator(), &item(Cmd::ReportBug), &item(Cmd::PerfReport), &item(Cmd::ShowLogs)],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;
+        // quiet entry, only once a support address is set (support.rs)
+        if crate::support::enabled() {
+            let _ = help.append_items(&[&PredefinedMenuItem::separator(), &item(Cmd::Support)]);
+        }
         if !mac {
             let _ = help.append_items(&[&PredefinedMenuItem::separator(), &item(Cmd::CheckUpdates), &item(Cmd::About)]);
         }
@@ -1221,6 +1252,11 @@ mod localization_tests {
             (key(egui::Key::I, egui::Modifiers::COMMAND), vec![Cmd::TabInfo]),
             (key(egui::Key::I, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), vec![Cmd::Import]),
             (key(egui::Key::Quote, egui::Modifiers::COMMAND), vec![Cmd::VirtualCopy]),
+            // series and stacks: ⌘G bundles, ⇧⌘G dissolves (menu Foto); N and ⇧S stay keys of the grid
+            (key(egui::Key::G, egui::Modifiers::COMMAND), vec![Cmd::StackGroup]),
+            (key(egui::Key::G, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), vec![Cmd::StackDissolve]),
+            (key(egui::Key::N, egui::Modifiers::NONE), vec![]),
+            (key(egui::Key::S, egui::Modifiers::SHIFT), vec![]),
             (key(egui::Key::F, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), vec![Cmd::ShowInFinder]),
             (key(egui::Key::Z, egui::Modifiers::NONE), vec![]),
             // an extra ⌥ does not run the shorter shortcut: ⌥⌘R is not ⌘R (turn left)

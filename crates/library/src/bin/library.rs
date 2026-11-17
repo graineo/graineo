@@ -62,6 +62,11 @@ fn main() {
             let n = library::exif::backfill(&db, 100_000, &std::sync::atomic::AtomicBool::new(false)).unwrap_or_else(|e| error(&e));
             println!("shooting data: {n} files in {:?}", t.elapsed());
         }
+        "places" => {
+            let t = Instant::now();
+            let n = library::places::backfill(&db, 1_000_000, &std::sync::atomic::AtomicBool::new(false), &|_| {}).unwrap_or_else(|e| error(&e));
+            println!("place names: {n} files in {:?}", t.elapsed());
+        }
         "text" => {
             let t = Instant::now();
             let n = library::textmeta::backfill(&db, 1_000_000, &std::sync::atomic::AtomicBool::new(false)).unwrap_or_else(|e| error(&e));
@@ -326,6 +331,7 @@ fn main() {
                 purpose: "Test",
                 derived: None,
                 info: None,
+                class: library::module::LicenseClass::Open,
             };
             let was = args.get(2).map(String::as_str).unwrap_or("status");
             let id = args.get(3).map(String::as_str).unwrap_or("text-encoder");

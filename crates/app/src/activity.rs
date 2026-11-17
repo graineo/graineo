@@ -34,6 +34,8 @@ pub enum Rank {
     Backup,
     Settings,
     Faces,
+    /// detecting series (signatures, grouping)
+    Series,
     Previews,
 }
 
@@ -48,7 +50,7 @@ impl Rank {
 
     /// Harmless background work that is not shown in the bar (only in the list) unless it takes very long.
     pub fn quiet(self) -> bool {
-        matches!(self, Rank::Backup | Rank::Settings | Rank::Faces | Rank::Previews)
+        matches!(self, Rank::Backup | Rank::Settings | Rank::Faces | Rank::Series | Rank::Previews)
     }
 }
 
@@ -140,6 +142,10 @@ impl App {
         if let Some((done, total)) = crate::sigma_refresh::progress() {
             let n = crate::library_ui::thousands(total - done);
             v.push(Task::new(Rank::Previews, if crate::sigma_refresh::film_stage_running() { crate::trf!("Film-Vorschauen erneuern: noch {n}", n = n) } else if crate::sigma_refresh::look_stage_running() { crate::trf!("Kamera-Look-Vorschauen erneuern: noch {n}", n = n) } else if crate::sigma_refresh::color_stage_running() { crate::trf!("Farb-Vorschauen erneuern: noch {n}", n = n) } else { crate::trf!("Foveon-Vorschauen erneuern: noch {n}", n = n) }));
+        }
+        if let Some((busy, text)) = crate::remote_access::activity() {
+            // on: a calm line; computing for a device: with progress like other work
+            v.push(Task::new(if busy { Rank::Started } else { Rank::Library }, text));
         }
         if crate::delete::running() {
             v.push(Task::new(Rank::Delete, crate::delete::status_text()));
@@ -494,7 +500,7 @@ mod tests {
         let mut v = vec![Task::new(Rank::Faces, "f".into()), Task::new(Rank::Visible, "v".into()), Task::new(Rank::Delete, "d".into())];
         v.sort_by_key(|t| t.rank);
         assert_eq!(v.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["d", "v", "f"]);
-        let all = [Rank::Import, Rank::Export, Rank::Move, Rank::Delete, Rank::ContactPrint, Rank::Started, Rank::Photo, Rank::Visible, Rank::Library, Rank::Backup, Rank::Settings, Rank::Faces, Rank::Previews];
+        let all = [Rank::Import, Rank::Export, Rank::Move, Rank::Delete, Rank::ContactPrint, Rank::Started, Rank::Photo, Rank::Visible, Rank::Library, Rank::Backup, Rank::Settings, Rank::Faces, Rank::Series, Rank::Previews];
         assert!(all.windows(2).all(|w| w[0].tier() <= w[1].tier()));
     }
 

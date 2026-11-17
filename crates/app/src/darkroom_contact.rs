@@ -356,6 +356,7 @@ impl App {
                 child.label(egui::RichText::new(crate::trf!("RECHNET {done}/{total}", done = done, total = total)).color(lr::TEXT_DIM));
             }
             let mut export = false;
+            let mut print = false;
             let mut zoom = self.darkroom.contact.zoom.clamp(1.0, 4.0);
             let zoom_controls = |ui: &mut egui::Ui, zoom: &mut f32| {
                 if ui.add_enabled(*zoom > 1.001, egui::Button::new(crate::tr("EINPASSEN")).frame(false)).clicked() {
@@ -374,6 +375,12 @@ impl App {
                 if print_on {
                     if ui.add_enabled(export_ready, egui::Button::new(crate::tr("EXPORTIEREN …")).frame(false)).clicked() {
                         export = true;
+                    }
+                    ui.add_space(8.0);
+                    let r = ui.add(egui::Button::new(crate::tr("DRUCKEN …")).frame(false));
+                    lr::hover_tip(ui, &r, "Im Druckraum in voller Auflösung drucken (Filmstreifen-Vorlage)");
+                    if r.clicked() {
+                        print = true;
                     }
                 } else {
                     zoom_controls(ui, &mut zoom);
@@ -401,6 +408,11 @@ impl App {
             self.darkroom.contact.zoom = zoom;
             if export {
                 self.darkroom_print_export(ctx);
+            }
+            if print {
+                let film = self.entries[index].settings.film.clone();
+                self.open_print_room(Some(film), Some(print::template::FILM_STRIP_TEMPLATE));
+                return;
             }
             if print_on {
                 let viewport = Rect::from_min_max(Pos2::new(rect.left() + margin, rect.top() + 58.0), Pos2::new(rect.right() - margin, rect.bottom() - margin));

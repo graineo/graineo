@@ -13,7 +13,7 @@
 #
 # Export as in the app: Sigma with "best quality" (Sigma base, camera defaults: --baseline --spp),
 # other RAWs through the same export path (rawdev::export) with default values.
-# GRAINEO_TIMING_EXPORT_ONLY=1 measures only the exports.
+# GRAINEO_TIMING_EXPORT_ONLY=1 measures only the exports, GRAINEO_TIMING_NO_EXPORT=1 leaves them out.
 #
 # The real library is never touched (own data folder, no XMP, no sync, no Apple Photos).
 # License: GPL-3.0-only.
@@ -59,6 +59,7 @@ grep -v '^#' "$CASES" | while IFS=$'\t' read -r name path; do
         env_app "$d" "$file" "$q" 2>&1 </dev/null | python3 -I "$HERE/stamp.py" > "$OUT/logs/$name.app.$i.log"
         rm -rf "$d"
     done
+    [ -n "${GRAINEO_TIMING_NO_EXPORT:-}" ] && continue
     note_load "export $name"
     for i in $(seq 0 "$N"); do
         d=$(mktemp -d "$OUT/data.XXXX")

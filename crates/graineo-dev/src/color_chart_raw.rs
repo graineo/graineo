@@ -154,7 +154,7 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
     // `-kurve-y` the same curve on the luminance only (all channels scaled alike)
     let ws_xyz = color::rec2020_to_xyz_d65();
     let cam_ws = color::mul(&color::xyz_d50_to(&ws_xyz), &col.camera_to_xyz_d50);
-    let gain = (doc.base_ev + s.exposure as f32).exp2();
+    let gain = (doc.base_ev_for(&s) + s.exposure as f32).exp2();
     let m_app = color::mul(&cam_ws, &color::diag(scale_wb)).map(|r| r.map(|v| v * gain));
     let ws_srgb = color::mul(&color::inv(&color::srgb_to_xyz_d65()).context("sRGB")?, &ws_xyz);
     let lum = ws_xyz[1];

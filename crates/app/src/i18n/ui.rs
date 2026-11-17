@@ -634,11 +634,19 @@ pub fn audit_image(ctx: &eframe::egui::Context) {
 /// Templates with placeholders from the dictionary match too: `{}`/`{name}` stand for arbitrary text.
 /// Without a matching entry the text stays unchanged; results are cached.
 pub fn tr_msg(de: &str) -> std::borrow::Cow<'_, str> {
+    // English developer texts of the RAW layer inside a message: their German key first, then translated as usual
+    if de.contains(raw::NIKON_HE) {
+        return std::borrow::Cow::Owned(tr_msg(&de.replace(raw::NIKON_HE, NIKON_HE_KEY)).into_owned());
+    }
     match friendly(de) {
         std::borrow::Cow::Borrowed(_) => tr_msg_depth(de, 0),
         std::borrow::Cow::Owned(s) => std::borrow::Cow::Owned(tr_msg_depth(&s, 0).into_owned()),
     }
 }
+
+/// German key (in `locales/*-ui.tsv`) of [`raw::NIKON_HE`], the English text of the RAW layer for Nikon's High
+/// Efficiency compression.
+pub const NIKON_HE_KEY: &str = "Nikon High Efficiency (HE/HE*): diese NEF-Kompression wird noch nicht dekodiert";
 
 /// Technical error texts of SQLite and the operating system (English, with error numbers) and the plain phrase
 /// shown instead: (technical text, German, English).
@@ -975,5 +983,21 @@ mod tests_msg {
         assert_eq!(tr_msg("Prüfsumme von models/clip.bin stimmt nicht – Datei verworfen"), "Checksum mismatch for models/clip.bin – file discarded");
         let _de = TestLanguage::set(Language::De);
         assert_eq!(tr_msg("Original nicht lesbar: kein Dateiname"), "Original nicht lesbar: kein Dateiname");
+    }
+
+    /// The RAW layer's text for Nikon High Efficiency is English (public crate); the UI shows it in its language,
+    /// German included.
+    #[test]
+    fn nikon_high_efficiency_text_is_shown_in_the_ui_language() {
+        let unsupported = raw::Error::Unsupported(raw::NIKON_HE.into()).to_string();
+        {
+            let _de = TestLanguage::set(Language::De);
+            assert_eq!(tr_msg(raw::NIKON_HE), NIKON_HE_KEY);
+            assert!(tr_msg(&unsupported).ends_with(NIKON_HE_KEY), "{}", tr_msg(&unsupported));
+        }
+        let _fr = TestLanguage::set(Language::Fr);
+        let fr = tr_msg(raw::NIKON_HE).into_owned();
+        assert!(fr.contains("compression NEF"), "{fr}");
+        assert!(!tr_msg(&unsupported).contains("nicht"), "{}", tr_msg(&unsupported));
     }
 }

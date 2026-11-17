@@ -234,9 +234,9 @@ struct Work {
     started: std::time::Instant,
 }
 
-const SECTIONS: [&str; 10] = ["Allgemein", "Oberfläche", "Bibliothek", "Entwickeln", "Export", "Objektive", "Suche", "Module", "Speicher", "Looks"];
+const SECTIONS: [&str; 11] = ["Allgemein", "Oberfläche", "Bibliothek", "Entwickeln", "Export", "Objektive", "Suche", "Module", "Speicher", "Looks", "Browser"];
 /// Icon per section (number in [`symbol`])
-const SYMBOL_NR: [usize; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 2];
+const SYMBOL_NR: [usize; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 2, 9];
 
 /// UI sizes (scales everything evenly: font, spacing, icons).
 const SCALES: [(f32, &str); 3] = [(0.9, "Klein"), (1.0, "Normal"), (1.15, "Groß")];
@@ -360,6 +360,12 @@ fn symbol(p: &egui::Painter, r: egui::Rect, i: usize, c: Color32) {
                 p.rect_stroke(egui::Rect::from_center_size(m + egui::vec2(dx * w * 0.5, dy * w * 0.5), egui::vec2(w * 0.8, w * 0.8)), 0.0, s, egui::StrokeKind::Middle);
             }
         }
+        9 => {
+            // Tablet
+            let q = egui::Rect::from_center_size(m, egui::vec2(w * 1.5, w * 2.0));
+            p.rect_stroke(q, 3.0, s, egui::StrokeKind::Middle);
+            p.circle_filled(egui::pos2(m.x, q.bottom() - 4.0), 1.4, c);
+        }
         _ => {
             // Disk
             let q = egui::Rect::from_center_size(m, egui::vec2(w * 1.6, w * 1.8));
@@ -467,6 +473,7 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                     6 => ai(ui, ctx),
                     7 => module(ui, ctx),
                     9 => crate::film_profiles_ui::settings(ui),
+                    10 => crate::remote_access::settings_page(ui),
                     _ => storage_section(ui),
                 })
             }));
@@ -478,7 +485,7 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
 const NAME_WIDTH: f32 = 290.0;
 
 /// Group: capitals heading and box.
-fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(8.0);
     let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM);
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), g.size().y + 4.0), egui::Sense::hover());
@@ -520,13 +527,13 @@ fn row_wide(ui: &mut egui::Ui, name: &str, right: impl FnOnce(&mut egui::Ui)) {
 }
 
 /// Separator between rows of a group.
-fn separator(ui: &mut egui::Ui) {
+pub(crate) fn separator(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 5.0), egui::Sense::hover());
     ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
 }
 
 /// Toggle (on/off) in Mac style. Returns: toggled.
-fn toggle(ui: &mut egui::Ui, an: &mut bool) -> bool {
+pub(crate) fn toggle(ui: &mut egui::Ui, an: &mut bool) -> bool {
     crate::lr::switch(ui, an)
 }
 
@@ -961,6 +968,64 @@ fn library(ui: &mut egui::Ui) {
         show_work(ui, "einlesen");
         show_blocked(ui, &["einlesen"], false);
     });
+    // series and stacks (library_series.rs, series_job.rs): detection, collapsing, what ⇧X does in the review
+    group(ui, crate::tr("Serien und Stapel"), |ui| {
+        row(ui, crate::tr("Serien automatisch erkennen"), Some(crate::tr("Fotos derselben Kamera, kurz nacheinander und mit gleichem Motiv, leise im Hintergrund.")), |ui| {
+            let mut on = crate::series_job::enabled();
+            if toggle(ui, &mut on) {
+                library::settings::set("seriesDetect", serde_json::json!(on));
+                if on {
+                    crate::series_job::poke();
+                } else {
+                    crate::series_job::cancel();
+                }
+            }
+        });
+        separator(ui);
+        row(ui, crate::tr("Serien zuklappen"), None, |ui| {
+            let now = library::settings::value("stackCollapse").as_str().unwrap_or("reviewed").to_string();
+            let name = |k: &str| match k {
+                "always" => crate::tr("immer"),
+                "never" => crate::tr("nie"),
+                _ => crate::tr("nach der Sichtung"),
+            };
+            egui::ComboBox::from_id_salt("prefs-serien-zuklappen").selected_text(name(&now)).width(170.0).show_ui(ui, |ui| {
+                for k in ["reviewed", "always", "never"] {
+                    if ui.selectable_label(now == k, name(k)).clicked() && now != k {
+                        library::settings::set("stackCollapse", serde_json::json!(k));
+                        let mode = k.to_string();
+                        std::thread::spawn(move || {
+                            if let Ok(db) = library::db::Db::standard() {
+                                if let Err(e) = library::series::apply_collapse_setting(&db, &mode) {
+                                    crate::log(&format!("stackCollapse: {e}"));
+                                }
+                            }
+                            crate::series_job::changed();
+                        });
+                    }
+                }
+            });
+        });
+        separator(ui);
+        row(ui, crate::tr("⇧X beim Sichten"), Some(crate::tr("Was mit den übrigen Fotos einer Serie geschieht, wenn das beste gewählt ist. Gelöscht wird nie.")), |ui| {
+            let now = library::settings::value("stackRest").as_str().unwrap_or("reject").to_string();
+            let name = |k: &str| match k {
+                "lower" => crate::tr("auf 0 Sterne (außer 4–5)"),
+                "none" => crate::tr("nichts"),
+                _ => crate::tr("ablehnen"),
+            };
+            egui::ComboBox::from_id_salt("prefs-serien-rest").selected_text(name(&now)).width(170.0).show_ui(ui, |ui| {
+                for k in ["reject", "lower", "none"] {
+                    if ui.selectable_label(now == k, name(k)).clicked() {
+                        library::settings::set("stackRest", serde_json::json!(k));
+                    }
+                }
+            });
+        });
+        if !cfg!(target_os = "macos") {
+            ui.label(egui::RichText::new(crate::tr("Hinweise zu Gesichtern und Augen gibt es nur unter macOS.")).small().color(lr::TEXT_DIM));
+        }
+    });
     group(ui, crate::tr("Sicherung"), |ui| {
         row(ui, crate::tr("Ziel"), None, |ui| match &z {
             Some(z) => {
@@ -1251,8 +1316,27 @@ fn develop_section(ui: &mut egui::Ui) {
             });
         });
     });
-    // Everything on the processor, to feel the difference (speed, fan)
-    group(ui, crate::tr("Rechnen"), |ui| {
+    // Operating mode for slower computers (`perf_mode`), everything on the processor, timing log and report
+    group(ui, crate::tr("Leistung"), |ui| {
+        row(ui, crate::tr("Betriebsart"), Some(crate::tr("Sparsam wartet auf einem Foto etwas länger, bevor die genaue Ansicht gerechnet wird, rechnet nichts im Voraus und hält weniger Fotos im Speicher. Das Ergebnis bleibt gleich: Zoom, Rauschregler und Export rechnen sofort genau. Automatisch wählt nach den gemessenen Rechenzeiten dieses Rechners und rechnet bei Akku, Stromsparmodus, Wärme oder knappem Speicher vorübergehend sparsam")), |ui| {
+            let mut c = crate::perf_mode::choice();
+            egui::ComboBox::from_id_salt("prefs-perf-mode").selected_text(c.name()).width(150.0).show_ui(ui, |ui| {
+                for k in crate::perf_mode::Choice::ALL {
+                    if ui.selectable_value(&mut c, k, k.name()).changed() {
+                        crate::perf_mode::set_choice(k);
+                    }
+                }
+            });
+        });
+        let st = crate::perf_mode::status();
+        let why = st.cause.text();
+        row(ui, crate::tr("Rechnet jetzt"), Some(why.as_str()), |ui| {
+            if !st.factors.is_empty() && ui.button(crate::tr("Neu messen")).clicked() {
+                crate::perf_mode::reset_measurements();
+            }
+            value(ui, st.tier.name(), if st.tier == crate::perf_mode::Tier::Exact { Signal::Green } else { Signal::Yellow });
+        });
+        separator(ui);
         row(ui, crate::tr("Grafikkarte verwenden"), Some(crate::tr("Aus: alles rechnet auf dem Prozessor (Rauschminderung, Film, Masken, andere RAW-Formate). Langsamer, der Lüfter läuft eher an; wirkt ab dem nächsten Rechnen")), |ui| {
             let mut an = gpu_setting();
             if toggle(ui, &mut an) {
@@ -1313,6 +1397,17 @@ fn develop_section(ui: &mut egui::Ui) {
                 library::settings::set("lightroomJpegEdits", json!(an));
             }
         });
+        if cfg!(target_os = "macos") {
+            separator(ui);
+            // the decoder version of the automatic fallback (Nikon High Efficiency): see rawdev::apple
+            row(ui, crate::tr("Apple-Version für Nikon HE"), Some(crate::tr("Nikon „Hohe Effizienz“ kann graineo noch nicht dekodieren; dann dekodiert macOS. „Bis RAW 8“ ist schneller und entrauscht nicht zusätzlich, „Neueste“ nimmt RAW 9, wo macOS es anbietet (3- bis 7-mal langsamer). Gilt für Fotos ohne festgehaltene Version")), |ui| {
+                let key = rawdev::apple::FALLBACK_SETTING;
+                let mut newest = library::settings::value(key).as_str() == Some("newest");
+                if lr::segmented(ui, &mut newest, &[(false, "Bis RAW 8"), (true, "Neueste")]) {
+                    library::settings::set(key, json!(if newest { "newest" } else { "8" }));
+                }
+            });
+        }
     });
     group(ui, crate::tr("Personen"), |ui| {
         // where graineo computes the detection itself (no Apple Vision), say so honestly
@@ -1339,7 +1434,7 @@ fn export(ui: &mut egui::Ui) {
     group(ui, crate::tr("Vorgaben für den Export-Dialog"), |ui| {
         row(ui, crate::tr("Format"), None, |ui| {
             let mut f = e["format"].as_str().unwrap_or("jpeg").to_string();
-            if lr::segmented(ui, &mut f, &[("jpeg".to_string(), "JPEG"), ("tiff".to_string(), "TIFF 16 Bit"), ("dng".to_string(), "DNG (X3F)")]) {
+            if lr::segmented(ui, &mut f, &[("jpeg".to_string(), "JPEG"), ("jxl".to_string(), "JPEG XL"), ("tiff".to_string(), "TIFF 16 Bit"), ("dng".to_string(), "DNG (X3F)")]) {
                 e["format"] = json!(f);
             }
         });
@@ -1471,9 +1566,76 @@ fn ai(ui: &mut egui::Ui, ctx: &egui::Context) {
 
 /// Module whose removal is to be confirmed (ID, bytes).
 static REMOVE: Mutex<Option<(&'static str, u64)>> = Mutex::new(None);
+/// Non-commercial module whose download waits for the confirmation (ID, box ticked).
+static CONFIRM_NC: Mutex<Option<(&'static str, bool)>> = Mutex::new(None);
+
+/// Confirmation before loading a module that may only be used non-commercially: licence, its core in one sentence,
+/// link, and a box the user must tick. The confirmation is stored with date, model, revision and graineo version.
+fn non_commercial_dialog(ctx: &egui::Context) {
+    let Some((id, mut ticked)) = *CONFIRM_NC.lock().unwrap() else { return };
+    let Some(d) = library::module::ALL.iter().copied().find(|x| x.id == id) else { return };
+    let Some(t) = library::module::non_commercial(d) else { return };
+    // the button follows the box of the frame before (the box is drawn inside the dialog)
+    let was = ticked;
+    let a = crate::dialog::show(
+        ctx,
+        "modul-nicht-kommerziell",
+        &crate::trf!("„{name}“ laden?", name = short_model_name(d)),
+        crate::dialog::WIDTH,
+        |ui| {
+            crate::dialog::warning(ui, crate::tr("Nur für nicht-kommerzielle Nutzung"));
+            crate::dialog::text(ui, &crate::trf!("Lizenz: {l}. {s}", l = t.name, s = crate::tr(t.summary)));
+            ui.hyperlink_to(crate::tr("Lizenztext lesen"), t.url);
+            crate::dialog::hint(ui, &crate::trf!("Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.", s = format!("huggingface.co/{}", d.repo)));
+            ui.add_space(4.0);
+            ui.checkbox(&mut ticked, crate::tr("Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell"));
+        },
+        crate::dialog::Buttons::confirm(crate::tr("Laden"), was),
+    );
+    match a {
+        crate::dialog::Answer::Primary if was => {
+            *CONFIRM_NC.lock().unwrap() = None;
+            match library::module::confirm_non_commercial(d, env!("CARGO_PKG_VERSION")) {
+                Ok(()) => install_module(ctx, id),
+                Err(e) => crate::log(&format!("non-commercial confirmation not stored: {e}")),
+            }
+        }
+        crate::dialog::Answer::Cancel => *CONFIRM_NC.lock().unwrap() = None,
+        _ => {
+            if let Some(c) = CONFIRM_NC.lock().unwrap().as_mut() {
+                c.1 = ticked;
+            }
+        }
+    }
+}
+
+/// Download and install a module in the background (progress in its row).
+fn install_module(ctx: &egui::Context, id: &'static str) {
+    let c = ctx.clone();
+    start_work(id, move |cancel, report_to| {
+        let d = library::module::ALL.iter().find(|x| x.id == id).ok_or("unbekanntes Modell")?;
+        library::module::install(d, &|a, b, f| {
+            let t = crate::trf!("{a} von {b}", a = gb(a), b = gb(b));
+            let t = if f.starts_with("prüfe") { crate::trf!("{t} · prüft", t = t) } else { t };
+            report_to(a as f32 / b.max(1) as f32, &t);
+            c.request_repaint();
+        }, &cancel)?;
+        Ok("installiert".into())
+    });
+}
 
 fn module(ui: &mut egui::Ui, ctx: &egui::Context) {
     let z = state(ui);
+    // test hook (screenshots, own data folder only): GRAINEO_MODULE_CONFIRM=<module id> opens the confirmation once
+    static ASKED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if !ASKED.swap(true, Ordering::Relaxed) {
+        if let Ok(id) = crate::env::var("GRAINEO_MODULE_CONFIRM") {
+            if let Some(d) = library::module::ALL.iter().find(|d| d.id == id) {
+                *CONFIRM_NC.lock().unwrap() = Some((d.id, false));
+            }
+        }
+    }
+    non_commercial_dialog(ctx);
     // "Remove model?" (destructive)
     let question = *REMOVE.lock().unwrap();
     if let Some((id, bytes)) = question {
@@ -1518,6 +1680,11 @@ fn module(ui: &mut egui::Ui, ctx: &egui::Context) {
             .iter()
             .copied()
             .filter(|d| !search_ids.contains(&d.id) && !library::module::SEARCH.iter().any(|x| x.id == d.id))
+            // withheld modules (no download offered) only appear once installed, to be removed
+            .filter(|d| {
+                library::module::offered(d)
+                    || z.as_ref().is_some_and(|z| z.module.iter().any(|m| m.0 == d.id && m.1 == library::module::Status::Installed))
+            })
             .collect();
         let ids: Vec<&str> = listed.iter().map(|d| d.id).collect();
         show_blocked(ui, &ids, false);
@@ -1599,19 +1766,11 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
                 }
             } else if st == Status::Installed {
                 *REMOVE.lock().unwrap() = Some((d.id, size));
+            } else if library::module::non_commercial(d).is_some() && library::module::confirmation(d).is_none() {
+                // never without the user's confirmation of non-commercial use
+                *CONFIRM_NC.lock().unwrap() = Some((d.id, false));
             } else {
-                let id = d.id;
-                let c = ctx.clone();
-                start_work(id, move |cancel, report_to| {
-                    let d = library::module::ALL.iter().find(|x| x.id == id).ok_or("unbekanntes Modell")?;
-                    library::module::install(d, &|a, b, f| {
-                        let t = crate::trf!("{a} von {b}", a = gb(a), b = gb(b));
-                        let t = if f.starts_with("prüfe") { crate::trf!("{t} · prüft", t = t) } else { t };
-                        report_to(a as f32 / b.max(1) as f32, &t);
-                        c.request_repaint();
-                    }, &cancel)?;
-                    Ok("installiert".into())
-                });
+                install_module(ctx, d.id);
             }
         }
         let status = if removing {
@@ -1649,6 +1808,13 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
                 None => crate::trf!("Gesperrt, solange {w} läuft", w = work_name(&o.what)),
             };
             ui.add(dim(t, Color32::from_rgb(0xe0, 0xb0, 0x40)));
+        } else if let Some(t) = library::module::non_commercial(d) {
+            // visibly marked: only for non-commercial use, licence and link
+            let note = crate::trf!("Nur für nicht-kommerzielle Nutzung · {l}", l = t.name);
+            let r = ui.add(dim(note, Color32::from_rgb(0xe0, 0xb0, 0x40)));
+            let confirmed = library::module::confirmation(d).is_some();
+            lr::hover_tip(ui, &r, &crate::trf!("{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}", p = crate::tr(d.purpose), l = d.license, r = d.repo, c = if confirmed { crate::tr(" · nicht-kommerzielle Nutzung bestätigt").to_string() } else { String::new() }));
+            ui.hyperlink_to(egui::RichText::new(crate::tr("Lizenz")).small(), t.url);
         } else {
             let t = crate::trf!("{a} · Lizenz {b}", a = crate::tr(d.purpose), b = short_license(d.license));
             let r = ui.add(dim(t, lr::TEXT_DIM));

@@ -1,0 +1,31 @@
+[package]
+name = "remote"
+description = "graineo's browser access: a small HTTPS server inside the running app (library, rating, simple develop sliders) for a tablet or another computer in the home network"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+sysdirs = { path = "../sysdirs" }
+library = { path = "../library" }
+develop = { path = "../develop" }
+rawdev = { path = "../rawdev" }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# small synchronous HTTP server (MIT/Apache-2.0); its own TLS feature is not used (it needs rustls 0.20),
+# TLS is terminated in front of it with rustls 0.23 (see proxy.rs)
+tiny_http = { version = "0.12", default-features = false }
+# TLS 1.2/1.3 with the ring provider (Apache-2.0/MIT/ISC), same version as elsewhere in the workspace
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+# local certificate authority and server certificate (MIT/Apache-2.0)
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring", "pem"] }
+time = "0.3"
+sha2 = "0.11"
+getrandom = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# pairing link as QR code (MIT)
+qrcodegen = "1.8"
+libc = "0.2"
+
+[dev-dependencies]
+rustls-pki-types = "1"

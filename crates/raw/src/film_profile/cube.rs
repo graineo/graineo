@@ -173,6 +173,28 @@ impl Cube {
         out
     }
 }
+/// The table of a `.cube` text as differences on its own grid (or 65³ for a curve or a non-default domain), the form
+/// [`Look::from_table`] takes: (edge length, Δ per node, r slow, b fast).
+pub fn table(text: &str) -> Result<(usize, Vec<[f32; 3]>), String> {
+    let cube = parse(text)?;
+    let n = if cube.n > 0 && cube.shaper.is_empty() && cube.min == [0.0; 3] && cube.max == [1.0; 3] {
+        cube.n
+    } else {
+        65
+    };
+    let mut d = Vec::with_capacity(n * n * n);
+    for r in 0..n {
+        for g in 0..n {
+            for b in 0..n {
+                let c = [r, g, b].map(|x| x as f32 / (n - 1) as f32);
+                let v = cube.pixel(c);
+                d.push(std::array::from_fn(|k| v[k] - c[k]));
+            }
+        }
+    }
+    Ok((n, d))
+}
+
 pub(super) fn look(text: &str, f: &FilmProfile) -> Result<Look, String> {
     let cube = parse(text)?;
     // Native grid preserves ordinary 3D LUTs exactly. A curve or a non-default domain is baked onto a 65³ grid.

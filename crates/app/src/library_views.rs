@@ -22,7 +22,7 @@ const ADD_FOLDER: &str = "bib-ordner-hinzufuegen";
 
 /// Is this source a restriction of its own kind (shown as a chip)?
 fn special(q: &Source) -> bool {
-    matches!(q, Source::Similar(_) | Source::Duplicates)
+    matches!(q, Source::Similar(_) | Source::Duplicates | Source::Series)
 }
 
 impl LibraryView {
@@ -72,6 +72,7 @@ impl LibraryView {
                 Some(crate::trf!("Ähnlich zu: {a}", a = name))
             }
             Source::Duplicates => Some(crate::tr("Duplikate").to_string()),
+            Source::Series => Some(crate::tr("Serien").to_string()),
             _ => None,
         }
     }

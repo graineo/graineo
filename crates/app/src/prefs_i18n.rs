@@ -154,7 +154,7 @@ fn default_apps(ui: &mut egui::Ui) {
                 value(ui, &shown, if is_own { Signal::Green } else { Signal::Gray });
             });
         }
-        let text = if more { crate::tr("Weniger Formate") } else { crate::tr("Weitere Formate (CR3, RAF, DNG, ARW)") };
+        let text = if more { crate::tr("Weniger Formate") } else { crate::tr("Weitere Formate (CR3, RAF, DNG, ARW, NEF, NRW)") };
         actions(ui, |ui| {
             if ui.button(text).clicked() {
                 ui.ctx().data_mut(|d| d.insert_temp(more_id, !more));
@@ -181,6 +181,7 @@ pub(super) fn area_label(index: usize) -> &'static str {
         Text::PrefsModules,
         Text::PrefsStorage,
         Text::PrefsLooks,
+        Text::PrefsBrowser,
     ];
     keys.get(index).map(|&key| i18n::text(key)).unwrap_or("")
 }

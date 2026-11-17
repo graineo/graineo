@@ -526,6 +526,12 @@ impl App {
         if self.confirm_delete || (self.in_grid() && self.lib.not_in_catalog_view()) {
             return;
         }
+        if self.in_grid() {
+            if self.lib.series_ask_scope(crate::library_ui::ScopeKind::Delete) {
+                return;
+            }
+            self.sync_source(true);
+        }
         let ids = self.delete_targets();
         if ids.is_empty() {
             return;

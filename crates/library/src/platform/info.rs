@@ -227,6 +227,113 @@ fn fill(s: &mut SystemInfo) {
     }
 }
 
+/// Physical processor cores (hyper-threads not counted), read once. `None` where the system does not tell.
+pub fn physical_cores() -> Option<usize> {
+    static CORES: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    *CORES.get_or_init(|| {
+        #[cfg(target_os = "macos")]
+        {
+            sysctl_u64(c"hw.physicalcpu").map(|n| n as usize).filter(|&n| n > 0)
+        }
+        #[cfg(windows)]
+        {
+            windows_cores().0.filter(|&n| n > 0)
+        }
+        #[cfg(not(any(target_os = "macos", windows)))]
+        {
+            None
+        }
+    })
+}
+
+/// Processor name only (cheap): "Apple M1 Pro", "Intel(R) Core(TM) i7-4870HQ …"; the architecture where unknown.
+pub fn cpu_name() -> String {
+    #[cfg(target_os = "macos")]
+    let n = sysctl_text(c"machdep.cpu.brand_string");
+    #[cfg(windows)]
+    let n = registry_text(r"HARDWARE\DESCRIPTION\System\CentralProcessor\0", "ProcessorNameString");
+    #[cfg(not(any(target_os = "macos", windows)))]
+    let n: Option<String> = None;
+    n.unwrap_or_else(|| std::env::consts::ARCH.to_string())
+}
+
+/// Performance cores where the processor has two kinds (Apple silicon, hybrid Intel), otherwise all physical cores.
+pub fn performance_cores() -> Option<usize> {
+    #[cfg(target_os = "macos")]
+    {
+        if sysctl_u64(c"hw.nperflevels").is_some_and(|n| n >= 2) {
+            if let Some(p) = sysctl_u64(c"hw.perflevel0.physicalcpu").filter(|&p| p > 0) {
+                return Some(p as usize);
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        if let (_, Some((p, _))) = windows_cores() {
+            return Some(p);
+        }
+    }
+    physical_cores()
+}
+
+/// Memory the system can hand out now without swapping (cheap; for decisions while working). `None` where unknown.
+/// Test hook `GRAINEO_FAKE_FREE_MEM=<GB>` (only with `GRAINEO_DATA_DIR`).
+pub fn memory_available_now() -> Option<u64> {
+    if std::env::var_os("GRAINEO_DATA_DIR").is_some() {
+        if let Some(gb) = std::env::var("GRAINEO_FAKE_FREE_MEM").ok().and_then(|v| v.parse::<f64>().ok()) {
+            return Some((gb * 1e9) as u64);
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        available_memory()
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+        let mut m: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+        m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+        // SAFETY: zeroed structure carrying its own length
+        (unsafe { GlobalMemoryStatusEx(&mut m) } != 0).then_some(m.ullAvailPhys)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    None
+}
+
+/// Power and thermal state only (no processor or memory facts): cheap enough to ask every half minute. Runs
+/// `pmset` on macOS: call it off the UI thread.
+pub fn power_state() -> (Power, Option<bool>, Option<String>) {
+    #[allow(unused_mut)]
+    let mut s = SystemInfo::default();
+    #[cfg(target_os = "macos")]
+    {
+        s.power = power_macos();
+        let info = objc2_foundation::NSProcessInfo::processInfo();
+        s.low_power_mode = Some(info.isLowPowerModeEnabled());
+        s.thermal = Some(
+            match info.thermalState().0 {
+                0 => "nominal",
+                1 => "fair",
+                2 => "serious",
+                3 => "critical",
+                _ => "unknown",
+            }
+            .to_string(),
+        );
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+        let mut p: SYSTEM_POWER_STATUS = Default::default();
+        // SAFETY: output structure
+        if unsafe { GetSystemPowerStatus(&mut p) } != 0 {
+            s.power = windows_power(p.ACLineStatus, p.BatteryFlag, p.BatteryLifePercent);
+            s.low_power_mode = Some(p.SystemStatusFlag == 1);
+        }
+    }
+    (s.power, s.low_power_mode, s.thermal)
+}
+
 /// Free plus inactive and purgeable pages (what the system hands out without swapping).
 #[cfg(target_os = "macos")]
 #[allow(deprecated)]

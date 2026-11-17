@@ -17,6 +17,9 @@ fn hash(img: &image::RgbImage) -> u64 {
     h.finish()
 }
 
+/// Tests that point `GRAINEO_LIBRARY_DB` at their own library run one after the other (the variable is process-wide).
+static OWN_LIBRARY: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn raw_dir() -> PathBuf {
     crate::env::var_os("GRAINEO_TEST_RAW_DIR").map(PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testbilder/signature-edits"))
 }
@@ -52,6 +55,7 @@ fn library_develops_the_same_as_the_sidecars_did() {
         eprintln!("test RAWs missing – skipped");
         return;
     };
+    let _own = OWN_LIBRARY.lock().unwrap_or_else(|e| e.into_inner());
     let dir = std::env::temp_dir().join(format!("graineo-store-test-{}-{}", std::process::id(), library::now()));
     let photos = dir.join("Fotos");
     std::fs::create_dir_all(&photos).unwrap();
@@ -121,6 +125,75 @@ fn library_develops_the_same_as_the_sidecars_did() {
     assert_eq!(k_new, k_old, "copy with its settings and Lightroom data");
     // written again unchanged: the file is not touched
     assert!(!library::store::write_sidecar_from_library(&db, file_a, true).unwrap());
+
+    drop(db);
+    match before_db {
+        Some(v) => std::env::set_var("GRAINEO_LIBRARY_DB", v),
+        None => std::env::remove_var("GRAINEO_LIBRARY_DB"),
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A development of a newer version (unknown mask field: not readable as `Settings` here) in the library is never
+/// overwritten or removed by saving: Sigma X3F original (saved on every photo switch), another format, virtual copy.
+/// Ratings are still saved; the unchanged initial values are no error (review of 1.3.0, M1).
+#[test]
+fn library_keeps_a_development_of_a_newer_version() {
+    let _own = OWN_LIBRARY.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = std::env::temp_dir().join(format!("graineo-newer-lib-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(&photos).unwrap();
+    let lib = dir.join("library.sqlite");
+    let before_db = std::env::var_os("GRAINEO_LIBRARY_DB");
+    std::env::set_var("GRAINEO_LIBRARY_DB", &lib);
+
+    let mut doc = masks::Document::from_json(include_str!("../../masks/samples/masks-example.json")).unwrap();
+    doc.settle_version();
+    let mut v = serde_json::to_value(Settings { exposure: 0.7, local: Some(doc), ..Default::default() }).unwrap();
+    v["local"]["layers"][0]["futureField"] = serde_json::json!(1);
+    let unknown = v.to_string();
+    assert!(serde_json::from_str::<Settings>(&unknown).is_err());
+
+    let jpg = photos.join("A.jpg");
+    image::RgbImage::from_pixel(32, 24, image::Rgb([90, 90, 90])).save(&jpg).unwrap();
+    let x3f = photos.join("SDIM0001.X3F");
+    std::fs::write(&x3f, b"not a real X3F").unwrap();
+    // the developments arrive with the sidecars (read once when the folder is added)
+    let copies = serde_json::json!([{ "name": "Kopie 1", "rating": 0, "flag": 0, "label": 0, "keywords": [], "settings": v.clone() }]).to_string();
+    xmp::write(&xmp::path_to(&jpg), &xmp::Values { copies_json: Some(copies), ..Default::default() }).unwrap();
+    xmp::write_develop(&xmp::path_to(&jpg), Some(&unknown)).unwrap();
+    xmp::write_develop(&crate::sidecar::sidecar_path(&x3f), Some(&unknown)).unwrap();
+    let db = library::db::Db::open(&lib).unwrap();
+    library::reconcile::add_root(&db, &photos, &|_| {}).unwrap();
+    // from now on the library only
+    std::fs::remove_file(xmp::path_to(&jpg)).unwrap();
+    std::fs::remove_file(crate::sidecar::sidecar_path(&x3f)).unwrap();
+    let stored = |p: &Path, copy: Option<&str>| library::store::develop_at(p, library::store::locate(p), copy).unwrap();
+    let originals = [(jpg.clone(), None), (jpg.clone(), Some("Kopie 1")), (x3f.clone(), None)];
+    for (p, copy) in &originals {
+        assert!(library::store::locate(p).is_some(), "{} in the library", p.display());
+        assert!(stored(p, *copy).is_some_and(|j| serde_json::from_str::<Settings>(&j).is_err()), "{} {copy:?}: newer development stored", p.display());
+    }
+    let changed = Settings { exposure: 1.2, ..Settings::default() };
+    let rated = Meta { rating: 4, ..Meta::default() };
+    // what this version shows instead (initial values): saved without a word, nothing removed
+    let (x3f_shown, _) = crate::sidecar::load(&x3f);
+    crate::sidecar::save_entry(&x3f, None, &x3f_shown, &Meta::default()).unwrap();
+    let (jpg_shown, _, _) = crate::raw_app::load_settings(&jpg, None);
+    crate::sidecar::save_entry(&jpg, None, &jpg_shown, &Meta::default()).unwrap();
+    crate::sidecar::save_entry(&jpg, Some("Kopie 1"), &Settings::default(), &Meta::default()).unwrap();
+    // a change: refused, the rating is saved
+    for (p, copy) in &originals {
+        let e = crate::sidecar::save_entry(p, *copy, &changed, &rated).unwrap_err();
+        assert_eq!(e, crate::develop_guard::newer_text(), "{} {copy:?}", p.display());
+    }
+    assert!(library::store::flush(std::time::Duration::from_secs(10)));
+    for (p, copy) in &originals {
+        assert_eq!(stored(p, *copy).as_deref(), Some(unknown.as_str()), "{} {copy:?}: development kept", p.display());
+        let loc = library::store::locate(p).unwrap();
+        assert_eq!(library::store::meta(loc.0, *copy).map(|m| m.0), Some(4), "{} {copy:?}: rating saved", p.display());
+    }
+    assert!(crate::photo_state::get(&x3f).iter().any(|n| n.kind == crate::photo_state::Kind::NewerDevelop));
 
     drop(db);
     match before_db {

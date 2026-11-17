@@ -99,7 +99,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
       <key>LSItemContentTypes</key>
       <array><string>public.image</string><string>public.camera-raw-image</string><string>com.sigmaphoto.photopro-x3f</string><string>public.folder</string></array>
       <key>CFBundleTypeExtensions</key>
-      <array><string>x3f</string><string>cr2</string><string>cr3</string><string>raf</string><string>dng</string><string>arw</string><string>nef</string><string>orf</string><string>rw2</string><string>heic</string><string>jpg</string><string>jpeg</string><string>tif</string><string>tiff</string><string>png</string></array>
+      <array><string>x3f</string><string>cr2</string><string>cr3</string><string>raf</string><string>dng</string><string>arw</string><string>nef</string><string>nrw</string><string>orf</string><string>rw2</string><string>heic</string><string>jpg</string><string>jpeg</string><string>tif</string><string>tiff</string><string>png</string></array>
     </dict>
   </array>
   <!-- X3F (Sigma Foveon RAW): macOS does not know the format. Imported under the identifier that SIGMA Photo Pro

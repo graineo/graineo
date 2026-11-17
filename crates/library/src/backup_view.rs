@@ -324,6 +324,13 @@ pub fn take_over(view: &Path, real: &Path, photo: &Path, copy: Option<&str>, wit
         return Err("Diese virtuelle Kopie gibt es in der Bibliothek nicht mehr".into());
     }
     put_develop_row(&t, rf, key, &new_develop).map_err(e)?;
+    // the rasters of bitmap masks and removed objects these settings name come along (the current library may have
+    // cleaned them up since the backup)
+    let mut rasters = std::collections::HashSet::new();
+    if let Some((Some(settings), ..)) = &new_develop {
+        crate::mask_raster::ids_in(settings, &mut rasters);
+    }
+    crate::mask_raster::copy_from(&v, &t, &rasters)?;
     if let (Some(m), Some(image)) = (&new_meta, image_id(&t, rf, copy).map_err(e)?) {
         put_meta(&t, image, m).map_err(e)?;
     }
@@ -434,6 +441,34 @@ mod tests {
         std::fs::create_dir_all(&other).unwrap();
         cleanup_in(&other);
         assert!(other.exists());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    /// "Take over from backup" brings the rasters and patches the taken settings name, also when the current library
+    /// no longer has them.
+    #[test]
+    fn take_over_brings_the_rasters_back() {
+        let d = tmp();
+        let (lib, a, _) = library(&d);
+        let patch = {
+            let db = Db::open(&lib).unwrap();
+            let id = crate::mask_raster::put_rgb_in(&db.conn, 2, 2, &[3u8; 12], &serde_json::Value::Null).unwrap();
+            crate::store::put_settings(&db.conn, a, None, Some(&format!(r#"{{"removals":[{{"patch":"{id}"}}]}}"#)), 150).unwrap();
+            id
+        };
+        let (backup, _) = crate::backup::create_backup(&Db::open(&lib).unwrap()).unwrap();
+        {
+            // later: the removal was undone and the patch cleaned up
+            let db = Db::open(&lib).unwrap();
+            crate::store::put_settings(&db.conn, a, None, Some(r#"{"exposure":0.2}"#), 300).unwrap();
+            db.conn.execute("DELETE FROM mask_raster", []).unwrap();
+        }
+        let copy = prepare_in(&backup, &d.join("backup-view")).unwrap();
+        take_over(&copy, &lib, Path::new("/tmp/graineo-ansicht/a.jpg"), None, false).unwrap();
+        let c = Connection::open(&lib).unwrap();
+        assert!(settings(&lib, a).unwrap().contains(&patch));
+        assert_eq!(crate::mask_raster::get_rgb_in(&c, &patch), Some((2, 2, vec![3u8; 12])));
+        drop(c);
         std::fs::remove_dir_all(d).unwrap();
     }
 

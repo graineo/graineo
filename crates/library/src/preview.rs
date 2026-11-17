@@ -984,8 +984,14 @@ fn dng_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
     let mut jpeg = vec![0u8; len];
     f.read_exact(&mut jpeg).ok()?;
     let img = jpeg_downscaled(&jpeg, min)?;
+    Some(tiff_finish(&t, &header, ifd0, img))
+}
+
+/// Orientation, camera and capture time from IFD0 of a TIFF-based RAW (start of the file in `header`), applied to
+/// the preview `img`.
+fn tiff_finish(t: &Tiff, header: &[u8], ifd0: usize, img: RgbImage) -> (RgbImage, Meta) {
     let o = t.number(ifd0, 0x0112).unwrap_or(1);
-    let camera = tiff_value(&header, 0x0110).and_then(|v| v.err()).filter(|s| !s.is_empty());
+    let camera = tiff_value(header, 0x0110).and_then(|v| v.err()).filter(|s| !s.is_empty());
     let capture = t.number(ifd0, 0x8769).and_then(|exif| {
         // DateTimeOriginal in the EXIF IFD (ASCII, pointer to 20 bytes)
         for i in 0..t.u16_(exif as usize)? as usize {
@@ -998,7 +1004,42 @@ fn dng_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
         }
         None
     });
-    Some((orient(img, o as u16), Meta { width: None, height: None, capture, camera }))
+    (orient(img, o as u16), Meta { width: None, height: None, capture, camera })
+}
+
+/// NEF/NRW: the previews are JPEGs (JPEGInterchangeFormat 0x0201/0x0202) in IFD0 and its SubIFDs: a full-size one
+/// and, on newer cameras, a medium one (about 1 MB). The RAW reader decodes the full-size JPEG (up to 45 MP) for every
+/// thumbnail, which took seconds per photo. Here only the smallest JPEG that reaches `min` is read and decoded
+/// downscaled. This also works for NEF compressions the RAW reader cannot decode (High Efficiency).
+fn nef_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let (header, _) = read_header(path, 1 << 20)?;
+    let t = Tiff::new(&header)?;
+    let ifd0 = t.u32_(4)? as usize;
+    let mut ifds = vec![ifd0];
+    ifds.extend(t.numbers(ifd0, 330).unwrap_or_default().into_iter().map(|o| o as usize));
+    let mut jpegs: Vec<(u64, usize)> = ifds
+        .into_iter()
+        .filter(|&ifd| t.number(ifd, 259) == Some(6))
+        .filter_map(|ifd| Some((t.number(ifd, 0x0201)? as u64, t.number(ifd, 0x0202)? as usize)))
+        .filter(|&(_, len)| len > 1000 && len <= 40 << 20)
+        .collect();
+    jpegs.sort_by_key(|&(_, len)| len);
+    let mut f = std::fs::File::open(path).ok()?;
+    for (off, len) in jpegs {
+        let mut jpeg = vec![0u8; len];
+        if f.seek(SeekFrom::Start(off)).is_err() || f.read_exact(&mut jpeg).is_err() {
+            continue;
+        }
+        let mut d = jpeg_decoder::Decoder::new(std::io::Cursor::new(&jpeg));
+        let Some(info) = d.read_info().ok().and_then(|_| d.info()) else { continue };
+        if (info.width.max(info.height) as u32) < min {
+            continue;
+        }
+        let img = jpeg_downscaled(&jpeg, min)?;
+        return Some(tiff_finish(&t, &header, ifd0, img));
+    }
+    None
 }
 
 /// CR3 without the RAW reader: preview JPEG (PRVW), orientation, camera and capture time are all
@@ -1029,6 +1070,11 @@ fn raw_preview(path: &Path, min: u32) -> Result<(RgbImage, Meta), String> {
     }
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng")) {
         if let Some(r) = dng_fast(path, min) {
+            return Ok(r);
+        }
+    }
+    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("nef") || e.eq_ignore_ascii_case("nrw")) {
+        if let Some(r) = nef_fast(path, min) {
             return Ok(r);
         }
     }
@@ -1933,5 +1979,38 @@ mod tests {
         // the moved cache is read completely
         assert_eq!(Cache::open(&new).occupied().1, 3);
         std::fs::remove_dir_all(d).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod nef_tests {
+    use super::*;
+
+    /// NEF/NRW sample files (`GRAINEO_TEST_NEF_DIR`, e.g. the CC0 files of raw.pixls.us; skipped without it): the
+    /// fast way finds a preview for every file, also for High Efficiency NEFs, with the same aspect ratio and
+    /// orientation as the RAW reader's full-size preview.
+    #[test]
+    fn nef_fast_matches_the_raw_reader() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_NEF_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_NEF_DIR not set, skipped");
+            return;
+        };
+        let mut n = 0;
+        for p in std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())) {
+            if !p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("nef") || e.eq_ignore_ascii_case("nrw")) {
+                continue;
+            }
+            for min in [400, 1600] {
+                let (fast, meta) = nef_fast(&p, min).unwrap_or_else(|| panic!("no fast preview: {}", p.display()));
+                assert!(fast.width().max(fast.height()) >= min, "{} {min}: {}×{}", p.display(), fast.width(), fast.height());
+                assert!(meta.camera.as_deref().is_some_and(|c| c.to_ascii_uppercase().contains("NIKON") || c.contains("COOLPIX")), "{}: {:?}", p.display(), meta.camera);
+                let src = rawler::rawsource::RawSource::new(&p).unwrap();
+                let (slow, _) = from_source(&src, min).unwrap();
+                let ratio = |i: &RgbImage| i.width() as f32 / i.height() as f32;
+                assert!((ratio(&fast) - ratio(&slow)).abs() < 0.02, "{}: aspect {} vs {}", p.display(), ratio(&fast), ratio(&slow));
+            }
+            n += 1;
+        }
+        assert!(n > 0, "no NEF/NRW in {}", dir.display());
     }
 }

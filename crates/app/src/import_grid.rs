@@ -174,6 +174,9 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
         });
     });
     imp.hovered = hovered;
+    if crate::import_bench::active() {
+        crate::import_bench::window_grid(imp.cand.len(), wanted.len(), wanted.iter().filter(|(p, _)| imp.thumbs.tex.contains_key(p)).count());
+    }
     // the helpers take the newest request first: requested from the bottom up, the top left cell comes first
     for (p, f) in wanted.iter().rev() {
         imp.thumbs.request(p, f);

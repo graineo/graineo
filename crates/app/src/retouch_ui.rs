@@ -1,10 +1,10 @@
-//! Retouching controls in the "Masks" tool: heal or clone spots, correct red eyes.
+//! Retouching controls in the "Retouch" tool: heal or clone spots, correct red eyes.
 //! The data lives in the photo's settings (`spots`, `red_eyes`, computation core see `develop::spots`); coordinates are, as with
 //! the masks, relative to the unrotated, uncropped image. The source of a spot is chosen by a simple method (to the side,
 //! into the image).
 //!
 //! Behaviour in the image:
-//! - The circles are visible while the "Masks" tool of the right rail is open or a retouching tool is active, hidden
+//! - The circles are visible while the "Retouch" tool of the right rail is open or a retouching tool is active, hidden
 //!   otherwise; H (or the switch in the panel) inverts that everywhere (hide in the tool, show outside of it).
 //! - A click on a circle selects the spot (highlighted, source with a line), dragging moves the spot or its source.
 //!   Radius and opacity act on the selected spot, ⌫/Del deletes it, Esc ends the tool and the selection.
@@ -55,8 +55,10 @@ impl Default for State {
 /// Visibility of the overlays (independent of the photo).
 #[derive(Clone, Copy, Default)]
 struct View {
-    /// the "Masks" tool of the right rail is open
+    /// the "Retouch" tool of the right rail is open
     panel_open: bool,
+    /// the "Masks" tool of the right rail is open (H then shows or hides the mask outlines, not the circles)
+    masks_open: bool,
     /// H / switch: inverts the default (hide in the tool, show outside)
     toggled: bool,
     /// the pointer was over a circle in the last frame (then the image does not zoom or pan on click/drag)
@@ -91,14 +93,31 @@ fn save_view(ctx: &Context, v: View) {
     ctx.data_mut(|d| d.insert_temp(view_key(), v));
 }
 
-/// Every frame before the image is drawn: is the "Masks" tool open? Opening or closing it resets H.
-pub fn set_panel_open(ctx: &Context, open: bool) {
+/// Every frame before the image is drawn: is the "Retouch" or the "Masks" tool open? Opening or closing one resets H.
+pub fn set_panel_open(ctx: &Context, open: bool, masks: bool) {
     let mut v = view(ctx);
-    if v.panel_open != open {
+    if v.panel_open != open || v.masks_open != masks {
         v.panel_open = open;
+        v.masks_open = masks;
         v.toggled = false;
     }
     save_view(ctx, v);
+}
+
+/// Is the "Masks" tool open (see [`set_panel_open`])?
+pub fn masks_open(ctx: &Context) -> bool {
+    view(ctx).masks_open
+}
+
+/// Are the outlines of the selected mask shown? In the "Masks" tool unless hidden with H; in the "Retouch" tool never;
+/// elsewhere only when shown with H.
+pub fn mask_outlines_visible(ctx: &Context) -> bool {
+    let v = view(ctx);
+    if v.masks_open {
+        !v.toggled
+    } else {
+        !v.panel_open && v.toggled
+    }
 }
 
 /// Key H / switch: show or hide retouch spots and mask outlines.
@@ -111,7 +130,7 @@ pub fn toggle_overlays(ctx: &Context) {
 /// Are retouch spots and mask outlines shown right now?
 pub fn overlays_visible(ctx: &Context) -> bool {
     let v = view(ctx);
-    active(ctx) || (v.panel_open != v.toggled)
+    active(ctx) || (!v.masks_open && v.panel_open != v.toggled)
 }
 
 /// Is a retouching tool active (then clicks in the image belong to it)?
@@ -156,7 +175,7 @@ fn delete(sel: Sel, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>) {
     }
 }
 
-/// Panel "RETOUCH" in the "Masks" tool.
+/// Section "Retouch" of the "Retouch" tool.
 pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, index: usize) {
     let mut z = state(ui.ctx(), index);
     // test hook GRAINEO_RETOUCH_TEST=1 (only with GRAINEO_DATA_DIR): three spots, the second selected
@@ -167,21 +186,35 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
         z.selected = Some(Sel::Spot(1));
     }
     z.selected = valid(z.selected, spots, red_eyes);
-    egui::CollapsingHeader::new(crate::tr("RETUSCHE")).default_open(true).show(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            crate::help::info(ui, "retusche", "Retusche", &crate::help::RETOUCH);
-            for (w, name) in [(Tool::Heal, "Heilen"), (Tool::CloneStamp, "Klonen"), (Tool::RedEyes, "Rote Augen")] {
+    {
+        // heading with the help card on the right (fixed place)
+        lr::category_with(ui, "Flecken & rote Augen", 20.0, |ui| crate::help::info(ui, "retusche", "Retusche", &crate::help::RETOUCH));
+        // the three tools in one row of equal buttons
+        ui.columns(3, |cols| {
+            for (c, (w, name, tip)) in [
+                (Tool::Heal, "Heilen", "Fleck anklicken: Struktur von einer Quelle daneben, an die Umgebung angepasst"),
+                (Tool::CloneStamp, "Klonen", "Fleck anklicken: kopiert die Quelle genau"),
+                (Tool::RedEyes, "Rote Augen", "Auf die Pupille klicken"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 let on = z.tool == w;
-                if ui.add(egui::Button::new(crate::tr(name)).selected(on)).clicked() {
+                let r = cols[c].add_sized([cols[c].available_width(), 24.0], egui::Button::new(crate::tr(name)).selected(on));
+                lr::hover_tip(&cols[c], &r, crate::tr(tip));
+                if r.clicked() {
                     z.tool = if on { Tool::Off } else { w };
                 }
             }
         });
-        // switch with a clear state; with an active tool the circles are always visible
+        ui.add_space(4.0);
+        // switch with a clear state; with an active tool the circles are always visible; the key is in the tooltip
         ui.horizontal(|ui| {
             let visible = overlays_visible(ui.ctx());
-            let label = if visible { crate::tr("Punkte sichtbar  H") } else { crate::tr("Punkte verborgen  H") };
-            if ui.add_enabled(z.tool == Tool::Off, egui::Button::new(label).selected(visible)).clicked() {
+            let label = if visible { crate::tr("Punkte sichtbar") } else { crate::tr("Punkte verborgen") };
+            let r = ui.add_enabled(z.tool == Tool::Off, egui::Button::new(label).selected(visible));
+            lr::tip_key(ui, &r, crate::tr("Retusche-Punkte im Bild zeigen oder verbergen"), "overlays");
+            if r.clicked() {
                 toggle_overlays(ui.ctx());
             }
         });
@@ -198,7 +231,7 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
             Some(Sel::Eye(i)) => line.push_str(&crate::trf!(" · Auge {a} gewählt", a = i + 1)),
             None => {}
         }
-        ui.label(egui::RichText::new(line).small().color(lr::TEXT_DIM));
+        lr::note(ui, &line);
         // Radius: of the selected element, otherwise of new spots (with an active tool); always in the same place
         let editable = z.selected.is_some() || z.tool != Tool::Off;
         ui.add_enabled_ui(editable, |ui| {
@@ -207,7 +240,7 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
                 Some(Sel::Eye(i)) => red_eyes[i].size[0].max(red_eyes[i].size[1]),
                 None => z.radius,
             } as f64;
-            if lr::slider(ui, crate::tr("Radius"), &mut r, 0.002..=0.06, 0.01, 0.001) {
+            if lr::slider_plain(ui, "Radius", &mut r, 0.002..=0.06, 0.01, 0.001) {
                 let r = r as f32;
                 match z.selected {
                     Some(Sel::Spot(i)) => spots[i].radius = r,
@@ -223,7 +256,7 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
         };
         ui.add_enabled_ui(spot.is_some(), |ui| {
             let mut o = spot.map_or(1.0, |i| spots[i].opacity) as f64 * 100.0;
-            if lr::slider(ui, crate::tr("Deckkraft"), &mut o, 0.0..=100.0, 100.0, 1.0) {
+            if lr::slider_plain(ui, "Deckkraft", &mut o, 0.0..=100.0, 100.0, 1.0) {
                 if let Some(i) = spot {
                     spots[i].opacity = (o / 100.0).clamp(0.0, 1.0) as f32;
                 }
@@ -231,6 +264,7 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
         });
         ui.horizontal(|ui| {
             if z.confirm_all {
+                ui.add_space(lr::TEXT_INSET);
                 ui.label(egui::RichText::new(crate::trf!("Alle {a} löschen?", a = spots.len() + red_eyes.len())).small());
                 if ui.button(crate::tr("Löschen")).clicked() {
                     spots.clear();
@@ -242,7 +276,9 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
                     z.confirm_all = false;
                 }
             } else {
-                if ui.add_enabled(z.selected.is_some(), egui::Button::new(crate::tr("Gewählten löschen  ⌫"))).clicked() {
+                let r = ui.add_enabled(z.selected.is_some(), egui::Button::new(crate::tr("Gewählten löschen")));
+                lr::hover_tip(ui, &r, &format!("{} (⌫)", crate::tr("Gewählten Punkt löschen")));
+                if r.clicked() {
                     if let Some(s) = z.selected.take() {
                         delete(s, spots, red_eyes);
                     }
@@ -252,7 +288,7 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
                 }
             }
         });
-    });
+    }
     save(ui.ctx(), z);
 }
 
@@ -456,21 +492,29 @@ mod tests {
     #[test]
     fn visibility_follows_panel_and_h() {
         let ctx = Context::default();
-        assert!(!overlays_visible(&ctx), "outside the Masks tool hidden");
+        assert!(!overlays_visible(&ctx), "outside the Retouch tool hidden");
+        assert!(!mask_outlines_visible(&ctx));
         toggle_overlays(&ctx);
         assert!(overlays_visible(&ctx), "H shows them outside");
-        set_panel_open(&ctx, true);
+        assert!(mask_outlines_visible(&ctx), "H shows the mask outlines outside, too");
+        set_panel_open(&ctx, true, false);
         assert!(overlays_visible(&ctx), "opening the tool: visible, H reset");
+        assert!(!mask_outlines_visible(&ctx), "no mask outlines in the Retouch tool");
         toggle_overlays(&ctx);
         assert!(!overlays_visible(&ctx), "H hides them in the tool");
-        set_panel_open(&ctx, false);
+        set_panel_open(&ctx, false, false);
         assert!(!overlays_visible(&ctx));
+        // the Masks tool: outlines, no retouch spots; H hides the outlines
+        set_panel_open(&ctx, false, true);
+        assert!(mask_outlines_visible(&ctx) && !overlays_visible(&ctx));
+        toggle_overlays(&ctx);
+        assert!(!mask_outlines_visible(&ctx) && !overlays_visible(&ctx));
     }
 
     #[test]
     fn select_move_delete_without_tool() {
         let ctx = Context::default();
-        set_panel_open(&ctx, true);
+        set_panel_open(&ctx, true, false);
         let (mut spots, mut eyes) = (vec![spot(0.25, 0.5), spot(0.5, 0.2)], Vec::new());
         run(&ctx, Vec::new(), &mut spots, &mut eyes);
         // a click on a free area places nothing without a tool

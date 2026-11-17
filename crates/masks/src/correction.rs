@@ -1,6 +1,7 @@
 use super::*;
-/// Neutral is 0 everywhere; EV for exposure, normalized sliders otherwise.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+/// Neutral is 0 everywhere; EV for exposure, normalized sliders otherwise. The sliders after `noise_reduction` came
+/// with document version 4 and are written only when they differ from neutral.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Adjustments {
     pub exposure: f32,
@@ -14,8 +15,47 @@ pub struct Adjustments {
     pub texture: f32,
     pub sharpness: f32,
     pub noise_reduction: f32,
+    /// −1…1: the brightest tones up to ±1 EV (above the highlights)
+    #[serde(skip_serializing_if = "zero")]
+    pub whites: f32,
+    /// −1…1: lifts (+) or deepens (−) the darkest tones
+    #[serde(skip_serializing_if = "zero")]
+    pub blacks: f32,
+    /// −1…1: removes (+) or adds (−) a bright veil, with a little saturation
+    #[serde(skip_serializing_if = "zero")]
+    pub dehaze: f32,
+    /// colour grading of shadows, midtones, highlights: hue in degrees (0…360), strength 0…1 (as the global wheels)
+    #[serde(skip_serializing_if = "no_grade")]
+    pub grade_shadows: [f32; 2],
+    #[serde(skip_serializing_if = "no_grade")]
+    pub grade_midtones: [f32; 2],
+    #[serde(skip_serializing_if = "no_grade")]
+    pub grade_highlights: [f32; 2],
+    /// −1…1: moves the border between shadows and highlights of the grading
+    #[serde(skip_serializing_if = "zero")]
+    pub grade_balance: f32,
+    /// point curve (input, output, each 0…1, sRGB-encoded values, as the global tone curve); empty = none
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub curve: Vec<[f32; 2]>,
 }
+fn zero(v: &f32) -> bool {
+    *v == 0.0
+}
+fn no_grade(v: &[f32; 2]) -> bool {
+    *v == [0.0, 0.0]
+}
+/// Most points of a mask's curve.
+pub const CURVE_POINTS_MAX: usize = 16;
 impl Adjustments {
+    /// Does a slider of document version 4 differ from neutral?
+    pub fn uses_version_4(&self) -> bool {
+        self.whites != 0.0
+            || self.blacks != 0.0
+            || self.dehaze != 0.0
+            || [self.grade_shadows, self.grade_midtones, self.grade_highlights].iter().any(|g| !no_grade(g))
+            || self.grade_balance != 0.0
+            || !self.curve.is_empty()
+    }
     pub fn validate(&self) -> Result<()> {
         if !self.exposure.is_finite() || self.exposure.abs() > 10.0 {
             return Err("Belichtung außerhalb ±10 EV".into());
@@ -37,9 +77,112 @@ impl Adjustments {
         {
             return Err("Korrekturparameter außerhalb des Bereichs".into());
         }
+        let grades = [self.grade_shadows, self.grade_midtones, self.grade_highlights];
+        if [self.whites, self.blacks, self.dehaze, self.grade_balance].iter().any(|v| !v.is_finite() || v.abs() > 1.0)
+            || grades.iter().any(|g| !g[0].is_finite() || !(0.0..=360.0).contains(&g[0]) || !unit(g[1]))
+            || self.curve.len() > CURVE_POINTS_MAX
+            || self.curve.iter().flatten().any(|v| !unit(*v))
+        {
+            return Err("Korrekturparameter außerhalb des Bereichs".into());
+        }
         Ok(())
     }
 }
+/// sRGB transfer, continued for negative values (sign kept) and beyond 1 (same power).
+pub(crate) fn encode(v: f32) -> f32 {
+    let a = v.abs();
+    let e = if a <= 0.0031308 { a * 12.92 } else { 1.055 * a.powf(1.0 / 2.4) - 0.055 };
+    e.copysign(v)
+}
+pub(crate) fn decode(e: f32) -> f32 {
+    let a = e.abs();
+    let v = if a <= 0.04045 { a / 12.92 } else { ((a + 0.055) / 1.055).powf(2.4) };
+    v.copysign(e)
+}
+/// Hue direction of a grading wheel: a fully saturated colour minus its Rec.709 luminance (zero luminance).
+fn hue_offset(hue: f32) -> [f32; 3] {
+    let h = hue.rem_euclid(360.0) / 60.0;
+    let x = 1.0 - (h % 2.0 - 1.0).abs();
+    let rgb = match h as u32 {
+        0 => [1.0, x, 0.0],
+        1 => [x, 1.0, 0.0],
+        2 => [0.0, 1.0, x],
+        3 => [0.0, x, 1.0],
+        4 => [x, 0.0, 1.0],
+        _ => [1.0, 0.0, x],
+    };
+    let y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    rgb.map(|c| c - y)
+}
+/// Samples of a curve table over encoded values 0…1.
+pub(crate) const LUT: usize = 1024;
+/// Brightness of the veil that "Dunst" removes or adds (linear), and how much of it at ±1.
+const VEIL: f32 = 0.35;
+const VEIL_AMOUNT: f32 = 0.15;
+
+/// The sliders of version 4, prepared once per layer (same numbers for the processor and the GPU).
+pub(crate) struct Extra {
+    pub any: bool,
+    /// curve table over encoded values (empty: no curve)
+    pub lut: Vec<f32>,
+    /// grading offsets of shadows, midtones, highlights (encoded units), `None`: no grading
+    pub grades: Option<[[f32; 3]; 3]>,
+    pub pivot: f32,
+}
+impl Extra {
+    pub(crate) fn new(a: &Adjustments) -> Self {
+        let lut = crate::curve::table(&a.curve);
+        let grading = [a.grade_shadows, a.grade_midtones, a.grade_highlights].iter().any(|g| g[1] > 0.0);
+        // as the global colour grading: offsets of 0.35 × strength in encoded units
+        let grades = grading.then(|| [a.grade_shadows, a.grade_midtones, a.grade_highlights].map(|[h, s]| hue_offset(h).map(|c| c * s.clamp(0.0, 1.0) * 0.35)));
+        let any = a.blacks != 0.0 || a.dehaze != 0.0 || !lut.is_empty() || grades.is_some();
+        Self { any, lut, grades, pivot: (0.5 - 0.3 * a.grade_balance).clamp(0.15, 0.85) }
+    }
+    /// The steps of version 4 after contrast, on the corrected colour `q` (`lum`: luminance of the input pixel).
+    pub(crate) fn apply(&self, a: &Adjustments, q: &mut [f32; 3], lum: f32) {
+        if a.blacks != 0.0 {
+            let w = 1.0 - smooth(lum / 0.12);
+            for v in q.iter_mut() {
+                *v += a.blacks * 0.02 * w;
+            }
+        }
+        if a.dehaze > 0.0 {
+            let h = a.dehaze * VEIL_AMOUNT;
+            for v in q.iter_mut() {
+                *v = (*v - h * VEIL) / (1.0 - h);
+            }
+        } else if a.dehaze < 0.0 {
+            let h = -a.dehaze * VEIL_AMOUNT;
+            for v in q.iter_mut() {
+                *v = *v * (1.0 - h) + h * VEIL;
+            }
+        }
+        if !self.lut.is_empty() {
+            for v in q.iter_mut() {
+                let e = encode(*v);
+                let f = e.clamp(0.0, 1.0) * (LUT - 1) as f32;
+                let i = (f as usize).min(LUT - 2);
+                let t = f - i as f32;
+                let c = self.lut[i] + (self.lut[i + 1] - self.lut[i]) * t;
+                // beyond white the curve continues with slope 1
+                *v = decode(c + (e - 1.0).max(0.0));
+            }
+        }
+        if let Some(g) = &self.grades {
+            let l = encode(luma(q).max(0.0)).clamp(0.0, 1.0);
+            let ws = 1.0 - smoothstep(0.0, self.pivot, l);
+            let wh = smoothstep(self.pivot, 1.0, l);
+            let wm = (1.0 - ws - wh).max(0.0);
+            for (k, v) in q.iter_mut().enumerate() {
+                *v = decode(encode(*v) + ws * g[0][k] + wm * g[1][k] + wh * g[2][k]);
+            }
+        }
+    }
+}
+fn smoothstep(a: f32, b: f32, x: f32) -> f32 {
+    smooth((x - a) / (b - a))
+}
+
 /// Pure function; layers follow in stored order, each mask before its adjustment.
 pub fn apply(image: Image<'_>, document: &Document) -> Result<Vec<f32>> {
     apply_view(image, document, View::whole(&image))
@@ -62,11 +205,16 @@ pub fn margin(document: &Document, full: [usize; 2]) -> usize {
         .layers
         .iter()
         .map(|l| {
-            let a = l.adjustments;
-            if a.clarity == 0.0 && a.texture == 0.0 && a.sharpness == 0.0 && a.noise_reduction == 0.0 {
+            let a = &l.adjustments;
+            if !l.active() {
                 return 0;
             }
-            if document.version == 2 {
+            // the refined edge reads the picture around the band
+            let edge = if l.refines() { crate::refine::reach(l.refine, short) } else { 0 };
+            if a.clarity == 0.0 && a.texture == 0.0 && a.sharpness == 0.0 && a.noise_reduction == 0.0 {
+                return edge;
+            }
+            edge + if document.version >= 2 {
                 let mut m = r[0];
                 if a.texture != 0.0 {
                     m = m.max(r[1]);
@@ -90,10 +238,13 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
     let mut current: std::borrow::Cow<'_, [f32]> = std::borrow::Cow::Borrowed(image.data);
     for layer in &document.layers {
         let mask = Prepared::new(&layer.mask, view.full[0], view.full[1])?;
-        let a = layer.adjustments;
-        if a == Adjustments::default() {
+        let a = &layer.adjustments;
+        let extra = Extra::new(a);
+        // switched off, strength 0 or neutral: nothing to do (the mask is still prepared and so checked)
+        if !layer.active() {
             continue;
         }
+        let amount = layer.amount;
         let base_exposure = 2.0f32.powf(a.exposure);
         let gains = [
             2.0f32.powf(0.5 * a.temperature - 0.25 * a.tint),
@@ -104,7 +255,7 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
             a.clarity != 0.0 || a.texture != 0.0 || a.sharpness != 0.0 || a.noise_reduction != 0.0;
         // Separate immutable input and output prevents neighborhood feedback and tile seams.
         let mut output = vec![0.0; current.len()];
-        let planes = if spatial && document.version == 2 {
+        let planes = if spatial && document.version >= 2 {
             Some(crate::filters::planes(
                 &current,
                 image.width,
@@ -120,20 +271,30 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
             None
         };
         let scale = (view.short() as f32 / 1000.0).max(0.001);
+        // a refined edge needs the weights of the whole crop first; otherwise each pixel samples the mask itself
+        let refined = if layer.refines() { Some(layer.weights(Image::new(image.width, image.height, &current)?, view)?) } else { None };
         output.par_chunks_mut(3).enumerate().for_each(|(i, out)| {
             let x = i % image.width;
             let y = i / image.width;
             let p = &current[i * 3..i * 3 + 3];
-            let weight = mask.sample(view.point(x, y), p);
+            let weight = match &refined {
+                Some(w) => w[i],
+                None => mask.sample(view.point(x, y), p),
+            };
+            // strength of the mask: the weight scaled (at 1 exactly the former value)
+            let weight = if amount == 1.0 { weight } else { weight * amount };
             if weight == 0.0 {
                 out.copy_from_slice(p);
                 return;
             }
             let lum = luma(p).max(0.0);
-            let tonal = 1.0
+            let mut tonal = 1.0
                 + a.shadows * (1.0 - smooth(lum / 0.5))
                 + a.highlights * smooth((lum - 0.25) / 0.75);
-            let exposure = if a.shadows == 0.0 && a.highlights == 0.0 {
+            if a.whites != 0.0 {
+                tonal += a.whites * smooth(lum - 0.5);
+            }
+            let exposure = if a.shadows == 0.0 && a.highlights == 0.0 && a.whites == 0.0 {
                 base_exposure
             } else {
                 base_exposure * 2.0f32.powf(tonal - 1.0)
@@ -184,7 +345,7 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
                     let delta = fine - v;
                     v += a.noise_reduction * delta / (1.0 + (delta / 0.03).powi(2));
                     let limit = |d: f32, t: f32| {
-                        if document.version == 2 {
+                        if document.version >= 2 {
                             d / (1.0 + (d / t).powi(2))
                         } else {
                             d
@@ -201,12 +362,17 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
                 }
                 q[c] = v;
             }
+            if extra.any {
+                extra.apply(a, &mut q, lum);
+            }
+            // "Dunst" adds a little saturation (removing a veil) or takes it (adding one)
+            let saturation = if a.dehaze == 0.0 { a.saturation } else { a.saturation + 0.3 * a.dehaze };
             let yq = luma(&q);
             for c in 0..3 {
-                let v = if a.saturation == 0.0 {
+                let v = if saturation == 0.0 {
                     q[c]
                 } else {
-                    yq + (q[c] - yq) * (1.0 + a.saturation)
+                    yq + (q[c] - yq) * (1.0 + saturation)
                 };
                 out[c] = p[c] + weight * (v - p[c]);
             }

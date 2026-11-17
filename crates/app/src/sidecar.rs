@@ -128,16 +128,19 @@ pub fn own_settings(x3f: &Path) -> Option<Settings> {
 pub fn load(x3f: &Path) -> (Settings, Meta) {
     if let Some(loc) = library::store::locate(x3f) {
         let meta = library::store::meta(loc.0, None).map(|m| Meta { rating: m.0, flag: Flag::from_i8(m.1), label: m.2 }).unwrap_or_default();
-        let own = library::store::develop_at(x3f, Some(loc), None).ok().flatten().and_then(|j| serde_json::from_str::<Settings>(&j).ok());
+        let json = library::store::develop_at(x3f, Some(loc), None).ok().flatten();
+        crate::develop_guard::note_loaded(x3f, json.as_deref());
+        let own = json.and_then(|j| serde_json::from_str::<Settings>(&j).ok());
         return (own.unwrap_or_else(|| baseline(x3f)), meta);
     }
     let xp = sidecar_path(x3f);
+    crate::develop_guard::note_loaded(x3f, library::xmp::read_develop(&xp).ok().flatten().as_deref());
     (read_settings(&xp).unwrap_or_else(|| baseline(x3f)), read_meta(&xp))
 }
 
 /// Initial values without own settings: settings stored by SPP in the X3F,
 /// otherwise the defaults. Reads only the header and small sections of the X3F (never writes).
-fn baseline(x3f: &Path) -> Settings {
+pub(crate) fn baseline(x3f: &Path) -> Settings {
     let mut s = develop::sppa::baseline(x3f).unwrap_or_default();
     // Setting "Binning" (Quattro only, photos without own settings)
     crate::binning_ui::apply_standard(x3f, &mut s);
@@ -194,7 +197,12 @@ pub fn save(x3f: &Path, s: &Settings, meta: &Meta) -> Result<(), String> {
     }
     let settings = Settings { view: develop::View::Developed, ..s.clone() };
     let stored = library::xmp::read_develop(&xp)?;
-    if settings == baseline(x3f) {
+    // a development of a newer version is neither replaced nor removed (`develop_guard.rs`)
+    let initial = baseline(x3f);
+    if let Some(r) = crate::develop_guard::stop(crate::develop_guard::check(stored.as_deref()), settings == initial) {
+        return r;
+    }
+    if settings == initial {
         if stored.is_some() {
             library::xmp::write_develop(&xp, None)?;
         }
@@ -215,6 +223,11 @@ fn save_to_library(x3f: &Path, loc: (i64, bool), s: &Settings, meta: &Meta) -> R
     }
     let settings = Settings { view: develop::View::Developed, ..s.clone() };
     let stored = library::store::develop_at(x3f, Some(loc), None)?;
+    // a development of a newer version is neither replaced nor removed (`develop_guard.rs`); the initial values shown
+    // instead of it are no change
+    if let Err(e) = crate::develop_guard::check(stored.as_deref()) {
+        return crate::develop_guard::stop(Err(e), x3f.is_file() && settings == baseline(x3f)).unwrap_or(Ok(()));
+    }
     // only with the file at hand: an unreachable X3F (NAS offline) has no initial values, and the defaults
     // standing in for them must not delete settings that happen to equal them
     if x3f.is_file() && settings == baseline(x3f) {

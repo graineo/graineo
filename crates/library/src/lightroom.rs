@@ -179,6 +179,8 @@ pub struct Report {
     /// face boxes from the catalog and of these the ones with a confirmed name (the other names are unverified suggestions by Lightroom)
     pub faces: usize,
     pub faces_confirmed: usize,
+    /// stacks with at least two different photos taken over (pure original + virtual copy stacks are versions)
+    pub stacks: usize,
     pub read_duration_ms: u128,
     pub write_duration_ms: u128,
     pub run: i64,
@@ -229,6 +231,7 @@ impl Report {
             "no_longer_in_catalog": self.no_longer_in_catalog,
             "faces": self.faces,
             "faces_confirmed": self.faces_confirmed,
+            "stacks": self.stacks,
             "read_duration_ms": self.read_duration_ms,
             "write_duration_ms": self.write_duration_ms,
         })
@@ -558,6 +561,45 @@ impl NotTaken {
         }
         n
     }
+}
+
+/// One member of a Lightroom folder stack: stack, collapsed, catalog image, root file, is a virtual copy.
+type StackMember = (i64, bool, i64, i64, bool);
+
+/// Folder stacks of the catalog in stack order (position 1 = top). The counter table of the catalog is not reliable
+/// (it counted 143 stacks where there were 101): the members are read from the image assignment itself.
+fn read_stacks(lr: &Connection, schema: &CatalogSchema) -> Option<Vec<StackMember>> {
+    if !(schema.has("AgLibraryFolderStackImage", "stack") && schema.has("AgLibraryFolderStackImage", "image") && schema.has("AgLibraryFolderStack", "collapsed") && schema.has("Adobe_images", "rootFile")) {
+        return None;
+    }
+    let mut st = lr
+        .prepare(
+            "SELECT s.stack, st.collapsed, s.image, i.rootFile, coalesce(i.copyName, '') <> ''
+             FROM AgLibraryFolderStackImage s JOIN AgLibraryFolderStack st ON st.id_local = s.stack JOIN Adobe_images i ON i.id_local = s.image
+             ORDER BY s.stack, CAST(s.position AS REAL), s.id_local",
+        )
+        .ok()?;
+    let v = st.query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? != 0, r.get(2)?, r.get(3)?, r.get(4)?))).ok()?.collect::<rusqlite::Result<Vec<StackMember>>>().ok();
+    v
+}
+
+/// Take over the stacks with at least two different originals (virtual copies follow their original anyway).
+fn import_stacks(tx: &Connection, list: &[StackMember]) -> rusqlite::Result<usize> {
+    let mut by_stack: BTreeMap<i64, (bool, Vec<i64>, std::collections::HashSet<i64>)> = BTreeMap::new();
+    let mut ours = tx.prepare("SELECT id FROM image WHERE lr_id = ?1 AND copy IS NULL")?;
+    for &(stack, collapsed, image, file, copy) in list {
+        let e = by_stack.entry(stack).or_insert_with(|| (collapsed, Vec::new(), Default::default()));
+        if copy {
+            continue;
+        }
+        if let Some(id) = ours.query_row([image], |r| r.get::<_, i64>(0)).optional()? {
+            if e.2.insert(file) {
+                e.1.push(id);
+            }
+        }
+    }
+    let stacks: Vec<(i64, bool, Vec<i64>)> = by_stack.into_iter().filter(|(_, (_, v, _))| v.len() >= 2).map(|(k, (c, v, _))| (k, c, v)).collect();
+    crate::series::import_lightroom(tx, &stacks).map_err(|e| rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ERROR), Some(e)))
 }
 
 /// Which parts the catalog could be read for (see `import_with`): a part it lacks leaves the library's values alone.
@@ -1018,6 +1060,8 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
         collection_images: ["id_local", "collection", "image"].iter().all(|c| schema.has("AgLibraryCollectionImage", c)),
     };
     b.not_taken = NotTaken::read(&lr, &schema);
+    // folder stacks (read now, written after the photos): (stack, collapsed, catalog image, file) by position
+    let lr_stacks = read_stacks(&lr, &schema);
     b.catalog_gaps.extend(schema.missing());
     drop(lr);
     // never over the data of another catalog (its ids collide with the ones of the library)
@@ -1710,6 +1754,19 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
         }
     }
     pause_point(usize::MAX / 2)?;
+    // stacks of two or more different photos (the last step; stacks changed in graineo stay as they are). All or
+    // nothing: `series::import_lightroom` rolls back its own savepoint on an error.
+    if let Some(list) = &lr_stacks {
+        progress("Stapel übernehmen …");
+        match import_stacks(&tx, list) {
+            Ok(n) => {
+                b.stacks = n;
+                b.not_taken.stacks = 0;
+                b.not_taken.stacked_photos = 0;
+            }
+            Err(e) => b.conflicts.push(format!("Stapel nicht übernommen: {e}")),
+        }
+    }
     // faces and people (only boxes and names; Lightroom's own face features stay untouched)
     progress("Gesichter übernehmen …");
     // without readable face tables the faces of earlier imports stay as they are

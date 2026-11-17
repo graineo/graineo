@@ -28,13 +28,14 @@ pub use facets_build::inputs_fingerprint;
 #[path = "library_facets_bench.rs"]
 mod facets_bench;
 
-pub const CATEGORIES: [&str; N] = ["Kamera", "Objektiv", "Jahr", "Stichwort", "KI-Qualität", "Format", "Etikett", "Sterne", "Person", "Monat", "Tag im Monat", "Wochentag", "Tageszeit"];
+pub const CATEGORIES: [&str; N] = ["Kamera", "Objektiv", "Jahr", "Stichwort", "KI-Qualität", "Format", "Etikett", "Sterne", "Person", "Monat", "Tag im Monat", "Wochentag", "Tageszeit", "Ort"];
 /// Number of columns
-const N: usize = 13;
+const N: usize = 14;
 const WEEKDAY_COL: usize = 11;
 const TIME_COL: usize = 12;
 const KEYWORD_COL: usize = 3;
 const PERSON_COL: usize = 8;
+const PLACE_COL: usize = 13;
 pub const RANGES: [&str; 4] = ["Blende", "Brennweite", "ISO", "Zeit"];
 const NO_VALUE: u32 = u32::MAX;
 /// Height of the columns; below that a row for filters on attributes not currently in any column
@@ -68,9 +69,10 @@ const ALL_SLOTS: [Slot; N + 4] = [
     Slot::Cat(10),
     Slot::Cat(11),
     Slot::Cat(12),
+    Slot::Cat(PLACE_COL),
 ];
 /// IDs for `settings.json` (`metadata_columns`), same order as [`ALL_SLOTS`]
-const SLOT_IDS: [&str; N + 4] = ["camera", "lens", "year", "keyword", "person", "quality", "format", "label", "stars", "aperture", "focal_length", "iso", "shutter", "month", "day", "weekday", "time"];
+const SLOT_IDS: [&str; N + 4] = ["camera", "lens", "year", "keyword", "person", "quality", "format", "label", "stars", "aperture", "focal_length", "iso", "shutter", "month", "day", "weekday", "time", "place"];
 const DEFAULT_SLOTS: [Slot; 4] = [Slot::Cat(0), Slot::Cat(1), Slot::Cat(2), Slot::Cat(3)];
 
 impl Slot {
@@ -577,8 +579,8 @@ impl Facets {
     pub fn as_search(&self) -> Result<String, String> {
         let mut parts = Vec::new();
         // English base forms of the search fields
-        let keys = ["camera", "lens", "year", "keyword", "ai", "format", "label", "rating", "person", "month", "day", "weekday", "time"];
-        const EXACT_COLS: [usize; 5] = [0, 1, KEYWORD_COL, 5, PERSON_COL];
+        let keys = ["camera", "lens", "year", "keyword", "ai", "format", "label", "rating", "person", "month", "day", "weekday", "time", "place"];
+        const EXACT_COLS: [usize; 6] = [0, 1, KEYWORD_COL, 5, PERSON_COL, PLACE_COL];
         for k in 0..N {
             if self.selection[k].contains(&NO_VALUE) {
                 return Err(crate::tr("„(ohne)“ lässt sich nicht als Regel sichern").to_string());
@@ -941,7 +943,7 @@ pub(crate) mod tests {
         Row {
             image: 1, file: 1, folder: 1, name: "a.jpg".into(), format: "JPG".into(), copy: None, stars: 0, flag: 0, label: 0, status: 0, camera: None, capture: None,
             run: None, size: None, mtime: None, width: None, height: None, orientation: None, lens: None, aperture: Some(aperture), focal: Some(focal),
-            iso: Some(iso as i64), time: Some(time), ai_quality: None, changed: None, imported: None, from_lightroom: false, sidecar_jpeg: None, jpeg_for: None,
+            iso: Some(iso as i64), time: Some(time), ai_quality: None, changed: None, imported: None, from_lightroom: false, sidecar_jpeg: None, jpeg_for: None, place: None,
         }
     }
 

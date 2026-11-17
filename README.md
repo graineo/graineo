@@ -15,7 +15,7 @@ a photo library and a darkroom with film and paper simulation.</p>
 
 Photos from different cameras in one library, with film and paper simulation for your own looks.
 
-- **Every RAW.** Sigma Foveon (Merrill, Quattro, classic X3F), Fujifilm X-Trans, and Bayer files from Canon, Sony, Nikon, Panasonic, Ricoh and others, plus JPEG, HEIC, TIFF and PNG.
+- **Every RAW.** Sigma Foveon (Merrill, Quattro, classic X3F), Fujifilm X-Trans, and Bayer files from Canon (CR2, CR3), Nikon (NEF, NRW), Sony (ARW), Panasonic, Ricoh and others, plus DNG, JPEG, HEIC, TIFF and PNG. Nikon “High Efficiency” files (HE/HE★) are developed through macOS’s own RAW engine on a Mac where macOS supports them (reportedly from macOS 26.4); on Windows and Linux graineo shows the camera’s preview but does not develop them yet.
 - **Library.** Browse tens of thousands of photos, filter by camera, lens, year, keyword, person or ranges such as aperture and ISO, and search by words or by meaning. Originals are never modified.
 - **Darkroom.** Choose a negative film and a print paper. The picture runs through a spectral model of film dyes, enlarger light and paper, with grain and halation. Test strip, dodge and burn, contact sheet, compare. Results can be saved as a film look and used in Develop.
 

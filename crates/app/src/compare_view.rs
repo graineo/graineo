@@ -158,6 +158,8 @@ pub enum PaneImage {
     Current,
     Settings(Settings),
     CameraJpeg,
+    /// the photo developed by the system RAW engine of macOS (apple_raw.rs)
+    Apple,
 }
 
 pub struct Pane {
@@ -185,6 +187,8 @@ pub struct PaneTextures {
     /// per pane: the settings of the picture last painted there (kept until the next picture is there, so that a moving
     /// slider never turns the pane dark)
     shown: Vec<Option<Settings>>,
+    /// time of the last preview or crop: settings, milliseconds, crop (shown in the pipeline comparison)
+    pub last_ms: Option<(Settings, f64, bool)>,
 }
 
 impl PaneTextures {
@@ -236,7 +240,9 @@ impl PaneTextures {
         let Some(pos) = self.requested.iter().position(|(p, _)| p == settings) else { return false };
         let (_, at) = self.requested.remove(pos);
         self.stale_previews.retain(|p| p != settings);
-        crate::log(&format!("compare pane: preview {} × {} in {:.0} ms", image.size[0], image.size[1], (ctx.input(|i| i.time) - at) * 1000.0));
+        let ms = (ctx.input(|i| i.time) - at) * 1000.0;
+        crate::log(&format!("compare pane: preview {} × {} in {ms:.0} ms", image.size[0], image.size[1]));
+        self.last_ms = Some((settings.clone(), ms, false));
         match self.previews.iter_mut().find(|(p, _)| p == settings) {
             Some((_, t)) => t.set(image, TextureOptions::LINEAR),
             None => self.previews.push((settings.clone(), ctx.load_texture("compare-pane", image, TextureOptions::LINEAR))),
@@ -260,7 +266,9 @@ impl PaneTextures {
         let (x0, y0) = ((src[0]).ceil() as usize, (src[1]).ceil() as usize);
         let (x1, y1) = ((src[0] + src[2]).floor() as usize, (src[1] + src[3]).floor() as usize);
         let shown = [x0, y0, x1.saturating_sub(x0), y1.saturating_sub(y0)];
-        crate::log(&format!("compare pane: crop {} × {} in {:.0} ms ({:.1} MB of pane crops)", image.size[0], image.size[1], (ctx.input(|i| i.time) - at) * 1000.0, (self.bytes() + image.size[0] * image.size[1] * 4) as f64 / 1e6));
+        let ms = (ctx.input(|i| i.time) - at) * 1000.0;
+        crate::log(&format!("compare pane: crop {} × {} in {ms:.0} ms ({:.1} MB of pane crops)", image.size[0], image.size[1], (self.bytes() + image.size[0] * image.size[1] * 4) as f64 / 1e6));
+        self.last_ms = Some((settings.clone(), ms, true));
         let tex = ctx.load_texture("compare-pane-detail", image, TextureOptions::NEAREST);
         self.details.retain(|(s, ..)| *s != settings);
         self.stale_details.retain(|p| *p != settings);
@@ -313,7 +321,7 @@ pub fn pane_rects(n: usize, area: Rect, cols: usize, rows: usize, gap: f32) -> V
 }
 
 /// Name tag at the top left of a pane; with `menu` a small arrow (the tag opens the list of sources).
-fn tag(painter: &egui::Painter, at: Pos2, text: &str, menu: bool, hot: bool, max_width: f32) -> Rect {
+pub(crate) fn tag(painter: &egui::Painter, at: Pos2, text: &str, menu: bool, hot: bool, max_width: f32) -> Rect {
     let t = if menu { format!("{}  ▾", text.to_uppercase()) } else { text.to_uppercase() };
     // one line, shortened with "…" if the pane is narrower than the name
     let mut job = egui::text::LayoutJob::simple(t, egui::FontId::monospace(11.0), Color32::WHITE, (max_width - 14.0).max(40.0));
@@ -347,6 +355,8 @@ pub enum Kind {
     Before,
     /// current state and the picked looks
     Looks,
+    /// pipeline comparison in the sensor tray: graineo | Apple, or Apple alone (apple_raw.rs)
+    Pipeline,
 }
 
 impl App {
@@ -354,6 +364,8 @@ impl App {
     pub(crate) fn compare_kind(&self) -> Option<Kind> {
         if self.crop_mode.is_some() || self.current.is_none() {
             None
+        } else if self.apple_showing() {
+            Some(Kind::Pipeline)
         } else if self.look_compare.showing() {
             Some(Kind::Looks)
         } else if self.compare {
@@ -515,6 +527,21 @@ impl App {
                 v.extend(self.look_compare.picks.iter().map(|p| Pane { label: p.name.clone(), image: PaneImage::Settings(with_look(&p.choice, &s)) }));
                 v
             }
+            Kind::Pipeline => {
+                let Some(c) = self.current.as_ref() else { return Vec::new() };
+                let apple = Pane { label: self.apple.pane_label(), image: PaneImage::Apple };
+                if self.apple.pipeline == crate::apple_raw::Pipeline::Apple {
+                    return vec![apple];
+                }
+                let g = crate::apple_raw::graineo_settings(&self.entries[c.index].settings, self.apple.steps);
+                // developed by the Apple engine: the left pane is Apple's decoding through graineo's chain, say so
+                let dev = self.current.as_ref().and_then(|c| c.loaded.previews.foreign.as_ref()).and_then(|d| d.apple.as_ref()).map(|a| raw::apple::version_label(&a.used));
+                let label = match dev {
+                    Some(v) => format!("{} · {}", crate::trf!("Apple RAW {a}", a = v), self.apple.graineo_label()),
+                    None => self.apple.graineo_label(),
+                };
+                vec![Pane { label, image: PaneImage::Settings(g) }, apple]
+            }
         }
     }
 
@@ -591,7 +618,7 @@ impl App {
         let full_src = [0.0, 0.0, fw as f32, fh as f32];
         let s = Vec2::new(frame.w, frame.h);
         let gap = 8.0;
-        let (cols, rows) = grid(panes.len(), avail.size(), s, kind == Kind::BeforeAfter, gap);
+        let (cols, rows) = grid(panes.len(), avail.size(), s, matches!(kind, Kind::BeforeAfter | Kind::Pipeline), gap);
         let rects = pane_rects(panes.len(), avail, cols, rows, gap);
         let cell = rects[0].size();
         let pane_fit = (cell.x / s.x).min(cell.y / s.y);
@@ -732,6 +759,9 @@ impl App {
         let mut loading = false;
         let mut needed: Vec<Settings> = Vec::new();
         let mut tag_rects: Vec<Rect> = Vec::new();
+        let apple_params = if kind == Kind::Pipeline { self.apple_params() } else { None };
+        let apple_camera = if kind == Kind::Pipeline { self.apple_camera() } else { String::new() };
+        let Some(c) = self.current.as_ref() else { return true };
         let hovered_pane = if kind == Kind::Looks && clicks && !resp.dragged() { resp.hover_pos().and_then(|p| rects.iter().position(|r| image_rect(*r, center_u, pane_size).intersect(*r).contains(p))) } else { None };
         if kind == Kind::Looks && hovered_pane.is_some() && self.zoom <= 1.01 {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
@@ -826,11 +856,15 @@ impl App {
                         loading = true;
                     }
                 },
+                PaneImage::Apple => match &apple_params {
+                    Some(p) => loading |= self.apple.paint_pane(ui.ctx(), painter, r, rect, &frame, [fw, fh], p, needs_detail.then_some(region), settled, now, &apple_camera),
+                    None => crate::spinner(painter, r.intersect(rect).center(), 6.5, now, 1.0),
+                },
             }
             if kind == Kind::Looks && hovered_pane == Some(k) {
                 painter.rect_stroke(r.intersect(rect), 0.0, egui::Stroke::new(2.0, Color32::from_white_alpha(200)), egui::StrokeKind::Inside);
             }
-            let menu = kind != Kind::Looks && k == 0;
+            let menu = matches!(kind, Kind::BeforeAfter | Kind::Before) && k == 0;
             let at = r.intersect(rect).left_top() + Vec2::new(10.0, 10.0);
             let hot = menu && (self.before.menu_open || ui.rect_contains_pointer(Rect::from_min_size(at, Vec2::new(10.0, 10.0))));
             let tr = tag(painter, at, &pane.label, menu, hot, rect.right() - at.x - 10.0);
@@ -838,7 +872,7 @@ impl App {
         }
         // request the camera JPEG once per image (it may not exist)
         // (always with "Unedited | Current": the list offers it only once it exists, a remembered choice applies then)
-        let jpeg_needed = kind != Kind::Looks;
+        let jpeg_needed = matches!(kind, Kind::BeforeAfter | Kind::Before);
         if jpeg_needed && c.camera_jpeg.is_none() && self.before.jpeg_requested != Some(index) {
             self.before.jpeg_requested = Some(index);
             jobs.push(Job::CameraJpeg { index, path: self.entries[index].path.clone() });
@@ -879,7 +913,7 @@ impl App {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
         // the name tag of the left side opens the list of sources
-        if kind != Kind::Looks {
+        if matches!(kind, Kind::BeforeAfter | Kind::Before) {
             let tag_resp = ui.interact(tag_rects[0], egui::Id::new("compare-before-tag"), egui::Sense::click());
             if tag_resp.clicked() {
                 self.before.menu_open = !self.before.menu_open;
@@ -917,6 +951,7 @@ impl App {
             Kind::BeforeAfter => crate::tr("Y beendet den Vergleich").to_string(),
             Kind::Before => crate::tr("\\ zum Umschalten").to_string(),
             Kind::Looks => crate::tr("Klick auf ein Feld übernimmt den Look · Esc beendet").to_string(),
+            Kind::Pipeline => crate::tr("Nur zum Vergleichen – ändert die Entwicklung nicht").to_string(),
         };
         crate::badge(painter, avail, &hint, None);
         if let Some(k) = adopt.or_else(|| self.look_compare_test_end(kind)) {

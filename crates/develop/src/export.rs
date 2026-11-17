@@ -1,4 +1,4 @@
-//! Output as JPEG, 16-bit TIFF or linear DNG.
+//! Output as JPEG, JPEG XL, 16-bit TIFF, PNG or linear DNG.
 
 use std::path::Path;
 
@@ -25,6 +25,8 @@ pub enum Format {
     Exr { half: bool },
     /// The unprocessed sensor layers as 16-bit TIFF (X3F only)
     RawLayers,
+    /// JPEG XL: lossy with `quality` (1–100) or lossless with 8 or 16 bit (`bits16` applies to lossless only)
+    Jxl { quality: u8, lossless: bool, bits16: bool },
 }
 
 /// Additional export options (defaults = previous behaviour).
@@ -89,6 +91,7 @@ impl Format {
             Format::Dng | Format::DngProfiles => "dng",
             Format::Png16 => "png",
             Format::Exr { .. } => "exr",
+            Format::Jxl { .. } => "jxl",
         }
     }
 
@@ -101,10 +104,13 @@ impl Format {
         }
     }
 
-    /// Finished (display-referred) image in an RGB output colour space: JPEG, TIFF 16 bit, PNG.
+    /// Finished (display-referred) image in an RGB output colour space: JPEG, JPEG XL, TIFF 16 bit, PNG.
     pub fn is_finished_image(&self) -> bool {
-        matches!(self, Format::Jpeg { .. } | Format::Tiff16 | Format::Png16)
+        matches!(self, Format::Jpeg { .. } | Format::Jxl { .. } | Format::Tiff16 | Format::Png16)
     }
+
+    /// JPEG XL with the defaults of the export dialog (lossy, quality 92).
+    pub const JXL_DEFAULT: Format = Format::Jxl { quality: 92, lossless: false, bits16: true };
 
     /// Scene-linear floating-point image (TIFF 32 bit, OpenEXR).
     pub fn is_scene_linear(&self) -> bool {
@@ -119,6 +125,7 @@ impl Format {
             "dng" => Some(Format::Dng),
             "png" => Some(Format::Png16),
             "exr" => Some(Format::Exr { half: true }),
+            "jxl" => Some(Format::JXL_DEFAULT),
             _ => None,
         }
     }
@@ -223,6 +230,7 @@ pub fn write_finished(img: &Rgb16, path: &Path, format: Format, space: graineo_c
         Format::Tiff16 if opts.tiff_compression == tiffw::Compression::None => color::write_tiff16(img, path, space),
         Format::Tiff16 => write_tiff16_with(img, path, icc(), opts.tiff_compression),
         Format::Png16 => crate::png16::write(img, path, icc().as_deref().map(|p| (space.name(), p))),
+        Format::Jxl { quality, lossless, bits16 } => crate::jxl::write(img, path, space, crate::jxl::Params { quality, lossless, bits16 }),
         _ => Err(std::io::Error::other("kein fertiges Bildformat")),
     }
 }
@@ -322,7 +330,7 @@ pub fn export_with(session: &mut Session, s: &Settings, format: Format, engine: 
 pub fn export_with_opts(session: &mut Session, s: &Settings, format: Format, engine: Engine, path: &Path, opts: &Options) -> std::io::Result<bool> {
     let spp = engine == Engine::Spp && Session::uses_spp(s);
     match format {
-        Format::Tiff16 | Format::Png16 | Format::Jpeg { .. } if !spp => {
+        Format::Tiff16 | Format::Png16 | Format::Jxl { .. } | Format::Jpeg { .. } if !spp => {
             // TIFF/PNG: true 16-bit gradations (tone curve interpolated, exact gamma)
             let img = if matches!(format, Format::Jpeg { .. }) { session.render_full_own(s) } else { session.render_full_own_fine(s) };
             let img = crate::geometry::apply(img, s, session.cal.orientation);
@@ -393,13 +401,13 @@ pub fn export_opts(session: &mut Session, s: &Settings, format: Format, path: &P
             dng::write_linear_dng(lin, &cal, s.color_mode.as_deref(), meta, path)
         }
         // Crop/straighten only after development (DNGs stay uncropped)
-        Format::Png16 | Format::Tiff16 if format == Format::Png16 || opts.tiff_compression != tiffw::Compression::None => {
+        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 if format != Format::Tiff16 || opts.tiff_compression != tiffw::Compression::None => {
             let img = apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size);
             write_finished(&img, path, format, graineo_color::Space::Srgb, opts)
         }
         Format::TiffFloat | Format::Exr { .. } => export_scene(session, s, format, Session::uses_spp(s), path, opts),
         Format::RawLayers => crate::rawlayers::write(&session.path, &session.cal, path, opts.tiff_compression).map(|_| ()),
-        Format::Png16 | Format::Tiff16 => write_tiff16(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size), path),
+        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 => write_tiff16(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size), path),
         Format::Jpeg { quality } => write_jpeg(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size), path, quality),
     }
 }

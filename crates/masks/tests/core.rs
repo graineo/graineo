@@ -20,6 +20,10 @@ fn doc(mask: Mask, a: Adjustments) -> Document {
         layers: vec![Layer {
             mask,
             adjustments: a,
+            name: None,
+            enabled: true,
+            amount: 1.0,
+            refine: 0.0,
         }],
     }
 }
@@ -233,6 +237,10 @@ fn exposure_neutral_outside_and_layer_order() {
             exposure: 1.,
             ..Default::default()
         },
+        name: None,
+        enabled: true,
+        amount: 1.0,
+        refine: 0.0,
     });
     let out = apply(image, &d).unwrap();
     assert_eq!(out[0], 0.);
@@ -372,13 +380,14 @@ fn benchmark_24mp() {
                 texture: 0.2,
                 sharpness: 0.2,
                 noise_reduction: 0.2,
+                ..Default::default()
             },
         ),
     ] {
         let mut times = Vec::new();
         for _ in 0..3 {
             let t = std::time::Instant::now();
-            let out = apply(im, &doc(mask.clone(), a)).unwrap();
+            let out = apply(im, &doc(mask.clone(), a.clone())).unwrap();
             let elapsed = t.elapsed();
             assert!(out.iter().all(|v| v.is_finite()));
             times.push(elapsed.as_secs_f64());
@@ -446,6 +455,10 @@ fn v2_edges_have_limited_halos() {
                 sharpness: 1.0,
                 ..Default::default()
             },
+            name: None,
+            enabled: true,
+            amount: 1.0,
+            refine: 0.0,
         }],
     };
     let out = apply(Image::new(w, h, &data).unwrap(), &d).unwrap();

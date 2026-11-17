@@ -222,7 +222,52 @@ pub fn slider_hint(
     step: f64,
     hint: &str,
 ) -> bool {
-    slider_full(ui, label, value, range, default, step, hint, None)
+    slider_full(ui, label, value, range, default, step, hint, None, 0.0)
+}
+
+/// Marker for [`slider_plain`]: no help card, no tooltip on the name.
+const PLAIN: &str = "\u{0}plain";
+
+/// Left text edge of a tool tray (Masks, Retouch): category headings ([`category`]), slider names of
+/// [`slider_plain`], notes ([`note`]) and status lines start this far right of the content edge; areas (lists,
+/// buttons, row highlights, tracks) start at the content edge itself. Inside a collapsible group ([`section_local`])
+/// the content is indented by the group step, so its names line up with the group title.
+pub const TEXT_INSET: f32 = 4.0;
+
+/// [`slider`] for tools whose sliders share a name with a slider of the Edit panel but act differently (local masks,
+/// removal size …): same operation (double-click resets to `default`), but without the help card of the global slider.
+/// The name starts at the text edge of the tray ([`TEXT_INSET`]).
+pub fn slider_plain(ui: &mut egui::Ui, label: &str, value: &mut f64, range: std::ops::RangeInclusive<f64>, default: f64, step: f64) -> bool {
+    slider_full(ui, label, value, range, default, step, PLAIN, None, TEXT_INSET)
+}
+
+/// Dimmed note line of a tool tray (hint, state, count): small, wrapped, at the text edge ([`TEXT_INSET`]).
+pub fn note(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    egui::Frame::NONE
+        .inner_margin(egui::Margin { left: TEXT_INSET as i8, ..Default::default() })
+        .show(ui, |ui| ui.add(egui::Label::new(egui::RichText::new(text).small().color(TEXT_DIM)).wrap()))
+        .inner
+}
+
+/// Width of `ui` that is visible (inside indented sections a wide row before can widen the layout beyond the panel).
+pub fn visible_width(ui: &egui::Ui) -> f32 {
+    ui.available_width().min(ui.clip_rect().right() - ui.cursor().left() - 4.0).max(40.0)
+}
+
+/// [`slider_plain`] for `f32` values (the mask and retouch data).
+pub fn slider_plain_f32(ui: &mut egui::Ui, label: &str, value: &mut f32, range: std::ops::RangeInclusive<f32>, default: f32, step: f64) -> bool {
+    let mut v = *value as f64;
+    // never wider than the visible panel (inside indented sections a wide row before can widen the layout, and the
+    // value at the right edge would be clipped)
+    let w = visible_width(ui).max(60.0);
+    let changed = ui.allocate_ui(egui::vec2(w, 0.0), |ui| {
+        ui.set_max_width(w);
+        slider_plain(ui, label, &mut v, *range.start() as f64..=*range.end() as f64, default as f64, step)
+    }).inner;
+    if changed {
+        *value = v as f32;
+    }
+    changed
 }
 
 /// Slider with a colored track (e.g. temperature blue → yellow).
@@ -236,7 +281,7 @@ pub fn slider_gradient(
     hint: &str,
     grad: [Color32; 2],
 ) -> bool {
-    slider_full(ui, label, value, range, default, step, hint, Some(grad))
+    slider_full(ui, label, value, range, default, step, hint, Some(grad), 0.0)
 }
 
 /// Range slider for a hue range:
@@ -352,6 +397,7 @@ fn slider_full(
     step: f64,
     hint: &str,
     grad: Option<[Color32; 2]>,
+    inset: f32,
 ) -> bool {
     let before = *value;
     let (lo, hi) = (*range.start(), *range.end());
@@ -360,7 +406,8 @@ fn slider_full(
     let (outer, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 31.0 + SLIDER_AIR), egui::Sense::hover());
     let row = egui::Rect::from_min_size(outer.min + egui::vec2(0.0, SLIDER_AIR / 2.0), egui::vec2(outer.width(), 31.0));
     let pad = 7.0;
-    let label_rect = egui::Rect::from_min_size(row.min, egui::vec2(row.width() - 64.0, 17.0));
+    // the name may start right of the row (`inset`, text edge of a tool tray); track and value keep their place
+    let label_rect = egui::Rect::from_min_size(row.min + egui::vec2(inset, 0.0), egui::vec2(row.width() - 64.0 - inset, 17.0));
     let value_rect = egui::Rect::from_min_max(egui::pos2(row.right() - 60.0, row.top()), egui::pos2(row.right(), row.top() + 17.0));
     let track_rect = egui::Rect::from_min_max(egui::pos2(row.left() + pad, row.top() + 17.0), egui::pos2(row.right() - pad, row.bottom()));
     let id = ui.scope_id().with(("lr-slider", label));
@@ -518,6 +565,9 @@ const SECTION_CONTROLS: &str = "Schalter im Kopf: Abschnitt vorübergehend absch
 /// while the row is hovered; otherwise the previous short hint as a tooltip.
 #[allow(clippy::too_many_arguments)]
 fn name_hover(ui: &egui::Ui, name: egui::Response, name_text: egui::Rect, id: egui::Id, hot: bool, label: &str, hint: &str, controls: &str) {
+    if hint == PLAIN {
+        return;
+    }
     match crate::help::for_slider(label, hint) {
         Some(card) => {
             let q = egui::pos2(name_text.right() + 10.0, name_text.center().y);
@@ -700,9 +750,26 @@ pub fn category(ui: &mut egui::Ui, text: &str) {
     ui.add_space(2.0);
 }
 
+/// [`category`] with controls at its right end (e.g. "?" or a toggle), `right` points wide; the line ends before them.
+pub fn category_with<R>(ui: &mut egui::Ui, text: &str, right: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.add_space(12.0);
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 22.0), egui::Sense::hover());
+    let line = rect.with_max_x((rect.right() - right - 6.0).max(rect.left()));
+    category_paint(ui.painter(), egui::Rect::from_center_size(line.center(), egui::vec2(line.width(), 18.0)), text);
+    let owned = text.to_string();
+    crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.scope_id().with(("kategorie", text)), rect.expand2(egui::vec2(0.0, 3.0)), move |p, bar, _| {
+        category_paint(p, egui::Rect::from_center_size(bar.center(), egui::vec2(bar.width(), 18.0)), &owned);
+    });
+    let area = egui::Rect::from_min_max(egui::pos2((rect.right() - right).max(rect.left()), rect.top()), rect.max);
+    let mut child = ui.new_child(egui::UiBuilder::new().id_salt(("category_with", text)).max_rect(area).layout(egui::Layout::right_to_left(egui::Align::Center)));
+    let r = add(&mut child);
+    ui.add_space(2.0);
+    r
+}
+
 fn category_paint(painter: &egui::Painter, rect: egui::Rect, text: &str) {
     let g = caps(painter, text, egui::FontId::proportional(10.5), CATEGORY_LABEL);
-    let links = rect.left() + 4.0;
+    let links = rect.left() + TEXT_INSET;
     painter.galley(egui::pos2(links, rect.center().y - g.size().y / 2.0), g.clone(), CATEGORY_LABEL);
     let x = links + g.size().x + 10.0;
     if x < rect.right() {
@@ -1003,13 +1070,19 @@ thread_local!(static RECORDED_SECTIONS: std::cell::RefCell<Vec<String>> = const 
 
 pub fn section_reset<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
     remember_section(title);
-    section_full(ui, title, open, changed, None, add)
+    section_full(ui, title, open, changed, None, None, add)
+}
+
+/// [`section_reset`] for a tool's own sliders whose section titles also occur in "Edit" (e.g. the local corrections
+/// "Licht", "Details"): own open/closed state under `salt`, no copy/paste menu and no help card of the Edit section.
+pub fn section_local<R>(ui: &mut egui::Ui, salt: &str, title: &str, open: bool, changed: bool, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
+    section_full(ui, title, open, changed, None, Some(salt), add)
 }
 
 /// Like [`section_reset`], additionally with a small toggle in the header: temporarily
 /// disable the section without losing the sliders (`off` = disabled).
 pub fn section_switch<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, off: &mut bool, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
-    section_full(ui, title, open, changed, Some(off), add)
+    section_full(ui, title, open, changed, Some(off), None, add)
 }
 
 /// Arrow (rotates when expanding) and title of a section header; returns the title position and width.
@@ -1029,10 +1102,13 @@ fn section_head_paint(painter: &egui::Painter, rect: egui::Rect, title: &str, op
     (title_pos, title_w)
 }
 
-fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mut off: Option<&mut bool>, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
+fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mut off: Option<&mut bool>, local: Option<&str>, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
     // Test hook (own data folder only): `GRAINEO_OPEN_SECTIONS="Aufnahmedetails,…"` opens these sections at first sight
-    let open = open || crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_OPEN_SECTIONS").is_ok_and(|v| v.split(',').any(|t| t.trim() == title));
-    let id = ui.make_persistent_id(("lr-section", title));
+    let open = open || crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_OPEN_SECTIONS").is_ok_and(|v| v.split(',').any(|t| t.trim() == title || local == Some(t.trim())));
+    let id = match local {
+        Some(salt) => egui::Id::unique(("lr-section-local", salt)),
+        None => ui.make_persistent_id(("lr-section", title)),
+    };
     let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, open);
     let mut reset = false;
     // Header row across the full width: click expands/collapses, hover highlights
@@ -1054,7 +1130,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
         state.toggle(ui);
     }
     // Context menu: reset, copy, paste section (only this section)
-    if crate::paste::for_section(title).is_some() {
+    if local.is_none() && crate::paste::for_section(title).is_some() {
         let clip: Option<String> = ui.ctx().data(|d| d.get_temp(egui::Id::unique(SECTION_CLIP)));
         let action = egui::Id::unique(SECTION_ACTION);
         resp.context_menu(|ui| {
@@ -1093,8 +1169,8 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
         });
     }
     // Help for the section: "?" after the title (and change dot), only while hovering the header
-    let edit_section = crate::paste::for_section(title).is_some();
-    if let Some(card) = crate::help::for_section(title).or(edit_section.then_some(&crate::help::EDIT_SECTION)) {
+    let edit_section = local.is_none() && crate::paste::for_section(title).is_some();
+    if let Some(card) = local.is_none().then(|| crate::help::for_section(title)).flatten().or(edit_section.then_some(&crate::help::EDIT_SECTION)) {
         let q = egui::pos2(title_pos.x + title_w + 22.0, rect.center().y);
         crate::help::question_mark(ui, q, id.with("hilfe"), ui.rect_contains_pointer(rect), title, "", card, if edit_section { SECTION_CONTROLS } else { "" });
     }
@@ -1187,10 +1263,20 @@ pub struct HistResponse {
     pub toggle_clipping: bool,
     /// Dragged: area and shift as a fraction of the width
     pub drag: Option<(HistRegion, f32)>,
+    /// Double click outside the clipping triangles (next size of the display)
+    pub double_clicked: bool,
 }
 
+/// Height of the histogram (and of the other displays at the top of the Edit panel).
+pub const HISTOGRAM_H: f32 = 110.0;
+
 pub fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool) -> HistResponse {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 110.0), egui::Sense::click_and_drag());
+    histogram_h(ui, h, show_clipping, HISTOGRAM_H)
+}
+
+/// [`histogram`] with its own height (the pinned histogram gets smaller in low windows).
+pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32) -> HistResponse {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, PANEL_DARK);
     let n = h[0].len();
@@ -1259,6 +1345,7 @@ pub fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool) -> H
     let hovered = resp.hovered();
     crate::help::question_mark(ui, rect.right_bottom() + egui::vec2(-10.0, -10.0), resp.id.with("hilfe"), hovered, "Histogramm", "", &crate::help::HISTOGRAM, "");
     out.toggle_clipping = clicked;
+    out.double_clicked = resp.double_clicked() && !resp.interact_pointer_pos().is_some_and(corner);
     out
 }
 
@@ -1353,12 +1440,13 @@ pub fn scope_image(rgb: &[u8], width: usize, height: usize, scope: Scope) -> egu
 
 /// Waveform/parade, same height as the histograms (no jumping when switching).
 pub fn scope_view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: Scope) {
-    scope_view_h(ui, tex, scope, 96.0, false);
+    let _ = scope_view_h(ui, tex, scope, 96.0, false);
 }
 
 /// Like [`scope_view`], with selectable height and optionally a percent scale on the left (0 … 100 %).
-pub fn scope_view_h(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: Scope, height: f32, scale: bool) {
-    let (outer, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::hover());
+/// Returns: double clicked (next size of the display).
+pub fn scope_view_h(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: Scope, height: f32, scale: bool) -> bool {
+    let (outer, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click());
     let rect = if scale { egui::Rect::from_min_max(outer.min + egui::vec2(34.0, 6.0), outer.max - egui::vec2(0.0, 6.0)) } else { outer };
     if scale {
         let p = ui.painter();
@@ -1391,6 +1479,7 @@ pub fn scope_view_h(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope:
         _ => ("Waveform", &crate::help::SCOPE_WAVE),
     };
     crate::help::question_mark(ui, outer.right_top() + egui::vec2(-10.0, 10.0), resp.id.with("hilfe"), resp.hovered(), title, "", card, "");
+    resp.double_clicked()
 }
 
 /// Color wheel for color grading: angle = hue, distance from the centre = saturation.
@@ -1743,6 +1832,25 @@ pub enum Icon {
     XCircle,
     /// Zoom: fit the photo
     FrameCorners,
+    /// Pin of the histogram at the top of the Edit trays
+    PushPin,
+    /// Retouch tool of the rail
+    Bandaids,
+    /// Masks tray: on/off, menu, combination of parts
+    Eye,
+    EyeSlash,
+    DotsThree,
+    Plus,
+    Intersect,
+    /// Masks tray: kinds of new masks
+    UserFocus,
+    Users,
+    CursorClick,
+    PaintBrush,
+    Gradient,
+    Circle,
+    SunDim,
+    Palette,
 }
 
 impl Icon {
@@ -1821,6 +1929,21 @@ impl Icon {
             Icon::CircleDashed => '\u{e602}',
             Icon::XCircle => '\u{e4f8}',
             Icon::FrameCorners => '\u{e626}',
+            Icon::PushPin => '\u{e3e2}',
+            Icon::Bandaids => '\u{e0b2}',
+            Icon::Eye => '\u{e220}',
+            Icon::EyeSlash => '\u{e224}',
+            Icon::DotsThree => '\u{e1fe}',
+            Icon::Plus => '\u{e3d4}',
+            Icon::Intersect => '\u{e2d2}',
+            Icon::UserFocus => '\u{e6fc}',
+            Icon::Users => '\u{e4d6}',
+            Icon::CursorClick => '\u{e7c8}',
+            Icon::PaintBrush => '\u{e6f0}',
+            Icon::Gradient => '\u{eb42}',
+            Icon::Circle => '\u{e18a}',
+            Icon::SunDim => '\u{e474}',
+            Icon::Palette => '\u{e6c8}',
         }
     }
 }
@@ -2042,76 +2165,6 @@ pub fn orientation_toggle(ui: &mut egui::Ui, landscape: &mut bool) -> bool {
 
 
 
-/// Vectorscope of the 8-bit preview image: hue as angle, saturation as distance from the centre
-/// (Cb/Cr per Rec. 709), brightness = frequency, tinted with the respective hue.
-pub fn vectorscope_image(rgb: &[u8], width: usize, height: usize) -> egui::ColorImage {
-    const N: usize = 160;
-    let mut counts = vec![0u32; N * N];
-    let mut col = vec![[0f32; 3]; N * N];
-    for p in rgb.chunks_exact(3) {
-        let (r, g, b) = (p[0] as f32 / 255.0, p[1] as f32 / 255.0, p[2] as f32 / 255.0);
-        let y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        let cb = (b - y) / 1.8556;
-        let cr = (r - y) / 1.5748;
-        // ±0.5 fills the circle; edge = full saturation
-        let x = ((cb + 0.5) * N as f32) as isize;
-        let yy = ((0.5 - cr) * N as f32) as isize;
-        if (0..N as isize).contains(&x) && (0..N as isize).contains(&yy) {
-            let i = yy as usize * N + x as usize;
-            counts[i] += 1;
-            col[i][0] += r;
-            col[i][1] += g;
-            col[i][2] += b;
-        }
-    }
-    let mean = (width as f32 * height as f32 / (N * N) as f32 * 6.0).max(1.0);
-    let pixels = counts
-        .iter()
-        .zip(&col)
-        .map(|(&n, c)| {
-            if n == 0 {
-                return Color32::TRANSPARENT;
-            }
-            let v = ((n as f32 / mean).sqrt() * 0.9).min(1.0);
-            // Color of the pixels, brought to full brightness so the hue is recognisable
-            let m = (c[0].max(c[1]).max(c[2]) / n as f32).max(1e-3);
-            let k = |x: f32| ((x / n as f32 / m) * 0.75 + 0.25).min(1.0) * v * 255.0;
-            Color32::from_rgb(k(c[0]) as u8, k(c[1]) as u8, k(c[2]) as u8)
-        })
-        .collect();
-    egui::ColorImage { size: [N, N], source_size: egui::vec2(N as f32, N as f32), pixels }
-}
-
-/// Show the vectorscope: circle with target marks (R, Mg, B, Cy, G, yellow) and skin tone line.
-pub fn vectorscope_view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32) {
-    let (outer, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::hover());
-    let p = ui.painter_at(outer);
-    p.rect_filled(outer, 0.0, PANEL_DARK);
-    let d = height - 8.0;
-    let sq = egui::Rect::from_center_size(outer.center(), egui::vec2(d, d));
-    let c = sq.center();
-    let r = d / 2.0;
-    p.circle_stroke(c, r, Stroke::new(1.0, Color32::from_gray(0x3a)));
-    p.circle_stroke(c, r * 0.5, Stroke::new(1.0, Color32::from_gray(0x26)));
-    p.line_segment([c - egui::vec2(r, 0.0), c + egui::vec2(r, 0.0)], Stroke::new(1.0, Color32::from_gray(0x24)));
-    p.line_segment([c - egui::vec2(0.0, r), c + egui::vec2(0.0, r)], Stroke::new(1.0, Color32::from_gray(0x24)));
-    // Skin tone line: 123° from the Cb axis (skin tones of all types lie close to this line)
-    let a = 123f32.to_radians();
-    p.line_segment([c, c + egui::vec2(a.cos() * r, -a.sin() * r)], Stroke::new(1.0, Color32::from_rgba_unmultiplied(0xe0, 0xa0, 0x80, 80)));
-    if let Some(t) = tex {
-        p.image(t.id(), sq, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
-    }
-    // Target marks of the primaries at 75 % saturation
-    for (name, rgb) in [("R", [1.0f32, 0.0, 0.0]), ("Mg", [1.0, 0.0, 1.0]), ("B", [0.0, 0.0, 1.0]), ("Cy", [0.0, 1.0, 1.0]), ("G", [0.0, 1.0, 0.0]), ("Ge", [1.0, 1.0, 0.0])] {
-        let y = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
-        let (cb, cr) = ((rgb[2] - y) / 1.8556 * 0.75, (rgb[0] - y) / 1.5748 * 0.75);
-        let at = egui::pos2(sq.left() + (cb + 0.5) * d, sq.top() + (0.5 - cr) * d);
-        p.rect_stroke(egui::Rect::from_center_size(at, egui::vec2(7.0, 7.0)), 0.0, Stroke::new(1.0, Color32::from_gray(0x60)), egui::StrokeKind::Middle);
-        p.text(at + egui::vec2(7.0, -7.0), egui::Align2::LEFT_BOTTOM, name, egui::FontId::proportional(10.0), Color32::from_gray(0x9c));
-    }
-    crate::help::question_mark(ui, outer.right_top() + egui::vec2(-10.0, 10.0), resp.id.with("hilfe"), resp.hovered(), "Vektorskop", "", &crate::help::VECTORSCOPE, "");
-}
-
 /// Result of [`thumb_grid_fav`].
 #[derive(Default)]
 pub struct ThumbGridResponse {
@@ -2322,7 +2375,12 @@ pub fn with_shortcut(tip: &str, shortcut: &str) -> String {
 
 /// Like [`icon_button`] with its own hint text (appears after a short hover delay).
 pub fn icon_button_hint(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(26.0, 24.0), egui::Sense::click());
+    icon_button_sized(ui, icon, on, tip, egui::vec2(26.0, 24.0), 16.0)
+}
+
+/// [`icon_button_hint`] with its own size of the field and of the symbol (head rows with small controls).
+pub fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str, size: egui::Vec2, icon_px: f32) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let enabled = ui.is_enabled();
     let painter = ui.painter();
     let (fill, fg) = if on {
@@ -2336,7 +2394,7 @@ pub fn icon_button_hint(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str) -> b
     if on || resp.has_focus() {
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(if resp.has_focus() { 1.5 } else { 1.0 }, ACCENT), egui::StrokeKind::Inside);
     }
-    paint_icon(painter, egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0)), icon, fg);
+    paint_icon(painter, egui::Rect::from_center_size(rect.center(), egui::vec2(icon_px, icon_px)), icon, fg);
     if !tip.is_empty() && enabled {
         hover_tip(ui, &resp, tip);
     }
@@ -2931,6 +2989,25 @@ mod tests {
             });
         }
         assert!(clicked);
+    }
+
+    /// The sliders of the Masks tray (slider_plain) reset on a double-click on the name or the track, as in Edit.
+    #[test]
+    fn plain_slider_resets_on_double_click() {
+        for at in [egui::pos2(20.0, 10.0), egui::pos2(150.0, 28.0)] {
+            let ctx = egui::Context::default();
+            let mut value = 0.7f32;
+            let mut changed = false;
+            let press = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+            for (i, events) in [vec![egui::Event::PointerMoved(at)], vec![press(true)], vec![press(false)], vec![press(true)], vec![press(false)], vec![]].into_iter().enumerate() {
+                let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(300.0, 100.0))), time: Some(i as f64 * 0.05), events, ..Default::default() };
+                let _ = crate::ui_test::run(&ctx, input, |ui| {
+                    changed |= slider_plain_f32(ui, "Belichtung", &mut value, -3.0..=3.0, 0.0, 0.01);
+                });
+            }
+            assert!(changed, "no change at {at:?}");
+            assert_eq!(value, 0.0, "double-click at {at:?} did not reset");
+        }
     }
 
     #[test]

@@ -1,0 +1,12 @@
+75fb74497161541f  1 Foto, A4, 10 mm Rand
+49b5e662da557e66  1 Foto, A3+, 15 mm Rand
+a9854a13fddeb43f  1 Foto, A3, 15 mm Rand
+38f4878d3b1ceaa1  Randlos 10 × 15
+400056e55d2ce158  13 × 18, 5 mm Rand
+bc1a25ae0d6500fb  2 Fotos, A4
+d1e694cefdf3b609  4 Fotos, A4
+414d326860f4828f  Kontaktabzug A4 5 × 6
+1e053d27f8b894e6  Kontaktabzug A3+ 6 × 8
+6ac3eaed87e32f8d  Filmstreifen A4 (Kontaktabzug)
+88dddda327057c4c  A3+ quer, ausfüllen, Kontur, Schnittmarken
+fee4fb6339e71546  frei 200 × 250, Zellmaß, wiederholen

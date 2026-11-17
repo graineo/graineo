@@ -27,7 +27,7 @@
 //! ```
 //!
 //! Further commands: `apple-photos`, `lens`, `masks`, `lr-masks`, `retouch`, `color-chart`, `grain`,
-//! `style`, `look-pair`, `look-image`, `rawapp`, `psnr`, `sppgpu`, `sppsharp`, `bench`, `stages`, `ca`,
+//! `style`, `camera-color`, `apple-raw`, `learn-look`, `look-pair`, `look-image`, `rawapp`, `psnr`, `sppgpu`, `sppsharp`, `bench`, `stages`, `ca`,
 //! `defringe`, `sharpen-study`, `color-export`, `wide-stat`, `auto-data`, `lr-compare`, `lr-calibrate`,
 //! `lr-samples`, `camera-samples`. The German command names of earlier versions (`lens`, `masks`,
 //! `farbtafel`, `grain`, `stil`, `sensorblick`, …) are still accepted as hidden aliases.
@@ -41,12 +41,18 @@ use tiff::encoder::{colortype, TiffEncoder};
 use x3f::{CamfEntry, MatrixData, X3fFile};
 
 mod classic_output;
+mod scene_cmd;
+mod learn_look_cmd;
+mod samples_look;
 mod film_shelf;
 mod merrill_new;
 mod color_quality;
 mod pairs_bench;
+mod series_cmd;
 mod search_bench;
+mod places_cmd;
 mod semantic_search;
+mod content_keywords_cmd;
 mod color_chart;
 mod film;
 mod analog;
@@ -60,10 +66,12 @@ mod lens_measure;
 mod noise_measure;
 mod hotpixel;
 mod looks;
+mod camera_color;
 mod focus_cmd;
 mod lr_handover;
 mod gpu_measure;
 mod qa;
+mod bench_data;
 
 /// Lightroom catalog for the measuring tools (read only): `GRAINEO_LR_CATALOG`, else the usual location on this Mac.
 /// The app itself never reads a catalog outside the import.
@@ -73,6 +81,7 @@ pub(crate) fn dev_catalog() -> std::path::PathBuf {
         .unwrap_or_else(|| sysdirs::home().unwrap_or_default().join("Pictures/Lightroom/Lightroom Catalog.lrcat"))
 }
 mod rawapp;
+mod apple_raw_cmd;
 mod color_chart_raw;
 mod gpu_compare;
 mod rawtest;
@@ -92,6 +101,16 @@ fn main() -> Result<()> {
         return apple_photos_cmd(args.get(1).map(String::as_str));
     }
     // sync of a test library with times and system calls, see `sync_cmd`
+    // series and stacks: grouping measured on an own synthetic library / statistics of a library copy
+    if args.first().map(String::as_str) == Some("series-measure") {
+        return series_cmd::measure(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("series-demo") {
+        return series_cmd::demo(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("series-stats") {
+        return series_cmd::stats(&args[1..]);
+    }
     if args.first().map(String::as_str) == Some("sync") {
         return sync_cmd(&args[1..]);
     }
@@ -109,12 +128,27 @@ fn main() -> Result<()> {
     if args.first().map(String::as_str) == Some("semantic-search") {
         return semantic_search::run(&args[1..]);
     }
+    // offline place names: build the data file / spot checks, see places_cmd.rs
+    if args.first().map(String::as_str) == Some("places-build") {
+        return places_cmd::build(&args[1..]);
+    }
+    if args.first().map(String::as_str) == Some("places-lookup") {
+        return places_cmd::lookup(&args[1..]);
+    }
     // time of the library search per query and term, see search_bench.rs
     if args.first().map(String::as_str) == Some("search-measure") {
         return search_bench::run(&args[1..]);
     }
+    // keyword suggestions from the picture content: ranking, threshold sweep, hits per photo, see content_keywords_cmd.rs
+    if args.first().map(String::as_str) == Some("content-keywords") {
+        return content_keywords_cmd::run(&args[1..]);
+    }
     if args.first().map(String::as_str) == Some("semantic-search-fill") {
         return semantic_search::fill(&args[1..]);
+    }
+    // test data and machine facts for the start page benchmarks, see bench_data.rs
+    if args.first().map(String::as_str) == Some("bench-data") {
+        return bench_data::run(&args[1..]);
     }
     if args.first().map(String::as_str) == Some("hotpixel") {
         return hotpixel::run(&args[1..]);
@@ -135,9 +169,15 @@ fn main() -> Result<()> {
     }
     let (cmd, file) = match (args.first(), args.get(1)) {
         (Some(c), Some(f)) => (c.as_str(), f),
-        _ => bail!("usage: graineo-dev <command> <file> …\ncommands: info camf raw preview develop x3fuse compare spphash sppa sppgpu sppsharp bench stages ca defringe psnr film qa sensor rawapp lens masks lr-masks retouch color-chart grain style look-pair look-image sharpen-study color-export wide-stat auto-data lr-compare lr-calibrate lr-samples camera-samples apple-photos update-key update-sign update-verify update-manifest"),
+        _ => bail!("usage: graineo-dev <command> <file> …\ncommands: info camf raw preview develop x3fuse compare spphash sppa sppgpu sppsharp bench stages ca defringe psnr film qa sensor rawapp lens masks lr-masks retouch color-chart grain style camera-color learn-look samples-look look-pair look-image sharpen-study color-export wide-stat auto-data lr-compare lr-calibrate lr-samples camera-samples apple-photos update-key update-sign update-verify update-manifest"),
     };
     if cmd == "perf" { return perf::run(&args[1..]); }
+    if cmd == "scene-depth" { return scene_cmd::depth(&args[1..]); }
+    if cmd == "scene-depth-compare" { return scene_cmd::depth_compare(&args[1..]); }
+    if cmd == "scene-sky" { return scene_cmd::sky(&args[1..]); }
+    if cmd == "mask-refine" { return scene_cmd::mask_refine(&args[1..]); }
+    if cmd == "scene-segments" { return scene_cmd::segments(&args[1..]); }
+    if cmd == "mask-ref" { return scene_cmd::mask_ref(&args[1..]); }
     if cmd == "gpub" { return gpu_b::run(&args[1..]); }
     if cmd == "perf-reference" { return baseline_compare::reference(&args[1..]); }
     if matches!(cmd, "lens") { return lens_measure::run(&args[1..]); }
@@ -176,6 +216,22 @@ fn main() -> Result<()> {
     if matches!(cmd, "style") {
         return looks::style(&args[1..]);
     }
+    // time of reading the picture styles of many RAWs (window "Kamera-Looks"), see looks.rs
+    if matches!(cmd, "style-scan") {
+        return looks::style_scan(&args[1..]);
+    }
+    // color distance to the camera's own JPEG rendering over many RAW/JPEG pairs, see camera_color.rs
+    if cmd == "camera-color" {
+        return camera_color::run(&args[1..]);
+    }
+    // learn camera looks from RAW + camera JPEG pairs (same code as the app), see learn_look_cmd.rs
+    if cmd == "learn-look" {
+        return learn_look_cmd::run(&args[1..]);
+    }
+    // starting look from sample files of other photographers (e.g. raw.pixls.us), see samples_look.rs
+    if cmd == "samples-look" {
+        return samples_look::run(&args[1..]);
+    }
     if matches!(cmd, "look-pair") {
         return looks::look_pair(&args[1..]);
     }
@@ -211,6 +267,14 @@ fn main() -> Result<()> {
     }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);
+    }
+    // the system RAW engine of macOS (Core Image) as in the app's comparison view, see apple_raw_cmd.rs
+    if cmd == "apple-raw" {
+        return apple_raw_cmd::run(file, &args[2..]);
+    }
+    // the system RAW engine as decoding stage of a development (Apple path): times, exposure against graineo
+    if cmd == "apple-stage" {
+        return apple_raw_cmd::stage(file, &args[2..]);
     }
     if cmd == "raw" && !file.to_ascii_lowercase().ends_with(".x3f") {
         return rawtest::run(file, &args[2..]);
@@ -725,10 +789,10 @@ fn x3fuse_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Metadata of an exported JPEG/TIFF/PNG as in the app (same function, without the library's personal fields).
+/// Metadata of an exported JPEG/JPEG XL/TIFF/PNG as in the app (same function, without the library's personal fields).
 pub(crate) fn export_metadata(out: &std::path::Path, original: &std::path::Path, format: develop::export::Format, opts: &develop::export::Options, shot: Option<library::export_meta::Shot>) {
     use develop::export::{Format, Metadata};
-    if opts.metadata == Metadata::None || !matches!(format, Format::Jpeg { .. } | Format::Tiff16 | Format::Png16) {
+    if opts.metadata == Metadata::None || !matches!(format, Format::Jpeg { .. } | Format::Jxl { .. } | Format::Tiff16 | Format::Png16) {
         return;
     }
     let f = library::imageio::ExportFields { personal: opts.metadata == Metadata::All, gps: opts.gps, shot, ..Default::default() };
@@ -738,9 +802,9 @@ pub(crate) fn export_metadata(out: &std::path::Path, original: &std::path::Path,
     }
 }
 
-/// `develop <out.jpg|out.tif|out.dng> [--mono] [--ev=N] [--contrast=N] [--shadow=N] [--highlight=N]
+/// `develop <out.jpg|out.jxl|out.tif|out.dng> [--mono] [--ev=N] [--contrast=N] [--shadow=N] [--highlight=N]
 /// [--mode=Portrait] [--mix=r,g,b] [--nr=off] [--luma=0..1] [--chroma=0..1] [--fill=-2..2]
-/// [--layer=0|1|2] [--rawrgb] [--cbm3d=strength[,y]] [--einstellungen=FILE.json] [--baseline] [--metadata=none|shooting|all] [--gps]`
+/// [--layer=0|1|2] [--rawrgb] [--cbm3d=strength[,y]] [--einstellungen=FILE.json] [--baseline] [--metadata=none|shooting|all] [--gps] [--jxl=1..100|lossless|lossless8]`
 fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
     // whole-image export: binning of the sd Quattro at high ISO as in the camera maker's software
     develop::quattro::enable_binning(true);
@@ -771,6 +835,12 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
             Some(("--compress", v)) => opts.tiff_compression = match v { "deflate" | "zip" => develop::tiffw::Compression::Deflate, "lzw" => develop::tiffw::Compression::Lzw, _ => develop::tiffw::Compression::None },
             Some(("--linear", v)) => opts.linear_space = match v { "acescg" => graineo_color::LinearSpace::AcesCg, "prophoto" => graineo_color::LinearSpace::ProPhoto, _ => graineo_color::LinearSpace::Rec2020 },
             Some(("--format", v)) => forced = Some(match v { "png" => develop::export::Format::Png16, "tiff-float" => develop::export::Format::TiffFloat, "exr" => develop::export::Format::Exr { half: true }, "exr-float" => develop::export::Format::Exr { half: false }, "layers" => develop::export::Format::RawLayers, _ => bail!("--format=png|tiff-float|exr|exr-float|layers") }),
+            // JPEG XL (out.jxl): quality 1–100, "lossless" (16 bit) or "lossless8"
+            Some(("--jxl", v)) => forced = Some(match v {
+                "lossless" => develop::export::Format::Jxl { quality: 92, lossless: true, bits16: true },
+                "lossless8" => develop::export::Format::Jxl { quality: 92, lossless: true, bits16: false },
+                q => develop::export::Format::Jxl { quality: q.parse::<u8>().ok().filter(|q| (1..=100).contains(q)).context("--jxl=1..100|lossless|lossless8")?, lossless: false, bits16: true },
+            }),
             // metadata of exported JPEG/TIFF/PNG: none | shooting (default) | all; --gps takes over the location
             Some(("--metadata", v)) => opts.metadata = develop::export::Metadata::parse(v).context("--metadata=none|shooting|all")?,
             None if a == "--gps" => opts.gps = true,
@@ -851,7 +921,7 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
         }
     }
     let path = std::path::Path::new(out);
-    let mut format = develop::export::Format::from_path(path).context("unknown output format (jpg, tif, dng)")?;
+    let mut format = develop::export::Format::from_path(path).context("unknown output format (jpg, jxl, tif, png, dng)")?;
     if profiles && format == develop::export::Format::Dng {
         format = develop::export::Format::DngProfiles;
     }

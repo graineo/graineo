@@ -53,6 +53,14 @@ pub fn export(session:&mut Session,s:&Settings,format:Format,engine:Engine,path:
   if !matches!(format,Format::Dng|Format::DngProfiles)||space==Space::Srgb{return super::export_with_opts(session,s,format,engine,path,opts)}
   return Err(std::io::Error::other("DNG retains its camera profile; RGB output profiles apply only to JPEG/TIFF/PNG"))
  }
+ let (img,spp)=render(session,s,engine,space)?;
+ super::write_finished(&img,path,format,space,opts)?;
+ Ok(spp)
+}
+
+/// The developed image in `space` (crop, rotation, border and output size of `s` applied) – the rendering of
+/// [`export`] for RGB spaces, shared with printing. Returns whether Sigma's exact base was used.
+pub fn render(session:&mut Session,s:&Settings,engine:Engine,space:Space)->std::io::Result<(Rgb16,bool)>{
  let spp=engine==Engine::Spp&&Session::uses_spp(s);
  let img=match session.render_full_wide(s,spp).map_err(std::io::Error::other)?{
   Some(wide)=>{
@@ -69,6 +77,5 @@ pub fn export(session:&mut Session,s:&Settings,format:Format,engine:Engine,path:
    img
   }
  };
- super::write_finished(&img,path,format,space,opts)?;
- Ok(spp)
+ Ok((img,spp))
 }

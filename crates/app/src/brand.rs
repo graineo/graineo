@@ -375,11 +375,22 @@ impl Brand {
                 .fixed_pos(egui::pos2(cx, top))
                 .pivot(egui::Align2::CENTER_TOP)
                 .show(ctx, |ui| {
-                    let r = lr::link_text(ui, egui::RichText::new(label).size(11.0), Color32::from_gray(0xa0));
-                    over_button = r.hovered() || r.contains_pointer();
-                    if r.clicked() {
-                        self.licenses = true;
-                    }
+                    ui.horizontal(|ui| {
+                        let r = lr::link_text(ui, egui::RichText::new(label).size(11.0), Color32::from_gray(0xa0));
+                        over_button = r.hovered() || r.contains_pointer();
+                        if r.clicked() {
+                            self.licenses = true;
+                        }
+                        // quiet support link next to it, only once an address is set (support.rs); opens the browser
+                        if crate::support::enabled() {
+                            ui.add_space(14.0);
+                            let r = lr::link_text(ui, egui::RichText::new(crate::tr("graineo unterstützen …")).size(11.0), Color32::from_gray(0xa0));
+                            over_button |= r.hovered() || r.contains_pointer();
+                            if r.clicked() {
+                                crate::support::open();
+                            }
+                        }
+                    });
                 });
         }
         if self.licenses {
@@ -429,7 +440,15 @@ impl Brand {
                             line(ui, &crate::tr("Filmdaten: CC BY-SA 4.0"));
                             line(ui, &crate::tr("RAW-Dekodierung: rawler (LGPL-2.1)"));
                             line(ui, &crate::tr("Objektivdaten: lensfun (CC BY-SA 3.0)"));
+                            line(ui, &crate::tr("Ortsnamen: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)"));
                             line(ui, &crate::tr("Gesichter finden: YuNet, Shiqi Yu (MIT)"));
+                            line(ui, &crate::tr("Tiefe (Modul): Depth Anything V2 Small, L. Yang et al. (Apache-2.0)"));
+                            // optional non-commercial modules: never shipped, attribution as their licence asks
+                            for d in library::module::ALL.iter().filter(|d| library::module::non_commercial(d).is_some()) {
+                                if let Some(t) = library::module::non_commercial(d) {
+                                    line(ui, &crate::trf!("Optional, nicht mitgeliefert, nur nicht-kommerziell: {a}", a = t.attribution));
+                                }
+                            }
                             line(ui, &crate::tr("Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm"));
                             head(ui, &crate::tr("Schriften und Symbole"));
                             line(ui, "IBM Plex Mono, Syne (OFL)");

@@ -275,6 +275,12 @@ impl LibraryView {
 
     /// Every frame: adopt a finished load, start the next one if still wanted, run callbacks that waited for it.
     pub(super) fn poll_load(&mut self, actions: &mut Vec<Action>) {
+        self.series_poll();
+        self.series_first_hint(actions);
+        // picture styles of the RAWs for "Kamera-Looks": read ahead in idle time (only when the library changed)
+        if !self.first_loading() {
+            crate::style_scan::ahead(self.rows.len(), || self.learn_candidates());
+        }
         if self.writer.all_written() {
             self.loader.ratings_written();
         }
@@ -390,6 +396,8 @@ impl LibraryView {
         self.update_protection();
         let first = !self.loader.first_done;
         self.loader.first_done = true;
+        // photos may have come, gone or changed their time: the series job looks at the changed days
+        crate::series_job::poke();
         crate::log(&format!("library: {} images loaded in {:.0} ms, taken over in {:.0} ms", self.rows.len(), l.ms, t.elapsed().as_secs_f64() * 1000.0));
         if first {
             self.after_first_load();

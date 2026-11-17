@@ -22,3 +22,8 @@ serde_json = "1"
 legacy_names = { path = "../legacy_names" }
 # color tables of the film profiles (zlib)
 flate2 = "1"
+
+# macOS: the system RAW engine (Core Image CIRAWFilter) for comparisons, called through objc2 (see src/apple.rs)
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSString", "NSURL"] }

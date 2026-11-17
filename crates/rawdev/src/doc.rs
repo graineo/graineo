@@ -177,6 +177,8 @@ pub struct DetailKey {
     lens: Option<(u32, u32, bool)>,
     /// effective assignment of an own lens profile ([`pin_hash`]; 0 = automatic)
     pin: u64,
+    /// Apple path: rendering of the engine (version, white balance; [`apple::AppleDev::key`]); 0 = graineo
+    apple: u64,
 }
 
 /// Registry that turns the assignment text (`"id@version"`, `""`) into a number for the `Copy` key and back.
@@ -213,6 +215,7 @@ impl DetailKey {
             nr: [r.nr_luma, r.nr_luma_detail, r.nr_color, r.nr_color_detail].map(|v| v.round().clamp(0.0, 100.0) as u32),
             lens: r.lens.then(|| ((r.lens_distortion * 100.0).round() as u32, (r.lens_vignette * 100.0).round() as u32, r.lens_ca)),
             pin: pin_hash(r.lens_profile.as_deref()),
+            apple: 0,
         }
     }
     fn noise(&self) -> NoiseReduction {
@@ -235,14 +238,23 @@ pub struct RawDoc {
     /// ("As camera"), never applied by itself
     pub picture_style: Option<raw::picture_style::PictureStyle>,
     pub auto_look: Option<String>,
+    /// key of a learned look for this shot (`camera/style`, see [`raw::learn_look::style_key`]); the learned look of
+    /// that key, when switched on, is the standard development of an unedited (neutral) photo ([`crate::learn`])
+    pub learn_key: Option<String>,
+    /// plain development without any per-camera colour correction (no learned look, no hue table, no saturation
+    /// factor): the base learned looks are fitted on ([`crate::learn`])
+    pub plain: std::sync::atomic::AtomicBool,
     /// all bundled looks of this camera
     pub looks: Vec<String>,
     /// as-shot white balance as (Kelvin, tint)
     pub as_shot: (f32, f32),
     /// automatic white balance (camera neutral, from the preview)
     pub auto_neutral: [f32; 3],
-    /// base exposure of the standard development in EV (without sliders)
+    /// base exposure of the standard development in EV (without sliders); see [`Self::base_ev_for`]
     pub base_ev: f32,
+    /// part of `base_ev` that Lightroom does not apply (FinePix X100 dynamic range modes): photos with Lightroom start
+    /// values subtract it
+    pub(crate) lr_offset: f32,
     pub(crate) cam_xyz_shot: M3,
     /// built-in neutral correction of the standard development (X100, GR III), linear sRGB
     pub(crate) std_look: Option<Arc<raw::development::LookLut>>,
@@ -264,6 +276,12 @@ pub struct RawDoc {
     preview_detail: Mutex<Vec<(DetailKey, Arc<Stage>)>>,
     correction: Mutex<Option<(DetailKey, Option<Arc<Correction>>, Option<&'static str>)>>,
     looks_cache: Mutex<Vec<(String, Arc<raw::looks::Look>)>>,
+    /// tone curve matched to the camera's rendering (`learn::MATCHED_LOOK`), once computed
+    matched: Mutex<Option<Result<Arc<raw::looks::Look>, String>>>,
+    /// Apple path: the system RAW engine decodes instead of graineo ([`apple`]); `None` = graineo
+    pub apple: Option<Arc<apple::AppleDev>>,
+    /// the value of `RawAdjust::engine` this document was opened for ([`Self::engine_fits`])
+    pub engine_request: Option<String>,
 }
 
 pub(crate) fn quarters(o: u16) -> u8 {
@@ -278,7 +296,7 @@ pub(crate) fn quarters(o: u16) -> u8 {
 /// Non-Sigma RAW (extension)?
 pub fn is_raw(p: &Path) -> bool {
     let e = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    matches!(e.as_str(), "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "orf" | "rw2" | "pef" | "srw")
+    matches!(e.as_str(), "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "nrw" | "orf" | "rw2" | "pef" | "srw")
 }
 
 /// Finished image (JPEG, HEIC, TIFF, PNG) that can be edited here?
@@ -397,13 +415,58 @@ fn info_for_image(path: &Path, w: usize, h: usize, o: u32) -> raw::Info {
 }
 
 impl RawDoc {
-    /// Open: decode, preview, white balance values, picture style. `keep_going`: abort while browsing.
+    /// Open: decode, preview, white balance values, picture style. `keep_going`: abort while browsing. Automatic
+    /// engine (graineo, Apple only for files graineo cannot decode); see [`Self::open_for`].
     pub fn open(path: &Path, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
+        Self::open_for(path, &Settings::default(), keep_going)
+    }
+
+    /// Open with the engine of the settings (`RawAdjust::engine`, see [`apple::Choice`]); the white balance of the
+    /// settings is the first rendering of the Apple path.
+    pub fn open_for(path: &Path, s: &Settings, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
+        let request = s.raw.engine.clone();
+        let mut doc = match Self::open_engine(path, s, keep_going) {
+            Ok(Some(d)) => d,
+            other => return other,
+        };
+        doc.engine_request = request;
+        Ok(Some(doc))
+    }
+
+    fn open_engine(path: &Path, s: &Settings, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
         if is_image(path) {
             return Self::open_image(path).map(Some);
         }
+        let choice = apple::Choice::parse(s.raw.engine.as_deref());
+        if let apple::Choice::Apple(v) = &choice {
+            if apple::available() {
+                // why graineo cannot decode the file (header only, no pixel data)
+                let blocked = raw::check_decodable(path).err().map(|e| match e {
+                    raw::Error::Unsupported(why) => why,
+                    e => e.to_string(),
+                });
+                match apple::open(path, s, v.as_deref(), apple::Reason::Chosen, blocked) {
+                    Ok(d) => return Ok(Some(d)),
+                    // not supported (any more) or failed: graineo, the entry stays (the UI says so)
+                    Err(e) => eprintln!("apple raw {}: {e} – graineo", path.display()),
+                }
+            }
+        }
         let t = std::time::Instant::now();
-        let f = raw::RawFile::open(path).map_err(|e| e.to_string())?;
+        let f = match raw::RawFile::open(path) {
+            Ok(f) => f,
+            // a file graineo cannot decode (Nikon High Efficiency): the system engine, if it knows the file
+            Err(raw::Error::Unsupported(why)) if why == raw::NIKON_HE && apple::available() => {
+                return match apple::open(path, s, None, apple::Reason::Fallback, Some(why.clone())) {
+                    Ok(d) => Ok(Some(d)),
+                    Err(e) => {
+                        eprintln!("apple raw fallback {}: {e}", path.display());
+                        Err(raw::Error::Unsupported(why).to_string())
+                    }
+                };
+            }
+            Err(e) => return Err(e.to_string()),
+        };
         crate::timings::lap("CPU read RAW file", t.elapsed());
         if !keep_going() {
             return Ok(None);
@@ -424,11 +487,13 @@ impl RawDoc {
         let auto_neutral = auto_neutral(&b.px, wb).unwrap_or(n_shot);
         let mut base_ev = raw::development::BASE_EV + raw::development::camera_ev(&info.maker, &info.model) + info.baseline_exposure;
         base_ev += raw::development::fuji_compensation(&info.maker, &info.model, info.exif.iso, info.fuji_dr);
+        let lr_offset = raw::development::fuji_lightroom_offset(&info.maker, &info.model, info.exif.iso, info.fuji_dr);
         let std_look = raw::development::camera_look(&info.maker, &info.model).map(|l| Arc::new(raw::development::LookLut::new(&l)));
         let picture_style = raw::picture_style::read(path);
         let short = raw::picture_style::camera_short(&info.maker, &info.model);
         let looks: Vec<String> = raw::looks::Look::names().into_iter().filter(|n| n.split('/').next() == Some(short.as_str())).map(str::to_string).collect();
         let auto_look = picture_style.as_ref().map(|b| format!("{}/{}", b.camera_short(), b.style)).filter(|n| looks.contains(n));
+        let learn_key = picture_style.as_ref().filter(|b| raw::learn_look::learnable_style(b)).map(|b| format!("{}/{}", b.camera_short(), raw::learn_look::style_key(b)));
         let (info_rows, summary) = info_texts(&info, picture_style.as_ref(), as_shot);
         let full_size = [b.full.0, b.full.1];
         let preview = Arc::new(Stage::new(b.px, b.width, b.height, b.profile));
@@ -444,10 +509,13 @@ impl RawDoc {
             preview,
             picture_style,
             auto_look,
+            learn_key,
+            plain: Default::default(),
             looks,
             as_shot,
             auto_neutral,
             base_ev,
+            lr_offset,
             cam_xyz_shot,
             std_look,
             info_rows,
@@ -461,6 +529,9 @@ impl RawDoc {
             preview_detail: Mutex::new(Vec::new()),
             correction: Mutex::new(None),
             looks_cache: Mutex::new(Vec::new()),
+            matched: Mutex::new(None),
+            apple: None,
+            engine_request: None,
         }))
     }
 
@@ -486,10 +557,13 @@ impl RawDoc {
             preview: Arc::new(Stage::new(small, pw, ph, profile)),
             picture_style: None,
             auto_look: None,
+            learn_key: None,
+            plain: Default::default(),
             looks: Vec::new(),
             as_shot: (6504.0, 0.0),
             auto_neutral: [1.0; 3],
             base_ev: 0.0,
+            lr_offset: 0.0,
             cam_xyz_shot,
             std_look: None,
             info_rows,
@@ -503,11 +577,26 @@ impl RawDoc {
             preview_detail: Mutex::new(Vec::new()),
             correction: Mutex::new(None),
             looks_cache: Mutex::new(Vec::new()),
+            matched: Mutex::new(None),
+            apple: None,
+            engine_request: None,
         })
+    }
+
+    /// Was this document opened for the engine the settings call for (`RawAdjust::engine`)? If not, the app opens the
+    /// photo again. An automatic fallback whose version was pinned afterwards still fits.
+    pub fn engine_fits(&self, s: &Settings) -> bool {
+        if self.finished || s.raw.engine == self.engine_request {
+            return true;
+        }
+        self.engine_request.is_none() && self.apple.as_ref().is_some_and(|a| a.reason == apple::Reason::Fallback && s.raw.engine.as_deref() == Some(a.pin_value().as_str()))
     }
 
     /// Release large intermediate states (full resolution, decoded file).
     pub fn release_memory(&self) {
+        if let Some(a) = &self.apple {
+            a.release();
+        }
         for (_, st) in self.preview_detail.lock().unwrap().iter() {
             st.release_gpu();
         }
@@ -516,8 +605,22 @@ impl RawDoc {
         *self.file.lock().unwrap() = None;
     }
 
+    /// Base exposure for these settings: with Lightroom start values without the part Lightroom does not apply, so a
+    /// photo edited in Lightroom keeps its brightness.
+    pub fn base_ev_for(&self, s: &Settings) -> f32 {
+        if s.raw.from_lightroom {
+            self.base_ev - self.lr_offset
+        } else {
+            self.base_ev
+        }
+    }
+
     /// Camera neutral of the chosen white balance.
     pub fn target_neutral(&self, s: &Settings) -> Option<[f32; 3]> {
+        // Apple path: the engine balanced already ([`apple::white_for`])
+        if self.apple.is_some() {
+            return None;
+        }
         let r = &s.raw;
         match r.wb_mode.as_str() {
             "as_shot" | "" => None,
@@ -532,6 +635,7 @@ impl RawDoc {
         let r = &s.raw;
         match r.wb_mode.as_str() {
             "custom" => (r.temperature, r.tint),
+            "auto" if self.apple.is_some() => self.as_shot,
             "auto" => crate::wb::temp_from_neutral(&self.info, self.auto_neutral).unwrap_or(self.as_shot),
             v => crate::wb::preset(v).unwrap_or(self.as_shot),
         }
@@ -546,8 +650,23 @@ impl RawDoc {
         }
     }
 
+    /// The learned look that is the standard of this shot's camera and style (switched on), with its strength.
+    /// `None` for finished images, the plain development ([`Self::plain`]) and without a learned look.
+    pub fn learned_look(&self) -> Option<(Arc<raw::looks::Look>, f32)> {
+        if self.finished || self.plain.load(std::sync::atomic::Ordering::Relaxed) {
+            return None;
+        }
+        crate::learn::active(self.learn_key.as_deref()?)
+    }
+
     pub(crate) fn look_for(&self, s: &Settings) -> Option<Arc<raw::looks::Look>> {
         let name = self.look_name(s)?;
+        if name == crate::learn::IDENTITY_LOOK {
+            return Some(Arc::new(crate::learn::identity_look()));
+        }
+        if name == crate::learn::MATCHED_LOOK {
+            return self.matched_look();
+        }
         let cache_name = if name.starts_with("film:") { format!("{}:{name}",raw::film_profile::generation()) } else { name.clone() };
         let mut c = self.looks_cache.lock().unwrap();
         if let Some((_, l)) = c.iter().find(|(n, _)| *n == cache_name) {
@@ -560,6 +679,27 @@ impl RawDoc {
         Some(l)
     }
 
+    /// The tone curve matched to the camera's rendering of this photo ([`crate::learn::MATCHED_LOOK`]), computed once
+    /// per opened photo (no lock is held while it renders the plain development). `None` if it cannot be computed
+    /// (no camera rendering, alignment too weak): the development stays neutral, [`Self::matched_error`] says why.
+    pub fn matched_look(&self) -> Option<Arc<raw::looks::Look>> {
+        if let Some(r) = self.matched.lock().unwrap().as_ref() {
+            return r.as_ref().ok().cloned();
+        }
+        let r = crate::learn::matched_look(self).map(Arc::new);
+        if let Err(e) = &r {
+            eprintln!("matched curve {}: {e}", self.path.display());
+        }
+        let out = r.as_ref().ok().cloned();
+        *self.matched.lock().unwrap() = Some(r);
+        out
+    }
+
+    /// Why the matched tone curve could not be computed (after a try).
+    pub fn matched_error(&self) -> Option<String> {
+        self.matched.lock().unwrap().as_ref().and_then(|r| r.as_ref().err().cloned())
+    }
+
     /// Lens correction for full size (cached) and its source ("Kamera", "lensfun" …).
     pub fn correction(&self, key: DetailKey) -> (Option<Arc<Correction>>, Option<&'static str>) {
         let mut g = self.correction.lock().unwrap();
@@ -570,7 +710,7 @@ impl RawDoc {
         }
         let res = key.lens.and_then(|(d, v, ca)| {
             let o = LensOptions { distortion: d as f32 / 100.0, vignette: v as f32 / 100.0, lateral_ca: ca, backup_enabled: false, pinned: pin_text(key.pin), ..Default::default() };
-            if self.finished {
+            if self.finished || self.apple.is_some() {
                 let i = &self.info;
                 return raw::lens::lensfun_img(&i.maker, &i.model, i.exif.lens.as_deref(), i.exif.focal_length, i.exif.aperture, self.full_size[0], self.full_size[1], &o).map(|k| Arc::new(k.0));
             }
@@ -603,6 +743,7 @@ impl RawDoc {
     pub fn detail_key(&self, s: &Settings) -> DetailKey {
         let mut k = DetailKey::from_settings(s);
         k.pin = pin_hash(self.lens_pin(s).as_deref());
+        k.apple = self.apple.as_ref().map_or(0, |a| a.key(s));
         if self.finished {
             let on = s.raw.lens_image.unwrap_or_else(|| self.lens_status().default_on);
             if !on {
@@ -655,7 +796,7 @@ impl RawDoc {
     }
 
     fn file_or_reopen(&self) -> Option<std::sync::MutexGuard<'_, Option<raw::RawFile>>> {
-        if self.finished {
+        if self.finished || self.apple.is_some() {
             return None;
         }
         let mut g = self.file.lock().unwrap();
@@ -750,7 +891,14 @@ impl RawDoc {
                 return st;
             }
         }
-        let st = Arc::new(self.detail(&self.preview, key, false));
+        let base = match &self.apple {
+            Some(a) => a.preview_for(s).unwrap_or_else(|e| {
+                eprintln!("apple raw preview {}: {e}", self.path.display());
+                self.preview.clone()
+            }),
+            None => self.preview.clone(),
+        };
+        let st = Arc::new(self.detail(&base, key, false));
         let mut c = self.preview_detail.lock().unwrap();
         c.retain(|(k, _)| *k != key);
         c.insert(0, (key, st.clone()));
@@ -766,6 +914,9 @@ impl RawDoc {
 
     /// Full resolution after demosaicing (cached).
     pub fn full_base(&self) -> Result<Arc<Stage>, String> {
+        if self.apple.is_some() {
+            return self.full_base_for(&Settings::default());
+        }
         if let Some(v) = self.full.lock().unwrap().as_ref() {
             return Ok(v.clone());
         }
@@ -801,6 +952,15 @@ impl RawDoc {
         Ok(st)
     }
 
+    /// Full resolution of the raw stage for these settings: graineo's (independent of the settings) or the Apple
+    /// engine's (rendered once per white balance).
+    pub fn full_base_for(&self, s: &Settings) -> Result<Arc<Stage>, String> {
+        match &self.apple {
+            Some(a) => a.full_for(s),
+            None => self.full_base(),
+        }
+    }
+
     /// Full resolution after noise reduction, sharpening, lens correction (cached per slider state).
     pub fn full_stage(&self, s: &Settings) -> Result<Arc<Stage>, String> {
         let key = self.detail_key(s);
@@ -809,7 +969,7 @@ impl RawDoc {
                 return Ok(st.clone());
             }
         }
-        let b = self.full_base()?;
+        let b = self.full_base_for(s)?;
         let _busy = self.full_busy.lock().unwrap_or_else(|e| e.into_inner());
         if let Some((k, st)) = self.full_detail.lock().unwrap().as_ref() {
             if *k == key {
@@ -823,7 +983,7 @@ impl RawDoc {
 
     /// Recompute the detail stage at full resolution, without cache (measurements, tests).
     pub fn full_stage_fresh(&self, s: &Settings) -> Result<Stage, String> {
-        let b = self.full_base()?;
+        let b = self.full_base_for(s)?;
         Ok(self.detail(&b, self.detail_key(s), true))
     }
 
@@ -1034,7 +1194,7 @@ impl RawDoc {
                 return Ok(Some(img));
             }
         }
-        let b = self.full_base()?;
+        let b = self.full_base_for(s)?;
         let (w, h) = (b.w, b.h);
         let wb = self.info.wb.unwrap_or([1.0; 3]);
         let sch = raw::sharpness::Sharpness::default();
@@ -1172,7 +1332,9 @@ impl RawDoc {
     pub fn auto_tone(&self, s: &mut Settings) -> bool {
         let st = &self.preview;
         let lum = self.lum();
-        let g = (self.base_ev).exp2();
+        // measured with the base exposure the photo is rendered with (Lightroom start values leave out the part
+        // Lightroom does not apply, see `base_ev_for`)
+        let g = self.base_ev_for(s).exp2();
         let mut y: Vec<f32> = st.px.iter().step_by(7).map(|p| (lum[0] * p[0] + lum[1] * p[1] + lum[2] * p[2]) * g).collect();
         if y.len() < 100 {
             return false;
@@ -1260,6 +1422,10 @@ pub fn crop_rgb(img: &Rgb16, x: usize, y: usize, w: usize, h: usize) -> Rgb16 {
 #[path="sharpen_study.rs"]
 pub mod sharpen_study;
 
+/// The system RAW engine of macOS as decoding stage (Apple path); a child of this module for the document's fields
+#[path = "apple.rs"]
+pub mod apple;
+
 /// Spacing of the lens correction grid on the GPU in pixels (8; `GRAINEO_LENS_GRID=n` for measurements).
 fn lens_grid_step() -> usize {
     std::env::var("GRAINEO_LENS_GRID").ok().and_then(|v| v.parse().ok()).filter(|v| *v >= 1).unwrap_or(8)
@@ -1287,5 +1453,57 @@ mod profile_scale_tests {
                 assert!((q / e - 1.0).abs() < 0.2, "channel {c} level {l}: exact {e}, reduced {q}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod auto_tone_tests {
+    use super::*;
+
+    /// "Auto" measures with the base exposure the photo is rendered with: with Lightroom start values of an X100 in
+    /// DR200/DR400 (`lr_offset` 1 or 2 EV less) it must ask for that much more exposure, otherwise the result is 1–2 EV
+    /// too dark. Photos without the offset, or without Lightroom start values, are unchanged.
+    #[test]
+    fn auto_tone_measures_with_the_rendered_base_exposure() {
+        let dir = std::env::temp_dir().join(format!("graineo-auto-tone-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let png = dir.join("grey.jpg");
+        // a dark grey with some structure: the automatic exposure is well inside its ±2.5 EV range
+        let img = image::RgbImage::from_fn(96, 64, |x, y| {
+            let v = 100 + ((x * 3 + y * 5) % 24) as u8;
+            image::Rgb([v, v, v])
+        });
+        img.save(&png).unwrap();
+        let mut doc = RawDoc::open(&png, &|| true).unwrap().unwrap();
+        let auto = |doc: &RawDoc, from_lightroom: bool| {
+            let mut s = Settings::default();
+            s.raw.from_lightroom = from_lightroom;
+            assert!(doc.auto_tone(&mut s));
+            s.exposure
+        };
+        let (plain, lr) = (auto(&doc, false), auto(&doc, true));
+        assert_eq!(plain, lr, "no offset: Lightroom start values change nothing");
+        assert!(plain.abs() < 2.0, "{plain}");
+        for offset in [1.0f32, 2.0] {
+            doc.lr_offset = offset;
+            assert_eq!(auto(&doc, false), plain, "without Lightroom start values the offset does not apply");
+            let with = auto(&doc, true);
+            assert!((with - plain - offset as f64).abs() < 0.051, "offset {offset}: {plain} → {with}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod extension_tests {
+    use std::path::Path;
+
+    /// Nikon NEF and NRW (Coolpix) open in the RAW development, in any case.
+    #[test]
+    fn nikon_files_are_raw() {
+        for name in ["a.NEF", "a.nef", "a.NRW", "a.nrw"] {
+            assert!(super::is_raw(Path::new(name)), "{name}");
+        }
+        assert!(!super::is_raw(Path::new("a.jpg")));
     }
 }

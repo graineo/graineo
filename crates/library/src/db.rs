@@ -125,6 +125,19 @@ CREATE TABLE IF NOT EXISTS image_meta (
     latitude   REAL,                     -- GPS position in degrees, north positive (from Lightroom)
     longitude  REAL                      -- east positive
 );
+-- place names of the GPS position of a file (offline from the built-in GeoNames data, `crate::places`); added without a
+-- version step: older versions ignore the table. A row means "looked at": without `latitude` the file has no position.
+CREATE TABLE IF NOT EXISTS place (
+    file         INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE,
+    state        INTEGER NOT NULL DEFAULT 1,  -- 1 = looked at, -1 = file not readable (tried again at the next start)
+    latitude     REAL,                        -- GPS position in degrees (Lightroom or EXIF block), north positive
+    longitude    REAL,                        -- east positive
+    city         TEXT,                        -- nearest known place, English names
+    region       TEXT,
+    country      TEXT,
+    country_code TEXT,                        -- ISO 3166-1 alpha-2
+    name         TEXT                         -- "City, Region, Country" as shown and searched
+);
 CREATE TABLE IF NOT EXISTS keyword (
     id      INTEGER PRIMARY KEY,
     name    TEXT NOT NULL,
@@ -141,6 +154,14 @@ CREATE TABLE IF NOT EXISTS keyword_option (
     export    INTEGER NOT NULL DEFAULT 1,
     synonyms  TEXT
 );
+-- keyword suggestions from the picture content the user rejected for a photo (`crate::content_keywords`; added
+-- without a version step: older versions ignore the table). term = id of the vocabulary term (English name)
+CREATE TABLE IF NOT EXISTS content_term_rejected (
+    image     INTEGER NOT NULL REFERENCES image(id) ON DELETE CASCADE,
+    term      TEXT NOT NULL,
+    time      INTEGER,
+    PRIMARY KEY (image, term)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS image_keyword (
     image     INTEGER NOT NULL REFERENCES image(id) ON DELETE CASCADE,
     keyword   INTEGER NOT NULL REFERENCES keyword(id) ON DELETE CASCADE,
@@ -267,6 +288,18 @@ CREATE TABLE IF NOT EXISTS develop_step (
     command  INTEGER,                   -- id of a command for several photos
     UNIQUE (file, copy, seq)
 );
+-- immutable mask rasters (bitmap masks), named by content hash (`crate::mask_raster`; added without a version step:
+-- older versions ignore the table)
+CREATE TABLE IF NOT EXISTS mask_raster (
+    id        TEXT PRIMARY KEY,          -- 'sha256:<hex>' over width, height and the raw weights
+    width     INTEGER NOT NULL,
+    height    INTEGER NOT NULL,
+    format    TEXT NOT NULL,             -- 'u8-zstd': 8-bit weights, row-major, zstd
+    data      BLOB NOT NULL,
+    basis     TEXT,                      -- JSON: what it was computed from (file, rule, app version)
+    created   INTEGER NOT NULL,          -- Unix seconds
+    last_used INTEGER NOT NULL           -- Unix seconds, for the clean-up
+);
 -- where the cursor stands (only stored when it is not on the newest step)
 CREATE TABLE IF NOT EXISTS develop_cursor (
     file   INTEGER NOT NULL REFERENCES file(id) ON DELETE CASCADE,
@@ -298,6 +331,57 @@ CREATE TABLE IF NOT EXISTS folder_scan (
     entries  INTEGER NOT NULL,
     PRIMARY KEY (root, rel)
 ) WITHOUT ROWID;
+-- series and stacks (`crate::series`; added without a version step: older versions ignore the tables). Groups of
+-- photos shown as one tile: detected series, exposure brackets, own stacks, stacks taken over from Lightroom
+CREATE TABLE IF NOT EXISTS stack (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT NOT NULL,              -- 'series' | 'bracket' | 'manual'
+    origin     TEXT NOT NULL,              -- 'auto' | 'user' | 'lightroom' | 'apple'
+    cover      INTEGER REFERENCES image(id) ON DELETE SET NULL, -- photo on top
+    cover_by   TEXT,                       -- 'auto' | 'user'
+    collapsed  INTEGER NOT NULL DEFAULT 1,
+    reviewed   INTEGER,                    -- Unix seconds of the review (NULL: not reviewed)
+    reason     TEXT,                       -- JSON: span_s, gap_max_s, sim_min, sim_mean, ev_steps, model
+    algo       INTEGER NOT NULL DEFAULT 1, -- version of the grouping (a new version regroups 'auto' stacks)
+    day        TEXT,                       -- 'YYYY-MM-DD' capture day (regroup per day)
+    lr_id      INTEGER UNIQUE,
+    created    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS stack_day ON stack(day) WHERE origin = 'auto';
+-- one stack per photo (originals only; virtual copies follow their original)
+CREATE TABLE IF NOT EXISTS stack_image (
+    image    INTEGER PRIMARY KEY REFERENCES image(id) ON DELETE CASCADE,
+    stack    INTEGER NOT NULL REFERENCES stack(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,             -- order in the stack (capture time by default)
+    pinned   INTEGER NOT NULL DEFAULT 0    -- 1 = placed by the user: regrouping never moves it
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS stack_image_stack ON stack_image(stack, position);
+-- photos the user split apart: never grouped together again (a < b)
+CREATE TABLE IF NOT EXISTS stack_never (
+    a INTEGER NOT NULL REFERENCES image(id) ON DELETE CASCADE,
+    b INTEGER NOT NULL REFERENCES image(id) ON DELETE CASCADE,
+    PRIMARY KEY (a, b)
+) WITHOUT ROWID;
+-- state of each capture day at the last grouping: a day is only grouped again when its photos changed (a pure cache)
+CREATE TABLE IF NOT EXISTS stack_day_state (
+    day         TEXT PRIMARY KEY,
+    fingerprint INTEGER NOT NULL,
+    algo        INTEGER NOT NULL
+) WITHOUT ROWID;
+-- per-file quality hints for reviewing (regenerable cache)
+CREATE TABLE IF NOT EXISTS image_quality (
+    file        INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE,
+    version     INTEGER NOT NULL,          -- version of the measurement
+    signature   BLOB,                      -- dHash (8 bytes) + 8×8 Lab thumbnail (192 bytes)
+    sharpness   REAL,                      -- Tenengrad of the sharpest regions (relative within a stack)
+    sharp_x     REAL, sharp_y REAL,        -- centre of the sharpest region (0..1, upright image)
+    motion      REAL,                      -- 0..1 anisotropy of the gradients (motion blur)
+    clip_high   REAL, clip_low REAL,       -- share of clipped pixels in the preview
+    faces       INTEGER,                   -- faces found
+    eyes_closed INTEGER,                   -- faces with closed eyes
+    face_score  REAL,                      -- best/mean face capture quality 0..1
+    computed    INTEGER NOT NULL           -- Unix seconds
+);
 -- search index (regenerable; missing e.g. in a backup)
 CREATE VIRTUAL TABLE IF NOT EXISTS search_word USING fts5(text, tokenize = 'unicode61 remove_diacritics 2');
 CREATE VIRTUAL TABLE IF NOT EXISTS search_trigram USING fts5(text, tokenize = 'trigram');
@@ -349,6 +433,8 @@ pub struct Row {
     pub sidecar_jpeg: Option<i64>,
     /// camera JPEG of a RAW (image ID of the RAW) – not shown separately in the stack
     pub jpeg_for: Option<i64>,
+    /// place name of the GPS position ("City, Region, Country"), see [`crate::places`]
+    pub place: Option<String>,
 }
 
 /// Detect RAW+JPEG pairs: same folder, same name (without extension, case-insensitive); the JPEG
@@ -747,9 +833,10 @@ impl Db {
                     d.camera, d.capture_time, b.run, d.size, d.mtime, d.width, d.height, d.orientation,
                     d.lens, d.aperture, d.focal_length, d.iso, d.time, k.quality,
                     max(coalesce(b.changed, 0), coalesce(b.keywords_changed, 0), coalesce(b.lr_touch, 0)), l.started,
-                    d.lr_id IS NOT NULL
+                    d.lr_id IS NOT NULL, p.name
              FROM image b JOIN file d ON d.id = b.file
              LEFT JOIN ai k ON k.file = d.id AND k.source = 'imported' LEFT JOIN run l ON l.id = b.run
+             LEFT JOIN place p ON p.file = d.id
              WHERE d.status <> 4",
         )?;
         let rows = st.query_map([], |r| {
@@ -783,6 +870,7 @@ impl Db {
                 from_lightroom: r.get(26)?,
                 sidecar_jpeg: None,
                 jpeg_for: None,
+                place: r.get(27)?,
             })
         })?;
         let mut v: Vec<Row> = rows.collect::<Result<_>>()?;
@@ -1167,6 +1255,19 @@ impl Db {
             .ok()
             .flatten()
             .map(PathBuf::from)
+    }
+
+    /// One present file per camera model among the non-Sigma RAW formats (the most recently added), at most `limit`
+    /// models, the most frequent first: (camera, absolute path). For warming up the system RAW engine of macOS.
+    pub fn raw_camera_samples(&self, limit: usize) -> Result<Vec<(String, PathBuf)>> {
+        let mut st = self.conn.prepare(
+            "SELECT d.camera, s.path || o.path || d.name FROM file d JOIN folder o ON o.id = d.folder JOIN root_folder s ON s.id = o.root
+             WHERE d.id IN (SELECT max(id) FROM file WHERE status = 0 AND camera IS NOT NULL AND camera != ''
+                            AND format IN ('CR2','CR3','RAF','DNG','ARW','NEF','ORF','RW2','PEF','SRW') GROUP BY camera)
+             ORDER BY (SELECT count(*) FROM file f WHERE f.camera = d.camera) DESC LIMIT ?1",
+        )?;
+        let rows = st.query_map([limit as i64], |r| Ok((r.get::<_, String>(0)?, PathBuf::from(r.get::<_, String>(1)?))))?;
+        rows.collect()
     }
 
     /// Absolute paths of all folders (id → path with trailing '/').

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Feasibility probe: Core Image RAW rendering straight into a Metal texture that wgpu uses (no CPU copy).
+# Standalone crate (own workspace), not part of the app.
+[package]
+name = "ci-wgpu-probe"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+[workspace]
+
+[dependencies]
+wgpu = "30"
+objc2 = "0.6"
+objc2-foundation = "0.3"
+objc2-metal = "0.3"
+pollster = "0.4"

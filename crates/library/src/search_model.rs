@@ -293,6 +293,7 @@ pub fn target() -> Option<Stage> {
 /// A module was installed or removed: read the choice again.
 pub fn modules_changed() {
     forget_choice();
+    crate::content_keywords::model_changed();
 }
 
 fn set_active(s: Stage) {

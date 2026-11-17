@@ -28,6 +28,8 @@ mod library_filter_bar;
 mod library_load;
 #[path = "library_manage.rs"]
 mod library_manage;
+#[path = "content_keywords_ui.rs"]
+mod content_keywords_ui;
 #[path = "collection_order_ui.rs"]
 mod collection_order_ui;
 #[path = "collection_drag.rs"]
@@ -37,6 +39,10 @@ mod library_pairs;
 // Cleaning up duplicates (group view, suggestion, Trash)
 #[path = "library_dupes.rs"]
 mod library_dupes;
+#[path = "library_series.rs"]
+mod library_series;
+#[path = "series_review.rs"]
+mod series_review;
 // Typed completion in the search field
 #[path = "search_suggest.rs"]
 mod search_suggest;
@@ -53,8 +59,13 @@ pub fn search_field_table(ui: &mut egui::Ui) {
 // which view the centre shows, its chip and how to leave it; "+" for folders
 #[path = "library_views.rs"]
 mod library_views;
+// "Ordner ansehen" (⌘O): the band in every view and the note in the left panel
+#[path = "view_folder_band.rs"]
+pub mod view_folder_band;
 pub use library_manage::PhotoDrag;
 pub use library_load::Loaded;
+pub use library_series::ScopeKind;
+pub use library_series::StackMenu;
 use crate::library_filter::Facets;
 
 /// Selection of the column filters and the filters themselves, kept across a rebuild (see `take_facets_state`).
@@ -67,6 +78,8 @@ use library::search;
 pub enum Action {
     Selection,
     Export,
+    /// "Drucken …" from the context menu: the print room with the selection
+    Print,
     /// open the active image in single-image view (double-click, Return, D)
     Develop,
     /// ratings changed (image, stars, flag, label) → update the filmstrip
@@ -113,6 +126,8 @@ enum Source {
     Similar(i64),
     /// duplicates (identical or very similar), grouped
     Duplicates,
+    /// series and stacks, one tile each (not reviewed first)
+    Series,
     /// folders on disk whose photos the catalog doesn't know
     NotInCatalog,
     /// only view a folder (⌘O), not in the library: own rows with negative IDs
@@ -186,7 +201,7 @@ pub fn view_folder_sidecars() -> bool {
 }
 
 /// Why rating is refused in a viewed folder (status line, tooltips).
-pub const RATING_REFUSED: &str = "Zum Bewerten zur Bibliothek hinzufügen oder den Schalter „Bewertungen als Begleitdatei (XMP)“ einschalten";
+pub const RATING_REFUSED: &str = "Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten";
 
 /// ID for a photo of a viewed folder (not in the library): negative and unique for the whole session. Numbered per
 /// folder (−2, −3 …) the photos of two viewed folders shared their IDs – the app then took the first folder's loaded
@@ -312,6 +327,10 @@ struct Work {
 }
 
 /// Is this an automatic sync (started by the app, quiet, in the background)?
+/// The library has no search index yet (first start, restored backup): the full-text search finds nothing until the
+/// background job built it; the empty grid says so instead of "Keine Treffer".
+pub(crate) static INDEX_MISSING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn automatic(kind: &str) -> bool {
     matches!(kind, "sync" | "sync_full")
 }
@@ -353,6 +372,8 @@ pub struct LibraryView {
     db: Option<Db>,
     /// last interim reload during a run
     interim_loaded: Option<std::time::Instant>,
+    /// the search index was missing at the last look ([`INDEX_MISSING`]): when it is there, the search runs again
+    index_was_missing: bool,
     /// write ratings in the background (database, sidecars)
     writer: crate::rating::Writer,
     /// previous values per rating (⌘Z), newest last
@@ -476,6 +497,8 @@ pub struct LibraryView {
     similar_order: HashMap<i64, usize>,
     /// "Similar photos" is pending or failed for this file; shown right at the button
     similar_state: Option<(i64, SimilarState)>,
+    /// keyword suggestions from the picture content of the shown photo (content_keywords_ui.rs)
+    content_ideas: content_keywords_ui::ContentIdeas,
     /// Info with several selected: (selection sorted, active photo) → rows that differ
     meta_comparison: Option<((Vec<i64>, Option<i64>), HashSet<&'static str>)>,
     /// test: last stored preview (file, mean brightness)
@@ -523,6 +546,8 @@ pub struct LibraryView {
     /// RAW+JPEG twice in the library, see `library_pairs`
     pairs: library_pairs::PairsState,
     dupes: library_dupes::DupesState,
+    /// series and stacks (library_series.rs)
+    series: library_series::SeriesView,
     manage_message: Option<String>,
     /// active image (image ID)
     active: Option<i64>,
@@ -599,6 +624,11 @@ pub struct LibraryView {
     /// creation time (measurement of the grid previews)
     opened_at: std::time::Instant,
     grid_y: f32,
+    /// direction the grid is scrolling in (1 down, -1 up, 0 still or jumped): thumbnails are requested from the
+    /// leading edge on
+    scroll_dir: i8,
+    /// last frame the grid moved (the direction counts a moment longer: inertia and set positions skip frames)
+    scroll_moved: Option<std::time::Instant>,
     grid_remembered: Option<GridState>,
     grid_back_y: Option<f32>,
     /// back from single image view: keep this photo at the same height on screen for a few frames,
@@ -616,6 +646,8 @@ pub struct LibraryView {
     measurement: Option<(std::time::Instant, u64, f64)>,
     /// test aid GRAINEO_GRID_SCROLL_TEST: scrolling at a fixed speed with measurement
     scroll_test: Option<crate::grid_scroll_test::ScrollTest>,
+    /// test aid GRAINEO_GRID_BENCH: scrolling and jumping program with per-frame measurement (grid_bench.rs)
+    grid_bench: Option<crate::grid_bench::GridBench>,
     // Milestone 3
     dup: Arc<Mutex<Option<Vec<library::duplicates::Group>>>>,
     dup_running: bool,
@@ -747,6 +779,19 @@ fn newest_first(rows: &[Row], v: &[usize]) -> Option<Vec<usize>> {
     }
     out.extend_from_slice(&v[dated..]);
     Some(out)
+}
+
+/// Order of the thumbnail requests of the grid (the workers take them in this order): still, the visible tiles top
+/// to bottom, then the rows after and before them; while scrolling, the leading edge first (down: from the last row
+/// after the view upwards, up: from the row before the view downwards). When the workers fall behind (a slow disk, a
+/// busy Mac), top-first kept them loading the tiles about to leave the view: the screen stayed empty for seconds
+/// although thumbnails kept arriving.
+fn request_order(scroll_dir: i8, shown: &[usize], after: &[usize], before: &[usize]) -> Vec<usize> {
+    match scroll_dir {
+        1 => after.iter().rev().chain(shown.iter().rev()).chain(before.iter().rev()).copied().collect(),
+        -1 => before.iter().chain(shown).chain(after).copied().collect(),
+        _ => shown.iter().chain(after).chain(before).copied().collect(),
+    }
 }
 
 /// Path of a row's file.
@@ -882,6 +927,7 @@ impl LibraryView {
             vectors_running: false,
             similar_order: HashMap::new(),
             similar_state: None,
+            content_ideas: Default::default(),
             meta_comparison: None,
             #[cfg(test)]
             last_stored: None,
@@ -891,6 +937,7 @@ impl LibraryView {
             loader: Default::default(),
             row_keys: Vec::new(),
             interim_loaded: None,
+            index_was_missing: false,
             refilter: true,
             cameras: Vec::new(),
             formats: Vec::new(),
@@ -911,6 +958,7 @@ impl LibraryView {
             manage: Default::default(),
             pairs: Default::default(),
             dupes: Default::default(),
+            series: Default::default(),
             manage_message: None,
             active: None,
             loupe: false,
@@ -959,6 +1007,8 @@ impl LibraryView {
             preview_cleanup: Arc::new(AtomicBool::new(false)),
             opened_at: std::time::Instant::now(),
             grid_y: 0.0,
+            scroll_dir: 0,
+            scroll_moved: None,
             grid_remembered: None,
             grid_back_y: None,
             grid_anchor: None,
@@ -968,6 +1018,7 @@ impl LibraryView {
             source_nr: 0,
             measurement: None,
             scroll_test: crate::grid_scroll_test::ScrollTest::from_env(),
+            grid_bench: crate::grid_bench::GridBench::from_env(),
             dup: Arc::new(Mutex::new(None)),
             dup_running: false,
             dup_order: HashMap::new(),
@@ -1073,9 +1124,13 @@ impl LibraryView {
         self.test_filter(&ctx);
         self.start_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
         crate::log(&format!("library: {} images ready after {:.0} ms", self.rows.len(), self.start_ms));
+        if let Some(cache) = self.generator.as_ref().map(|g| g.cache().clone()) {
+            crate::series_job::start(cache);
+        }
         // sync with the disk at startup (read-only, ~0.5 s), the result reloads silently
         // without a search index (first version 2): AI data, capture dates and index in the background
         let without_index = self.db.as_ref().is_some_and(|d| d.info("search_index").is_none());
+        INDEX_MISSING.store(without_index && !self.rows.is_empty(), Ordering::Relaxed);
         if self.db.is_some() && !self.rows.is_empty() && without_index {
             self.start_job(&ctx, "index", None);
         } else if self.db.is_some() && !self.rows.is_empty() && crate::env::var_os("GRAINEO_LIBRARY_NO_SYNC").is_none() {
@@ -1647,6 +1702,7 @@ impl LibraryView {
                 Source::Missing => z.status == 1,
                 Source::Offline => z.status == 2,
                 Source::Duplicates => self.dup_order.contains_key(&z.file),
+                Source::Series => self.series.by_image.contains_key(&z.image),
                 Source::NotInCatalog => false,
                 Source::Folder(..) => folder_ids.as_ref().is_some_and(|s| s.contains(&z.folder)),
                 Source::Date(d) if d.is_empty() => z.folder != VIEW_FOLDER && z.capture.as_deref().is_none_or(|a| a.len() < 10),
@@ -1722,6 +1778,8 @@ impl LibraryView {
         if self.sort_reversed && !matches!(self.source, Source::Similar(_) | Source::Duplicates) {
             v.reverse();
         }
+        // series and stacks: collapsed ones keep one tile, open ones stand together (library_series.rs)
+        v = self.series_collapse(v);
         // part 2: semantic hits (column filters apply here too), sorted by meaning
         if let Some(f) = self.facets.as_mut().filter(|f| f.rows_len() == self.rows.len()) {
             if f.active() && !v2.is_empty() {
@@ -1967,6 +2025,10 @@ impl LibraryView {
         }
         if let Some((lat, lon)) = self.db.as_ref().and_then(|d| d.position_of(z.image)) {
             rows.push((crate::tr("GPS-Position"), format!("{lat:.5}, {lon:.5}")));
+        }
+        // place name of the position (offline from the built-in GeoNames data, `library::places`)
+        if let Some(p) = &z.place {
+            rows.push((crate::tr("Ort"), p.clone()));
         }
         if let Some(c) = self.db.as_ref().and_then(|d| d.copyright_of(z.image)) { rows.push((crate::tr("Copyright"), c)); } // copyright from the import
         rows
@@ -2362,16 +2424,33 @@ impl LibraryView {
                     });
                     report(crate::tr("Texte in den Dateien lesen …"));
                     let _ = library::textmeta::backfill(&db, 100_000, &std::sync::atomic::AtomicBool::new(false));
-                    // The search index is rebuilt completely (over 10 s write lock) – after automatic
-                    // syncs at most every 10 minutes
+                    // place names of the GPS positions (offline); new names make the photos searchable by place. The
+                    // grid shows no place: no interim reload for them. First the positions the database knows (quick)…
+                    report(crate::tr("Ortsnamen bestimmen …"));
+                    let known = library::places::backfill_known(&db, 100_000, &std::sync::atomic::AtomicBool::new(false), &|_| {}).unwrap_or_default();
+                    // The search index is rebuilt completely (over 10 s write lock) – after automatic syncs at most
+                    // every 10 minutes. It comes before reading GPS blocks from the files: without an index (restored
+                    // backup, first start) the search finds nothing, and the file pass can take minutes (network drive)
                     static LAST_INDEX: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
                     let now_s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
                     let index_due = now_s.saturating_sub(LAST_INDEX.load(std::sync::atomic::Ordering::Relaxed)) >= 600;
-                    if !automatic(kind) || (new && index_due) {
+                    let without_index = db.info("search_index").is_none();
+                    if !automatic(kind) || without_index || ((new || !known.named.is_empty()) && index_due) {
                         LAST_INDEX.store(now_s, std::sync::atomic::Ordering::Relaxed);
                         report("Suchindex aufbauen …");
                         let (n, ms) = library::search::build_index(&db)?;
+                        crate::log(&format!("library job {kind}: search index built ({n} images, {ms} ms)"));
+                        INDEX_MISSING.store(false, std::sync::atomic::Ordering::Relaxed);
+                        c.request_repaint();
                         v["index"] = serde_json::json!({"images": n, "ms": ms});
+                    } else if !known.named.is_empty() {
+                        let _ = library::search::update_files(&db, &known.named);
+                    }
+                    // …then the GPS blocks of files never looked at; their new names go into the index entry by entry
+                    report(crate::tr("Ortsnamen bestimmen …"));
+                    let files = library::places::backfill_files(&db, 100_000, &std::sync::atomic::AtomicBool::new(false), &|_| {}).unwrap_or_default();
+                    if !files.named.is_empty() {
+                        let _ = library::search::update_files(&db, &files.named);
                     }
                     Ok(v)
                 })
@@ -2391,6 +2470,12 @@ impl LibraryView {
     }
 
     fn check_work(&mut self) -> Option<Action> {
+        // the search index just got built: a search typed meanwhile runs again at once (not only after the job's reload)
+        let missing = INDEX_MISSING.load(Ordering::Relaxed);
+        if std::mem::replace(&mut self.index_was_missing, missing) && !missing {
+            self.query_for = None;
+            self.refilter = true;
+        }
         let (finished, interim, kind) = {
             let mut a = self.work.lock().unwrap_or_else(|e| e.into_inner());
             (a.outcome.take(), std::mem::take(&mut a.interim), a.kind)
@@ -2404,9 +2489,11 @@ impl LibraryView {
                 self.lr_window = true;
             }
         }
-        // interim state of the capture dates: reload at most every 5 s
-        if interim && finished.is_none() && self.interim_loaded.is_none_or(|t| t.elapsed().as_secs() >= 5) {
+        // interim state of the capture dates (the grid sorts by them): reload at most every 30 s – each load reads the
+        // whole library; the end of the run reloads anyway
+        if interim && finished.is_none() && self.interim_loaded.is_none_or(|t| t.elapsed().as_secs() >= 30) {
             self.interim_loaded = Some(std::time::Instant::now());
+            crate::log(&format!("library: interim reload during job {kind}"));
             // the list follows when the load is adopted (`adopt_load` filters again)
             self.reload();
         }
@@ -2481,6 +2568,16 @@ impl LibraryView {
     /// Set the rating of these images immediately (grid, filter); database and sidecars in the
     /// background. Label: pressing the same key again removes it.
     /// Returns: new values (for the filmstrip).
+    /// A rating changed outside the grid and is already saved (browser access): show it.
+    pub fn show_rating(&mut self, image: i64, stars: u8, flag: i8, label: u8) {
+        if let Some(&i) = self.index.get(&image) {
+            let z = &mut Arc::make_mut(&mut self.rows)[i];
+            z.stars = stars;
+            z.flag = flag;
+            z.label = label;
+        }
+    }
+
     pub fn rate_images(&mut self, target: &[i64], stars: Option<u8>, flag: Option<i8>, label: Option<u8>) -> Vec<crate::rating::Value> {
         let label = label.map(|e| {
             let all_same = target.iter().all(|b| self.index.get(b).is_some_and(|&i| self.rows[i].label == e));
@@ -2802,6 +2899,10 @@ impl LibraryView {
         }
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let p = |k: egui::Key| ctx.input(|i| i.key_pressed(k));
+        // series review open: its own keys (series_review.rs)
+        if self.series.review.is_some() && self.review_keys(ctx, actions) {
+            return;
+        }
         if cmd {
             if p(egui::Key::Quote) {
                 self.menu(Menu::VirtualCopy, ctx, actions);
@@ -3046,6 +3147,11 @@ impl LibraryView {
         if std::mem::take(&mut self.people_stale) {
             self.reload();
         }
+        // series review: own view instead of the grid (series_review.rs)
+        if self.series.review.is_some() {
+            self.review_center(ui, &mut actions);
+            return actions;
+        }
         if self.source == Source::NotInCatalog {
             self.not_in_catalog_center(ui);
             return actions;
@@ -3082,6 +3188,7 @@ impl LibraryView {
         self.manage_dialogs(ctx, &mut actions);
         self.pairs_dialogs(ctx, &mut actions);
         self.dupes_dialogs(ctx, &mut actions);
+        self.series_dialogs(ctx, &mut actions);
         self.paint_drag(ctx);
         let cache = self.generator.as_ref().map(|g| g.cache().clone());
         let job = self.running();
@@ -3279,6 +3386,8 @@ impl LibraryView {
     }
 
     fn left_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // a viewed folder: a quiet line on top, at the height of the band, says the sources below are the library
+        self.view_folder_sources_note(ui);
         // fixed at the bottom: Import (also "Add folder": there "Hinzufügen"). Importing from Lightroom is in the menu
         // (File → Import from Lightroom …), on the tiles of the empty library and in the settings (Library).
         egui::Panel::bottom("bib-links-unten").resizable(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 8))).show(ui, |ui| {
@@ -3286,10 +3395,12 @@ impl LibraryView {
             let w = ((ui.available_width() - 6.0) / 2.0).floor();
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                // a view in place of the grid (People, RAW+JPEG twice) has its own gold button
+                // a view in place of the grid (People, RAW+JPEG twice) has its own gold button, and so has the band of
+                // a viewed folder ("Zur Bibliothek hinzufügen …")
                 // viewing a backup: importing is refused there, so the button is disabled (not gold), with the reason
                 let can_import = library::backup_view::active().is_none();
-                let r = ui.add_enabled_ui(can_import, |ui| lr::arrow_button_gold(ui, crate::tr("Importieren …"), w, true, can_import && !self.grid_replaced())).inner;
+                let gold = can_import && !self.grid_replaced() && self.viewed_folder().is_none();
+                let r = ui.add_enabled_ui(can_import, |ui| lr::arrow_button_gold(ui, crate::tr("Importieren …"), w, true, gold)).inner;
                 if !can_import {
                     // a disabled widget reports no hover: the reason on a hover area over the same place
                     let reason = ui.interact(r.rect, r.id.with("reason"), egui::Sense::hover());
@@ -3363,6 +3474,7 @@ impl LibraryView {
                 if Self::special_row(ui, lr::Icon::Copy, crate::tr("Duplikate"), n_dup, self.source_marked(&Source::Duplicates), false).0 {
                     self.show_duplicates();
                 }
+                self.series_row(ui);
                 self.pairs_list_row(ui);
                 let review = if self.review_n + self.suggestion_n > 0 { Some(self.review_n + self.suggestion_n) } else { None };
                 if Self::special_row(ui, lr::Icon::User, crate::tr("Personen"), review, crate::people_ui::is_open(), false).0 {
@@ -3543,43 +3655,6 @@ impl LibraryView {
             ui.add_space(6.0);
             ui.label(egui::RichText::new(reason).color(lr::TEXT_DIM));
         });
-    }
-
-    /// "Ordner nur ansehen": a quiet bar above the grid of a viewed folder – originals are never changed, edits go
-    /// to sidecars (XMP) next to the photo; the way into the library and back; and the switch whether ratings may
-    /// go next to the photos as sidecars as well (default off).
-    fn view_folder_bar(&mut self, ui: &mut egui::Ui) {
-        let Source::Browse(dir) = self.source.clone() else { return };
-        let ctx = ui.ctx().clone();
-        let (mut add, mut close) = (false, false);
-        egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(10, 5)).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.set_height(24.0);
-                let lead = ui.label(egui::RichText::new(crate::tr("Nur ansehen – Originale unverändert")).color(lr::TEXT));
-                lr::hover_tip(ui, &lead, crate::tr("Änderungen (Entwicklung) werden als Begleitdatei (XMP) neben das Foto gespeichert, sobald du etwas änderst. Zur Bibliothek hinzufügen speichert sie stattdessen in der Bibliothek."));
-                ui.add_space(14.0);
-                let mut on = view_folder_sidecars();
-                if crate::dialog::toggle(ui, &mut on) {
-                    library::settings::set(VIEW_SIDECARS_KEY, serde_json::json!(on));
-                }
-                let sw = ui.label(egui::RichText::new(crate::tr("Bewertungen als Begleitdatei (XMP) neben die Fotos schreiben")).small().color(lr::TEXT_DIM));
-                lr::hover_tip(ui, &sw, crate::tr("Gilt nur für Bewertungen. Entwicklungen werden immer als Begleitdatei neben das Foto gespeichert."));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(crate::tr("Schließen")).clicked() {
-                        close = true;
-                    }
-                    if ui.button(crate::tr("Zur Bibliothek hinzufügen …")).clicked() {
-                        add = true;
-                    }
-                });
-            });
-        });
-        if add {
-            self.import_folder(&ctx, dir);
-        } else if close {
-            self.close_view_folder();
-        }
     }
 
     /// Leave a viewed folder: its photos go out of the list, back to the library.
@@ -3860,6 +3935,7 @@ impl LibraryView {
                 7 => format!("{} {}", month_name(d), d.get(..4).unwrap_or(d)),
                 _ => format!("{} {} {}", tag_name(d), month_name(d.get(..7).unwrap_or(d)), d.get(..4).unwrap_or(d)),
             },
+            Source::Series => crate::trf!("Serien · {n} noch nicht gesichtet", n = thousands(self.series.open_count())),
             Source::Duplicates => match self.dup.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 Some(g) => crate::trf!("Duplikate · {a} gleich, {b} ähnlich (Gruppen)", a = g.iter().filter(|x| x.kind == library::duplicates::Kind::Identical).count(), b = g.iter().filter(|x| x.kind == library::duplicates::Kind::Similar).count()),
                 None => crate::tr("Duplikate · werden gesucht …").into(),
@@ -4033,6 +4109,12 @@ impl LibraryView {
         if let Some(t) = crate::apple_photos_ui::status() {
             v.push(Task::new(Rank::Library, t));
         }
+        if let Some(t) = crate::series_job::status() {
+            v.push(Task::new(Rank::Series, t));
+        }
+        if let Some(t) = crate::style_scan::status() {
+            v.push(Task::new(Rank::Library, t));
+        }
         // previews of the photos visible in the grid that are still missing (what the user is looking at)
         let level = preview::small();
         let visible_missing = self.requested.iter().filter(|k| k.1 == level && !self.textures.contains_key(k)).count();
@@ -4051,10 +4133,14 @@ impl LibraryView {
     fn raster(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let t0 = std::time::Instant::now();
         self.header_row(ui);
-        self.view_folder_bar(ui);
+        // a viewed folder: the band below the navigation says so in every view (view_folder_band.rs)
         // "View folder" without photos: the reason below the header row (which keeps its place)
         if self.visible.is_empty() && !self.refilter && matches!(self.source, Source::Browse(_)) {
             self.browse_empty(ui);
+        }
+        // "Serien" without series yet: what the detection is doing instead of an empty middle
+        if self.visible.is_empty() && !self.refilter && self.source == Source::Series && self.series.stacks.is_empty() {
+            self.series_empty(ui);
         }
         // first start / empty library: a calm hint with the way in instead of an empty middle
         if self.library_is_empty() && self.db.is_some() && !self.refilter && !self.first_loading() && !matches!(self.source, Source::Browse(_)) {
@@ -4070,6 +4156,8 @@ impl LibraryView {
         if crate::shortcuts::pressed(ui.ctx(), "jump_to_selection") {
             self.jump_request = true;
         }
+        // S, ⇧S, ⌘G, ⇧⌘G, N, ⌥ + rating key: series and stacks (library_series.rs)
+        self.series_keys(ui.ctx(), actions);
         // ⌥⌘↑ / ⌥⌘↓: the collection shown moves within its level (collection_order_ui.rs)
         self.collection_order_keys(ui.ctx());
         let width = self.centre_width.min(ui.available_width());
@@ -4097,6 +4185,7 @@ impl LibraryView {
         let mut clicked = None;
         let mut double_click = None;
         let mut menu: Option<(Menu, i64)> = None;
+        let mut stack_cmd: Option<(library_series::StackCmd, i64)> = None;
         let mut quick_click: Option<i64> = None;
         let mut cell_hovered = false;
         let mut shown: Vec<usize> = Vec::new();
@@ -4133,6 +4222,13 @@ impl LibraryView {
         let layout = crate::grid_jump::Rows::new(n1, columns, self.sem_from.is_some(), pitch, ui.spacing().item_spacing.y);
         // grid row of a position in the list (after the hits, the separator row comes first)
         let row_of = |pos: usize| if pos < n1 { pos / columns } else { r1 + 1 + (pos - n1) / columns };
+        if let Some(b) = self.grid_bench.as_mut() {
+            let before = crate::grid_bench::Before { now: std::time::Instant::now(), since_open: self.opened_at.elapsed().as_secs_f32(), ready: !self.visible.is_empty() && self.sem_from.is_none(), pitch, rows: rows_n, view_h: self.grid_view_h };
+            if let Some(y) = b.offset(before) {
+                area = area.vertical_scroll_offset(y);
+            }
+            ui.ctx().request_repaint();
+        }
         if let Some((image, dy, left)) = self.grid_anchor.take() {
             let scrolled = ui.input(|i| i.smooth_scroll_delta.y != 0.0);
             if !scrolled {
@@ -4245,11 +4341,18 @@ impl LibraryView {
                             Some((b, t)) if *b == z.image => Some(t.clone()),
                             _ => self.texture(z.file, level),
                         };
+                        self.paint_series_ground(ui.painter(), rect, z.image);
                         let badge = self.paint_cell(ui, rect, &resp, &z, tex.as_ref(), pos + 1);
+                        if let Some(c) = self.paint_series_mark(ui, rect, &z, tex.as_ref()) {
+                            stack_cmd = Some((c, z.image));
+                        }
                         cell_hovered |= resp.hovered() || resp.context_menu_opened();
                         resp.context_menu(|ui| {
                             if let Some(m) = photo_menu(ui, self.quick.contains(&z.image), z.status == 0, self.can_paste, self.removable_collection().as_deref()) {
                                 menu = Some((m, z.image));
+                            }
+                            if let Some(c) = self.series_menu(ui, z.image) {
+                                stack_cmd = Some((c, z.image));
                             }
                         });
                         // drag onto a collection on the left: the whole selection if this photo belongs to it
@@ -4271,7 +4374,17 @@ impl LibraryView {
         if self.motion.moving(now, outdated) {
             ui.ctx().request_repaint();
         }
+        let dy = out.state.clamped_offset().y - self.grid_y;
         self.grid_y = out.state.clamped_offset().y;
+        // a jump (more than a screen) has no direction; a still frame keeps the last one for a moment
+        if dy.abs() > out.inner_rect.height() {
+            self.scroll_dir = 0;
+        } else if dy.abs() > 0.5 {
+            self.scroll_dir = if dy > 0.0 { 1 } else { -1 };
+            self.scroll_moved = Some(std::time::Instant::now());
+        } else if self.scroll_moved.is_none_or(|t| t.elapsed().as_millis() > 200) {
+            self.scroll_dir = 0;
+        }
         if let (Some(t), Some(wanted)) = (self.scroll_test.as_mut(), scroll_test_y) {
             let large = preview::large();
             let tiles: Vec<(i64, bool)> = shown.iter().map(|&i| self.rows[i].file).map(|f| (f, self.textures.contains_key(&(f, level)) || self.textures.contains_key(&(f, large)))).collect();
@@ -4281,6 +4394,9 @@ impl LibraryView {
                 self.scroll_test = None;
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
+        }
+        if self.grid_bench.is_some() || crate::import_bench::active() {
+            self.grid_bench_frame(ui.ctx(), &shown, layout, &row_of, cell, out.inner_rect.height(), t0, level);
         }
         self.grid_cell = pitch;
         self.on_screen = shown.iter().map(|&i| self.rows[i].image).collect();
@@ -4296,8 +4412,9 @@ impl LibraryView {
             let pos_b = self.visible.iter().position(|&i| i == last).unwrap_or(0);
             let mut wanted: Vec<(i64, u32)> = Vec::new();
             let mut jobs = Vec::new();
-            let region = shown.iter().copied().chain(self.visible[(pos_b + 1).min(self.visible.len())..(pos_b + 1 + columns * 2).min(self.visible.len())].iter().copied()).chain(self.visible[pos_a.saturating_sub(columns)..pos_a].iter().copied());
-            for i in region {
+            let after = &self.visible[(pos_b + 1).min(self.visible.len())..(pos_b + 1 + columns * 2).min(self.visible.len())];
+            let before = &self.visible[pos_a.saturating_sub(columns)..pos_a];
+            for i in request_order(self.scroll_dir, &shown, after, before) {
                 let z = &self.rows[i];
                 if self.textures.contains_key(&(z.file, level)) || wanted.contains(&(z.file, level)) {
                     continue;
@@ -4341,6 +4458,13 @@ impl LibraryView {
             self.active = Some(b);
             self.menu(m, ui.ctx(), actions);
         }
+        if let Some((c, b)) = stack_cmd {
+            if c != library_series::StackCmd::Group && !self.selection.contains(&b) {
+                self.selection.clear();
+            }
+            self.active = Some(b);
+            self.series_command(c, b, actions);
+        }
         // measurement: time from opening the library until the grid shows its first tiles (once per run)
         static GRID_FIRST_LOGGED: AtomicBool = AtomicBool::new(false);
         if !shown.is_empty() && !GRID_FIRST_LOGGED.swap(true, Ordering::Relaxed) {
@@ -4355,6 +4479,34 @@ impl LibraryView {
         if !shown.is_empty() {
             let ms = t0.elapsed().as_secs_f64() * 1000.0 / shown.len() as f64;
             self.raster_ms = if self.raster_ms == 0.0 { ms } else { self.raster_ms * 0.95 + ms * 0.05 };
+        }
+    }
+
+    /// GRAINEO_GRID_BENCH: hands the frame to the bench (tiles inside the view and whether they show their thumbnail).
+    #[allow(clippy::too_many_arguments)]
+    fn grid_bench_frame(&mut self, ctx: &egui::Context, shown: &[usize], layout: crate::grid_jump::Rows, row_of: &dyn Fn(usize) -> usize, cell: f32, view_h: f32, t0: std::time::Instant, level: u32) {
+        let (y, large) = (self.grid_y, preview::large());
+        let first = shown.first().and_then(|f| self.visible.iter().position(|i| i == f)).unwrap_or(0);
+        let mut tiles = Vec::with_capacity(shown.len());
+        let mut span = (usize::MAX, 0);
+        for (k, &i) in shown.iter().enumerate() {
+            let row = row_of(first + k);
+            let top = layout.top(row);
+            if top < y + view_h && top + cell > y {
+                let f = self.rows[i].file;
+                tiles.push((f, self.textures.contains_key(&(f, level)) || self.textures.contains_key(&(f, large))));
+                span = (span.0.min(row), span.1.max(row));
+            }
+        }
+        if crate::import_bench::active() {
+            crate::import_bench::grid(tiles.len(), tiles.iter().filter(|t| t.1).count());
+        }
+        let Some(b) = self.grid_bench.as_mut() else { return };
+        b.info = format!("{} photos, {} columns, cell {:.0} pt × {:.1} = {:.0} px, thumbnails {level} px, view {:.0} pt high", self.visible.len(), self.columns, cell, ctx.pixels_per_point(), cell * ctx.pixels_per_point(), view_h);
+        let drawn = crate::grid_bench::Drawn { now: std::time::Instant::now(), tiles: &tiles, row_span: (span.0.min(span.1), span.1), y, build_ms: t0.elapsed().as_secs_f64() * 1000.0 };
+        if b.frame(drawn) {
+            self.grid_bench = None;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
 
@@ -4812,6 +4964,7 @@ impl LibraryView {
                 self.review_checked = None;
             }
             let mut kw_remove: Option<(i64, String)> = None;
+            let mut content_answer: Option<content_keywords_ui::Answer> = None;
             // chosen keyword (id) or typed text (resolved in the background)
             let mut kw_add: Option<(Option<i64>, String)> = None;
             lr::section(ui, "Stichwörter", true, |ui| {
@@ -4832,6 +4985,8 @@ impl LibraryView {
                         }
                     }
                 });
+                // suggestions from the picture content (shown photo only)
+                content_answer = self.content_ideas_row(ui, z.image);
                 // add with completion ("Orte > Italien > Rom" for hierarchy). The suggestions depend on the focus
                 // at the start of the frame: a click on a suggestion takes the focus from the field in this frame
                 // (egui), and the list must still be there to receive that click.
@@ -4922,7 +5077,11 @@ impl LibraryView {
                     self.kw_set_dialog = Some((n, keywords.iter().map(|(_, s)| s.replace(" › ", "|")).collect()));
                 }
             });
+            if let Some(a) = content_answer {
+                self.content_ideas_answer(z.image, a);
+            }
             if kw_add.is_some() || kw_remove.is_some() {
+                self.forget_content_ideas();
                 let target = self.target();
                 let label = match (&kw_add, &kw_remove) {
                     (Some((_, t)), _) => crate::trf!("Stichwort „{a}“ zugewiesen", a = t),
@@ -5968,6 +6127,7 @@ impl LibraryView {
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Menu {
     Export,
+    Print,
     /// add to or remove from the quick collection
     Quick,
     VirtualCopy,
@@ -6001,6 +6161,7 @@ fn photo_menu(ui: &mut egui::Ui, in_quick: bool, present: bool, can_paste: bool,
         }
     };
     item(ui, Menu::Export, crate::tr("Exportieren …"), display("export"), true);
+    item(ui, Menu::Print, crate::tr("Drucken …"), display("print"), true);
     ui.separator();
     let quick = if in_quick { crate::tr("Aus der Schnellsammlung entfernen") } else { crate::tr("Zur Schnellsammlung hinzufügen") };
     item(ui, Menu::Quick, quick, display("quick"), true);
@@ -6100,6 +6261,7 @@ impl LibraryView {
         let z = self.rows[i].clone();
         match m {
             Menu::Export => actions.push(Action::Export),
+            Menu::Print => actions.push(Action::Print),
             Menu::Delete => actions.push(Action::Delete),
             Menu::Time => {
                 let (files, photos) = capture_time_files(&self.target(), |b| self.index.get(&b).map(|&j| &self.rows[j]), self.stack);
@@ -6112,11 +6274,9 @@ impl LibraryView {
                 self.dialog = Some(Dialog::Rename { file: z.file, name: stem });
             }
             Menu::Move => {
-                let start = self.path_of(&z).parent().map(|p| p.to_path_buf());
-                crate::file_dialog::target_folder(ctx, "bib-verschieben", move |d| match start {
-                    Some(s) => d.set_directory(s),
-                    None => d,
-                });
+                if !self.series_ask_scope(library_series::ScopeKind::Move) {
+                    self.menu_move(ctx);
+                }
             }
             Menu::Finder => {
                 crate::system::show(self.path_of(&z));
@@ -6142,6 +6302,17 @@ impl LibraryView {
                 self.remove_from_collection(target, actions);
             }
         }
+    }
+
+    /// "Verschieben nach …": choose the target folder (the move follows when the dialog answers).
+    fn menu_move(&mut self, ctx: &egui::Context) {
+        let Some(&i) = self.active.and_then(|a| self.index.get(&a)) else { return };
+        let z = self.rows[i].clone();
+        let start = self.path_of(&z).parent().map(|p| p.to_path_buf());
+        crate::file_dialog::target_folder(ctx, "bib-verschieben", move |d| match start {
+            Some(s) => d.set_directory(s),
+            None => d,
+        });
     }
 
     /// Plan and run an operation (move/rename); errors as a window.
@@ -6637,7 +6808,19 @@ impl LibraryView {
                 *self.backup_status.lock().unwrap_or_else(|e| e.into_inner()) = Some(crate::tr("läuft").into());
                 let st = self.backup_status.clone();
                 std::thread::spawn(move || {
-                    let r = Db::standard().map_err(|e| e.to_string()).and_then(|db| library::backup::create_backup(&db));
+                    let r = Db::standard().map_err(|e| e.to_string()).and_then(|db| {
+                        let r = library::backup::create_backup(&db);
+                        // after a successful backup only: rasters of bitmap masks that nothing names any more (own
+                        // presets included; see `mask_raster::sweep` for what keeps a raster)
+                        if r.is_ok() {
+                            match library::mask_raster::sweep(&db, library::now(), 500, &[library::data_dir().join("presets.json")]) {
+                                Ok(0) => {}
+                                Ok(n) => crate::log(&format!("mask rasters: {n} unused removed")),
+                                Err(e) => crate::log(&format!("mask rasters: clean-up skipped: {e}")),
+                            }
+                        }
+                        r
+                    });
                     *st.lock().unwrap_or_else(|e| e.into_inner()) = Some(match r {
                         Ok((p, n)) => format!("{} ({:.0} MB)", p.display(), n as f64 / 1e6),
                         Err(e) => crate::trf!("Fehler: {e}", e = e),
@@ -6966,6 +7149,10 @@ fn backfill_vectors(image_dir: Option<PathBuf>, text_model: Option<library::sema
         // description vectors (standard model if installed; crates/library: semantic_backfill)
         n += library::semantic_backfill::descriptions(&db, model);
     }
+    // new image vectors make the series more exact
+    if n > 0 {
+        crate::series_job::poke();
+    }
     n
 }
 
@@ -6994,7 +7181,7 @@ fn remember_source(q: &Source) {
         Source::Browse(p) => format!("browse:{}", p.display()),
         Source::NotInCatalog => "uncatalogued".into(),
         Source::Date(d) => format!("date:{d}"),
-        Source::Similar(_) | Source::Duplicates => return,
+        Source::Similar(_) | Source::Duplicates | Source::Series => return,
     };
     library::settings::set("librarySource", serde_json::json!(t));
 }
@@ -7162,6 +7349,7 @@ impl LibraryView {
 
     /// Re-read the keyword list (after a change), update facets and filters.
     fn reload_keywords(&mut self) {
+        self.forget_content_ideas();
         let Some(db) = &self.db else { return };
         self.keywords = db.keywords().unwrap_or_default();
         if let Some(g) = self.take_facets_state() {
@@ -7196,6 +7384,14 @@ impl LibraryView {
         let e = self.generator.as_ref()?;
         let keys = files.iter().map(|f| self.rows.iter().position(|z| z.file == *f).map(|i| self.key_at(i))).collect();
         Some((e.cache().clone(), keys))
+    }
+
+    /// The library row of an image (print captions: date, camera, exposure).
+    pub fn row_of_image(&self, image: i64) -> Option<&Row> {
+        match self.index.get(&image).and_then(|&i| self.rows.get(i)) {
+            Some(r) if r.image == image => Some(r),
+            _ => self.rows.iter().find(|r| r.image == image),
+        }
     }
 
     /// Thumbnail of an image (from the library's preview cache), if already loaded.
@@ -7390,6 +7586,29 @@ impl LibraryView {
         Some((cache, cands))
     }
 
+    /// Non-Sigma RAWs of the library (originals, reachable when the library was read) for "Learn this camera's look":
+    /// path, shooting day and folder. Empty until the library has been read.
+    pub fn learn_candidates(&self) -> Vec<rawdev::learn::Candidate> {
+        if self.db.is_none() || self.first_loading() {
+            return Vec::new();
+        }
+        let small = preview::small();
+        let cache = self.generator.as_ref().map(|e| e.cache().clone());
+        self.rows
+            .iter()
+            .filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && z.status == 0 && z.format != "X3F" && library::is_raw(&z.format))
+            .filter_map(|z| {
+                let day = z.capture.as_deref()?.get(..10)?.to_string();
+                let path = self.path_of(z);
+                let folder = path.parent().map(|p| p.display().to_string()).unwrap_or_default();
+                // the small preview in the cache (statistics and filmstrip of "Kamera-Looks"; never the original)
+                let key = self.key(z);
+                let thumb = cache.as_ref().filter(|c| c.has(key, small)).map(|c| c.path(key, small));
+                Some(rawdev::learn::Candidate { path, day, folder, camera: z.camera.clone().unwrap_or_default(), thumb })
+            })
+            .collect()
+    }
+
     pub fn offline_developed(&self, file: i64) -> impl FnOnce() -> bool + use<> {
         let job = self.rows.iter().find(|z| z.file == file).map(|z| (self.key(z), preview::large()));
         let cache = self.generator.as_ref().map(|e| e.cache().clone());
@@ -7508,6 +7727,7 @@ impl LibraryView {
                         from_lightroom: false,
                         sidecar_jpeg: None,
                         jpeg_for: None,
+                        place: None,
                     };
                     let file = view_id();
                     rows.push(Row { image: file, file: file, ..basis.clone() });
@@ -7622,6 +7842,21 @@ impl LibraryView {
 }
 
 
+
+#[cfg(test)]
+mod request_order_tests {
+    use super::request_order;
+
+    #[test]
+    fn still_keeps_top_first_and_scrolling_starts_at_the_leading_edge() {
+        let (before, shown, after) = ([0, 1], [2, 3, 4, 5], [6, 7]);
+        assert_eq!(request_order(0, &shown, &after, &before), vec![2, 3, 4, 5, 6, 7, 0, 1]);
+        assert_eq!(request_order(1, &shown, &after, &before), vec![7, 6, 5, 4, 3, 2, 1, 0]);
+        assert_eq!(request_order(-1, &shown, &after, &before), vec![0, 1, 2, 3, 4, 5, 6, 7]);
+        // at the ends of the list the rows before or after are missing
+        assert_eq!(request_order(1, &shown, &[], &[]), vec![5, 4, 3, 2]);
+    }
+}
 
 #[cfg(test)]
 mod media_library_tests {
@@ -8028,6 +8263,7 @@ mod date_tests {
             from_lightroom: false,
             sidecar_jpeg: None,
             jpeg_for: None,
+            place: None,
         }
     }
 

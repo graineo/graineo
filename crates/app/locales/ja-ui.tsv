@@ -2210,6 +2210,10 @@ Bild zu klein für die Schärfekarte	シャープネスマップには画像が�
 keine eingebettete Vorschau	埋め込みプレビューなし
 Seitenverhältnis der Vorschau {}×{} passt nicht zum Zuschnitt	プレビューの縦横比{}×{}が切り抜きと合いません
 Fuji SuperCCD (gedrehter Sensor) wird nicht unterstützt	Fuji SuperCCD（回転センサー）には対応していません
+Nikon High Efficiency (HE/HE*): diese NEF-Kompression wird noch nicht dekodiert	Nikon High Efficiency（HE/HE*）：この NEF 圧縮はまだデコードできません
+NEF-Kompression nicht unterstützt	この NEF 圧縮には対応していません
+Nikon „Hohe Effizienz“ (HE und HE★) kann graineo noch nicht entwickeln. Die Vorschau aus der Kamera bleibt sichtbar. Fotos mit „Verlustfrei komprimiert“, „Komprimiert“ oder „Unkomprimiert“ lassen sich entwickeln.	graineo はニコンの「高効率」（HE と HE★）ファイルをまだ現像できません。カメラのプレビューは表示されたままです。「ロスレス圧縮」「圧縮」「非圧縮」で記録した写真は現像できます。
+NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt	NEF 圧縮「高効率」：まだ対応していません
 E/A-Fehler: {}	入出力エラー：{}
 keine X3F-Datei (Kennung {})	X3Fファイルではありません（識別子{}）
 Datei beschädigt: {}	ファイルが破損しています：{}
@@ -3128,7 +3132,6 @@ Ordner verschieben	フォルダを移動
 Punkte sichtbar  H	スポット表示  H
 Punkte verborgen  H	スポット非表示  H
 Retusche-Punkt wählen; Ziehen verschiebt Punkt oder Quelle	レタッチスポットを選択。ドラッグでスポットまたはソースを移動
-Retusche-Punkte und Maskenkonturen ein/aus (im Werkzeug „Masken“ sichtbar)	レタッチスポットとマスク輪郭のオン/オフ（「マスク」ツールで表示）
 Retusche-Werkzeug und Auswahl beenden	レタッチツールと選択を終了
 Sicherung der Bibliothek	ライブラリのバックアップ
 Abgleich · {a}	同期 · {a}
@@ -3325,7 +3328,7 @@ Entzerrt um die Bildmitte, als wäre die Kamera nicht nach oben oder unten gekip
 Farbrauschen zeigt sich beim Foveon als bunte Flecken in dunklen, gleichmäßigen Flächen. Mehr glättet sie, kann aber feine Farbdetails an Kanten verwischen.\n• **Mitte** – Standard\n• **Ganz links** – schwächste sinnvolle Stufe; ohne Farbglättung zeigen sich schon bei ISO 100 bunte Pünktchen\n\nJede Stufe rechnet die Basis neu.	Foveon では、カラーノイズは暗く均一な領域に色のむらとして現れます。強めると平滑化されますが、エッジの繊細な色のディテールがにじむことがあります。\n• **中央** – 標準\n• **左端** – 実用上最も弱い段階。色の平滑化がないと、ISO 100 でもすでに色の点が現れます\n\n各段階でベースを再計算します。
 • **Film** – simuliert Filmmaterial, Entwicklung, Papier, Korn und Lichthof\n• **Look** – gestaltet Farbe und Tonwerte; Looks aus Profilpaketen haben einen Intensitätsregler\n• **Wie Kamera** – der zum Bildstil der Aufnahme passende Look (z. B. Monochrom + Ye); wird nur auf Klick angewandt, unbearbeitete Fotos starten neutral\n\nFilm und Look schließen sich aus: Ein gewählter Look schaltet den Film aus, „Film ausschalten“ bringt den gespeicherten Look zurück.	• **フィルム** – フィルム素材、現像、ペーパー、粒子、ハレーションをシミュレート\n• **ルック** – 色とトーンを作り込む。プロファイルパックのルックには強度スライダーあり\n• **カメラと同じ** – 撮影時のピクチャースタイルに合うルック（例：Monochrome + Ye）。クリックしたときだけ適用され、未編集の写真はニュートラルで始まります\n\nフィルムとルックは同時に使えません。ルックを選ぶとフィルムがオフになり、「フィルムをオフにする」で保存済みのルックが戻ります。
 Vergleichsknopf (zwei Felder, oben rechts) einschalten und bis zu drei Look-Kacheln anklicken; ein zweiter Klick nimmt einen wieder heraus.\n• **Erstes Feld** – der aktuelle Stand\n• **Weitere Felder** – derselbe Stand mit dem gewählten Look\n\nZoomen und Verschieben wirken in allen Feldern gleich. Ein Klick auf ein Feld übernimmt dessen Look.\n\n### Tasten\n⌘-Klick vergleicht ohne Schalter · ⌘Z rückgängig · Esc beendet	比較ボタン（2 つのフィールド、右上）をオンにして、ルックのタイルを最大 3 つクリックします。もう一度クリックすると外れます。\n• **最初のフィールド** – 現在の状態\n• **他のフィールド** – 同じ状態に選んだルックを適用\n\nズームと移動はすべてのフィールドに同じように作用します。フィールドをクリックするとそのルックを適用します。\n\n### キー\n⌘ クリックでスイッチなしで比較 · ⌘Z 取り消し · Esc 終了
-Art wählen und „Neue Maske“: Pinsel, Verlauf und Ellipse werden gleich im Bild gezogen. Die Liste zeigt alle Masken; die Regler darunter gelten für die gewählte.\n• **Addieren, abziehen, schneiden** – weitere Formen kombinieren\n• **Fluss** – baut Deckkraft über überlappende Tupfer auf\n• **Version 2** – begrenzt Kantenhalos\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · Esc Zeichnen beenden · ⌘Z rückgängig	種類を選んで「新規マスク」をクリックすると、ブラシ、グラデーション、楕円をそのまま画像上に描けます。リストにはすべてのマスクが表示され、下のスライダーは選択中のマスクに適用されます。\n• **追加、減算、交差** – 別の形を組み合わせる\n• **流量** – ストロークを重ねるごとに不透明度が増す\n• **バージョン 2** – エッジのハローを抑える\n\n補正は、切り抜きや回転の後も画像に追従します。\n\n### キー\nH 輪郭を非表示 · Esc 描画を終了 · ⌘Z 取り消し
+Oben stehen alle Masken: das Auge schaltet eine aus, ⋯ benennt um, dupliziert, invertiert, verschiebt oder löscht. „+ Neue Maske ▾“ legt eine an: automatisch, als Form oder als Bereich.\n• **Teile** – eine Maske besteht aus Teilen: + hinzufügen, − abziehen, ∩ schneiden\n• **Werkzeug** – der gewählte Teil zeichnet im Bild: Pinsel malt, Verlauf und Ellipse an den Griffen ziehen, Farbbereich nimmt mit der Pipette Proben (⇧ dazu, ⌥ weg), Klick-Auswahl nimmt Klicks oder einen gezogenen Rahmen\n• **Kante** – Bitmap-Masken (Motiv, Personen, Klick-Auswahl) dehnen oder schrumpfen, ohne neu zu rechnen\n• **Tiefe** – wählt ganze Segmente nach ihrer Entfernung (Vorne, Mitte, Hinten); ein Klick ins Bild nimmt ein Segment dazu oder heraus\n• **Kante verfeinern** – gezeichnete Masken und Bereiche folgen in einem schmalen Band den Kanten im Bild\n• **Stärke** – Deckkraft der ganzen Maske\n• **Reihenfolge** – oben wird zuerst angewendet; Helligkeits- und Farbbereiche lesen den Stand davor\n\nDie Korrekturen folgen dem Bild auch nach Freistellen und Drehen.\n\n### Tasten\nH Konturen aus · ⇧O Überlagerung (Rot → Maske → Bild auf Grau → Abdeckfolie → aus) · Esc Werkzeug beenden · ⌫ Maske löschen · ⌘Z rückgängig	上にすべてのマスクが並びます。目のアイコンでオフ、⋯で名前変更・複製・反転・移動・削除。「+ 新しいマスク ▾」で作成：自動、形状、範囲。\n• **パーツ** – マスクはパーツから成ります：+ 追加、− 減算、∩ 交差\n• **ツール** – 選んだパーツが写真上で描きます：ブラシで描き、グラデーションと楕円はハンドルでドラッグ、色の範囲はスポイトでサンプル（⇧追加、⌥削除）、クリック選択はクリックまたはドラッグした枠\n• **エッジ** – ビットマップマスク（被写体、人物、クリック選択）を再計算せずに広げる・縮める\n• **深度** – 距離（手前・中央・奥）でセグメント全体を選択。画像をクリックするとセグメントを追加／除外\n• **境界を調整** – 描画したマスクと範囲が狭い帯の中で画像のエッジに沿う\n• **強さ** – マスク全体の不透明度\n• **順序** – 上のものから適用。明るさと色の範囲はその前の状態を読みます\n\n補正は切り抜きや回転の後も写真に追従します。\n\n### キー\nH 輪郭オフ · ⇧O オーバーレイ（赤 → マスク → グレー上の画像 → マスキングフィルム → オフ） · Esc ツール終了 · ⌫ マスク削除 · ⌘Z 取り消し
 graineo	graineo
 RAW & Film	RAW & Film
 Version {a}	バージョン {a}
@@ -3800,7 +3803,7 @@ Standardprogramm	既定のアプリ
 Standardprogramm für {a}	{a} の既定のアプリ
 graineo verwenden	graineo を使用
 keins	なし
-Weitere Formate (CR3, RAF, DNG, ARW)	その他の形式（CR3、RAF、DNG、ARW）
+Weitere Formate (CR3, RAF, DNG, ARW, NEF, NRW)	その他の形式（CR3、RAF、DNG、ARW、NEF、NRW）
 Weniger Formate	形式を減らす
 Nur in der installierten App einstellbar.	インストール済みのアプリでのみ設定できます。
 virtuelle Kopie	仮想コピー
@@ -3842,7 +3845,7 @@ Alles, was in deinen Stammordnern liegt, ist in der Bibliothek.	ルートフォ�
 Aufnehmen legt nur Bibliothekseinträge an. Die Fotos auf der Platte bleiben unverändert. Doppelklick auf eine Zeile zeigt den Ordner.	追加しても、作られるのはライブラリの項目だけです。ディスク上の写真は変更されません。行をダブルクリックするとフォルダを表示します。
 In die Bibliothek aufgenommen: {a}	ライブラリに追加しました: {a}
 „Verlustfrei“ heißt bei Foveon-Dateien drei verschiedene Dinge.	Foveon ファイルで「ロスレス」には 3 つの異なる意味があります。
-• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **センサーレイヤー** – TIFF「センサーレイヤー」: 3 つのレイヤーを X3F のまま無加工で、色なしで書き出します。黒レベルとマトリクスはファイル内に記録されます\n• **リニア、クリップなし** – リニア DNG、TIFF 32 ビット、OpenEXR: トーンカーブなし。白を超えるハイライトと色空間外の色が保たれます\n• **完成画像** – TIFF または PNG 16 ビット: トーンカーブ適用済み、印刷やレタッチ向け\n\nすべてを保持しているのは X3F そのものだけです。キャリブレーションとダークフレームはそこにしかありません。\n\n### 用途\nLightroom と Camera Raw: リニア DNG。Resolve、Nuke、Affinity: OpenEXR。macOS のプレビューは 32 ビットの DNG を開けません。
+• **Sensorschichten** – TIFF „Sensorschichten“: die drei Schichten unverändert wie in der X3F, ohne Farbe; Schwarzwert und Matrix stehen in der Datei\n• **Linear, nichts beschnitten** – Lineares DNG, TIFF 32 Bit, OpenEXR: ohne Tonkurve; Lichter über Weiß und Farben außerhalb des Farbraums bleiben erhalten\n• **Fertiges Bild** – TIFF oder PNG 16 Bit, JPEG XL verlustfrei: Tonkurve eingerechnet, für Druck und Retusche\n\nAlles davon hält nur die X3F selbst – Kalibrierung und Dunkelrahmen gibt es nur dort.\n\n### Wohin\nLightroom und Camera Raw: Lineares DNG. Resolve, Nuke, Affinity: OpenEXR. Die macOS-Vorschau öffnet DNG mit 32 Bit nicht.	• **センサーレイヤー** – TIFF「センサーレイヤー」: 3 つのレイヤーを X3F のまま無加工で、色なしで書き出します。黒レベルとマトリクスはファイル内に記録されます\n• **リニア、クリップなし** – リニア DNG、TIFF 32 ビット、OpenEXR: トーンカーブなし。白を超えるハイライトと色空間外の色が保たれます\n• **完成画像** – TIFF または PNG 16 ビット、ロスレス JPEG XL: トーンカーブ適用済み、印刷やレタッチ向け\n\nすべてを保持しているのは X3F そのものだけです。キャリブレーションとダークフレームはそこにしかありません。\n\n### 用途\nLightroom と Camera Raw: リニア DNG。Resolve、Nuke、Affinity: OpenEXR。macOS のプレビューは 32 ビットの DNG を開けません。
 Verlustfrei exportieren	ロスレスで書き出し
 16 Bit	16 ビット
 32 Bit linear	32 ビット リニア
@@ -3864,8 +3867,6 @@ Rot, Grün und Blau nebeneinander, jeweils über die Bildbreite.	赤、緑、青
 Oben ist hell, unten dunkel. Gleich hohe Spuren an einer Stelle bedeuten neutrales Grau; ein Farbstich zeigt sich als Spur, die höher oder tiefer liegt als die anderen.	上が明るく、下が暗くなります。同じ位置で同じ高さのトレースはニュートラルグレーを意味します。色かぶりは、ほかより高いまたは低いトレースとして現れます。
 Rot, Grün und Blau übereinander, über die Bildbreite.	赤、緑、青を重ねて、画像幅いっぱいに表示します。
 Links im Bild ist links in der Anzeige. Oben ist hell, unten dunkel; wo sich alle drei Farben decken, wird die Spur weiß (neutral).	画像の左は表示でも左です。上が明るく、下が暗くなります。3 色が重なる箇所はトレースが白（ニュートラル）になります。
-Farbton als Richtung, Sättigung als Abstand zur Mitte.	色相を方向、彩度を中心からの距離で表します。
-Neutrales Grau liegt in der Mitte; ein Farbstich zieht die Wolke zur Seite.\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Schräge Linie** – die Hauttonlinie: Haut liegt meist nahe daran	ニュートラルグレーは中心に位置します。色かぶりがあると、点の集まりが中心から横にずれます。\n• **四角** – 彩度 75 % の赤、マゼンタ、青、シアン、緑、黄\n• **斜めの線** – 肌色ライン: 肌はたいていその近くにあります
 Gruppe von Reglern zu einem Thema.	1 つのテーマに関するスライダーのグループ。
 Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.	ヘッダーで開閉できます。セクション内で何かを調整すると、ヘッダー右側にスイッチとリセットボタンが表示されます。
 Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral	各ホイールで色相（方向）とその強さ（中心からの距離）を設定します。明るさは変わりません。定番: 冷たいシャドウ、暖かいハイライト、または白黒のセピアやセレン。\n\n### 操作\nホイールをドラッグ: 色相と強さ · ドラッグ中に ⇧: 強さのみ · ダブルクリック: ニュートラル
@@ -5466,3 +5467,944 @@ Schon nach Namen geordnet	すでに名前順です
 Steht schon auf der obersten Ebene	すでに最上位にあります
 Alben aus Apple Fotos bleiben in ihrem Satz	Apple 写真のアルバムはそのセット内に留まります
 In Lightroom: {n} Schritte	Lightroom: {n}ステップ
+graineo unterstützen …	graineo を支援 …
+Fotos einer Serie vergleichen und das beste wählen.	シリーズの写真を比較してベストを選ぶ。
+• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **比較** – 2〜4枚を大きく並べて表示。ダブルクリックまたはZで全フィールドを連動して最もシャープな位置の1:1にズーム\n• **ライトテーブル** – シリーズの全写真。クリックで比較に追加\n• **デュエル** – 2枚を表示。←で左、→で右を残し、1枚になるまで続ける\n\nヒントはシリーズ内の相対値です：最もシャープな写真に対するシャープネス、目と顔（Apple Vision、macOSのみ）、白飛び、ブレ。提案は理由を示し、何も自動で設定しません。差がほとんどない場合はそう表示します。\n\n### キー\n↩/スペース ベストを選択 · ⇧X 残りを除外 · P/X/U/0–5 通常どおり · Z ズーム · H 顔 · ⌘↩ 選別済みにして次へ · ↓/↑ 次/前のシリーズ · ⌘Z 取り消し · Esc 戻る
+Stapel nicht geändert: {e}	スタックは変更されていません: {e}
+Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	露出ブラケット: {n}枚、{ev} EVに{k}段階
+Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	シリーズ: {t}で{n}枚、同じ被写体（類似度 {s}）
+Serie: {n} Fotos in {t} (nur nach Zeit, Bildinhalt noch unbekannt)	シリーズ: {t}で{n}枚（時間のみ、画像内容は未確認）
+Stapel aus Lightroom: {n} Fotos	Lightroomのスタック: {n}枚
+Stapel: {n} Fotos	スタック: {n}枚
+Noch nicht gesichtet	未選別
+Serie aufklappen	シリーズを展開
+Stapel aufklappen	スタックを展開
+Serie zuklappen	シリーズを折りたたむ
+Stapel zuklappen	スタックを折りたたむ
+Serie sichten …	シリーズを選別…
+Stapel sichten …	スタックを選別…
+Als Titelfoto	表紙写真にする
+Aus Serie nehmen	シリーズから外す
+Aus Stapel nehmen	スタックから外す
+Serie teilen ab hier	ここからシリーズを分割
+Stapel teilen ab hier	ここからスタックを分割
+Serie auflösen	シリーズを解除
+Stapel auflösen	スタックを解除
+Zu Stapel bündeln	スタックにまとめる
+Ganze Serie bewertet ({n} Fotos)	シリーズ全体を評価（{n}枚）
+Zum Bündeln mindestens zwei Fotos auswählen	まとめるには2枚以上選択してください
+Stapel aus {n} Fotos	{n}枚のスタック
+Serie teilen	シリーズを分割
+Ganze Serie ({n} Fotos)	シリーズ全体（{n}枚）
+{a}: nur oberstes Foto oder ganze Serie?	{a}: 一番上の写真だけ、それともシリーズ全体？
+Die Auswahl enthält zugeklappte Serien oder Stapel mit {n} weiteren Fotos.	選択には折りたたまれたシリーズまたはスタックがあり、さらに{n}枚含まれます。
+Nur oberstes Foto	一番上の写真のみ
+Nur oberste Fotos ({n})	一番上の写真のみ（{n}）
+Serien	シリーズ
+Alle Serien und Stapel, je eine Kachel; ungesichtete zuerst	すべてのシリーズとスタック（各1タイル、未選別が先）
+Serien · {n} noch nicht gesichtet	シリーズ · 未選別 {n}
+Serien und Stapel	シリーズとスタック
+Serien automatisch erkennen	シリーズを自動検出
+Fotos derselben Kamera, kurz nacheinander und mit gleichem Motiv, leise im Hintergrund.	同じカメラで短時間に撮った同じ被写体の写真を、バックグラウンドで静かに検出します。
+Serien zuklappen	シリーズを折りたたむ
+nach der Sichtung	選別後
+⇧X beim Sichten	選別時の⇧X
+Was mit den übrigen Fotos einer Serie geschieht, wenn das beste gewählt ist. Gelöscht wird nie.	ベストを選んだ後、シリーズの残りの写真をどうするか。削除されることはありません。
+Hinweise zu Gesichtern und Augen gibt es nur unter macOS.	顔と目のヒントはmacOSでのみ利用できます。
+Serien erkennen: noch {n} Fotos	シリーズを検出中: 残り{n}枚
+Serien erkennen	シリーズを検出中
+Zum Sichten eine Serie oder 2–60 Fotos auswählen	選別するにはシリーズまたは2〜60枚を選択してください
+Keine weitere Serie zu sichten	選別するシリーズはもうありません
+Als bestes Foto gewählt	ベストの写真に選択
+Erst das beste Foto wählen (Leertaste oder ↩)	先にベストの写真を選んでください（スペースまたは↩）
+Rest abgestuft ({n} Fotos) – ⌘Z macht es rückgängig	残りを格下げ（{n}枚） – ⌘Zで取り消し
+Rest abgelehnt ({n} Fotos) – ⌘Z macht es rückgängig	残りを除外（{n}枚） – ⌘Zで取り消し
+Serie gesichtet	シリーズを選別済み
+Belichtungsreihe	露出ブラケット
+Serie	シリーズ
+Auswahl	選択
+Zum Raster	グリッドへ
+Gesichtet, weiter	選別済み、次へ
+Als bestes wählen	ベストに選ぶ
+Rest ablehnen	残りを除外
+Belichtungsreihe: kein Vorschlag (Material zum Zusammenfügen)	露出ブラケット: 提案なし（合成用の素材）
+Hinweise werden gemessen ({a}/{n}) …	ヒントを測定中（{a}/{n}）…
+Kaum Unterschied – selbst entscheiden	ほとんど差がありません – ご自身で判断してください
+schärfstes Foto	最もシャープ
+alle Augen offen	全員目が開いている
+ohne Bewegungsunschärfe	ブレなし
+ohne abgeschnittene Lichter	白飛びなし
+von dir am besten bewertet	あなたの評価が最も高い
+Vorschlag: {k}/{n}{w}	提案: {k}/{n}{w}
+VORSCHLAG	提案
+wird gemessen …	測定中…
+Schärfe: {a} % des schärfsten Fotos der Serie (gemessen an der schärfsten Stelle)	シャープネス: シリーズで最もシャープな写真の{a} %（最もシャープな位置で測定）
+Augen {n}/{n} offen	目 {n}/{n} 開
+Augen {a}/{n} zu	目 {a}/{n} 閉
+Lichter {a} %	白飛び {a} %
+Fokus neben dem Gesicht	ピントが顔から外れている
+Klick: in den Vergleich legen, ⌘-Klick: herausnehmen	クリック: 比較に追加、⌘クリック: 外す
+{k}/{n} – Klick: in den Vergleich, ⌘-Klick: heraus	{k}/{n} – クリック: 比較へ、⌘クリック: 外す
+Gesichter	顔
+{k}/{n}: Augen zu	{k}/{n}: 目を閉じている
+{k}/{n}: Gesichtsqualität {q}	{k}/{n}: 顔の品質 {q}
+Serie/Stapel des aktiven Fotos auf-/zuklappen	アクティブな写真のシリーズ/スタックを展開/折りたたむ
+alle Serien und Stapel auf-/zuklappen	すべてのシリーズとスタックを展開/折りたたむ
+Auswahl zu einem Stapel bündeln (Titelfoto = aktives Foto)	選択をスタックにまとめる（表紙 = アクティブな写真）
+Serie/Stapel auflösen (die Fotos werden nie wieder zusammengelegt)	シリーズ/スタックを解除（写真は二度とまとめられません）
+Serie sichten (bzw. die Auswahl von 2–60 Fotos)	シリーズを選別（または2〜60枚の選択）
+ganze Serie als Auswahl markieren	シリーズ全体を採用にする
+ganze Serie ablehnen	シリーズ全体を除外
+Markierung der ganzen Serie aufheben	シリーズ全体のフラグを解除
+Sterne der ganzen Serie löschen / setzen	シリーズ全体の星を消去/設定
+Farbetikett der ganzen Serie	シリーズ全体のカラーラベル
+fokussiertes Foto als bestes wählen (Titelfoto + Markierung „Auswahl“)	フォーカス中の写真をベストに選ぶ（表紙 + 採用フラグ）
+fokussiertes Foto als bestes wählen	フォーカス中の写真をベストに選ぶ
+Rest ablehnen: alle Fotos der Serie außer den markierten (ein ⌘Z)	残りを除外: 採用以外のシリーズの全写真（⌘Z一回）
+gekoppelter Zoom 1:1 an der schärfsten Stelle ↔ Einpassen	最もシャープな位置で連動1:1ズーム ↔ 全体表示
+Gesichterleiste ein/aus	顔バーのオン/オフ
+Serie als gesichtet abschließen, weiter zur nächsten ungesichteten	シリーズを選別済みにして次の未選別へ
+nächste Serie (ohne Abschluss)	次のシリーズ（完了せず）
+vorige Serie	前のシリーズ
+zurück ins Raster	グリッドに戻る
+Feld 1–4 fokussieren (auch ← →)	フィールド1〜4にフォーカス（← →も可）
+fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	フォーカスするフィールドを切り替え。デュエルでは左/右の写真を残す
+Vergleich	比較
+Leuchttisch	ライトテーブル
+Duell	デュエル
+2–4 Fotos groß nebeneinander	2〜4枚を大きく並べる
+Alle Fotos der Serie; Klick legt eins in den Vergleich	シリーズの全写真。クリックで比較に追加
+Zwei Fotos: ← behält das linke, → das rechte	2枚: ←で左、→で右を残す
+immer	常に
+nie	しない
+nichts	何もしない
+Serie als gesichtet abschließen und zur nächsten	シリーズを選別済みにして次へ
+Fokussiertes Foto als bestes wählen: Titelfoto und Markierung „Auswahl“	フォーカス中の写真をベストに: 表紙と採用フラグ
+Alle Fotos außer den markierten ablehnen (ein ⌘Z)	採用以外のすべてを除外（⌘Z一回）
+Gekoppelter Zoom auf die schärfste Stelle (Doppelklick: an dieser Stelle)	最もシャープな位置へ連動ズーム（ダブルクリック: その位置）
+Gesichter und Augen (Apple Vision); geschlossene Augen sind im Foto umrandet	顔と目（Apple Vision）。閉じた目は写真内で枠表示
+Anteil abgeschnittener Lichter in der Vorschau	プレビュー内の白飛びの割合
+Die Kanten sind in einer Richtung verwischt (Bewegungsunschärfe)	エッジが一方向に流れています（ブレ）
+Das Fokusfeld der Kamera berührt keines der gefundenen Gesichter (nur ein Hinweis)	カメラのAFエリアが検出された顔に重なっていません（ヒントのみ）
+verwischt	ブレ
+Serien sichten	シリーズの選別
+Das Foto liegt in keinem Stapel	この写真はスタックに属していません
+Hier lässt sich nicht teilen	ここでは分割できません
+Bildstile lesen	ピクチャースタイルを読み込み中
+{a} (Startwert von {b})	{a}（{b} からの初期値）
+{a} (gelernt)	{a}（学習済み）
+Gelernter Look	学習したルック
+Als Standard dieser Kamera und dieses Bildstils verwenden (aus: eingebaute Entwicklung)	このカメラとピクチャースタイルの標準として使用（オフ：内蔵の現像）
+Stärke des gelernten Looks	学習したルックの強さ
+Wirklich zurücksetzen?	本当にリセットしますか？
+Gelernten Look entfernen: wieder die eingebaute Entwicklung dieser Kamera	学習したルックを削除：このカメラの内蔵現像に戻す
+Look dieser Kamera lernen …	このカメラのルックを学習 …
+Look je Kamera und Bildstil aus RAW und Kamera-JPEG der eigenen Fotos lernen	自分の写真のRAWとカメラJPEGから、カメラとピクチャースタイルごとにルックを学習
+Alle Fotos aus einem Ordner	すべての写真が1つのフォルダから
+{n} Fotos mit „{a}“ ausgelassen	「{a}」の写真 {n} 枚を除外
+{n} Fotos mit „{a}“ einbezogen (adaptive Kamera-Einstellung)	「{a}」の写真 {n} 枚を含めました（適応型のカメラ設定）
+Gemischte Weißabgleiche (Kunstlicht und Tageslicht)	ホワイトバランスが混在（人工光と昼光）
+Kaum Hauttöne unter den Fotos	写真に肌色がほとんどありません
+Kaum kräftige Farben unter den Fotos	写真に鮮やかな色がほとんどありません
+Lesen der Bildstile abgebrochen	ピクチャースタイルの読み込みを中止しました
+Lernen abgebrochen	学習を中止しました
+Look dieser Kamera lernen	このカメラのルックを学習
+Vergleicht die Entwicklung mit dem Kamera-JPEG derselben Aufnahme und lernt daraus den Look je Kamera und Bildstil. Fotos werden nur gelesen; nichts verlässt den Rechner.	同じ撮影のカメラJPEGと現像結果を比較し、カメラとピクチャースタイルごとのルックを学習します。写真は読み取るだけで、何もこのコンピュータの外に出ません。
+{a}: {d} von {n} Fotos	{a}：{n} 枚中 {d} 枚
+Keine geeigneten RAW-Fotos in der Bibliothek (Sigma/Foveon und eigene Bildstile bleiben außen vor).	ライブラリに適したRAW写真がありません（Sigma/Foveonとユーザー設定のピクチャースタイルは対象外）。
+Fotos mit adaptiven Kamera-Einstellungen einbeziehen	適応型のカメラ設定の写真も含める
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches passen das Kamera-JPEG an die Szene an; ohne Haken bleiben solche Fotos außen vor	DRオート、シャドー補正、オート最適化などはカメラJPEGをシーンに合わせて変えます。チェックしない場合、そのような写真は除外されます
+{a}: Foto {d} von {n}	{a}：{n} 枚中 {d} 枚目
+Übernehmen und weiteres Lernen warten darauf.	適用と次の学習はこれの完了を待ちます。
+Startwert übernommen: Look von {a} für {b}	初期値を適用：{b} に {a} のルック
+Startwert nicht übernommen: {a}	初期値を適用できませんでした：{a}
+Look exportieren (.cube)	ルックを書き出す（.cube）
+Gespeichert: {a}	保存しました：{a}
+Nicht gespeichert: {a}	保存できませんでした：{a}
+Übernommen: {a} ist jetzt der Standard dieser Kamera. Vorschauen werden im Leerlauf erneuert.	適用しました：{a} がこのカメラの標準になりました。プレビューはアイドル時に更新されます。
+Kamera · Bildstil	カメラ・ピクチャースタイル
+Empfehlung	おすすめ
+Hinweise	注意
+{a} ({b} nutzbar)	{a}（使用可能 {b}）
+Geeignete Fotos; in Klammern die genutzten (höchstens 4 je Aufnahmetag)	適した写真。括弧内は使用する枚数（撮影日ごとに最大4枚）
+zu wenig	不足
+gelernt, aus	学習済み・オフ
+ein Ordner	1フォルダ
+{n} adaptiv	適応型 {n}
+Fotos mit adaptiven Kamera-Einstellungen (z. B. DR Auto, Auto-Optimierung) werden ausgelassen	適応型のカメラ設定（DRオート、オート最適化など）の写真は除外されます
+Lernen	学習
+Gerade läuft ein anderer Lernvorgang	別の学習を実行中です
+Mindestens 20 Fotos an mindestens zwei Aufnahmetagen nötig	少なくとも2日分の撮影日から20枚以上の写真が必要です
+Look aus diesen Fotos lernen (im Hintergrund, jederzeit abbrechbar)	これらの写真からルックを学習（バックグラウンド、いつでも中止可能）
+Ergebnis · {a}	結果・{a}
+Nicht gelernt: {a}	学習しませんでした：{a}
+Kein besserer Look gefunden: an den herausgehaltenen Fotos war keine Stufe deutlich besser als die heutige Entwicklung.	より良いルックは見つかりませんでした：検証用の写真では、どの段階も現在の現像より明らかに良くはありませんでした。
+Farbmatrix	カラーマトリクス
+Farbmatrix und Kurven	カラーマトリクスとカーブ
+Farbmatrix, Kurven und 3D-Tabelle	カラーマトリクス、カーブ、3Dテーブル
+Übernommen ({a})	適用済み（{a}）
+Besserer Look gefunden ({a})	より良いルックが見つかりました（{a}）
+ΔE00 Mittel / p95	ΔE00 平均 / p95
+Training ({a} Fotos)	学習用（{a} 枚）
+Fotos, aus denen gelernt wurde	学習に使った写真
+Kontrolle ({a} Fotos)	検証用（{a} 枚）
+Herausgehaltene Fotos anderer Aufnahmetage: der ehrliche Kontrollwert	別の撮影日の検証用写真：公正な検証値
+Heute	現在
+Gelernt	学習後
+Look exportieren (.cube) …	ルックを書き出す（.cube）…
+Gelernten Look als 3D-LUT (.cube, sRGB) speichern	学習したルックを3D LUT（.cube、sRGB）として保存
+Look lernen · {a}	ルックを学習中・{a}
+Standardentwicklung · gelernter Look dieser Kamera	標準現像・このカメラの学習済みルック
+Startwert …	初期値 …
+Zu wenige Fotos: den Look von {a} als Startwert übernehmen (deutlich gekennzeichnet)	写真が少なすぎます：{a} のルックを初期値として使用（明示されます）
+; {a} Fotos mit adaptiver Kamera-Einstellung ausgelassen	（アダプティブなカメラ設定の写真 {a} 枚を除外）
+Nur {n} nutzbare Fotos, mindestens {m} sind nötig{rest}.	使える写真は {n} 枚だけです。少なくとも {m} 枚必要です{rest}。
+Alle Fotos stammen von einem Aufnahmetag: eine Kontrolle an anderen Tagen ist nicht möglich.	すべての写真が同じ撮影日のものです。別の日の写真で確認できません。
+nur {d} Aufnahmetage	撮影日は {d} 日だけ
+alle aus einem Ordner	すべて同じフォルダー
+knapp genug Fotos	写真がぎりぎり
+kaum kräftige Farben	鮮やかな色がほとんどない
+{n} Fotos an {d} Tagen in {f} Ordnern	{d} 日・{f} フォルダーの写真 {n} 枚
+, kaum Hauttöne	、肌色がほとんどない
+lernbar: ja	学習可能：はい
+lernbar: eingeschränkt	学習可能：制限あり
+lernbar: nein	学習可能：いいえ
+sehr nah	非常に近い
+mäßig	中程度
+ΔE00 {d} ({c})	ΔE00 {d}（{c}）
+an Kontrollfotos geprüft	検証用写真で確認済み
+aus der Kamera-Makernote, ohne Messung	カメラのメーカーノートから（未測定）
+Basis ohne Messung	測定なしのベース
+Startwert von {a}	{a} からの初期値
+Kamera-Looks	カメラのルック
+Kamera oder Bildstil suchen …	カメラまたはピクチャースタイルを検索…
+nur lernbare	学習可能のみ
+Nur Bildstile zeigen, aus deren Fotos sich ein Look lernen lässt	写真からルックを学習できるピクチャースタイルだけを表示
+nur ohne Look	ルックなしのみ
+Nur Bildstile ohne mitgelieferten und ohne gelernten Look	付属ルックも学習済みルックもないピクチャースタイルのみ
+Bildstile lesen: {d} von {n} Fotos	ピクチャースタイルを読み込み中：{n} 枚中 {d} 枚
+Keine RAW-Fotos in der Bibliothek (Sigma/Foveon bleibt außen vor).	ライブラリに RAW 写真がありません（Sigma/Foveon は対象外）。
+RAW-Fotos dieser Kamera in der Bibliothek	ライブラリ内のこのカメラの RAW 写真
+{n} neue Fotos seit dem Lernen	学習後の新しい写真 {n} 枚
+Mit den neuen Fotos lässt sich der Look neu lernen; er wird nur ersetzt, wenn er an denselben Kontrollfotos besser ist	新しい写真でルックを再学習できます。同じ検証用写真でより良い場合にだけ置き換えます
+Bildstile werden gelesen …	ピクチャースタイルを読み込み中…
+kein lesbarer Bildstil	読み取れるピクチャースタイルなし
+GELERNT	学習済み
+AUS	オフ
+MITGELIEFERT	付属
+FARBTONTABELLE	色相テーブル
+KEINER	なし
+Gelernt: {a}	学習済み：{a}
+Mitgeliefert: {a}	付属：{a}
+Eingebaute Farbtontabelle der Standardentwicklung (an Kontrollfotos gemessen)	標準現像の内蔵色相テーブル（検証用写真で測定）
+Links eine Kamera und einen Bildstil wählen.	左でカメラとピクチャースタイルを選んでください。
+Erfahrungswert: an Kontrollfotos meist nah am Kamera-JPEG (ΔE00 etwa 0,7–1,7). Zugesagt ist nichts: angeboten wird nur, was messbar besser ist.	経験値：検証用写真ではカメラJPEGに近いことが多い（ΔE00 約0.7〜1.7）。保証はありません。測定で良くなったものだけを提示します。
+Ergebnis unsicher: angeboten wird nur, was an Kontrollfotos messbar besser ist.	結果は不確かです。検証用写真で測定して良くなったものだけを提示します。
+STATISTIK	統計
+Teilen	共有
+Gelernten Look als .x3look (für graineo) oder .cube (auch für andere Programme) speichern: nur Farbwerte mit Herkunft und Güte, keine Bilder, keine Aufnahmedaten	学習済みルックを .x3look（graineo 用）または .cube（他のソフトでも可）で保存：由来と品質付きの色の値のみ。画像や撮影データは含みません
+Geteilten Look (.x3look oder .cube) für diese Kamera und diesen Bildstil laden; ein vorhandener gelernter Look wird aufbewahrt	共有ルック（.x3look または .cube）をこのカメラとピクチャースタイルに読み込みます。既存の学習済みルックは保管されます
+Den neuen Look als Standard dieser Kamera und dieses Bildstils verwenden; ein bisheriger gelernter Look wird aufbewahrt	新しいルックをこのカメラとピクチャースタイルの標準にします。以前の学習済みルックは保管されます
+Erneut lernen	もう一度学習
+Noch einmal lernen (verwirft das Ergebnis, nicht den Look in Gebrauch)	もう一度学習（結果は破棄、使用中のルックはそのまま）
+Erst eine Kamera und einen Bildstil wählen	まずカメラとピクチャースタイルを選んでください
+Gerade läuft ein Lernvorgang	学習を実行中です
+Zu wenige geeignete Fotos (siehe Einschätzung)	適した写真が少なすぎます（評価を参照）
+Mit aktuellen Fotos neu lernen: das Ergebnis wird an denselben Kontrollfotos gegen den bisherigen Look und gegen heute gemessen und nur angeboten, wenn es besser ist	現在の写真で再学習：結果を同じ検証用写真で以前のルックおよび現在の現像と比較し、良い場合にだけ提示します
+Look aus RAW und Kamera-JPEG dieser Fotos lernen (leise im Hintergrund, jederzeit abbrechbar)	これらの写真の RAW とカメラJPEG からルックを学習（バックグラウンドで静かに実行、いつでも中止可）
+adaptive einbeziehen	アダプティブを含める
+Auch Fotos mit adaptiven Kamera-Einstellungen nutzen (DR Auto, Schattenkorrektur, Auto-Optimierung …); sie passen das Kamera-JPEG an die Szene an, daher sonst ausgelassen	アダプティブなカメラ設定（DR オート、シャドウ補正、オートライティングオプティマイザ …）の写真も使います。カメラJPEGをシーンに合わせるため、通常は除外されます
+Ausrichtung	位置合わせ
+Paare	ペア
+Matrix	マトリクス
+Kurven	カーブ
+Tabelle	テーブル
+Kontrolle	検証
+Bisher gelernt	以前の学習
+Lernen · {a}	学習 · {a}
+Anpassen und kontrollieren	フィッティングと検証
+Foto {d} von {n} · {a}	写真 {d}/{n} · {a}
+Zuletzt entwickeltes Foto	最後に現像した写真
+Heute bisher: ΔE00 {a}	現在の現像（途中経過）：ΔE00 {a}
+Median der Fotos so weit: Abstand der heutigen Entwicklung zum Kamera-JPEG	これまでの写真の中央値：現在の現像とカメラJPEGとの差
+Lernen beenden; es wird nichts geändert	学習を中止します。何も変更されません
+Läuft leise weiter, auch wenn das Fenster geschlossen wird.	ウインドウを閉じても静かに続行します。
+Ergebnis	結果
+Der bisherige Look bleibt: an denselben Kontrollfotos war der neue nicht deutlich besser.	以前のルックを維持します。同じ検証用写真で新しいルックは明確に良くなりませんでした。
+Kein besserer Look gefunden: an den Kontrollfotos war keine Stufe deutlich besser als die heutige Entwicklung.	より良いルックは見つかりませんでした。検証用写真で、現在の現像より明確に良い段階はありませんでした。
+ΔE00 Median / p90	ΔE00 中央値 / p90
+Kontrolle ({a})	検証（{a}）
+Training ({a})	学習用（{a}）
+Neu	新規
+Gemessen an denselben Kontrollfotos wie der bisherige Look.	以前のルックと同じ検証用写真で測定しました。
+ausgeschaltet (Look-Fach)	オフ（ルックパネル）
+Mitgeliefert	付属
+Eingebaut	内蔵
+Farbtontabelle der Standardentwicklung, an Kontrollfotos gemessen	標準現像の色相テーブル（検証用写真で測定）
+neutrale Entwicklung mit der Farbmatrix der Kamera	カメラのカラーマトリクスによるニュートラル現像
+Look von {a} als Startwert …	{a} のルックを初期値に…
+Zu wenige Fotos: den Look einer verwandten Kamera übernehmen, gekennzeichnet als Basis ohne Messung	写真が少なすぎます：近いカメラのルックを、測定なしのベースとして引き継ぎます
+Fotos der Kamera	カメラの写真
+in diesem Bildstil	このピクチャースタイル
+Bei mehr als 400 Fotos einer Kamera wird eine über die Aufnahmetage verteilte Auswahl gelesen	1 台のカメラの写真が 400 枚を超える場合は、撮影日に分散した一部を読み込みます
+Ohne Fotos mit adaptiven Kamera-Einstellungen (außer sie sind einbezogen)	アダプティブなカメラ設定の写真を除く（含める設定時を除く）
+davon zum Lernen	うち学習用
+Höchstens 4 je Aufnahmetag und 80 insgesamt, über den Tag verteilt	撮影日ごとに最大 4 枚、合計 80 枚まで（1 日の中で分散）
+DR Auto, Schattenkorrektur, Auto-Optimierung und Ähnliches	DR オート、シャドウ補正、オートライティングオプティマイザなど
+Aufnahmetage	撮影日
+Kontrollfotos stammen von anderen Tagen als die Trainingsfotos	検証用写真は学習用写真とは別の日のものです
+mit Kamera-JPEG	カメラJPEGあり
+RAW+JPEG; sonst dient die im RAW eingebettete Vorschau als Kamera-Bild	RAW+JPEG。ない場合は RAW 内蔵のプレビューをカメラ画像として使います
+Farbabdeckung wird aus den Vorschauen ermittelt …	プレビューから色の分布を調べています…
+Keine Vorschauen für die Farbabdeckung	色の分布に使えるプレビューがありません
+aus den Lernblöcken (Kamera-JPEG)	学習ブロック（カメラJPEG）から
+aus den Vorschauen der Bibliothek	ライブラリのプレビューから
+Abdeckung, {a}	分布、{a}
+Anteil dunkler bis heller Bildteile (fünf Stufen)	暗部から明部までの割合（5 段階）
+Farben	色
+Anteil farbiger Bildteile je Farbton (Rot, Gelb, Grün, Cyan, Blau, Magenta)	色相ごとの有彩色部分の割合（赤、黄、緑、シアン、青、マゼンタ）
+Hauttöne {a} %	肌色 {a} %
+Anteil hauttonähnlicher Farben; unter 1 % lernt der Look Hauttöne kaum	肌色に近い色の割合。1 % 未満では肌色をほとんど学習できません
+kräftige Farben {a} %	鮮やかな色 {a} %
+Anteil stark gesättigter Farben; unter 1 % bleiben kräftige Farben unsicher	彩度の高い色の割合。1 % 未満では鮮やかな色が不確かです
+ · gemischt (Kunstlicht und Tageslicht)	 · 混在（人工光と昼光）
+Weißabgleich {a}–{b} K{c}	ホワイトバランス {a}–{b} K{c}
+Weißabgleich-Streuung: wird beim Lernen gemessen	ホワイトバランスのばらつき：学習時に測定
+10. bis 90. Perzentil des Weißabgleichs der Aufnahmen	撮影時ホワイトバランスの 10〜90 パーセンタイル
+Fassungen	バージョン
+ohne Messung	測定なし
+in Gebrauch	使用中
+Wirklich?	本当に？
+Zurück zu dieser	これに戻す
+Diese frühere Fassung wieder verwenden; die jetzige wird aufbewahrt	この以前のバージョンを再び使います。現在のものは保管されます
+Frühere Fassung wieder in Gebrauch; die bisherige ist aufbewahrt.	以前のバージョンを再び使用中。それまでのものは保管されています。
+Nicht zurückgesetzt: {a}	戻せませんでした：{a}
+Look exportieren	ルックを書き出す
+graineo-Look	graineo ルック
+Look importieren	ルックを読み込む
+Geladen als Look von {a}	{a} のルックとして読み込みました
+Nicht geladen: {a}	読み込めませんでした：{a}
+Hier erscheint der Vergleich eines Fotos: neutral, aktuell, neu gelernt und Kamera-JPEG.	ここに写真の比較が表示されます：ニュートラル、現在、新たに学習、カメラJPEG。
+Entwicklung ohne kameraeigene Farbkorrektur: die Grundlage, auf der gelernt wird	カメラ固有の色補正なしの現像：学習の土台
+Standardentwicklung, wie sie jetzt ist (mit eingeschaltetem gelernten Look)	現在の標準現像（オンの学習済みルックを含む）
+Grundlage mit dem neu gelernten Look (oder dem gelernten Look in Gebrauch)	土台に新しく学習したルック（または使用中の学習済みルック）を適用
+Das Bild der Kamera: JPEG neben dem RAW oder die eingebettete Vorschau	カメラの画像：RAW と並ぶ JPEG または内蔵プレビュー
+Wischen	ワイプ
+Nebeneinander	左右に並べる
+Ein Bild, links und rechts der Trennlinie verschieden (Linie ziehen)	1 枚の画像で、境界線の左右が異なります（線をドラッグ）
+Beide Bilder nebeneinander, Zoomen und Verschieben gekoppelt	2 枚を並べて表示、ズームと移動は連動
+Zwischen eingepasst und 100 % der Vorschau wechseln (auch Doppelklick ins Bild); Scrollrad oder Zwei-Finger-Geste zoomt, Ziehen verschiebt	全体表示とプレビューの 100 % を切り替え（画像のダブルクリックでも可）。スクロールホイールや 2 本指ジェスチャーでズーム、ドラッグで移動
+Kamera-JPEG neben dem RAW	RAW と並ぶカメラJPEG
+eingebettete Vorschau	内蔵プレビュー
+{a} · Belichtung an das Kamera-Bild angeglichen ({b} EV) · {c}	{a} · 露出をカメラ画像に合わせました（{b} EV）· {c}
+{a} · wird entwickelt …	{a} · 現像中…
+Foto wird entwickelt …	写真を現像中…
+Kein Foto zum Vergleichen	比較する写真がありません
+Noch kein neuer Look: erst lernen	新しいルックはまだありません。先に学習してください
+Kontrollfoto: nicht zum Lernen benutzt, daran wird gemessen	検証用写真：学習には使わず、測定に使います
+Trainingsfoto: daraus wird gelernt	学習用写真：ここから学習します
+Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)	学習に使う写真（学習用か検証用かは学習時に決まります）
+{a} (geladen)	{a}（読み込み）
+Kamera-Looks …	カメラのルック…
+Looks der Kameras der Bibliothek: Übersicht, Vergleich mit dem Kamera-JPEG, Lernen aus RAW und Kamera-JPEG der eigenen Fotos, Fassungen und Teilen	ライブラリのカメラのルック：一覧、カメラJPEGとの比較、自分の写真の RAW とカメラJPEG からの学習、バージョン、共有
+Nicht gelernt: nur {n} brauchbare Fotos, mindestens {m} sind nötig.	学習できませんでした：使える写真は {n} 枚だけです。少なくとも {m} 枚必要です。
+Nicht gelernt: zu wenige Aufnahmetage für eine getrennte Kontrolle.	学習できませんでした：別の日で検証するには撮影日が少なすぎます。
+Neu lernen	再学習
+„Motiv“ und „Personen“ wählen mit der Bildanalyse des Systems aus, was im Foto vorne steht. Die Maske ist nur eine Auswahl: Pixel ändern erst die Regler darunter.	「被写体」と「人物」は、システムの画像解析で写真の中で目立つものを選択します。マスクは選択にすぎず、ピクセルを変えるのは下のスライダーです。
+• **Motiv 1, 2 …** – mehrere erkannte Motive einzeln an- und abwählen\n• **Weiche Kante** – weicher Übergang am Rand der Auswahl\n• **+ Hinzufügen / − Abziehen → Pinsel** – vergessene Teile ergänzen, zu viel Ausgewähltes abziehen\n• **Überlagerung** – zeigt die Wirkung der Maske rot im Bild\n\nGrenzen: Haare, Fell, Glas, feine Zweige und Bilder ohne klares Hauptmotiv werden oft ungenau. Die Berechnung läuft auf dem Rechner, nichts verlässt ihn. Die Auswahl wird in der Bibliothek gespeichert; beim Einfügen auf andere Fotos wird sie dort neu berechnet.\n\nNur unter macOS (Motiv: ab macOS 14).	• **被写体 1、2 …** – 検出された複数の被写体を個別に選択・解除\n• **ぼかし** – 選択範囲の境界をなめらかに\n• **+ 追加 / − 減算 → ブラシ** – 足りない部分を追加、選択しすぎた部分を減算\n• **オーバーレイ** – マスクの効果を画像上に赤で表示\n\n限界：髪、毛、ガラス、細い枝、はっきりした主題のない画像は不正確になりがちです。計算はこのコンピュータ上で行われ、何も外部に送られません。選択はライブラリに保存され、他の写真に貼り付けるとそこで再計算されます。\n\nmacOS のみ（被写体：macOS 14 以降）。
+„Stelle entfernen“ füllt eine angeklickte Stelle mit Inhalt, den ein Modell aus der Umgebung erfindet. Das ist keine Fotografie mehr, sondern eine Vermutung.	「箇所を除去」はクリックした箇所を、モデルが周囲から作り出した内容で埋めます。それはもはや写真ではなく推測です。
+• **Gut** – Himmel, Wasser, Wiese, Wand, Muster\n• **Schlecht** – Gesichter, Schrift, Kanten von Gegenständen, große Flächen\n• **Größe** – Radius des nächsten Kreises\n\nDie Füllung wird einmal berechnet und in der Bibliothek gespeichert; Helligkeit und Farbe passen sich beim Entwickeln der Umgebung an. Für kleine Flecken auf echtem Bildinhalt ist „Heilen“ meist besser. Das Modell („Objekte entfernen“, Einstellungen → Module) rechnet auf dem Rechner, nichts verlässt ihn.	• **得意** – 空、水、芝生、壁、模様\n• **苦手** – 顔、文字、物の輪郭、広い範囲\n• **サイズ** – 次の円の半径\n\n塗りつぶしは一度だけ計算されライブラリに保存されます。明るさと色は現像時に周囲に合わせて調整されます。実際の画像上の小さなシミには「修復」の方が通常よい結果になります。モデル（「オブジェクトを除去」、設定 → モジュール）はこのコンピュータ上で計算し、何も外部に送られません。
+Klick-Auswahl	クリック選択
+Überlagerung	オーバーレイ
+Entfernen fehlgeschlagen: {e}	除去に失敗しました：{e}
+OBJEKTE ENTFERNEN	オブジェクトを除去
+Alle entfernen	すべて取り消す
+{n} entfernte Stellen	除去した箇所 {n}
+Wirkung der gewählten Maske rot zeigen (im Werkzeug „Masken“)	選択したマスクの効果を赤で表示（「マスク」ツール内）
+Berechnung fehlgeschlagen: {e}	計算に失敗しました：{e}
+Auswahl nicht gespeichert: {e}	選択範囲を保存できませんでした：{e}
+Kein Motiv erkannt	被写体が見つかりません
+Keine Person erkannt	人物が見つかりません
+{n} gefunden · {t} s	{n} 件検出 · {t} 秒
+Auswahl fehlt – Modul „Klick-Auswahl“ nicht installiert	選択がありません – モジュール「クリック選択」が未インストール
+Auswahl steht aus	選択を計算待ち
+Auswahl fehlt – auf diesem System nicht berechenbar	選択がありません – このシステムでは計算できません
+Auswahl fehlt in der Bibliothek	ライブラリに選択がありません
+Motiv {n}	被写体 {n}
+Person {n}	人物 {n}
+Neu berechnen	再計算
+Pinsel +	ブラシ +
+Pinsel −	ブラシ −
+Motiv	被写体
+Auswahl per Klick	クリック選択
+Bitmap	ビットマップ
+Motiv und Personen	被写体と人物
+Objekte entfernen	オブジェクトを除去
+Klick-Auswahl (MobileSAM)	クリック選択（MobileSAM）
+Objekte entfernen (LaMa)	オブジェクトを除去（LaMa）
+Masken: Objekt anklicken, Auswahl wird berechnet	マスク：オブジェクトをクリックすると選択範囲を計算
+Retusche: markierte Bereiche mit erfundenem Inhalt füllen	レタッチ：指定範囲を作り出した内容で埋める
+Hauptmotiv auswählen (Bildanalyse des Systems, ändert keine Pixel)	主な被写体を選択（システムの画像解析、ピクセルは変更しません）
+Personen auswählen (Bildanalyse des Systems, ändert keine Pixel)	人物を選択（システムの画像解析、ピクセルは変更しません）
+Braucht macOS 14 oder neuer	macOS 14 以降が必要です
+Gibt es nur unter macOS	macOS でのみ利用できます
+Wird gerade berechnet (wenige Sekunden)	計算中（数秒）
+Auswahl mit der Bildanalyse neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	選択を再計算（レンズ補正を変更した後など）
+Mit dem Pinsel zur Auswahl hinzufügen	ブラシで選択に追加
+Mit dem Pinsel aus der Auswahl entfernen	ブラシで選択から除外
+Objekt im Bild anklicken; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	画像内のオブジェクトをクリック。⌥クリックで範囲を除外（このコンピュータで計算）
+Braucht das Modul „Klick-Auswahl“ (Einstellungen → Module)	モジュール「クリック選択」が必要です（設定 → モジュール）
+Wirkung der gewählten Maske rot im Bild zeigen	選択したマスクの効果を赤で表示
+Stelle anklicken: der Bereich wird mit erfundenem Inhalt aus der Umgebung gefüllt (rechnet auf dem Rechner)	箇所をクリック：周囲から作り出した内容で埋めます（このコンピュータで計算）
+Braucht das Modul „Objekte entfernen“ (Einstellungen → Module)	モジュール「オブジェクトを除去」が必要です（設定 → モジュール）
+Alle entfernten Stellen wiederherstellen	除去したすべての箇所を元に戻す
+Ortsnamen: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)	地名: GeoNames (geonames.org)、CC BY 4.0 (creativecommons.org/licenses/by/4.0)
+Ortsnamen bestimmen …	地名を判定中…
+Vorschläge aus dem Bildinhalt brauchen das Suchmodell „Beste Treffer“ (SigLIP 2 Base). Installieren unter Einstellungen → Suche; es wird nichts von selbst geladen.	画像内容からの候補には検索モデル「最高精度」(SigLIP 2 Base)が必要です。設定 → 検索 でインストールしてください。自動ではダウンロードされません。
+Die Begriffe werden einmal für das Suchmodell vorbereitet (wenige Sekunden).	検索モデル用に語句を一度だけ準備しています(数秒)。
+Die Vorschläge konnten nicht berechnet werden.	候補を計算できませんでした。
+Dieses Foto ist für das Suchmodell „Beste Treffer“ noch nicht eingelesen. Das geschieht im Hintergrund; danach erscheinen hier Vorschläge.	この写真はまだ検索モデル「最高精度」で読み込まれていません。バックグラウンドで行われ、その後ここに候補が表示されます。
+Begriffe, die das Suchmodell im Bild erkennt. Klick übernimmt das Stichwort für dieses Foto, × lehnt den Vorschlag für dieses Foto ab. Nie automatisch vergeben.	検索モデルが画像内に認識した語句です。クリックでこの写真にキーワードを付け、× でこの写真の候補を却下します。自動では付きません。
+keine sicheren	確かな候補なし
+Vorschlag „{a}“ abgelehnt	候補「{a}」を却下しました
+Als Stichwort für dieses Foto übernehmen	この写真のキーワードとして付ける
+Vorschlag für dieses Foto ablehnen	この写真の候補を却下
+Basis aus Fremdbeispielen, nicht geprüft	他の撮影者のサンプルによるベース（未検証）
+Quelle: {a} Dateien	出典：{a} ファイル
+An Kamera-JPEG angleichen	カメラJPEGに合わせる
+Kein passendes Kamera-JPEG – neutral entwickelt	合うカメラJPEGがありません – ニュートラルで現像
+Tonkurve dieses Fotos aus seinem Kamera-JPEG	この写真のカメラJPEGから求めたトーンカーブ
+DRUCKEN …	プリント…
+Im Druckraum in voller Auflösung drucken (Filmstreifen-Vorlage)	プリントルームでフル解像度でプリント（フィルムストリップのテンプレート）
+Druckauflösung	プリント解像度
+Ausdruck schärfen	プリントのシャープ
+Farbraum der Seite	ページの色空間
+Pixel je Zoll auf dem Papier.	用紙上の1インチあたりのピクセル数。
+graineo rechnet jede Seite genau in dieser Auflösung, damit der Druckertreiber nicht mit einfacherem Verfahren nachskaliert. Epson-Drucker arbeiten intern mit 360 oder 720 ppi, viele Canon- und HP-Drucker mit 300 oder 600. Mehr als 360 ppi zeigt sich nur bei genauem Hinsehen und kostet Zeit und Speicher.	graineo は各ページをちょうどこの解像度で計算するため、プリンタードライバーが簡易な方法で拡大縮小し直すことはありません。Epson のプリンターは内部で 360 または 720 ppi、多くの Canon や HP は 300 または 600 で処理します。360 ppi を超える差はよく見ないと分からず、時間とメモリを使います。
+Ausgleich für die Unschärfe von Tinte und Papier.	インクと用紙によるぼけを補正します。
+Wirkt nach dem Skalieren auf die Helligkeit, mit einem Radius in Millimetern auf dem Papier – bei jeder Auflösung gleich. Mattes Papier lässt die Tinte stärker verlaufen und bekommt mehr. Am Bildschirm wirkt die Schärfung zu kräftig; maßgeblich ist der Ausdruck.	拡大縮小の後に明るさに対して、用紙上のミリ単位の半径で適用されます。どの解像度でも同じ効果です。マット紙はインクがにじみやすいため強めにかかります。画面では強すぎて見えますが、基準はプリントです。
+Farbraum der Seite; die Farben rechnet der Drucker um.	ページの色空間。色の変換はプリンターが行います。
+Die Seite trägt ihr Farbprofil (Adobe RGB oder sRGB). Im Druckdialog übernimmt der Treiber die Umrechnung auf Drucker und Papier – dort Papiersorte und Qualität wählen und die Farbanpassung des Druckers eingeschaltet lassen. Adobe RGB erhält kräftige Grün- und Cyantöne, die gute Tintenstrahldrucker drucken können.	ページには色プロファイル（Adobe RGB または sRGB）が埋め込まれます。プリントダイアログでドライバーがプリンターと用紙に合わせて変換します。そこで用紙の種類と品質を選び、プリンターのカラーマッチングはオンのままにしてください。Adobe RGB は、優れたインクジェットプリンターが再現できる鮮やかな緑やシアンを保ちます。
+Drucken …	プリント…
+Keine Seite zu drucken	プリントするページがありません
+leeres Bild	空の画像
+{name}: keine Vorschau für den Entwurf	{name}: 下書き用のプレビューがありません
+Abstand	間隔
+Als Vorlage sichern …	テンプレートとして保存…
+An den Druckdialog übergeben	プリントダイアログに渡しました
+Ausfüllen	フィル
+Bildeinstellung	画像の設定
+Drehen und einpassen	回転して合わせる
+Druckauftrag	プリントジョブ
+Druckdialog im Testlauf übersprungen	テスト実行のためプリントダイアログを省略しました
+Drucken	プリント
+Drucker …	プリンター…
+Drucker: {a}	プリンター: {a}
+ENTWURF	下書き
+Ein Foto pro Seite wiederholen	1ページに1枚の写真を繰り返す
+Entwurfsmodus	下書きモード
+Farbmanagement: vom Drucker verwaltet	カラーマネジメント: プリンターで管理
+Fotoinfo	写真情報
+Fotos ({n})	写真 ({n})
+Hilfslinien	ガイド
+Hintergrund	背景
+In Datei drucken …	ファイルにプリント…
+In Datei drucken	ファイルにプリント
+In den Papierkorb legen	ゴミ箱に入れる
+Kein Platz für eine Zelle: Ränder oder Abstände verkleinern	セルを置く余地がありません: 余白または間隔を小さくしてください
+Kontur	枠線
+Konturbreite	枠線の幅
+Konturfarbe	枠線の色
+Mit aktuellen Einstellungen aktualisieren	現在の設定で更新
+Nicht gedruckt: {e}	プリントされませんでした: {e}
+PDF für den Druck geschrieben: {a}	プリント用 PDF を書き出しました: {a}
+PDF	PDF
+Rand der Dunkelkammer mitdrucken	暗室のふちもプリント
+Rand links	左余白
+Rand oben	上余白
+Rand rechts	右余白
+Rechnet Seite {a} von {n} …	ページ {a}/{n} を計算中…
+Rechnet …	計算中…
+Reihen × Spalten	行 × 列
+Ränder auf den bedruckbaren Bereich des Druckers angehoben	余白をプリンターの印刷可能範囲まで広げました
+Schnittmarken	トンボ
+Schriftgrad	文字サイズ
+Schärfen {a} · {m}	シャープ {a} · {m}
+Seite und Raster	ページとグリッド
+Seite {a} von {n}	ページ {a}/{n}
+Seite	ページ
+Seiteneinrichtung nicht verfügbar	ページ設定を利用できません
+Seiteninformationen	ページ情報
+Seitennummern	ページ番号
+TIFF	TIFF
+Vorlage nicht entfernt: {e}	テンプレートを削除できませんでした: {e}
+Vorlage nicht gesichert: {e}	テンプレートを保存できませんでした: {e}
+Vorlage „{a}“ gesichert	テンプレート「{a}」を保存しました
+Vorlagen	テンプレート
+Zelle B × H	セル 幅 × 高さ
+mind. {a} mm	最小 {a} mm
+ohne Schärfung	シャープなし
+{name}: nicht mehr in der Liste	{name}: リストにありません
+{n} Fotos · {p} Seiten	写真 {n} 枚 · {p} ページ
+{n} Seiten gespeichert: {a} …	{n} ページを保存しました: {a} …
+{s}, vom Drucker verwaltet	{s}、プリンターで管理
+{w} × {h} px je Seite · {mb} MB	1ページ {w} × {h} px · {mb} MB
+Druckraum schließen	プリントルームを閉じる
+Aktuelle Einstellungen als eigene Vorlage sichern	現在の設定を独自のテンプレートとして保存
+Zelle ganz füllen, Überstand abschneiden; im Bild ziehen verschiebt den Ausschnitt	セル全体を埋め、はみ出しを切り取ります。写真内をドラッグすると切り抜き位置が動きます
+Foto um 90° drehen, wenn es dann größer wird	大きく配置できる場合は写真を90°回転します
+Jede Zelle einer Seite zeigt dasselbe Foto	ページのすべてのセルに同じ写真を配置します
+Linie außen um jedes Foto	各写真の外側に線を引きます
+Ränder, Zellen und Maße in der Vorschau (werden nicht gedruckt)	プレビューに余白・セル・寸法を表示（プリントされません）
+Unten in der Mitte	下中央
+Datum, Vorlage, Farbraum, Auflösung und Schärfung klein unten links	日付・テンプレート・色空間・解像度・シャープを左下に小さく表示
+Kurze Linien im Rand an den Bildkanten	写真の端に合わせて余白に短い線を引きます
+Papier- und Filmrand der Dunkelkammer gehören zum Bild; sonst macht das Seitenlayout den Rand	暗室の用紙とフィルムのふちを写真に含めます。オフの場合、ふちはページレイアウトで作られます
+Schnell: Bibliotheksvorschau statt voller Entwicklung, 150 ppi, ohne Schärfung, 8 Bit	高速: 完全な現像の代わりにライブラリのプレビュー、150 ppi、シャープなし、8 ビット
+16 Bit je Kanal (PDF, TIFF); nicht jeder Druckertreiber nutzt sie	チャンネルあたり 16 ビット（PDF、TIFF）。すべてのプリンタードライバーが使うわけではありません
+Auf diesem System über die PDF-Datei drucken	このシステムでは PDF ファイルからプリントしてください
+Drucker, Papier und Ausrichtung wählen (Seiteneinrichtung)	プリンター・用紙・向きを選択（ページ設定）
+Seiten in voller Qualität in eine Datei schreiben	ページを最高品質でファイルに書き出します
+Seiten in voller Qualität rechnen und an den Druckdialog geben	ページを最高品質で計算してプリントダイアログに渡します
+Nächste Seite	次のページ
+Vorige Seite	前のページ
+Grau	グレー
+Eigener Text	カスタムテキスト
+Glanz	光沢
+Matt	マット
+Niedrig	弱
+Drucker	プリンター
+Drucken (Druckraum)	プリント（プリントルーム）
+1 Foto, A4, 10 mm Rand	写真1枚、A4、余白10 mm
+1 Foto, A3+, 15 mm Rand	写真1枚、A3+、余白15 mm
+1 Foto, A3, 15 mm Rand	写真1枚、A3、余白15 mm
+Randlos 10 × 15	フチなし 10 × 15
+13 × 18, 5 mm Rand	13 × 18、余白5 mm
+2 Fotos, A4	写真2枚、A4
+4 Fotos, A4	写真4枚、A4
+Kontaktabzug A4 5 × 6	コンタクトシート A4 5 × 6
+Kontaktabzug A3+ 6 × 8	コンタクトシート A3+ 6 × 8
+Filmstreifen A4 (Kontaktabzug)	フィルムストリップ A4（コンタクトシート）
+ · JPEG XL ohne HDR-Gain-Map	 · HDRゲインマップなしのJPEG XL
+JPEG XL (.jxl): kleiner als JPEG bei gleicher Qualität, auch verlustfrei und mit 16 Bit	JPEG XL (.jxl): 同じ画質で JPEG より小さく、ロスレスや 16 ビットも可能
+8 Bit	8 ビット
+Fertiges Bild ohne Verlust, kleiner als TIFF und PNG.	劣化のない完成画像。TIFF や PNG より小さい。
+Fertiges Bild, kleiner als JPEG bei gleicher Qualität.	完成画像。同じ画質で JPEG より小さい。
+Im Browser: {name}	ブラウザで: {name}
+Browser-Zugriff: rechnet für ein Gerät	ブラウザアクセス: デバイスのために計算中
+Browser-Zugriff an	ブラウザアクセス オン
+in {n} h	{n} 時間後
+vor {n} h	{n} 時間前
+in {n} Tagen	{n} 日後
+Browser-Zugriff	ブラウザアクセス
+Konnte nicht starten: {e}	開始できませんでした: {e}
+Geräte	デバイス
+Kopplungscode	ペアリングコード
+gültig noch {m}:{s}	有効期限 残り {m}:{s}
+QR-Code mit der Kamera des Tablets scannen oder die Adresse öffnen und den Code eingeben. Der Code gilt einmal und fünf Minuten.	タブレットのカメラでQRコードを読み取るか、アドレスを開いてコードを入力してください。コードは1回限り、5分間有効です。
+Gerät koppeln …	デバイスをペアリング…
+darf ändern	変更可
+nur ansehen	閲覧のみ
+gültig bis	有効期限
+Widerruf	取り消しまで
+Sicherheit	セキュリティ
+zuletzt	最終
+Nie	しない
+1 Tag	1日
+7 Tage	7日
+30 Tage	30日
+90 Tage	90日
+1 h	1時間
+4 h	4時間
+12 h	12時間
+Zertifikat	証明書
+Browser-Zugriff erlauben	ブラウザアクセスを許可
+Diese Bibliothek im Browser eines Tablets oder anderen Rechners in deinem Heimnetz ansehen, bewerten und einfach entwickeln, solange graineo hier läuft. Zugreifen kann nur ein Gerät, das du hier mit einem Code koppelst; die Verbindung ist verschlüsselt (HTTPS). Nichts geht an fremde Server.	graineo がここで動作している間、家庭内ネットワークのタブレットや別のコンピュータのブラウザでこのライブラリを表示・評価し、簡単な現像ができます。アクセスできるのは、ここでコードによりペアリングしたデバイスだけです。接続は暗号化されます (HTTPS)。外部のサーバーには何も送信されません。
+Adresse im Browser	ブラウザで開くアドレス
+Auf dem Tablet eine dieser Adressen öffnen (gleiches WLAN). Beim ersten Mal warnt der Browser vor dem Zertifikat: Fingerabdruck vergleichen oder das Zertifikat installieren (siehe unten).	タブレットでこれらのアドレスのいずれかを開いてください (同じWi‑Fi)。初回はブラウザが証明書について警告します。フィンガープリントを照合するか、証明書をインストールしてください (下記参照)。
+Fingerabdruck des Zertifikats	証明書のフィンガープリント
+Neue Geräte dürfen ändern	新しいデバイスに変更を許可
+Bewerten und die einfachen Regler. Aus: nur ansehen.	評価とシンプルなスライダー。オフ: 閲覧のみ。
+Neues Gerät	新しいデバイス
+Alle Geräte	すべてのデバイス
+Gekoppelte Geräte gelten	ペアリングの有効期間
+Danach ist eine neue Kopplung nötig. Gilt für neu gekoppelte Geräte.	期限後は再ペアリングが必要です。新たにペアリングするデバイスに適用されます。
+Automatisch ausschalten	自動的にオフにする
+Der Browser-Zugriff schaltet sich nach dieser Zeit selbst ab.	この時間が経つとブラウザアクセスは自動的にオフになります。
+Auch von außerhalb des Heimnetzes	家庭内ネットワークの外からも許可
+Nur nötig für ein VPN mit öffentlichen Adressen. Unterwegs immer über ein VPN ins Heimnetz (z. B. das VPN des Routers oder NAS), nie über eine Portfreigabe im Router.	公開アドレスを使うVPNの場合にのみ必要です。外出先からは必ずVPNで家庭内ネットワークに接続してください (ルーターやNASのVPNなど)。ルーターのポート転送は決して使わないでください。
+Neu erzeugen, wenn du ihm nicht mehr traust. Geräte müssen danach dem neuen Zertifikat vertrauen.	信頼できなくなった場合は作り直してください。その後、各デバイスで新しい証明書を信頼する必要があります。
+Zugriffsprotokoll	アクセスログ
+Anmeldungen, Kopplungen, Änderungen und abgewiesene Anfragen mit Zeit, Adresse und Gerät, ohne Inhalte.	サインイン、ペアリング、変更、拒否したリクエストを時刻・アドレス・デバイスとともに記録します (内容は含みません)。
+Zertifikat auf dem iPad: die Adresse öffnen, …/ca.crt laden, unter Einstellungen → Allgemein → VPN und Geräteverwaltung das Profil installieren und unter Info → Zertifikatsvertrauenseinstellungen einschalten. Fingerabdruck dabei vergleichen.	iPadでの証明書: アドレスを開いて …/ca.crt を読み込み、設定 → 一般 → VPNとデバイス管理 でプロファイルをインストールし、情報 → 証明書信頼設定 でオンにします。その際フィンガープリントを照合してください。
+Fotos auf dem NAS: Das NAS muss auf diesem Rechner eingehängt sein, damit Originale entwickelt werden können. Zum Ansehen genügen die Vorschauen und Offline-Kopien, die hier liegen.	NAS上の写真: オリジナルを現像するには、このコンピュータにNASがマウントされている必要があります。閲覧だけなら、ここにあるプレビューとオフラインコピーで足ります。
+Ruhezustand: Schläft der Rechner oder ist graineo beendet, ist der Browser-Zugriff nicht erreichbar.	スリープ: コンピュータがスリープ中、または graineo が終了している間は、ブラウザアクセスは利用できません。
+Genau	正確
+Sparsam	省エネ
+Leistung	パフォーマンス
+Betriebsart	動作モード
+Rechnet jetzt	現在の計算
+Neu messen	再測定
+von Hand gewählt	手動で選択
+Startwert nach der Hardware (Rechenfaktor ≈ {f}); noch keine Messung	ハードウェアからの初期値（計算係数 ≈ {f}）。まだ測定なし
+gemessen: Rechenfaktor {f} aus {n} Rechnungen	測定済み：{n} 回の計算から計算係数 {f}
+vorübergehend: Akkubetrieb	一時的：バッテリー駆動
+vorübergehend: Stromsparmodus	一時的：低電力モード
+vorübergehend: Rechner ist heiß	一時的：コンピュータが高温
+vorübergehend: Arbeitsspeicher knapp	一時的：メモリ不足
+Betriebsart jetzt {t} ({c}) · Einstellungen → Entwickeln → Leistung	動作モード：{t}（{c}）· 設定 → 現像 → パフォーマンス
+{t}: genaue Ansicht in {n} s, beim Zoomen sofort ({c})	{t}：{n} 秒後に正確な表示、ズーム時はすぐ（{c}）
+Sparsam wartet auf einem Foto etwas länger, bevor die genaue Ansicht gerechnet wird, rechnet nichts im Voraus und hält weniger Fotos im Speicher. Das Ergebnis bleibt gleich: Zoom, Rauschregler und Export rechnen sofort genau. Automatisch wählt nach den gemessenen Rechenzeiten dieses Rechners und rechnet bei Akku, Stromsparmodus, Wärme oder knappem Speicher vorübergehend sparsam	省エネでは正確な表示を計算する前に写真上で少し長く待ち、先読み計算をせず、メモリに保持する写真を減らします。結果は同じです：ズーム、ノイズスライダー、書き出しはすぐに正確に計算します。自動はこのコンピュータで測定した計算時間から選び、バッテリー駆動、低電力モード、高温、メモリ不足のときは一時的に省エネで計算します
+auf 0 Sterne (außer 4–5)	星0にする（4〜5を除く）
+{a} gibt es schon und bleibt unverändert	{a} は既にあり、変更されません
+Vorlage „{a}“ gibt es schon.	テンプレート「{a}」は既にあります。
+Ersetzen	置き換える
+{n} mit 4–5 Sternen unverändert	星4〜5の{n}枚は変更なし
+interner Fehler	内部エラー
+Seite zu groß zum Drucken: {w} × {h} Pixel bei {ppi} ppi, höchstens {max} MP und {edge} Pixel je Seite. Bitte kleineres Papier oder weniger ppi wählen.	ページが大きすぎて印刷できません: {ppi} ppi で {w} × {h} ピクセル（上限は {max} MP、1 ページあたり {edge} ピクセル）。用紙を小さくするか ppi を下げてください。
+Suchindex wird aufgebaut …	検索インデックスを作成しています…
+Seite {a}	{a}ページ
+Druckraum	プリントルーム
+vorheriges Foto im Filmstreifen (die Vorschau zeigt seine Seite)	フィルムストリップの前の写真（プレビューはそのページを表示）
+nächstes Foto im Filmstreifen (die Vorschau zeigt seine Seite)	フィルムストリップの次の写真（プレビューはそのページを表示）
+Auswahl im Filmstreifen erweitern / verkleinern	フィルムストリップの選択を広げる / 狭める
+vorige Seite	前のページ
+nächste Seite	次のページ
+Klick / ⇧-Klick / ⌘-Klick im Filmstreifen	フィルムストリップでクリック / ⇧クリック / ⌘クリック
+Foto wählen / Bereich wählen / einzeln dazu oder weg	写真を選択 / 範囲を選択 / 1枚ずつ追加・解除
+Ermittle …	検出中…
+Bild wird entwickelt …	写真を現像中…
+Modell wird geladen …	モデルを読み込み中…
+Motiv wird gesucht …	被写体を検出中…
+Personen werden gesucht …	人物を検出中…
+Bild wird analysiert …	写真を解析中…
+Auswahl wird berechnet …	選択範囲を計算中…
+Bereich wird gefüllt …	領域を塗りつぶし中…
+Wird abgebrochen (nach diesem Schritt) …	中止しています（この処理の後）…
+Berechnung abbrechen (ein laufender Rechenschritt endet noch)	計算を中止（実行中の処理は最後まで行われます）
+Auswahl berechnet · {t} s	選択範囲を計算しました · {t} 秒
+Auswahl berechnet	選択範囲を計算済み
+Stelle entfernt · {t} s	箇所を除去しました · {t} 秒
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter	検出中 – 進行状況と中止は下の行にあります
+Wird gerade ermittelt – Fortschritt und Abbrechen in der Zeile darunter; weitere Stellen erst danach	計算中 – 進行状況と中止は下の行にあります。ほかの箇所はその後で
+Erst möglich, wenn die laufende Bildanalyse fertig ist	実行中の画像解析が終わってから使えます
+Erst möglich, wenn die laufende Berechnung fertig ist	実行中の計算が終わってから使えます
+Weiche Kante (%)	ぼかし (%)
+Größe (%)	サイズ (%)
+Histogramm oben festhalten	ヒストグラムを上部に固定
+Histogramm oben festhalten (Bearbeiten, Masken) ein/aus	ヒストグラムを上部に固定（編集・マスク）オン/オフ
+Füllung	塗りつぶし
+Gelesen wird nur der Dateikopf, mehrere Fotos gleichzeitig, je Kamera höchstens {n} über die Aufnahmetage verteilt; die Liste füllt sich Kamera für Kamera. Einmal gelesen, bleibt das Ergebnis gespeichert (neue Fotos werden im Leerlauf vorab gelesen).	各ファイルの先頭だけを複数枚同時に読み込みます。カメラごとに撮影日に分散して最大{n}枚。リストはカメラごとに埋まっていきます。一度読んだ結果は保存されます（新しい写真はアイドル時に先読みします）。
+Bildstile: {d} von {n} gelesen	ピクチャースタイル：{n}枚中{d}枚読み込み済み
+Die Zahlen dieser Kamera sind vorläufig, bis ihre Auswahl ganz gelesen ist; Lernen geht danach	このカメラの数値は、選択分をすべて読み込むまで暫定です。学習はその後に可能です
+Die Bildstile dieser Kamera werden noch gelesen ({d} von {n}); gelernt wird mit der ganzen Auswahl	このカメラのピクチャースタイルはまだ読み込み中です（{n}枚中{d}枚）。学習には選択分全体を使います
+Als Stapel bündeln	スタックにまとめる
+Serien werden gesucht … sie erscheinen links unter „Serien“	シリーズを検索中…左側の「シリーズ」に表示されます
+Noch keine Serien oder Stapel	シリーズやスタックはまだありません
+Erst ein Foto auswählen	先に写真を選択してください
+Das Foto liegt in keiner Serie und keinem Stapel	この写真はどのシリーズにもスタックにも属していません
+Serien: warten auf den Suchindex	シリーズ：検索インデックスを待機中
+Serien werden gesucht … {d} von {n} Tagen	シリーズを検索中…{n}日中{d}日
+gedrosselt: Stromsparmodus	減速中：低電力モード
+Serien sind Fotos kurz nacheinander mit gleichem Motiv. Die Erkennung läuft leise im Hintergrund und nutzt nur die Vorschauen. Eigene Stapel: Fotos auswählen, Foto → Als Stapel bündeln ({g}); sichten: Foto → Serie sichten ({r}).	シリーズとは、同じ被写体を短い間隔で続けて撮った写真です。検出はバックグラウンドで静かに行われ、プレビューだけを使います。自分でスタックを作るには写真を選択して 写真 → スタックにまとめる（{g}）。選別：写真 → シリーズを選別（{r}）。
+Erkennung aus	検出オフ
+Serienerkennung ist aus	シリーズ検出はオフです
+Einstellungen → Bibliothek → Serien automatisch erkennen	設定 → ライブラリ → シリーズを自動検出
+wartet auf den Suchindex	検索インデックスを待機中
+Serien: warten auf den Suchindex …	シリーズ：検索インデックスを待機中…
+Der Suchindex wird zuerst gebaut (höchstens 5 Minuten), danach beginnt die Suche nach Serien.	まず検索インデックスを作成します（最大5分）。その後シリーズの検索が始まります。
+Suche … {d} von {n} Fotos{s}	検索中…{n}枚中{d}枚{s}
+Serien werden gesucht … {d} von {n} Fotos{s}	シリーズを検索中…{n}枚中{d}枚{s}
+Der Bildinhalt der Fotos wird aus den Vorschauen verglichen.	写真の内容をプレビューで比較しています。
+Suche … {d} von {n} Tagen{s}	検索中…{n}日中{d}日{s}
+Serien werden gesucht … {d} von {n} Tagen{s}	シリーズを検索中…{n}日中{d}日{s}
+Die Fotos jedes Aufnahmetags werden zu Serien gruppiert.	撮影日ごとに写真をシリーズにまとめています。
+Suche …{s}	検索中…{s}
+Serien werden gesucht …{s}	シリーズを検索中…{s}
+noch keine gefunden	まだ見つかりません
+Noch keine Serien gefunden	シリーズはまだ見つかっていません
+Keine Fotos kurz nacheinander mit gleichem Motiv gefunden; Fotos ohne Vorschau kommen später dran.	同じ被写体を短い間隔で撮った写真は見つかりませんでした。プレビューのない写真は後で処理します。
+Suche beginnt …	検索を開始します…
+Serien werden gesucht …	シリーズを検索中…
+Die Suche beginnt kurz nachdem die Bibliothek geladen ist.	ライブラリの読み込み後まもなく検索が始まります。
+noch etwa {n} s	残り約{n}秒
+noch etwa {n} min	残り約{n}分
+gedrosselt	減速中
+Korrekturen	補正
+Licht	ライト
+Flecken & rote Augen	スポットと赤目
+Punkte sichtbar	スポット表示中
+Punkte verborgen	スポット非表示
+Retusche-Punkte im Bild zeigen oder verbergen	写真上のレタッチスポットを表示/非表示
+Gewählten löschen	選択を削除
+Gewählten Punkt löschen	選択したスポットを削除
+Fleck anklicken: Struktur von einer Quelle daneben, an die Umgebung angepasst	スポットをクリック：近くのソースから質感を取り、周囲に合わせる
+Fleck anklicken: kopiert die Quelle genau	スポットをクリック：ソースをそのままコピー
+Auf die Pupille klicken	瞳孔をクリック
+Stelle entfernen	箇所を除去
+Alle wiederherstellen	すべて元に戻す
+Retusche: Heilen, Klonen, rote Augen, Objekte entfernen	レタッチ：修復、クローン、赤目、オブジェクト除去
+rechte Leiste: Werkzeug „Retusche“	右パネル：「レタッチ」ツール
+Retusche-Punkte und Maskenkonturen ein/aus (in den Werkzeugen „Masken“ und „Retusche“ sichtbar)	レタッチスポットとマスク輪郭のオン/オフ（「マスク」と「レタッチ」ツールで表示）
+Maske umbenannt	マスク名を変更
+Maske ein/aus	マスクのオン/オフ
+Stärke der Maske	マスクの強さ
+Reihenfolge der Masken	マスクの順序
+Radial	円形
+Im Bild malen	写真上に描く
+Linearer Verlauf: im Bild ziehen	線形グラデーション：写真上でドラッグ
+Radialer Verlauf (Ellipse): im Bild ziehen	円形グラデーション（楕円）：写真上でドラッグ
+Bereich nach Helligkeit	明るさで範囲を選択
+Bereich nach Farbe	色で範囲を選択
+Formen	形状
+Bereiche	範囲
+Zusammengesetzt	複合
+{n} Teile	{n}パーツ
+{n} Striche	{n}ストローク
+Erst „Filter auf Version 2 umstellen“	先に「フィルターをバージョン2に切り替え」
+Erst „Filter auf Version 2 umstellen“ (⋯)	先に「フィルターをバージョン2に切り替え」（⋯）
+Maske invertieren	マスクを反転
+Regler zurücksetzen	スライダーをリセット
+Maske löschen	マスクを削除
+Maske ausschalten (bleibt erhalten)	マスクをオフ（保持されます）
+Maske einschalten	マスクをオン
+Wirkung	効果
+Klick-Auswahl: Objekt im Bild anklicken – legt eine neue Maske an · Esc beendet	クリック選択：写真内の対象をクリック – 新しいマスクを作成 · Escで終了
+Klick-Auswahl: Klick ergänzt diese Maske, ⌥-Klick nimmt heraus · Esc beendet	クリック選択：クリックでこのマスクに追加、⌥クリックで除外 · Escで終了
+Masken	マスク
+Maske: umbenennen, duplizieren, invertieren, verschieben, löschen	マスク：名前変更、複製、反転、移動、削除
+Im Bild zeichnen: Pinsel malt, Verlauf und Ellipse ziehen · Esc beendet	写真上に描画：ブラシで描く、グラデーションと楕円はドラッグ · Escで終了
+Pinsel malen, Verlauf und Ellipse im Bild ziehen (Esc beendet)	ブラシで描き、グラデーションと楕円を写真上でドラッグ（Escで終了）
+Himmel	空
+Härte (%)	硬さ (%)
+Fluss (%)	流量 (%)
+Stärke (%)	強さ (%)
+Gilt für die nächsten Striche · ⌘Z nimmt einen Strich zurück	次のストロークに適用 · ⌘Zで1ストローク取り消し
+Aus mehreren Formen zusammengesetzt; einzelne Formen lassen sich hier nicht ändern	複数の形状で構成されています。ここでは個々の形状を変更できません
+Anfang und Ende im Bild ziehen	写真上で始点と終点をドラッグ
+Teile · {name} · invertiert	パーツ · {name} · 反転
+Teile · {name}	パーツ · {name}
+Teil: invertieren, Verknüpfung ändern, löschen	パーツ：反転、組み合わせの変更、削除
+Teil invertieren	パーツを反転
+Als „Hinzufügen“	「追加」にする
+Als „Abziehen“	「減算」にする
+Als „Schneiden“	「交差」にする
+Der erste Teil ist die Grundlage	最初のパーツが基準です
+Einziger Teil: „Maske löschen“ (⋯ der Maske)	唯一のパーツ：「マスクを削除」（マスクの⋯）
+Ohne die Grundlage wirkte der nächste Teil auf das ganze Foto	基準がないと次のパーツが写真全体に作用します
+Teil löschen	パーツを削除
++ Hinzufügen ▾	+ 追加 ▾
+− Abziehen ▾	− 減算 ▾
+Teil hinzufügen: vergrößert die Maske	パーツを追加：マスクを広げる
+Teil abziehen: nimmt aus der Maske heraus	パーツを減算：マスクから取り除く
+Mit einem Teil schneiden: wirkt nur, wo beide wirken	パーツと交差：両方が作用する部分のみ
+Klick-Auswahl: Objekt im Bild anklicken – wird ein neuer Teil dieser Maske · Esc beendet	クリック選択：写真内の対象をクリック – このマスクの新しいパーツになります · Escで終了
+Klick-Auswahl: Klick ergänzt diesen Teil, ⌥-Klick nimmt heraus · Esc beendet	クリック選択：クリックでこのパーツに追加、⌥クリックで除外 · Escで終了
+Pinsel: im Bild malen · Esc beendet	ブラシ：写真上に描く · Escで終了
+Im Bild ziehen, um die Form zu setzen · Esc beendet	写真上でドラッグして形状を配置 · Escで終了
+Griffe im Bild ziehen · Esc beendet	写真上でハンドルをドラッグ · Escで終了
+Teil anklicken, um im Bild zu zeichnen	パーツをクリックして写真上に描画
+gewählte Maske löschen (im Werkzeug „Masken“, statt des Fotos)	選択したマスクを削除（「マスク」ツール内、写真の代わりに）
+Werkzeug der Maske beenden (Pinsel, Griffe, Klick-Auswahl)	マスクのツールを終了（ブラシ、ハンドル、クリック選択）
+Wähle Fotos im Filmstreifen	フィルムストリップで写真を選んでください
+Keine Fotos in der Ansicht	表示中の写真はありません
+Keine Fotos ausgewählt: „Alle“ zeigt alle Fotos der Ansicht	写真が選択されていません：「すべて」で表示中の全写真を表示します
+{a} (lässt sich nicht drucken)	{a}（印刷できません）
+alle Fotos der Ansicht auswählen	表示中のすべての写真を選択
+Haupt-Foto aus der Auswahl nehmen (nichts wird gelöscht)	メイン写真を選択から外す（何も削除されません）
+Nur die ausgewählten Fotos zeigen	選択した写真だけを表示
+Alle Fotos der Ansicht zeigen	表示中のすべての写真を表示
+Für den Druck um 90° gedreht („Drehen und einpassen“)	印刷用に90°回転（「回転して合わせる」）
+Kante (%)	エッジ (%)
+Noch keine Probe: Farbe im Bild anklicken	サンプルなし：写真の色をクリック
+Probe entfernen	サンプルを削除
+Toleranz	許容範囲
+Weichheit	柔らかさ
+Pipette: Bild wird für die Probe entwickelt …	スポイト：サンプル用に現像中…
+Pipette: Farbe anklicken · ⇧ dazu · ⌥ weg	スポイト：色をクリック · ⇧追加 · ⌥削除
+Farbprobe	色サンプル
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neue Maske · Esc beendet	クリック選択：対象をクリックまたは枠をドラッグ – 新しいマスク · Escで終了
+Klick-Auswahl: Objekt anklicken oder Rahmen ziehen – neuer Teil · Esc beendet	クリック選択：対象をクリックまたは枠をドラッグ – 新しいパーツ · Escで終了
+Klick-Auswahl: Klick ergänzt, ⌥-Klick nimmt heraus, Ziehen setzt den Rahmen	クリック選択：クリックで追加、⌥クリックで除外、ドラッグで枠
+Objekt im Bild anklicken oder einen Rahmen darum ziehen; ⌥-Klick nimmt Bereiche heraus (rechnet auf dem Rechner)	写真内の対象をクリックするか枠で囲む。⌥クリックで範囲を除外（このコンピュータで計算）
+Maske Schwarz-Weiß	マスク（白黒）
+Bild auf Grau	グレー上の画像
+Abdeckfolie (Rest rot)	マスキングフィルム（残りを赤）
+Darstellung der Überlagerung wählen	オーバーレイの表示を選択
+Wirkung der gewählten Maske im Bild zeigen: {kind}	選択したマスクの効果を写真に表示：{kind}
+Überlagerung der Maske: an, Darstellung wechseln, aus (im Werkzeug „Masken“)	マスクのオーバーレイ：オン、表示切替、オフ（「マスク」ツール）
+Alles außer dem Hauptmotiv (Motiv, invertiert)	主被写体以外のすべて（被写体を反転）
+Bereich nach Farbe (Pipette)	色で範囲（スポイト）
+Personen-Teile	人物のパーツ
+Gesicht	顔
+Gesichtshaut	顔の肌
+Augen	目
+Augenbrauen	眉
+Lippen	唇
+Zähne	歯
+Gesichter vom Kinn bis zur Stirn (Gesichtslandmarken der Bildanalyse des Systems)	あごから額までの顔（システムの画像解析の顔ランドマーク）
+Haut der Gesichter: ohne Augen, Brauen und Mund, nach der Farbe des Gesichts	顔の肌：目・眉・口を除き、顔の色で判定
+Augen (Kontur aus den Gesichtslandmarken)	目（顔ランドマークの輪郭）
+Augenbrauen (aus den Gesichtslandmarken)	眉（顔ランドマークから）
+Lippen ohne die Mundöffnung	口の開口部を除いた唇
+Mundöffnung (Zähne), innere Lippenkontur	口の開口部（歯）、唇の内側の輪郭
+Nur auf dem Mac (Gesichtslandmarken der Bildanalyse des Systems)	Macのみ（システムの画像解析の顔ランドマーク）
+Kein Gesicht erkannt	顔が見つかりません
+{n} Gesichter gefunden	{n} 件の顔が見つかりました
+Nicht gefunden	見つかりません
+Auswahl fehlt – nur auf dem Mac berechenbar	選択がありません – Macでのみ計算可能
+Zeigt, welche Farben im Bild stecken: Winkel = Farbton, Abstand von der Mitte = Sättigung.	画像に含まれる色を示します。角度 = 色相、中心からの距離 = 彩度。
+Jeder Bildpunkt landet an einer Stelle im Kreis. Die Richtung sagt, welche Farbe er hat (oben Rot, rechts Blau, unten Cyan, links Gelb), der Abstand von der Mitte, wie kräftig sie ist. Je heller ein Fleck, desto mehr Pixel haben diese Farbe.\n• **Mitte** – neutrales Grau, Weiß und Schwarz; ein Farbstich schiebt die ganze Wolke zur Seite\n• **Ringe** – Sättigung in Prozent (die Zahlen unten links)\n• **Kästchen** – Rot, Magenta, Blau, Cyan, Grün und Gelb bei 75 % Sättigung\n• **Haut** – die Hauttonlinie: Haut aller Menschen liegt nahe daran; weicht sie ab, hat die Haut einen Stich\n• **×1 · ×2 · ×4** – vergrößert die Mitte, denn die meisten Fotos sind nur wenig gesättigt\n• **S · M · L** – Größe der Anzeige im Kopf; ein Doppelklick auf die Anzeige wählt die nächste\n\nÜber der Anzeige steht oben links Farbton und Sättigung an der Zeigerposition.	各ピクセルは円の中のどこかに置かれます。方向がその色（上が赤、右が青、下がシアン、左が黄）、中心からの距離が色の強さを表します。明るい点ほど、その色のピクセルが多いことを示します。\n• **中心** – ニュートラルなグレー、白、黒。色かぶりがあると雲全体が片側に寄ります\n• **リング** – 彩度（%、左下の数字）\n• **四角** – 彩度75 %の赤、マゼンタ、青、シアン、緑、黄\n• **肌** – スキントーンライン。誰の肌もこの線の近くに来ます。外れていれば肌に色かぶりがあります\n• **×1 · ×2 · ×4** – 中心を拡大します。ほとんどの写真は彩度が低いためです\n• **S · M · L** – ヘッダーで表示サイズを選びます。表示をダブルクリックすると次のサイズになります\n\n表示の左上に、ポインター位置の色相と彩度が表示されます。
+Winkel = Farbton	角度 = 色相
+Abstand = Sättigung	距離 = 彩度
+Mitte = neutral	中心 = ニュートラル
+Helligkeit = Anzahl Pixel	明るさ = ピクセル数
+Größe der Anzeige: {s} (Doppelklick auf die Anzeige: nächste Größe)	表示サイズ: {s}（表示をダブルクリック: 次のサイズ）
+Gelbgrün	黄緑
+Türkisgrün	春緑
+Cyan	シアン
+Azurblau	空色
+Violett	紫
+Rosa	ローズ
+Mg	Mg
+Cy	Cy
+Gb	Ye
+Haut	肌
+Zoom auf die Sättigung (×1, ×2, ×4): Fotos liegen meist nahe der Mitte	彩度をズーム（×1、×2、×4）: 写真の多くは中心付近にあります
+Hauttonlinie zeigen: Hauttöne aller Menschen liegen nahe daran	スキントーンラインを表示: 誰の肌もこの線の近くにあります
+Neutral (Grau)	ニュートラル（グレー）
+Sättigung {s} %	彩度 {s} %
+Vektorskop: Farbton = Winkel, Sättigung = Abstand von der Mitte (Doppelklick: Größe)	ベクトルスコープ: 色相 = 角度、彩度 = 中心からの距離（ダブルクリック: サイズ）
+Tiefe	深度
+Genauer	高精度
+Tiefe wird geschätzt …	深度を推定中 …
+Himmel wird gesucht …	空を検出中 …
+Braucht das Modul „Tiefe“ (Einstellungen → Module)	モジュール「深度」が必要です（設定 → モジュール）
+Braucht die Module „Klick-Auswahl“ und „Tiefe“ (Einstellungen → Module)	モジュール「クリック選択」と「深度」が必要です（設定 → モジュール）
+Himmel automatisch auswählen (Tiefe und Klick-Auswahl, ändert keine Pixel)	空を自動選択（深度とクリック選択。ピクセルは変更しません）
+Tiefe (Modul): Depth Anything V2 Small, L. Yang et al. (Apache-2.0)	深度（モジュール）: Depth Anything V2 Small, L. Yang et al.（Apache-2.0）
+Optional, nicht mitgeliefert, nur nicht-kommerziell: {a}	オプション（同梱なし・非商用のみ）: {a}
+Kein Tiefenbild im Foto – Modul „Tiefe“ laden (Einstellungen → Module)	写真に深度マップがありません – モジュール「深度」を読み込んでください（設定 → モジュール）
+Himmel gefunden	空を検出しました
+Kein Himmel erkannt	空が見つかりません
+Tiefe aus dem Foto gelesen	写真から深度を読み込みました
+Tiefe geschätzt	深度を推定しました
+Auswahl fehlt – {why}	選択がありません – {why}
+Tiefe aus dem Foto (gemessen)	写真の深度（測定値）
+Tiefe berechnet	深度を計算しました
+Himmel berechnet	空を計算しました
+Tiefenbild aus dem Foto, sonst geschätzt mit Depth Anything V2 Small (Apache-2.0)	写真の深度マップ。ない場合は Depth Anything V2 Small（Apache-2.0）で推定
+Geschätzt mit Depth Anything V2 Base: feinere Kanten, etwa viermal langsamer; nur für nicht-kommerzielle Nutzung	Depth Anything V2 Base で推定：輪郭がより細かく、約4倍遅い。非商用のみ
+Braucht das Modul „Tiefe genauer“ (Einstellungen → Module; nur nicht-kommerziell)	モジュール「深度（高精度）」が必要です（設定 → モジュール。非商用のみ）
+Auswahl neu berechnen (z. B. nach einer geänderten Objektivkorrektur)	選択を再計算（レンズ補正を変更した後など）
+„{name}“ laden?	「{name}」を読み込みますか？
+Nur für nicht-kommerzielle Nutzung	非商用利用のみ
+Lizenz: {l}. {s}	ライセンス: {l}。{s}
+Lizenztext lesen	ライセンス本文を読む
+Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	このモデルは graineo が提供するものではなく、ご要望に応じて元の配布元（{s}）から読み込みます。すべての機能はフリーのモデルでも使えます。
+Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	このモデルを使った graineo は非商用目的でのみ使用します
+Nur für nicht-kommerzielle Nutzung · {l}	非商用のみ · {l}
+{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}。ライセンス: {l} · 配布元: huggingface.co/{r} · graineo からは提供されません{c}
+ · nicht-kommerzielle Nutzung bestätigt	 · 非商用利用を確認済み
+Tiefe (Depth Anything V2 Small)	深度（Depth Anything V2 Small）
+Tiefe genauer (Depth Anything V2 Base)	深度・高精度（Depth Anything V2 Base）
+Masken: Entfernung vom Objektiv schätzen (nah ↔ fern)	マスク: レンズからの距離を推定（近 ↔ 遠）
+Masken: Entfernung genauer schätzen (nur nicht-kommerziell)	マスク: 距離をより正確に推定（非商用のみ）
+Das Modell darf mit Namensnennung genutzt und weitergegeben werden, aber nicht für kommerzielle Zwecke.	このモデルはクレジット表記のうえで利用・共有できますが、商用目的には使えません。
+Apple-RAW ist auf diesem System nicht verfügbar	このシステムでは Apple RAW を使用できません
+Datei nicht gefunden	ファイルが見つかりません
+Nicht unterstützt: Kamera {a} (macOS kennt das Modell nicht)	非対応：カメラ {a}（macOS がこの機種を認識しません）
+Nicht unterstützt: {a}	非対応：{a}
+Fehler: {a}	エラー：{a}
+Apple RAW {a} · {b}	Apple RAW {a} · {b}
+Apple RAW	Apple RAW
+graineo · {a}	graineo · {a}
+wird geprüft …	確認中…
+wird entwickelt …	現像中…
+fertig	完了
+Neueste ({a})	最新（{a}）
+Neueste	最新
+Apple RAW {a}	Apple RAW {a}
+Decoder-Version von Apple festhalten (nur für diese Ansicht); „Neueste“ folgt macOS-Updates	Apple のデコーダーバージョンを固定（この表示のみ）。「最新」は macOS のアップデートに従います
+Apple RAW {a} nicht verfügbar	Apple RAW {a} は使用できません
+Für dieses Foto bietet macOS die gepinnte Version nicht an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen.	この写真では固定したバージョンを macOS が提供していません。Apple RAW {a} で処理しました。画像が異なる場合があります。
+Apple-Version	Apple バージョン
+erster Lauf {a} (Shader)	初回 {a}（シェーダー）
+Decoder	デコーダー
+Zeit graineo	graineo の時間
+Zeit Apple	Apple の時間
+Status	状態
+Nur zum Vergleichen – ändert die Entwicklung nicht	比較専用 – 現像は変更しません
+Pipeline	パイプライン
+Apple	Apple
+Schritte	処理
+neutral	ニュートラル
+Sensoransicht mit graineos Entwicklung	graineo の現像によるセンサー表示
+Das Foto mit der RAW-Engine von macOS (Core Image) entwickelt – nur zum Ansehen	macOS の RAW エンジン（Core Image）で現像した写真 – 表示専用
+Links graineo, rechts Apple; Zoomen und Verschieben wirken auf beide	左が graineo、右が Apple。ズームと移動は両方に連動します
+Rauschminderung, Schärfen und Objektivkorrektur auf beiden Seiten aus; Weißabgleich und Belichtung aus dem Foto	両側でノイズ低減・シャープ・レンズ補正をオフ。ホワイトバランスと露出は写真の設定
+Jede Pipeline mit ihren eigenen Vorgaben – Apple und graineo machen dann nicht dieselben Schritte	各パイプラインの既定値を使用 – Apple と graineo は同じ処理を行いません
+Segmente werden gebildet …	セグメントを作成中 …
+Vorne	手前
+Hinten	奥
+Ganze Segmente, deren mittlere Tiefe im nächsten Drittel des Fotos liegt	深度の中央値が写真の最も近い3分の1にあるセグメント全体
+Ganze Segmente, deren mittlere Tiefe im mittleren Drittel des Fotos liegt	深度の中央値が写真の中央の3分の1にあるセグメント全体
+Ganze Segmente, deren mittlere Tiefe im fernsten Drittel des Fotos liegt	深度の中央値が写真の最も遠い3分の1にあるセグメント全体
+Segmente zeigen	セグメントを表示
+Grenzen der Segmente im Bild zeigen; ein Klick ins Bild nimmt ein Segment dazu oder heraus	画像にセグメントの境界を表示。画像をクリックするとセグメントを追加または除外
+Klicks zurücksetzen ({n})	クリックをリセット ({n})
+Angeklickte Segmente vergessen: nur die gewählten Bereiche zählen	クリックしたセグメントを破棄：選択した範囲のみ有効
+Tiefe: Klick nimmt ein Segment dazu oder weg · Esc beendet	深度：クリックでセグメントを追加／除外 · Escで終了
+Ganze Segmente nach ihrer Entfernung vom Objektiv (vorne, Mitte, hinten; Tiefenbild aus dem Foto oder geschätzt, ändert keine Pixel)	レンズからの距離でセグメント全体を選択（手前・中央・奥。写真の深度マップまたは推定、ピクセルは変更しません）
+Kante verfeinern (%)	境界を調整 (%)
+Kante verfeinern	境界を調整
+Nur für gezeichnete Masken und Bereiche; Masken aus der Bildanalyse (Motiv, Personen, Klick-Auswahl, Tiefe, Himmel) behalten ihre Kante	描画したマスクと範囲のみ。画像解析によるマスク（被写体、人物、クリック選択、深度、空）は境界をそのまま保持
+Die Maskenkante folgt in einem schmalen Band den Kanten im Bild (geführter Filter); mehr = breiteres Band	マスクの境界が狭い帯の中で画像のエッジに沿う（ガイデッドフィルター）。大きいほど帯が広い
+Apple RAW gibt es nur unter macOS – hier entwickelt graineo	Apple RAW は macOS でのみ利用できます – ここでは graineo が現像します
+Für Sigma/Foveon nur graineo – Apple kennt das Format nicht	Sigma/Foveon は graineo のみ – Apple はこの形式に対応していません
+Nur für RAW-Dateien	RAW ファイルのみ
+Für diese Kamera nur graineo – Apple kennt das Modell nicht	このカメラは graineo のみ – Apple はこの機種に対応していません
+nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren	不可 (HE)：graineo は Nikon「高効率」をまだデコードできません
+Dieses Foto mit graineos eigener Pipeline entwickeln	この写真を graineo 独自のパイプラインで現像
+Dieses Foto mit der RAW-Engine von macOS dekodieren; Farbe, Ton, Looks, Film und Masken rechnet graineo	この写真を macOS の RAW エンジンでデコード。色、トーン、ルック、フィルム、マスクは graineo が計算します
+Automatik	自動
+Zurück auf Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	自動に戻す：graineo を使用し、graineo がデコードできないファイルのみ Apple
+Entwickelt mit	現像エンジン
+Apple RAW {a} fehlt – mit {b} gerechnet	Apple RAW {a} がありません – {b} で計算
+Automatik · HE-Rückfall	自動 · HE フォールバック
+festgehalten · HE	固定 · HE
+Apple RAW {a} nicht verfügbar – graineo	Apple RAW {a} は利用できません – graineo
+Automatik · nur graineo	自動 · graineo のみ
+unbekannte Pipeline „{a}“ – graineo	不明なパイプライン「{a}」 – graineo
+Für dieses Foto bietet macOS die festgehaltene Version nicht mehr an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen. Der Eintrag bleibt, bis du eine Version wählst.	この写真では固定したバージョンを macOS が提供しなくなりました。Apple RAW {a} で計算しています。画像が異なる場合があります。バージョンを選ぶまで設定は保持されます。
+Dieses Foto ist für Apple RAW {a} eingestellt. {b}. Entwickelt mit graineo – das Bild kann abweichen. Der Eintrag bleibt erhalten.	この写真は Apple RAW {a} に設定されています。{b}。graineo で現像しました – 画像が異なる場合があります。設定は保持されます。
+macOS hat die Datei nicht entwickelt	macOS はこのファイルを現像しませんでした
+Apple RAW {a} · HE	Apple RAW {a} · HE
+entwickelt mit Apple RAW {a} (graineo kann HE noch nicht)	Apple RAW {a} で現像 (graineo はまだ HE に未対応)
+Entwickelt mit Apple RAW {a}	Apple RAW {a} で現像
+graineo kann Nikon „Hohe Effizienz“ (HE und HE★) noch nicht dekodieren. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	graineo は Nikon「高効率」(HE および HE★) をまだデコードできません。この写真は macOS がデコードし (Apple RAW {a})、色、トーン、ルック、フィルム、マスクは graineo が計算します。色とシャープネスは graineo 自身の現像と異なる場合があります。バージョンはこの写真に固定されています。センサーパネルの「Pipeline」で変更できます。
+andere Pipeline als festgehalten	固定とは別のパイプライン
+festgehalten	固定
+voll	フル
+Die Entwicklung dieses Fotos	この写真の現像
+Decoder-Version für dieses Foto festhalten (ändert die Entwicklung)	この写真のデコーダーバージョンを固定 (現像が変わります)
+Decoder-Version für den Vergleich; „Neueste“ folgt macOS-Updates	比較用のデコーダーバージョン。「最新」は macOS のアップデートに追従します
+linear	リニア
+Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	自動：graineo を使用し、graineo がデコードできないファイルのみ Apple
+Apple-Version für Nikon HE	Nikon HE 用の Apple バージョン
+Nikon „Hohe Effizienz“ kann graineo noch nicht dekodieren; dann dekodiert macOS. „Bis RAW 8“ ist schneller und entrauscht nicht zusätzlich, „Neueste“ nimmt RAW 9, wo macOS es anbietet (3- bis 7-mal langsamer). Gilt für Fotos ohne festgehaltene Version	graineo は Nikon「高効率」をまだデコードできないため、macOS がデコードします。「RAW 8 まで」は高速で独自のノイズ除去を行いません。「最新」は macOS が提供する場合 RAW 9 を使います (3〜7 倍遅い)。バージョンが固定されていない写真に適用されます
+Bis RAW 8	RAW 8 まで
+Diese Bearbeitung stammt aus einer neueren Version und wird nicht überschrieben	この編集は新しいバージョンで作成されたため、上書きされません
+Bearbeitung aus neuerer Version	新しいバージョンの編集
+Bearbeitung aus neuerer Version – geschützt	新しいバージョンの編集 – 保護されています
+Bearbeitung aus einer neueren Version	新しいバージョンで作成された編集
+Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	この編集は graineo の新しいバージョンで作成されたため、上書きされません。このバージョンでは読み込めないため初期値を表示しています。この写真への変更は保存されませんが、星とフラグは保存されます。新しいバージョンで開くと編集が戻ります。
+Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	このフォルダは開いているだけで、ライブラリには入っていません。graineo が写真そのものを変更することはありません。
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### 保存されるもの\n• **現像** – スライダーの変更（仮想コピーも含む）はすべて、写真の横のサイドカー NAME.xmp に保存されます\n• **評価**（星、フラグ、ラベル）– 「評価を XMP に」がオフの間はロックされます。オンにすると評価も XMP として写真の横に書き込まれます\n\n### ここでできること\n• 表示、現像、書き出し\n• 星、フラグ、ラベルでの絞り込み（既存の XMP の値）\n• ファイル名での検索\n\n### 追加した後でのみ\n列フィルタ（カメラ、レンズ、日付 …）、内容・キーワード・場所での検索、コレクション、人物、重複、シリーズ。追加すると、ライブラリが XMP から評価と現像設定を引き継ぎます。\n\n### 終了するには\n帯の **閉じる**、または左でソースを選びます（例：「すべての写真」）。**ライブラリに追加…** はこのフォルダで読み込みを開きます。
+Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	フォルダ「{a}」を表示中 – ライブラリには入っていません
+Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	フォルダの表示をやめて「すべての写真」に戻る
+Öffnet den Import mit diesem Ordner	このフォルダで読み込みを開きます
+Bewertungen als XMP	評価を XMP に
+Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	星、フラグ、ラベルをサイドカーファイル（XMP）として写真の横に書き込みます。オフ：ここでは評価できません。
+Deine Bibliothek – der angesehene Ordner gehört nicht dazu	あなたのライブラリ – 表示中のフォルダは含まれません
+Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	評価するには、ライブラリに追加するか、上部の帯で「評価を XMP に」をオンにしてください

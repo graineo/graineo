@@ -16,6 +16,9 @@ legacy_names = { path = "../legacy_names" }
 # RGB color spaces and profiles for export (Display P3, Adobe RGB, ProPhoto)
 graineo-color = { path = "../color" }
 masks = { path = "../masks" }
+segment = { path = "../segment" }
+# face landmarks for the masks of face parts (macOS Vision)
+faces = { path = "../faces" }
 x3f = { path = "../x3f" }
 # SPP noise reduction on the GPU (falls back to the CPU automatically without a GPU)
 develop = { path = "../develop", features = ["spp-gpu"] }
@@ -30,6 +33,10 @@ lensprof = { path = "../lensprof" }
 sensor_view = { path = "../sensor_view" }
 rayon = "1"
 pools = { path = "../pools" }
+# page layout, page raster and print files (PDF, JPEG, TIFF)
+print = { path = "../print" }
+# browser access: HTTPS server inside the app (off by default)
+remote = { path = "../remote" }
 # photo textures in floating point (photo_display.rs)
 bytemuck = "1.25"
 half = { version = "2", features = ["bytemuck"] }
@@ -62,3 +69,7 @@ muda = "0.17"
 # Windows: menu bar on the window (HWND)
 [target.'cfg(windows)'.dependencies]
 raw-window-handle = "0.6"
+
+[dev-dependencies]
+# tests of the print files: read the compressed streams back
+flate2 = "1"

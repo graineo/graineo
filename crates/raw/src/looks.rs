@@ -10,12 +10,20 @@
 //! File format `X3LOOK1` (little endian): 8 bytes magic `X3LOOK1\0`, u16 n, u16 name length,
 //! name (UTF-8, `camera/style`), u16 meta length, meta (JSON: image count, ΔE00 of the cross-validation …),
 //! then n³ × 3 i16: Δ = output − input in units of 1/8192, order r (slow), g, b
-//! (fast). A 17³ table thus needs ≈ 29 KB.
+//! (fast). A 17³ table thus needs ≈ 29 KB. Meta `"interpolation": "tetrahedral"` selects tetrahedral instead of
+//! trilinear interpolation (learned looks, [`crate::learn_look`]).
 
 use rayon::prelude::*;
 
 use crate::picture_style::PictureStyle;
 use crate::RgbImage;
+
+/// Longest look name (`camera/style`, bytes).
+pub const MAX_NAME: usize = 256;
+/// Largest metadata JSON of a look (bytes); real looks have well under 4 KB.
+pub const MAX_META: usize = 16 * 1024;
+/// Largest table edge length.
+pub const MAX_NODES: usize = 65;
 
 /// A loaded camera look.
 #[derive(Debug, Clone)]
@@ -26,6 +34,24 @@ pub struct Look {
     pub meta: String,
     n: usize,
     d: Vec<[f32; 3]>,
+    /// tetrahedral instead of trilinear interpolation (meta `"interpolation": "tetrahedral"`)
+    tetrahedral: bool,
+}
+
+fn check(name: &str, meta: &str, n: usize, d: &[[f32; 3]]) -> Result<(), String> {
+    if !(2..=MAX_NODES).contains(&n) || d.len() != n * n * n {
+        return Err(format!("look table: {n} nodes per edge, {} values", d.len()));
+    }
+    if name.len() > MAX_NAME {
+        return Err(format!("look name too long ({} bytes)", name.len()));
+    }
+    if meta.len() > MAX_META {
+        return Err(format!("look metadata too large ({} bytes, at most {MAX_META})", meta.len()));
+    }
+    if d.iter().flatten().any(|v| !v.is_finite()) {
+        return Err("look table with invalid values (NaN or infinite)".into());
+    }
+    Ok(())
 }
 
 /// Bundled looks (name, data): every file in `looks/<camera>/<style>.x3look`, sorted by name (see `build.rs`).
@@ -35,6 +61,7 @@ const BUILT_IN: &[(&str, &[u8])] = include!(concat!(env!("OUT_DIR"), "/looks.rs"
 
 impl Look {
     /// Read a look from `X3LOOK1` data.
+    /// The data must have exactly the announced length (a cut or padded file is no look).
     pub fn from_bytes(b: &[u8]) -> Option<Self> {
         if b.get(..8)? != b"X3LOOK1\0" {
             return None;
@@ -42,11 +69,17 @@ impl Look {
         let u16_at = |o: usize| -> Option<usize> { Some(u16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?) as usize) };
         let n = u16_at(8)?;
         let ln = u16_at(10)?;
+        if !(2..=MAX_NODES).contains(&n) || ln > MAX_NAME {
+            return None;
+        }
         let name = String::from_utf8(b.get(12..12 + ln)?.to_vec()).ok()?;
         let lm = u16_at(12 + ln)?;
+        if lm > MAX_META {
+            return None;
+        }
         let meta = String::from_utf8(b.get(14 + ln..14 + ln + lm)?.to_vec()).ok()?;
         let start = 14 + ln + lm;
-        if !(2..=65).contains(&n) {
+        if b.len() != start + n * n * n * 6 {
             return None;
         }
         let data = b.get(start..start + n * n * n * 6)?;
@@ -57,16 +90,48 @@ impl Look {
                 [v(0), v(1), v(2)]
             })
             .collect();
-        Some(Self { name, meta, n, d })
+        let tetrahedral = meta_says_tetrahedral(&meta);
+        Some(Self { name, meta, n, d, tetrahedral })
+    }
+
+    /// `X3LOOK1` data of this look (the format [`Self::from_bytes`] reads). Differences beyond ±4 are clipped.
+    /// Errors (instead of a file that reads back as a different table): name longer than [`MAX_NAME`], metadata
+    /// longer than [`MAX_META`], values that are not finite.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, String> {
+        check(&self.name, &self.meta, self.n, &self.d)?;
+        let mut b = Vec::with_capacity(16 + self.name.len() + self.meta.len() + self.d.len() * 6);
+        b.extend_from_slice(b"X3LOOK1\0");
+        b.extend_from_slice(&(self.n as u16).to_le_bytes());
+        b.extend_from_slice(&(self.name.len() as u16).to_le_bytes());
+        b.extend_from_slice(self.name.as_bytes());
+        b.extend_from_slice(&(self.meta.len() as u16).to_le_bytes());
+        b.extend_from_slice(self.meta.as_bytes());
+        for v in &self.d {
+            for c in v {
+                b.extend_from_slice(&((c * 8192.0).round().clamp(-32768.0, 32767.0) as i16).to_le_bytes());
+            }
+        }
+        Ok(b)
+    }
+
+    /// Why [`Self::from_table`] would refuse this table (`Ok` if it is fine).
+    pub fn check_table(name: &str, meta: &str, n: usize, d: &[[f32; 3]]) -> Result<(), String> {
+        check(name, meta, n, d)
+    }
+
+    /// Tetrahedral interpolation (instead of trilinear)?
+    pub fn tetrahedral(&self) -> bool {
+        self.tetrahedral
     }
 
     /// Look from a finished table (`n`³ nodes, r slow, b fast; Δ = output − input,
-    /// encoded sRGB 0…1). `None` if `n` or the number of values does not fit.
+    /// encoded sRGB 0…1). `None` if `n` or the number of values does not fit, a value is not finite, or name or
+    /// metadata are too long for the file format (see [`Self::check_table`] for the reason).
     pub fn from_table(name: &str, meta: &str, n: usize, d: Vec<[f32; 3]>) -> Option<Self> {
-        if !(2..=65).contains(&n) || d.len() != n * n * n {
+        if check(name, meta, n, &d).is_err() {
             return None;
         }
-        Some(Self { name: name.to_string(), meta: meta.to_string(), n, d })
+        Some(Self { name: name.to_string(), meta: meta.to_string(), n, d, tetrahedral: meta_says_tetrahedral(meta) })
     }
 
     /// Read a look from a file.
@@ -110,6 +175,16 @@ impl Look {
         let n = self.n;
         let m = (n - 1) as f32;
         let c = c.map(|v| if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) });
+        if self.tetrahedral {
+            let mut o = c;
+            for (k, w) in tetrahedral_weights(n, c) {
+                let v = self.d[k];
+                o[0] += w * v[0];
+                o[1] += w * v[1];
+                o[2] += w * v[2];
+            }
+            return o.map(|v| v.clamp(0.0, 1.0));
+        }
         let p = [c[0] * m, c[1] * m, c[2] * m];
         let i = p.map(|v| (v as usize).min(n - 2));
         let f = [p[0] - i[0] as f32, p[1] - i[1] as f32, p[2] - i[2] as f32];
@@ -161,9 +236,113 @@ impl Look {
     }
 }
 
+fn meta_says_tetrahedral(meta: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(meta).ok().and_then(|v| v.get("interpolation").and_then(|i| i.as_str()).map(|i| i == "tetrahedral")).unwrap_or(false)
+}
+
+/// Tetrahedral interpolation on an `n`³ grid over the unit cube (r slow, b fast): the four nodes of the tetrahedron
+/// holding `c` (clamped to 0…1) and their weights (sum 1). Exact at the nodes; along the gray axis only gray nodes count.
+pub fn tetrahedral_weights(n: usize, c: [f32; 3]) -> [(usize, f32); 4] {
+    let m = (n - 1) as f32;
+    let p = c.map(|v| if v.is_nan() { 0.0 } else { v.clamp(0.0, 1.0) * m });
+    let i = p.map(|v| (v as usize).min(n - 2));
+    let f = [p[0] - i[0] as f32, p[1] - i[1] as f32, p[2] - i[2] as f32];
+    let at = |a: usize, b: usize, d: usize| ((i[0] + a) * n + i[1] + b) * n + i[2] + d;
+    let (r, g, b) = (f[0], f[1], f[2]);
+    let c000 = at(0, 0, 0);
+    let c111 = at(1, 1, 1);
+    if r >= g && g >= b {
+        [(c000, 1.0 - r), (at(1, 0, 0), r - g), (at(1, 1, 0), g - b), (c111, b)]
+    } else if r >= b && b > g {
+        [(c000, 1.0 - r), (at(1, 0, 0), r - b), (at(1, 0, 1), b - g), (c111, g)]
+    } else if b > r && r >= g {
+        [(c000, 1.0 - b), (at(0, 0, 1), b - r), (at(1, 0, 1), r - g), (c111, g)]
+    } else if g > r && r >= b {
+        [(c000, 1.0 - g), (at(0, 1, 0), g - r), (at(1, 1, 0), r - b), (c111, b)]
+    } else if g >= b && b > r {
+        [(c000, 1.0 - g), (at(0, 1, 0), g - b), (at(0, 1, 1), b - r), (c111, r)]
+    } else {
+        [(c000, 1.0 - b), (at(0, 0, 1), b - g), (at(0, 1, 1), g - r), (c111, r)]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bytes_round_trip_and_tetrahedral_is_exact_at_nodes() {
+        let n = 5;
+        let d: Vec<[f32; 3]> = (0..n * n * n).map(|k| [0.01 * (k % 7) as f32, -0.02 * (k % 3) as f32, 0.005 * (k % 11) as f32]).collect();
+        let l = Look::from_table("cam/style", r#"{"interpolation":"tetrahedral"}"#, n, d.clone()).unwrap();
+        assert!(l.tetrahedral());
+        let back = Look::from_bytes(&l.to_bytes().unwrap()).unwrap();
+        assert!(back.tetrahedral() && back.name == "cam/style" && back.support_points() == n);
+        for (a, b) in back.table().1.iter().zip(&d) {
+            for c in 0..3 {
+                assert!((a[c] - b[c]).abs() < 1.0 / 8192.0);
+            }
+        }
+        // at every node the tetrahedral and the trilinear look agree (both give the node value)
+        let tri = Look::from_table("cam/style", "{}", n, d.clone()).unwrap();
+        assert!(!tri.tetrahedral());
+        for k in 0..n * n * n {
+            let x = [k / (n * n), (k / n) % n, k % n].map(|v| v as f32 / (n - 1) as f32);
+            let (a, b) = (back.pixel(x), tri.pixel(x));
+            for c in 0..3 {
+                assert!((a[c] - b[c]).abs() < 2e-4, "{x:?}: {a:?} {b:?}");
+            }
+        }
+        // weights sum to one, also between nodes
+        for x in [[0.13, 0.77, 0.4], [0.9, 0.1, 0.5], [0.5, 0.5, 0.5], [1.0, 0.0, 0.3]] {
+            let w = tetrahedral_weights(n, x);
+            assert!((w.iter().map(|v| v.1).sum::<f32>() - 1.0).abs() < 1e-5);
+            assert!(w.iter().all(|v| v.1 >= -1e-6));
+        }
+    }
+
+    #[test]
+    fn oversized_or_broken_looks_are_refused() {
+        let n = 3;
+        let d = vec![[0.01f32, 0.0, -0.01]; n * n * n];
+        // metadata over the 16-bit length field: once silently cut to (len mod 65536), now refused everywhere
+        let huge = format!(r#"{{"source":{{"name":"x","pad":"{}"}}}}"#, "A".repeat(70_000));
+        assert!(Look::from_table("cam/std", &huge, n, d.clone()).is_none());
+        assert!(Look::check_table("cam/std", &huge, n, &d).unwrap_err().contains("metadata"));
+        let mut l = Look::from_table("cam/std", "{}", n, d.clone()).unwrap();
+        l.meta = huge.clone();
+        assert!(l.to_bytes().is_err(), "no file with a wrapped length");
+        l.meta = "{}".into();
+        l.name = "c/".to_string() + &"s".repeat(MAX_NAME);
+        assert!(l.to_bytes().is_err());
+        // a file written the old way (length field wrapped): the rest of the JSON would be read as table
+        let mut wrapped = b"X3LOOK1\0".to_vec();
+        wrapped.extend_from_slice(&(n as u16).to_le_bytes());
+        wrapped.extend_from_slice(&7u16.to_le_bytes());
+        wrapped.extend_from_slice(b"cam/std");
+        wrapped.extend_from_slice(&((huge.len() % 65536) as u16).to_le_bytes());
+        wrapped.extend_from_slice(huge.as_bytes());
+        wrapped.extend(std::iter::repeat_n(0u8, n * n * n * 6));
+        assert!(Look::from_bytes(&wrapped).is_none());
+        // NaN or infinite values
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let mut d2 = d.clone();
+            d2[5][1] = bad;
+            assert!(Look::from_table("cam/std", "{}", n, d2).is_none());
+        }
+        // cut, padded, wrong sizes
+        let good = Look::from_table("cam/std", "{}", n, d.clone()).unwrap().to_bytes().unwrap();
+        assert!(Look::from_bytes(&good).is_some());
+        assert!(Look::from_bytes(&good[..good.len() - 1]).is_none());
+        let mut padded = good.clone();
+        padded.push(0);
+        assert!(Look::from_bytes(&padded).is_none());
+        let mut big_n = good.clone();
+        big_n[8..10].copy_from_slice(&66u16.to_le_bytes());
+        assert!(Look::from_bytes(&big_n).is_none());
+        assert!(Look::from_table("cam/std", "{}", 66, vec![[0.0; 3]; 66 * 66 * 66]).is_none());
+        assert!(Look::from_bytes(&[]).is_none() && Look::from_bytes(b"X3LOOK1\0").is_none());
+    }
 
     #[test]
     fn built_in_looks_readable() {

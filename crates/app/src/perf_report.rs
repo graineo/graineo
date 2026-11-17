@@ -323,7 +323,7 @@ pub fn frame(ctx: &egui::Context) {
     }
     if pick_files {
         crate::file_dialog::files(ctx, PICK_FILES, |d| {
-            d.set_title(crate::tr("Fotos für den Leistungsbericht (bis zu 10)")).add_filter(crate::tr("Fotos"), &["x3f", "X3F", "raf", "RAF", "cr2", "CR2", "cr3", "CR3", "arw", "ARW", "nef", "NEF", "dng", "DNG", "orf", "ORF", "rw2", "RW2", "pef", "PEF", "jpg", "JPG", "jpeg", "JPEG", "heic", "HEIC", "tif", "TIF", "tiff", "TIFF", "png", "PNG"])
+            d.set_title(crate::tr("Fotos für den Leistungsbericht (bis zu 10)")).add_filter(crate::tr("Fotos"), &["x3f", "X3F", "raf", "RAF", "cr2", "CR2", "cr3", "CR3", "arw", "ARW", "nef", "NEF", "nrw", "NRW", "dng", "DNG", "orf", "ORF", "rw2", "RW2", "pef", "PEF", "jpg", "JPG", "jpeg", "JPEG", "heic", "HEIC", "tif", "TIF", "tiff", "TIFF", "png", "PNG"])
         });
     }
     let mut st = state().lock().unwrap_or_else(|e| e.into_inner());

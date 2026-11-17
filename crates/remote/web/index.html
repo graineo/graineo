@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d0d0e">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>graineo</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<div id="pair" class="screen hidden">
+  <form id="pair-form" class="card" autocomplete="off">
+    <div class="brand">graineo</div>
+    <h1 data-t="pair_title"></h1>
+    <p class="muted" data-t="pair_hint"></p>
+    <label><span data-t="pair_code"></span>
+      <input id="pair-code" name="code" inputmode="text" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" required>
+    </label>
+    <label><span data-t="pair_name"></span>
+      <input id="pair-name" name="name" maxlength="60" spellcheck="false">
+    </label>
+    <p id="pair-error" class="error" role="alert"></p>
+    <button type="submit" class="main" data-t="pair_button"></button>
+    <p class="muted small" data-t="privacy"></p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header id="bar">
+    <button id="src-btn" class="tool" data-tip="sources"><span class="ico">☰</span><span id="src-name"></span></button>
+    <input id="search" type="search" spellcheck="false" autocomplete="off" data-ph="search">
+    <button id="filter-btn" class="tool" data-tip="filter"><span class="ico">⚲</span><span id="filter-count"></span></button>
+    <span id="count" class="muted small"></span>
+    <button id="menu-btn" class="tool" data-tip="menu"><span class="ico">⋯</span></button>
+  </header>
+  <div id="filters" class="panel hidden">
+    <div class="row"><span class="lbl" data-t="min_stars"></span><div id="f-stars" class="seg"></div></div>
+    <div class="row"><span class="lbl" data-t="flag_picked"></span><div id="f-flag" class="seg"></div></div>
+    <div class="row"><span class="lbl" data-t="label"></span><div id="f-label" class="seg"></div></div>
+    <div class="row"><span class="lbl" data-t="sort"></span><div id="f-sort" class="seg"></div></div>
+  </div>
+  <div id="menu" class="panel hidden">
+    <p class="small"><span data-t="device"></span>: <span id="device-name"></span> · <span id="device-role"></span></p>
+    <p class="muted small" data-t="privacy"></p>
+    <button id="logout" class="plain" data-t="logout"></button>
+  </div>
+  <aside id="sources" class="drawer hidden"></aside>
+  <main id="grid" tabindex="-1"></main>
+  <p id="empty" class="muted hidden" data-t="empty"></p>
+</div>
+
+<div id="loupe" class="hidden" tabindex="-1">
+  <div id="stage"><img id="photo" alt=""></div>
+  <button id="prev" class="nav" data-tip="previous">‹</button>
+  <button id="next" class="nav" data-tip="next">›</button>
+  <div id="loupe-top">
+    <button id="close" class="tool" data-tip="close">✕</button>
+    <span id="loupe-name" class="small"></span>
+    <span class="spacer"></span>
+    <button id="info-btn" class="tool" data-tip="info">i</button>
+    <button id="dev-btn" class="tool" data-tip="develop">◐</button>
+  </div>
+  <div id="loupe-bottom">
+    <div id="l-stars" class="stars"></div>
+    <div class="flags">
+      <button id="l-pick" class="flag" data-tip="pick">⚑</button>
+      <button id="l-reject" class="flag" data-tip="reject">✕</button>
+    </div>
+    <div id="l-labels" class="labels"></div>
+  </div>
+  <aside id="info" class="side hidden"></aside>
+  <aside id="dev" class="side hidden">
+    <div id="dev-head"><strong data-t="develop"></strong><span id="dev-state" class="muted small"></span></div>
+    <p id="dev-note" class="note hidden"></p>
+    <div id="dev-sliders"></div>
+    <p class="muted small" data-t="history_note"></p>
+    <div id="dev-actions">
+      <button id="dev-reset" class="plain" data-t="reset"></button>
+      <button id="dev-save" class="main" data-t="save"></button>
+    </div>
+  </aside>
+  <div id="spinner" class="hidden"></div>
+</div>
+
+<div id="toast" class="hidden" role="status"></div>
+<div id="tip" class="hidden"></div>
+</body>
+</html>

@@ -266,6 +266,8 @@ pub struct Report {
     pub display: Display,
     pub graphics: Graphics,
     pub threads: Vec<(String, usize)>,
+    /// operating mode for slower computers: chosen, computing now and why, measured factors (`perf_mode::report`)
+    pub mode: Vec<(String, String)>,
     pub switches: Vec<String>,
     pub caches_drive: String,
     pub photos: Vec<Photo>,
@@ -503,12 +505,13 @@ pub fn run(sel: &Selection, display: Display, progress: &Mutex<Progress>, cancel
     r.system_before = library::platform::info::system_info();
     r.graphics = graphics();
     r.threads = vec![
-        ("work in front (per logical core)".into(), library::platform::foreground_threads()),
+        ("work in front (per physical core)".into(), library::platform::foreground_threads()),
         ("Foveon base".into(), (library::platform::foreground_threads() / 2).max(2)),
         ("background".into(), library::platform::background_threads()),
         ("global compute pool".into(), rayon::current_num_threads()),
     ];
     r.switches = switches();
+    r.mode = crate::perf_mode::report();
     r.caches_drive = sysdirs::app_cache_dir(library::APP).filter(|d| d.exists()).or_else(|| Some(library::data_dir())).map(|d| drive_text(&d)).unwrap_or_default();
     let tmp = library::data_dir().join("perf-reports").join("tmp");
     let collecting = Collecting::start(tmp.clone());
@@ -653,7 +656,7 @@ fn notes_for(p: &mut Photo) {
     if let Some(m) = (!cores.is_empty()).then(|| crate::perf_text::stats(&cores).median) {
         let n = library::platform::foreground_threads() as f64;
         if m < n * 0.35 {
-            p.notes.push(format!("The heavy stages kept only {m:.1} of {n:.0} logical cores busy on average (GPU-, memory- or serially bound)."));
+            p.notes.push(format!("The heavy stages kept only {m:.1} of {n:.0} cores busy on average (GPU-, memory- or serially bound)."));
         }
     }
 }

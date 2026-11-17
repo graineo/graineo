@@ -59,6 +59,10 @@ impl Preset {
                     defringe_purple_hue: cur.defringe_purple_hue,
                     defringe_green_amount: cur.defringe_green_amount,
                     defringe_green_hue: cur.defringe_green_hue,
+                    // objects removed and bitmap masks belong to the photo they were made on (as pasting): the photo
+                    // keeps its own removals, masks come along only where their rule computes them anew
+                    removals: cur.removals.clone(),
+                    local: p.local.as_ref().and_then(|d| d.for_other_photo().0),
                     ..p.clone()
                 };
             }
@@ -84,6 +88,12 @@ impl Preset {
     pub fn film_recipe(&self) -> develop::film::FilmSettings {
         develop::film::FilmSettings { active: true, ..self.settings.film.clone() }
     }
+}
+
+/// The settings of a new own preset made from a photo: without what belongs only to that photo (objects removed,
+/// bitmap masks that cannot be computed again on another photo), as pasting does.
+pub fn own_preset_settings(s: Settings) -> Settings {
+    Settings { removals: Vec::new(), local: s.local.as_ref().and_then(|d| d.for_other_photo().0), ..s }
 }
 
 /// New user recipe from the current film settings (scope film).
@@ -149,6 +159,37 @@ mod recipe_tests {
         let applied = r.apply(&cur);
         assert_eq!(applied.exposure, 0.7, "other sliders stay");
         assert!(applied.film.active && applied.film.stock == "kodak_trix_400" && applied.film.film_dev == 11.0 && applied.film.paper_matte == 1.5);
+    }
+
+    /// An own preset never carries what belongs to the photo it was made on: removed objects stay with that photo,
+    /// bitmap masks only come along as their rule (computed again on the other photo); also for older presets that
+    /// still hold them.
+    #[test]
+    fn own_preset_leaves_photo_bound_parts_behind() {
+        use masks::{Adjustments, Document, Instances, Layer, Mask, RasterSource};
+        let id = format!("sha256:{}", "a".repeat(64));
+        let removal = develop::spots::Removal { center: [0.5, 0.5], radius: 0.1, region: [0.3, 0.3, 0.4, 0.4], patch: format!("sha256:{}", "b".repeat(64)) };
+        let layer = |source| Layer::new(Mask::Raster { raster: id.clone(), source, feather: 0.0, range: None, edge: 0.0 }, Adjustments { exposure: 1.0, ..Default::default() });
+        let local = Document { version: 3, layers: vec![layer(RasterSource::Subject { instances: Instances::All }), layer(RasterSource::Painted)] };
+        let photo = Settings { exposure: 0.4, removals: vec![removal.clone()], local: Some(local), ..Settings::default() };
+        let check = |s: &Settings| {
+            let text = serde_json::to_string(s).unwrap();
+            assert!(!text.contains("sha256:"), "no raster or patch names: {text}");
+            let d = s.local.as_ref().expect("subject mask comes along as its rule");
+            assert_eq!(d.layers.len(), 1);
+        };
+        let made = own_preset_settings(photo.clone());
+        assert!(made.removals.is_empty());
+        assert_eq!(made.exposure, 0.4);
+        check(&made);
+        // an older preset that still holds them: applying leaves the target's own removals and drops the rest
+        let old = Preset { name: "alt".into(), settings: photo, scope: Scope::Look, hint: String::new() };
+        let own = develop::spots::Removal { center: [0.1, 0.1], patch: format!("sha256:{}", "c".repeat(64)), ..removal };
+        let target = Settings { removals: vec![own.clone()], ..Settings::default() };
+        let applied = old.apply(&target);
+        assert_eq!(applied.removals, vec![own]);
+        assert_eq!(applied.exposure, 0.4);
+        check(&Settings { removals: Vec::new(), ..applied });
     }
 
     #[test]

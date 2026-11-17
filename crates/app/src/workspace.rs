@@ -23,6 +23,8 @@ pub enum ToolTab {
     Crop,
     /// local corrections
     Masks,
+    /// retouching: heal, clone, red eyes, remove objects
+    Retouch,
     /// Presets, navigator, history
     Presets,
     /// Sensor view (measurements, calibration data)
@@ -123,9 +125,9 @@ impl App {
             self.show_before = false;
             self.show_camera_jpeg = false;
             self.navigation.finish();
-            // Whoever is already editing (Edit, Film & Look, Presets, Masks, Versions) stays in their tool;
+            // Whoever is already editing (Edit, Film & Look, Presets, Masks, Retouch, Versions) stays in their tool;
             // from Info (and everything that exists only in single image view) it goes to "Edit"
-            if !matches!(self.tool_tab, ToolTab::Edit | ToolTab::FilmLook | ToolTab::Masks | ToolTab::Presets | ToolTab::Versions) {
+            if !matches!(self.tool_tab, ToolTab::Edit | ToolTab::FilmLook | ToolTab::Masks | ToolTab::Retouch | ToolTab::Presets | ToolTab::Versions) {
                 self.tool_tab = ToolTab::Edit;
             }
             self.show_right = true;
@@ -192,7 +194,7 @@ impl App {
         }
         // Del / ⌫: delete selected photos (confirmation), in a collection only take them out of it (no question, ⌘Z);
         // not in crop, while drawing a mask, in the darkroom
-        if crate::shortcuts::which(ctx, "delete_selected").is_some() && !self.confirm_delete && self.crop_mode.is_none() && !crate::masks_ui::painting(ctx) && !crate::retouch_ui::has_selection(ctx) && !self.darkroom_active() {
+        if crate::shortcuts::which(ctx, "delete_selected").is_some() && !self.confirm_delete && self.crop_mode.is_none() && !crate::masks_ui::painting(ctx) && !crate::masks_ui::takes_delete(ctx) && !crate::retouch_ui::has_selection(ctx) && !self.darkroom_active() {
             if self.lib.removable_collection().is_some() && !(self.in_grid() && self.lib.not_in_catalog_view()) {
                 let ids = self.delete_targets();
                 let a = self.lib.remove_from_collection_external(ids);
@@ -261,6 +263,15 @@ impl App {
             return;
         }
         let w = ui.available_width();
+        // the display at the top of Edit and Masks, pinned above the scroll area (histogram_pin.rs); while another
+        // photo of the same kind loads it stays in place, locked like the sliders
+        {
+            let loaded = self.current.as_ref().map(|c| c.index);
+            let active = self.active_entry();
+            let kind = |i: Option<usize>| i.and_then(|i| self.entries.get(i)).map(|e| crate::image_kind::of(&e.path));
+            let shown = matches!(self.tool_rail_active(), ToolTab::Edit | ToolTab::Masks | ToolTab::Retouch) && (active == loaded || kind(active) == kind(loaded));
+            self.pinned_histogram(ui, shown, active == loaded);
+        }
         let mut surface = egui::ScrollArea::vertical().id_salt("bearbeiten").auto_shrink([false; 2]).max_width(w);
         // Test hook: GRAINEO_SIDEBAR_SCROLL=<points> scrolls the Edit panel on the first draw (for screenshots)
         if let Some(px) = crate::env::var("GRAINEO_SIDEBAR_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
@@ -272,7 +283,7 @@ impl App {
                     Some(e) if e.state != 0 && self.lib.work_running() => crate::tr("Bibliothek wird gerade abgeglichen …").to_string(),
                     Some(e) if e.state == 2 => crate::tr("Original nicht erreichbar\nEntwickeln geht wieder, sobald der Speicherort verbunden ist.").to_string(),
                     Some(e) if e.state != 0 => crate::state_message(e.state),
-                    Some(e) => crate::trf!("{a} lässt sich nicht bearbeiten", a = e.format),
+                    Some(e) => crate::photo_state::unsupported_text(&e.path).unwrap_or_else(|| crate::trf!("{a} lässt sich nicht bearbeiten", a = e.format)),
                     None if self.loading.is_some() => crate::tr("Wird geladen …").to_string(),
                     None => crate::tr("Kein Bild gewählt").to_string(),
                 };
@@ -319,7 +330,7 @@ impl App {
     /// Test hook: `GRAINEO_SET_EV=<EV>` changes the exposure of the active image by this value
     /// 3 s after opening (like a slider; checks saving and multi-selection).
     pub(crate) fn test_helpers(&mut self, ctx: &egui::Context) {
-        // Test hook: GRAINEO_EXPORT_TEST=<folder>[@jpg|tif|png] exports all images there 3 s after start (default JPEG)
+        // Test hook: GRAINEO_EXPORT_TEST=<folder>[@jpg|tif|png|jxl|jxl-lossless] exports all images there 3 s after start (default JPEG)
         static EXPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if let Ok(dir) = crate::env::var("GRAINEO_EXPORT_TEST") {
             if !EXPORT.load(std::sync::atomic::Ordering::Relaxed) && ctx.input(|i| i.time) > 3.0 && !self.entries.is_empty() {
@@ -328,6 +339,8 @@ impl App {
                 self.export_format = match kind {
                     "tif" => develop::export::Format::Tiff16,
                     "png" => develop::export::Format::Png16,
+                    "jxl" => develop::export::Format::JXL_DEFAULT,
+                    "jxl-lossless" => develop::export::Format::Jxl { quality: 92, lossless: true, bits16: true },
                     _ => develop::export::Format::Jpeg { quality: 92 },
                 };
                 self.export_dir = Some(std::path::PathBuf::from(dir));
@@ -643,6 +656,7 @@ impl App {
         if let Some(w) = rawdev::film_profiles::missing(&e.settings) {
             v.push(crate::photo_state::look(&w));
         }
+        v.extend(self.engine_notices(i));
         v
     }
 
@@ -665,6 +679,7 @@ impl App {
                 library_ui::Action::Develop => self.to_single_image(),
                 library_ui::Action::Selection => { self.navigation.finish(); self.tool_tab = ToolTab::Info; self.show_right = true; }
                 library_ui::Action::Export => self.open_export(),
+                library_ui::Action::Print => self.open_print_room(None, None),
                 library_ui::Action::Rated(w) => self.adopt_values(&w),
                 library_ui::Action::Status(t) => self.status = t,
                 library_ui::Action::VirtualCopy(b) => self.create_virtual_copy(Some(b)),
@@ -722,6 +737,7 @@ mod tests {
             (ToolTab::Presets, ToolTab::Presets),
             (ToolTab::FilmLook, ToolTab::FilmLook),
             (ToolTab::Masks, ToolTab::Masks),
+            (ToolTab::Retouch, ToolTab::Retouch),
             (ToolTab::Versions, ToolTab::Versions),
             (ToolTab::Edit, ToolTab::Edit),
             (ToolTab::Info, ToolTab::Edit),

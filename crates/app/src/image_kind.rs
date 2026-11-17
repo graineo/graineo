@@ -40,7 +40,7 @@ impl ImageKind {
 pub fn from_extension(extension: &str) -> ImageKind {
     match extension.to_ascii_lowercase().as_str() {
         "x3f" => ImageKind::Foveon,
-        "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "orf" | "rw2" | "pef" | "srw" => ImageKind::Raw,
+        "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "nrw" | "orf" | "rw2" | "pef" | "srw" => ImageKind::Raw,
         "jpg" | "jpeg" | "heic" | "heif" | "hif" | "tif" | "tiff" | "png" => ImageKind::Done,
         _ => ImageKind::Other,
     }
@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(from_extension("X3F"), ImageKind::Foveon);
         // Sigma fp/fp L/BF write Bayer DNGs → general path
         assert_eq!(from_extension("DNG"), ImageKind::Raw);
-        for e in ["RAF", "cr3", "CR2", "ARW", "NEF"] {
+        for e in ["RAF", "cr3", "CR2", "ARW", "NEF", "nef", "NRW", "nrw"] {
             assert_eq!(from_extension(e), ImageKind::Raw, "{e}");
         }
         for e in ["JPG", "jpeg", "HEIC", "TIFF", "png"] {

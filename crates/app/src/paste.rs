@@ -88,7 +88,9 @@ impl Default for Groups {
 pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
     let mut s = dst.clone();
     let on = |name: &str| g.0[index(name)];
-    if on("Lokale Korrekturen") { s.local = src.local.clone(); }
+    // bitmap masks belong to one image: on the target they are computed again from their rule (subject, people),
+    // click selections are left out (`masks::Document::for_other_photo`)
+    if on("Lokale Korrekturen") { s.local = src.local.as_ref().and_then(|d| d.for_other_photo().0); }
     if on("Profil") {
         s.color_mode = src.color_mode.clone();
         s.profile_amount = src.profile_amount;

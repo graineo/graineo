@@ -1,7 +1,9 @@
-//! Paging through images in the Develop module (non-Sigma RAWs): what is shown right away and when the RAW is read.
+//! Paging through images in the Develop module: what is shown right away and when the RAW is read.
 //!
-//! - The best stored preview appears at once (large preview/offline copy before the last developed view); the RAW is
-//!   opened only after a short dwell ([`OPEN_DWELL`]) – paging on cancels it.
+//! - The best stored preview appears at once (large preview/offline copy before the last developed view); the RAW
+//!   is opened only after a short dwell ([`OPEN_DWELL`]) – paging on cancels it. A Sigma X3F waits for the dwell only
+//!   while paging ([`Browse::paging`]); chosen on its own it opens at once. While paging fast ([`Browse::fast`]) no
+//!   exact Sigma base starts.
 //! - Neighbours are preloaded only after a dwell and never while the selected image is being opened; fast paging
 //!   ([`fast`]) pauses it.
 //! - Fingerprints: a stored preview remembers which settings (and which revision of the development) it shows. If it
@@ -21,7 +23,8 @@ use eframe::egui;
 pub const OPEN_DWELL: f64 = if cfg!(test) { 0.0 } else { 0.25 };
 /// Dwell after the image is shown before neighbours are preloaded (s).
 pub const PREFETCH_DWELL: f64 = 0.35;
-/// Dwell after the image is shown before the full resolution is prepared (s).
+/// Dwell after the image is shown before the full resolution is prepared (s), in the operating mode "Genau" (the
+/// mode's plan decides, see `perf_mode::Plan::full_dwell`).
 pub const FULL_DWELL: f64 = 1.5;
 /// Large previews decoded ahead in the direction of travel.
 pub const LARGE_AHEAD: isize = 3;
@@ -70,6 +73,12 @@ impl Browse {
         self.expected_logged = None;
         // the cached fingerprint was computed with the path of the photo at the old index
         self.expected = None;
+    }
+
+    /// Paging right now: the change before the last one was less than a second ago. A photo chosen on its own (first
+    /// click, first key press after looking for a while) is not paging.
+    pub fn paging(&self, now: f64) -> bool {
+        self.switches.iter().rev().nth(1).is_some_and(|&t| now - t < 1.0)
     }
 
     /// Fast paging right now: more than two changes within the last second.

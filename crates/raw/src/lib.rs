@@ -19,6 +19,7 @@ pub mod color;
 pub mod film_profile;
 pub mod fuji;
 pub mod looks;
+pub mod learn_look;
 pub mod highlights;
 pub mod markesteijn;
 pub mod lcp;
@@ -29,6 +30,8 @@ mod rcd;
 pub mod sharpness;
 pub mod sharpen_study;
 pub mod tone;
+/// System RAW engine of macOS (Core Image) for comparisons; stand-in without function elsewhere
+pub mod apple;
 pub mod measure;
 pub mod measure_run;
 
@@ -69,7 +72,39 @@ impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
 
 fn rl<E: std::fmt::Display>(e: E) -> Error {
-    Error::Rawler(e.to_string())
+    classify(e.to_string())
+}
+
+/// Text of the error for Nikon's "High Efficiency" NEF compression (Z 8, Z 9, Z f, Z 6III …), which rawler does
+/// not decode yet. A known gap, not a damaged file: says so instead of rawler's "possibly corrupt image". English
+/// (developer text); the app shows its own translated message for it.
+pub const NIKON_HE: &str = "Nikon High Efficiency (HE/HE*): this NEF compression is not decoded yet";
+
+/// rawler error → our error; known unsupported cases become [`Error::Unsupported`] with a plain text.
+fn classify(s: String) -> Error {
+    if is_nikon_he_refusal(&s) {
+        return Error::Unsupported(NIKON_HE.into());
+    }
+    Error::Rawler(s)
+}
+
+/// Does a rawler error refuse Nikon's High Efficiency compression? rawler 0.8 says "NEF compression
+/// Some(HighEfficency) is not supported" (its enum name has a typo; "HighEfficencyStar" for HE*). Matched on letters
+/// and digits only, case-insensitively, and on the common prefix "higheffic", so the correct spelling, spaces or
+/// another wrapping of the enum name are recognised as well. The test `rawler_version_is_the_one_checked` breaks on
+/// every rawler update, so the text is checked again then.
+fn is_nikon_he_refusal(s: &str) -> bool {
+    let flat: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect();
+    flat.contains("nefcompression") && flat.contains("higheffic")
+}
+
+/// Can our decoder read this file? Reads the header only (no pixel data); the error says why not (e.g. [`NIKON_HE`]).
+pub fn check_decodable(path: &Path) -> Result<()> {
+    let source = RawSource::new(path).map_err(|e| Error::Rawler(format!("{}: {e}", path.display())))?;
+    let decoder = rawler::get_decoder(&source).map_err(rl)?;
+    let params = RawDecodeParams::default();
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| decoder.raw_image(&source, &params, true))).map_err(|_| Error::Rawler("panic in the decoder".into()))?.map_err(rl)?;
+    Ok(())
 }
 
 /// Kind of sensor data.
@@ -193,7 +228,7 @@ impl RawFile {
         let params = RawDecodeParams::default();
         // rawler catches panics in `decode`, but not in the decoder directly → catch them ourselves
         let image = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| decoder.raw_image(&source, &params, false)))
-            .map_err(|_| Error::Rawler("Panic im Decoder".into()))?
+            .map_err(|_| Error::Rawler("panic in the decoder".into()))?
             .map_err(rl)?;
         let meta = decoder.raw_metadata(&source, &params).ok();
         let mut info = make_info(&*decoder, &image, meta.as_ref());
@@ -772,5 +807,37 @@ mod cine_dng_tests {
         assert!(sat.len() > 2000 && sat.len() < 2400, "{}", sat.len());
         let mean = sat.iter().sum::<f32>() / sat.len() as f32;
         assert!((mean - 4095.0).abs() < 8.0, "mean {mean}");
+    }
+}
+
+#[cfg(test)]
+mod nikon_he_tests {
+    use super::*;
+
+    /// rawler's refusal of Nikon "High Efficiency" becomes a plain "not supported", never "possibly corrupt".
+    #[test]
+    fn high_efficiency_is_unsupported_not_damaged() {
+        // rawler 0.8 (typo in its enum name), the correct spelling and other wrappings of the same refusal
+        for c in ["Some(HighEfficency)", "Some(HighEfficencyStar)", "Some(HighEfficiency)", "HighEfficiencyStar", "High Efficiency", "high_efficiency_star"] {
+            let e = classify(format!("Failed to decode image, possibly corrupt image: NEF compression {c} is not supported"));
+            assert!(matches!(&e, Error::Unsupported(s) if s == NIKON_HE), "{c}: {e}");
+        }
+        assert!(matches!(classify("anything else".into()), Error::Rawler(_)));
+        // other NEF compressions and an efficiency word elsewhere stay rawler errors
+        assert!(matches!(classify("NEF compression Some(Packed14Bits) is not supported".into()), Error::Rawler(_)));
+        assert!(matches!(classify("High efficiency mode of something else".into()), Error::Rawler(_)));
+        // the developer text is English (public crate); the app translates by its own key
+        assert!(NIKON_HE.is_ascii() && NIKON_HE.contains("not decoded"));
+    }
+
+    /// The HE detection depends on rawler's wording. rawler is pinned exactly (`=0.8.0` in Cargo.toml); when it is
+    /// updated, this test fails on purpose: check the refusal text of a High Efficiency NEF again (e.g.
+    /// `GRAINEO_TEST_NEF_HE_DIR=… cargo test -p raw --test nikon_samples`, `is_nikon_he_refusal`), then update the
+    /// version here.
+    #[test]
+    fn rawler_version_is_the_one_checked() {
+        let lock = include_str!("../../../Cargo.lock");
+        let version = lock.split("[[package]]").find(|p| p.contains("\nname = \"rawler\"\n")).and_then(|p| p.lines().find_map(|l| l.strip_prefix("version = \""))).map(|v| v.trim_end_matches('"'));
+        assert_eq!(version, Some("0.8.0"), "rawler was updated: check the Nikon HE detection (is_nikon_he_refusal) against the new error text");
     }
 }

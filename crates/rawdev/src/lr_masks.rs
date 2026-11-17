@@ -334,7 +334,7 @@ pub fn import(w: &Values, size: [usize; 2]) -> (Option<Document>, Option<MaskImp
                 let mask = join(masks)?;
                 mask.validate().map_err(|_| "Mask limits".to_string())?;
                 let adjustments = adjustments(c, amount, &mut report)?;
-                Ok(Some(Layer { mask, adjustments }))
+                Ok(Some(Layer::new(mask, adjustments)))
             })();
             match result {
                 Ok(Some(layer)) => {

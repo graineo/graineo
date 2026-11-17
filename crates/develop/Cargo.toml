@@ -17,6 +17,8 @@ serde = { version = "1", features = ["derive"] }
 # Downscaling on export (size limit), without image formats
 image = { version = "0.25", default-features = false }
 jpeg-encoder = "0.6"
+# JPEG XL export, pure Rust (BSD-3-Clause OR Apache-2.0); pinned exactly: young crate, its output is checked by the tests
+jixel = { version = "=0.5.10", default-features = false, features = ["neon", "sse", "avx"] }
 # Disk cache of the SPP base (diskcache.rs): lossless packing, checksums, free space measurement
 flate2 = "1"
 crc32fast = "1"
@@ -46,6 +48,8 @@ film-f64 = ["spektrafilm-core/precision-f64"]
 
 [dev-dependencies]
 serde_json = "1"
+# reference decoder for the JPEG XL tests (already in the tree through rawler)
+jxl-oxide = { version = "=0.12.6", features = ["moxcms"] }
 tiff = "0.9"
 
 [target.'cfg(windows)'.dependencies]

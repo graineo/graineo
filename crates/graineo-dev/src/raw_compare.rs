@@ -89,65 +89,9 @@ fn lab(xyz: [f32; 3]) -> [f32; 3] {
     [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
 }
 
-/// CIEDE2000 (Sharma, Wu, Dalal 2005).
+/// CIEDE2000 (Sharma, Wu, Dalal 2005), see [`raw::learn_look::de2000`].
 pub fn de2000(a: [f32; 3], b: [f32; 3]) -> f32 {
-    let (l1, a1, b1) = (a[0] as f64, a[1] as f64, a[2] as f64);
-    let (l2, a2, b2) = (b[0] as f64, b[1] as f64, b[2] as f64);
-    let c1 = (a1 * a1 + b1 * b1).sqrt();
-    let c2 = (a2 * a2 + b2 * b2).sqrt();
-    let cm = (c1 + c2) / 2.0;
-    let g = 0.5 * (1.0 - (cm.powi(7) / (cm.powi(7) + 25f64.powi(7))).sqrt());
-    let a1p = (1.0 + g) * a1;
-    let a2p = (1.0 + g) * a2;
-    let c1p = (a1p * a1p + b1 * b1).sqrt();
-    let c2p = (a2p * a2p + b2 * b2).sqrt();
-    let hp = |b: f64, a: f64| {
-        if a == 0.0 && b == 0.0 {
-            0.0
-        } else {
-            let h = b.atan2(a).to_degrees();
-            if h < 0.0 {
-                h + 360.0
-            } else {
-                h
-            }
-        }
-    };
-    let h1p = hp(b1, a1p);
-    let h2p = hp(b2, a2p);
-    let dlp = l2 - l1;
-    let dcp = c2p - c1p;
-    let dhp = if c1p * c2p == 0.0 {
-        0.0
-    } else if (h2p - h1p).abs() <= 180.0 {
-        h2p - h1p
-    } else if h2p - h1p > 180.0 {
-        h2p - h1p - 360.0
-    } else {
-        h2p - h1p + 360.0
-    };
-    let dhp_big = 2.0 * (c1p * c2p).sqrt() * (dhp.to_radians() / 2.0).sin();
-    let lpm = (l1 + l2) / 2.0;
-    let cpm = (c1p + c2p) / 2.0;
-    let hpm = if c1p * c2p == 0.0 {
-        h1p + h2p
-    } else if (h1p - h2p).abs() <= 180.0 {
-        (h1p + h2p) / 2.0
-    } else if h1p + h2p < 360.0 {
-        (h1p + h2p + 360.0) / 2.0
-    } else {
-        (h1p + h2p - 360.0) / 2.0
-    };
-    let t = 1.0 - 0.17 * (hpm - 30.0).to_radians().cos() + 0.24 * (2.0 * hpm).to_radians().cos() + 0.32 * (3.0 * hpm + 6.0).to_radians().cos()
-        - 0.20 * (4.0 * hpm - 63.0).to_radians().cos();
-    let dtheta = 30.0 * (-((hpm - 275.0) / 25.0).powi(2)).exp();
-    let rc = 2.0 * (cpm.powi(7) / (cpm.powi(7) + 25f64.powi(7))).sqrt();
-    let sl = 1.0 + 0.015 * (lpm - 50.0).powi(2) / (20.0 + (lpm - 50.0).powi(2)).sqrt();
-    let sc = 1.0 + 0.045 * cpm;
-    let sh = 1.0 + 0.015 * cpm * t;
-    let rt = -(2.0 * dtheta.to_radians()).sin() * rc;
-    let v = (dlp / sl).powi(2) + (dcp / sc).powi(2) + (dhp_big / sh).powi(2) + rt * (dcp / sc) * (dhp_big / sh);
-    v.max(0.0).sqrt() as f32
+    raw::learn_look::de2000(a, b)
 }
 
 fn size(r: f32) -> (usize, usize) {
@@ -298,6 +242,17 @@ mod tests {
   let to_lab=|p:[f32;3]|lab(color::mulv(&color::srgb_to_xyz_d65(),p.map(dec)));
   let de=de2000(to_lab(center),to_lab(reference));eprintln!("LUT mid gray ΔE00={de:.6}");assert!(de<1.0);
  }
+}
+
+/// Lab pairs (ours, reference) on the same grid as [`compare_images`] (common crop, 400 px long edge).
+pub fn lab_cells(own: &RgbImage, reference: &RgbImage, ref_adobe: bool) -> Vec<([f32; 3], [f32; 3])> {
+    let ra = own.width() as f32 / own.height() as f32;
+    let rb = reference.width() as f32 / reference.height() as f32;
+    let r = if ra >= 1.0 { ra.min(rb) } else { ra.max(rb) };
+    let (tw, th) = size(r);
+    let a = downscale(&to_xyz(own, false), own.width() as usize, own.height() as usize, r, tw, th);
+    let b = downscale(&to_xyz(reference, ref_adobe), reference.width() as usize, reference.height() as usize, r, tw, th);
+    a.iter().zip(&b).map(|(pa, pb)| (lab(*pa), lab(*pb))).collect()
 }
 
 /// Lab pairs (ours, reference) on a coarse grid of the common crop (basis for tuning tone and color).

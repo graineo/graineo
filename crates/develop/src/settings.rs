@@ -262,6 +262,9 @@ pub struct Settings {
     /// Red-eye correction, see [`crate::spots`]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub red_eyes: Vec<crate::spots::RedEye>,
+    /// Removed objects (filled by an inpainting model, patch stored in the library), see [`crate::spots::Removal`]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removals: Vec<crate::spots::Removal>,
     /// Black-and-white mixer: brightness per colour range (red, orange, yellow, green, aqua, blue, violet, magenta), −1 … +1; only acts with `monochrome`
     #[serde(default, skip_serializing_if = "gray_mix_empty")]
     pub gray_mix: [f32; 8],
@@ -363,6 +366,12 @@ pub struct RawAdjust {
     /// Not written while unset, so the JSON of existing photos stays byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lens_profile: Option<String>,
+    /// Engine of the raw stage: `None` = automatic (graineo; on macOS the system RAW engine only for files graineo cannot
+    /// decode), `"graineo"`, `"apple:<decoder version>"` (`"apple:8"`, `"apple:9.dng"`: the system RAW engine of macOS
+    /// with that pinned version, see `rawdev::apple`). Not written while unset, so the JSON of existing photos stays
+    /// byte-identical; older versions ignore the field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
     /// Profile: "" or "neutral" = neutral development, otherwise look name ("x100v/provia"). The camera look of the
     /// shot's picture style is only offered, never applied automatically (before 13.11.2026 "" meant it).
     /// Old look names of graineo 1.0 are translated on loading ([`legacy_names::looks`]).
@@ -402,6 +411,7 @@ impl Default for RawAdjust {
             lens_ca: true,
             lens_image: None,
             lens_profile: None,
+            engine: None,
             look: String::new(),
             look_name: String::new(),
             look_package: String::new(),
@@ -502,6 +512,7 @@ impl Default for Settings {
             local: None,
             spots: Vec::new(),
             red_eyes: Vec::new(),
+            removals: Vec::new(),
             gray_mix: [0.0; 8],
             output_size: None,
         }
@@ -712,6 +723,22 @@ mod binning_settings_tests {
 #[cfg(test)]
 mod lens_profile_tests {
     use super::*;
+
+    #[test]
+    fn engine_is_written_only_when_set() {
+        // existing photos stay byte-identical: no field while automatic
+        let plain = serde_json::to_string(&Settings::default()).unwrap();
+        assert!(!plain.contains("\"engine\""), "{plain}");
+        let s = Settings { raw: RawAdjust { engine: Some("apple:8".into()), ..RawAdjust::default() }, ..Settings::default() };
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"engine\":\"apple:8\""), "{j}");
+        let back: Settings = serde_json::from_str(&j).unwrap();
+        assert_eq!(back.raw.engine.as_deref(), Some("apple:8"));
+        // a document without the field (older versions) reads as automatic
+        let old: Settings = serde_json::from_str(&plain).unwrap();
+        assert_eq!(old.raw.engine, None);
+        assert_eq!(serde_json::to_string(&old).unwrap(), plain);
+    }
 
     #[test]
     fn settings_json_unchanged_without_lens_profile() {

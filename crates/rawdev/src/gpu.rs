@@ -750,6 +750,8 @@ pub struct OutputData {
     /// camera look: edge length and differences (n³ × 3)
     pub look: Option<(usize, Vec<f32>)>,
     pub look_amount: f32,
+    /// tetrahedral instead of trilinear interpolation of the camera look (learned looks)
+    pub look_tetrahedral: bool,
     /// Dehaze: map (width × height, whole image), airlight, ω, gain, removes haze, lower bound of t
     pub haze: Option<GpuHaze>,
     /// Noise brake (render.rs `prepare`): the base layer is computed on the GPU from the image of this job
@@ -997,6 +999,7 @@ fn output_kernels_with(g: &Gpu, l: &mut Run, rgb: &wgpu::Buffer, w: usize, h: us
         (22, out_data.lum[1]),
         (23, out_data.lum[2]),
         (61, look_offset as f32),
+        (62, out_data.look_tetrahedral as u8 as f32),
     ];
     if let Some((b, (_, bw, bh, f))) = &brake {
         e.extend_from_slice(&[(54, 1.0), (55, b.luma_exp), (56, b.chroma_exp), (57, b.exposure), (58, *f as f32), (59, *bw as f32), (60, *bh as f32)]);

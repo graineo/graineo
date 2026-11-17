@@ -85,7 +85,8 @@ pub fn load(path: &Path, settings: &Settings, keep_going: &dyn Fn() -> bool) -> 
     if let Some(ms) = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_TEST_OPEN_DELAY_MS").ok()).and_then(|v| v.parse::<u64>().ok()) {
         std::thread::sleep(std::time::Duration::from_millis(ms));
     }
-    let Some(mut doc) = RawDoc::open(path, keep_going)? else { return Ok(None) };
+    // engine of the raw stage from the settings (graineo, Apple, automatic fallback, see `rawdev::apple`)
+    let Some(mut doc) = RawDoc::open_for(path, settings, keep_going)? else { return Ok(None) };
     let t_open = t0.elapsed();
     // from a working copy: initial values, XMP and list path belong to the photo
     let raw_entry = RAW_OPENING.lock().unwrap().iter().find(|(c, _)| c == path).cloned();
@@ -215,7 +216,11 @@ fn load_from_library(p: &Path, loc: (i64, bool), copy_name: Option<&str>) -> (Se
         return (Settings::default(), Meta::default(), false);
     };
     let meta = meta_of(m);
-    let own = library::store::develop_at(p, Some(loc), copy_name).ok().flatten().and_then(|j| serde_json::from_str::<Settings>(&j).ok());
+    let json = library::store::develop_at(p, Some(loc), copy_name).ok().flatten();
+    if copy_name.is_none() {
+        crate::develop_guard::note_loaded(p, json.as_deref());
+    }
+    let own = json.and_then(|j| serde_json::from_str::<Settings>(&j).ok());
     match (own, copy_name) {
         (Some(s), None) => {
             remember_start(p, None, &s);
@@ -246,7 +251,9 @@ fn load_from_sidecar(p: &Path, copy_name: Option<&str>) -> (Settings, Meta, bool
         };
     }
     let meta = values.as_ref().map(meta_from).unwrap_or_default();
-    match library::xmp::read_develop(&xp).ok().flatten().and_then(|j| serde_json::from_str::<Settings>(&j).ok()) {
+    let json = library::xmp::read_develop(&xp).ok().flatten();
+    crate::develop_guard::note_loaded(p, json.as_deref());
+    match json.and_then(|j| serde_json::from_str::<Settings>(&j).ok()) {
         Some(s) => {
             remember_start(p, None, &s);
             (s, meta, true)
@@ -270,14 +277,9 @@ pub fn save_settings(p: &Path, copy_name: Option<&str>, s: &Settings, meta: &Met
 fn save_to_library(p: &Path, loc: (i64, bool), copy_name: Option<&str>, s: &Settings, meta: &Meta) -> Result<(), String> {
     let file = loc.0;
     let stored_json = library::store::develop_at(p, Some(loc), copy_name)?;
-    if copy_name.is_none() {
-        if let Some(json) = &stored_json {
-            let saved: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
-            if let Some(local) = saved.get("local").filter(|v| !v.is_null()) {
-                masks::Document::from_json(&local.to_string()).map_err(|e| crate::trf!("Gespeicherte Masken werden nicht überschrieben: {e}", e = e))?;
-            }
-        }
-    }
+    // a development this version cannot read (newer version: unknown fields, masks) is never overwritten or removed
+    // (`develop_guard.rs`), for originals and virtual copies alike; ratings are still saved below
+    let blocked = crate::develop_guard::check(stored_json.as_deref());
     let s = Settings { view: develop::View::Developed, ..s.clone() };
     let new_meta = (meta.rating, meta.flag.as_i8(), meta.label);
     let old_meta = library::store::meta(file, copy_name);
@@ -289,6 +291,9 @@ fn save_to_library(p: &Path, loc: (i64, bool), copy_name: Option<&str>, s: &Sett
         if old_meta != Some(new_meta) {
             library::store::set_meta(file, copy_name, new_meta);
         }
+        if let Some(r) = crate::develop_guard::stop(blocked, copy_shown(p, &s)) {
+            return r;
+        }
         if old != s {
             let json = (s != Settings::default()).then(|| serde_json::to_string(&s)).transpose().map_err(|e| e.to_string())?;
             library::store::set_develop(file, copy_name, json);
@@ -298,8 +303,11 @@ fn save_to_library(p: &Path, loc: (i64, bool), copy_name: Option<&str>, s: &Sett
     if old_meta.is_some_and(|m| m != new_meta) {
         library::store::set_meta(file, None, new_meta);
     }
-    let stored = stored_json.as_deref().and_then(|j| serde_json::from_str::<Settings>(j).ok());
     let start = start_value(p, None).unwrap_or_default();
+    if let Some(r) = crate::develop_guard::stop(blocked, s == start || s == Settings::default()) {
+        return r;
+    }
+    let stored = stored_json.as_deref().and_then(|j| serde_json::from_str::<Settings>(j).ok());
     if stored.as_ref() == Some(&s) || (stored.is_none() && s == start) {
         return Ok(());
     }
@@ -310,13 +318,6 @@ fn save_to_library(p: &Path, loc: (i64, bool), copy_name: Option<&str>, s: &Sett
 
 /// Save into the sidecar next to a photo outside the library.
 fn save_to_sidecar(p: &Path, copy_name: Option<&str>, s: &Settings, meta: &Meta) -> Result<(), String> {
-    if copy_name.is_none() {
-        if let Some(json)=library::xmp::read_develop(&xmp_path(p))? {
-            let saved:serde_json::Value=serde_json::from_str(&json).map_err(|e|e.to_string())?;
-            if let Some(local)=saved.get("local").filter(|v|!v.is_null()) {masks::Document::from_json(&local.to_string()).map_err(|e|crate::trf!("Gespeicherte Masken werden nicht überschrieben: {e}", e = e))?;}
-        }
-    }
-
     let xp = xmp_path(p);
     let s = Settings { view: develop::View::Developed, ..s.clone() };
     let mut w = match library::xmp::read(&xp) {
@@ -328,6 +329,16 @@ fn save_to_sidecar(p: &Path, copy_name: Option<&str>, s: &Settings, meta: &Meta)
     if let Some(k) = copy_name {
         let mut copies = library::sidecar::read_copies(w.copies_json.as_deref());
         let Some(copy) = copies.iter_mut().find(|x| x.name == k) else { return Err(crate::trf!("Kopie „{k}“ fehlt in {a}", k = k, a = xp.display())) };
+        // a development of a newer version stays (`develop_guard.rs`); the rating of the copy is still saved
+        if let Err(e) = crate::develop_guard::check_value(copy.settings.as_ref()) {
+            let new_meta = (meta.rating, meta.flag.as_i8(), meta.label);
+            if (copy.stars, copy.flag, copy.label) != new_meta {
+                (copy.stars, copy.flag, copy.label) = new_meta;
+                w.copies_json = library::sidecar::copies_text(&copies);
+                library::xmp::write(&xp, &w)?;
+            }
+            return crate::develop_guard::stop(Err(e), copy_shown(p, &s)).unwrap_or(Ok(()));
+        }
         let old: Settings = copy.settings.clone().and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
         if old == s && (copy.stars, copy.flag, copy.label) == (meta.rating, meta.flag.as_i8(), meta.label) {
             return Ok(()); // unchanged: do not touch the file
@@ -347,13 +358,24 @@ fn save_to_sidecar(p: &Path, copy_name: Option<&str>, s: &Settings, meta: &Meta)
         w.rating_time = Some(now);
         library::xmp::write(&xp, &w)?;
     }
-    let stored = library::xmp::read_develop(&xp)?.and_then(|j| serde_json::from_str::<Settings>(&j).ok());
+    let stored_json = library::xmp::read_develop(&xp)?;
     let start = start_value(p, None).unwrap_or_default();
+    // a development this version cannot read is never overwritten (`develop_guard.rs`); the rating is saved above
+    if let Some(r) = crate::develop_guard::stop(crate::develop_guard::check(stored_json.as_deref()), s == start || s == Settings::default()) {
+        return r;
+    }
+    let stored = stored_json.and_then(|j| serde_json::from_str::<Settings>(&j).ok());
     if stored.as_ref() == Some(&s) || (stored.is_none() && s == start) {
         return Ok(());
     }
     let json = serde_json::to_string(&s).map_err(|e| e.to_string())?;
     library::xmp::write_develop(&xp, Some(&json))
+}
+
+/// The settings a virtual copy shows when its own development is not readable: the defaults, for a Sigma X3F the
+/// initial values of the file (see `sidecar::load_entry`). Saving them is no change of the user.
+fn copy_shown(p: &Path, s: &Settings) -> bool {
+    *s == Settings::default() || (crate::image_kind::of(p) == crate::image_kind::ImageKind::Foveon && *s == crate::sidecar::baseline(p))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -397,6 +419,9 @@ pub fn look_name(n: &str) -> String {
     if let Some(u) = n.strip_prefix("film:") {
         return raw::film_profile::by_uuid(u).map_or_else(|| crate::tr("Look (nicht verfügbar)").to_string(), |p| p.name);
     }
+    if n == rawdev::learn::MATCHED_LOOK {
+        return crate::tr("An Kamera-JPEG angleichen").to_string();
+    }
     let style = n.rsplit('/').next().unwrap_or(n);
     let s = match style {
         "faithful" | "natural" => crate::tr("Natürlich").to_string(),
@@ -435,6 +460,12 @@ pub fn look_name(n: &str) -> String {
 /// camera's look (picture style of the shot) is only mentioned in the subline and applied when chosen.
 pub fn profile_card(doc: &RawDoc, s: &Settings) -> (String, String, String) {
     match s.raw.look.as_str() {
+        "" | "neutral" if !s.film.is_active() && doc.learned_look().is_some() => {
+            let key = doc.learn_key.clone().unwrap_or_default();
+            let meta = rawdev::learn::entries().iter().find(|(e, _)| e.key == key).and_then(|(_, m)| m.clone());
+            let camera = doc.picture_style.as_ref().map(|b| b.model.trim().to_string()).unwrap_or_default();
+            ("look:".into(), crate::learn_look_ui::learned_label(&key, &camera, meta.as_ref()), crate::tr("Standardentwicklung · gelernter Look dieser Kamera").into())
+        }
         "" | "neutral" => (
             "look:".into(),
             "Neutral".into(),
@@ -448,6 +479,11 @@ pub fn profile_card(doc: &RawDoc, s: &Settings) -> (String, String, String) {
             let package = raw::film_profile::by_uuid(&n[5..]).map(|p| package_title(&p.group));
             (format!("look:{n}"), if s.raw.look_name.is_empty() { look_name(n) } else { s.raw.look_name.clone() }, package.unwrap_or_else(|| s.raw.look_package.clone()))
         }
+        n if n == rawdev::learn::MATCHED_LOOK => (
+            format!("look:{n}"),
+            look_name(n),
+            if doc.matched_error().is_some() { crate::tr("Kein passendes Kamera-JPEG – neutral entwickelt") } else { crate::tr("Tonkurve dieses Fotos aus seinem Kamera-JPEG") }.into(),
+        ),
         n if doc.auto_look.as_deref() == Some(n) => (format!("look:{n}"), look_name(n), crate::tr("Wie Kamera · Kamera-Look").into()),
         n => (format!("look:{n}"), look_name(n), crate::tr("Kamera-Look").into()),
     }
@@ -462,6 +498,11 @@ pub fn profile_entries(doc: &RawDoc) -> Vec<(String, String, String)> {
     }
     for n in doc.looks.iter().filter(|n| doc.auto_look.as_ref() != Some(*n)) {
         v.push((format!("look:{n}"), look_name(n), n.clone()));
+    }
+    // tone curve matched per photo to the camera's rendering (every camera, also without a look of its own)
+    if !doc.finished {
+        let n = rawdev::learn::MATCHED_LOOK;
+        v.push((format!("look:{n}"), look_name(n), n.to_string()));
     }
     v
 }

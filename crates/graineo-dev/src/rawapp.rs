@@ -18,6 +18,7 @@
 //!   --zeige              print the Lightroom values read and the settings
 //!   --anzeige            output of the app's display path (extended sRGB, clipped for the file) instead of the export path
 //!   --ohne-look          without camera look (as "Neutral")
+//!   --engine VALUE       engine of the raw stage: graineo, apple:8, apple:9 … (default: automatic)
 //!   --kamera-look        with the camera look of the shot's picture style (as offered in the app; line `LOOK\tname`)
 
 use std::path::Path;
@@ -31,7 +32,13 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
     let has_flag = |n: &str| args.iter().any(|a| a == n);
     let value = |n: &str| args.iter().position(|a| a == n).and_then(|i| args.get(i + 1)).cloned();
     let t = Instant::now();
-    let mut doc = rawdev::RawDoc::open(Path::new(file), &|| true).map_err(|e| anyhow!(e))?.context("cancelled")?;
+    // `--engine graineo|apple:8|…`: engine of the raw stage (document field `RawAdjust::engine`); default automatic
+    let engine_settings = Settings { raw: develop::settings::RawAdjust { engine: value("--engine"), ..Default::default() }, ..Settings::default() };
+    let mut doc = rawdev::RawDoc::open_for(Path::new(file), &engine_settings, &|| true).map_err(|e| anyhow!(e))?.context("cancelled")?;
+    match &doc.apple {
+        Some(a) => println!("ENGINE\tapple\t{}\t{:?}\t{}", a.used, a.reason, a.graineo_blocked.as_deref().unwrap_or("-")),
+        None => println!("ENGINE\tgraineo"),
+    }
     if let Some(p) = value("--lr-path") {
         doc.logical_path = std::path::PathBuf::from(p);
     }
@@ -40,7 +47,7 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
         rawdev::lightroom::apply_orientation_from_catalog(&mut doc, &catalog);
     }
     let t_open = t.elapsed();
-    let mut s = Settings::default();
+    let mut s = engine_settings.clone();
     if let Some(j) = value("--settings") {
         s = serde_json::from_str(&std::fs::read_to_string(j)?)?;
     }

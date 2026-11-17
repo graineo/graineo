@@ -6,11 +6,8 @@ pub fn active(s: &Settings) -> bool {
 }
 fn masks_active(s: &Settings) -> bool {
     s.view == View::Developed
-        && s.local.as_ref().is_some_and(|d| {
-            d.layers
-                .iter()
-                .any(|l| l.adjustments != masks::Adjustments::default())
-        })
+        // a layer that is switched off or at strength 0 changes nothing (masks::Layer::active)
+        && s.local.as_ref().is_some_and(|d| d.layers.iter().any(masks::Layer::active))
 }
 /// Can a crop with local adjustments be computed on its own (with [`margin`] around it) instead of
 /// from the whole image? Not with retouching: its sources can lie anywhere in the image.
@@ -41,10 +38,12 @@ pub fn apply(img: &mut Rgb16, s: &Settings) {
 /// [`apply`] for a crop of the whole image (`view`, see [`masks::View`]); `None` = the whole image.
 pub fn apply_view(img: &mut Rgb16, s: &Settings, view: Option<masks::View>) {
     if !active(s) {
+        keep_capture(img, view);
         return;
     }
     // retouching first (it changes image content), then the local adjustments
     crate::spots::apply(img, s);
+    keep_capture(img, view);
     if !masks_active(s) {
         return;
     }
@@ -85,6 +84,73 @@ pub fn apply_view(img: &mut Rgb16, s: &Settings, view: Option<masks::View>) {
         Err(e) => eprintln!("local adjustments: {e}"),
     }
 }
+/// The image the local adjustments see (after retouching, before the first mask), downscaled: linear RGB.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Captured {
+    pub width: usize,
+    pub height: usize,
+    /// linear sRGB/Rec.709, row-major RGB
+    pub data: Vec<f32>,
+}
+
+std::thread_local! {
+    /// Armed by [`capture`] on this thread: long side of the copy, and the copy once taken.
+    static CAPTURE: std::cell::RefCell<Option<(usize, Option<Captured>)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `render` (a whole-image development on this thread) and keeps a copy of the image the local adjustments see,
+/// with a long side of at most `side` pixels (box average). For the colour samples and the overlay of colour and
+/// brightness ranges: they compare against exactly this image. Reads only; the rendering is unchanged.
+pub fn capture<R>(side: usize, render: impl FnOnce() -> R) -> (R, Option<Captured>) {
+    CAPTURE.with(|c| *c.borrow_mut() = Some((side.max(1), None)));
+    let r = render();
+    let got = CAPTURE.with(|c| c.borrow_mut().take()).and_then(|c| c.1);
+    (r, got)
+}
+
+fn keep_capture(img: &Rgb16, view: Option<masks::View>) {
+    // only the whole image (a crop of the zoomed view is not the mask space)
+    if view.is_some() || img.width == 0 || img.height == 0 {
+        return;
+    }
+    CAPTURE.with(|c| {
+        let mut c = c.borrow_mut();
+        let Some((side, slot)) = c.as_mut() else { return };
+        if slot.is_some() {
+            return;
+        }
+        let f = (img.width.max(img.height) as f32 / *side as f32).ceil().max(1.0) as usize;
+        let (w, h) = (img.width.div_ceil(f), img.height.div_ceil(f));
+        let lin = |v: u16| {
+            let v = v as f32 / 65535.0;
+            if v <= 0.04045 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let data: Vec<f32> = (0..w * h)
+            .into_par_iter()
+            .flat_map_iter(|i| {
+                let (x, y) = (i % w, i / w);
+                let mut acc = [0.0f32; 3];
+                let mut n = 0.0;
+                for yy in y * f..((y + 1) * f).min(img.height) {
+                    for xx in x * f..((x + 1) * f).min(img.width) {
+                        let p = &img.data[(yy * img.width + xx) * 3..(yy * img.width + xx) * 3 + 3];
+                        for k in 0..3 {
+                            acc[k] += lin(p[k]);
+                        }
+                        n += 1.0;
+                    }
+                }
+                acc.map(|a| a / n)
+            })
+            .collect();
+        *slot = Some(Captured { width: w, height: h, data });
+    });
+}
+
 pub fn crop(img: &Rgb16, region: [usize; 4]) -> Rgb16 {
     let [x, y, w, h] = region;
     let x = x.min(img.width - 1);
@@ -136,5 +202,20 @@ mod tests {
         };
         apply(&mut neutral, &Settings::default());
         assert_eq!(neutral.data, data);
+    }
+
+    #[test]
+    fn capture_keeps_what_the_masks_see_and_changes_nothing() {
+        let data: Vec<u16> = (0..40 * 20 * 3).map(|i| (i * 37 % 65536) as u16).collect();
+        let mut img = Rgb16 { width: 40, height: 20, data: data.clone() };
+        let ((), got) = capture(10, || apply(&mut img, &Settings::default()));
+        assert_eq!(img.data, data);
+        let got = got.unwrap();
+        assert_eq!((got.width, got.height), (10, 5));
+        // nothing armed: nothing kept, and a crop is never kept
+        let ((), none) = capture(10, || apply_view(&mut img, &Settings::default(), Some(masks::View { full: [80, 40], offset: [0, 0] })));
+        assert!(none.is_none());
+        apply(&mut img, &Settings::default());
+        assert!(CAPTURE.with(|c| c.borrow().is_none()));
     }
 }
