@@ -40,9 +40,14 @@ impl App {
         let blocked = self.current.as_ref().and_then(|c| c.loaded.previews.foreign.as_ref()).and_then(|d| d.apple.as_ref()).and_then(|a| a.graineo_blocked.clone());
         let path = if blocked.is_some() { None } else { path };
         self.sensor_raw.for_stage(path.as_deref(), ctx);
-        if let Some(why) = blocked.filter(|_| self.sensor_raw.error.is_none()) {
-            self.sensor_raw.error = Some(crate::menu::i18n::tr_msg(&why).into_owned());
-        }
+        // the photo is developed (by Apple), only the sensor view is missing: no "not readable" in that case
+        self.sensor_raw.apple_only = blocked.map(|why| {
+            if why.contains(raw::NIKON_HE) {
+                crate::tr("Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine").to_string()
+            } else {
+                crate::trf!("Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})", a = crate::menu::i18n::tr_msg(&why))
+            }
+        });
         if let Some(factor) = ctx.data_mut(|d| d.remove_temp::<f32>(egui::Id::new("sensor-zoom-request"))) {
             let target = self.one_to_one.max(1.0) * factor;
             let now = self.now();
@@ -182,7 +187,9 @@ impl App {
         let ready = self.sensor_raw.ready();
         // pipeline graineo | Apple | compare (macOS only, apple_raw.rs)
         self.apple_section(ui);
-        if let Some(e) = self.sensor_raw.error.clone() {
+        if let Some(t) = self.sensor_raw.apple_only.clone() {
+            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM));
+        } else if let Some(e) = self.sensor_raw.error.clone() {
             ui.label(egui::RichText::new(crate::trf!("Sensordaten nicht lesbar: {e}", e = e)).small().color(lr::TEXT_DIM));
         }
         lr::section(ui, "Überlagerungen", true, |ui| {

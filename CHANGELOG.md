@@ -358,6 +358,16 @@ Existing libraries open as before; a few small tables are added automatically, w
 
 ---
 
+## 1.3.1 · Your Own Looks
+
+A small update.
+
+- **Your own camera looks:** a look file in your data folder (`looks/<camera>/<style>.x3look`) now works like a bundled look: it is offered as "As shot" for photos with that picture style, selectable in the profile panel, and shown as "OWN LOOK" in the Camera Looks window. An own look takes precedence over a bundled one of the same name; damaged files are skipped, and nothing is ever overwritten.
+- **Missing look:** a camera look that is stored with a photo but no longer available now says "Camera look not found – developed neutral".
+- **Nikon HE files** developed through Apple's RAW engine: the sensor panel now says the sensor view isn't available for HE files, instead of "sensor data not readable".
+
+---
+
 ## Thanks
 
 - **spektrafilm** by Andrea Volpato (GPL-3.0), film profiles CC BY-SA 4.0

@@ -484,6 +484,11 @@ pub fn profile_card(doc: &RawDoc, s: &Settings) -> (String, String, String) {
             look_name(n),
             if doc.matched_error().is_some() { crate::tr("Kein passendes Kamera-JPEG – neutral entwickelt") } else { crate::tr("Tonkurve dieses Fotos aus seinem Kamera-JPEG") }.into(),
         ),
+        // a camera look stored by name that is neither in the data folder nor bundled (e.g. a personal style whose
+        // file is missing): the photo develops neutral, say so instead of naming the look as if it acted
+        n if n != rawdev::learn::IDENTITY_LOOK && rawdev::looks::source(n).is_none() => {
+            (format!("look:{n}"), look_name(n), crate::tr("Kamera-Look nicht gefunden – neutral entwickelt").into())
+        }
         n if doc.auto_look.as_deref() == Some(n) => (format!("look:{n}"), look_name(n), crate::tr("Wie Kamera · Kamera-Look").into()),
         n => (format!("look:{n}"), look_name(n), crate::tr("Kamera-Look").into()),
     }

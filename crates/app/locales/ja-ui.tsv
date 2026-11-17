@@ -6408,3 +6408,10 @@ Bewertungen als XMP	評価を XMP に
 Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	星、フラグ、ラベルをサイドカーファイル（XMP）として写真の横に書き込みます。オフ：ここでは評価できません。
 Deine Bibliothek – der angesehene Ordner gehört nicht dazu	あなたのライブラリ – 表示中のフォルダは含まれません
 Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	評価するには、ライブラリに追加するか、上部の帯で「評価を XMP に」をオンにしてください
+EIGENER LOOK	独自ルック
+Eigener Look	独自ルック
+Eigener Look aus dem Datenordner: {a}	データフォルダーの独自ルック：{a}
+Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine	センサービューは利用できません – AppleのRAWエンジンで現像
+Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine	HEファイルではセンサービューを利用できません – AppleのRAWエンジンで現像
+Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})	このファイルではセンサービューを利用できません – AppleのRAWエンジンで現像（{a}）
+Kamera-Look nicht gefunden – neutral entwickelt	カメラルックが見つかりません – ニュートラルで現像

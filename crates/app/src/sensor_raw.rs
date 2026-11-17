@@ -146,6 +146,9 @@ pub struct SensorRaw {
     path: Option<PathBuf>,
     rb: Option<Arc<RawImage>>,
     pub error: Option<String>,
+    /// The photo is developed by Apple's RAW engine because graineo cannot decode it (Nikon HE): no sensor view, and
+    /// this says why (set every frame, see `sensor_raw_update`) instead of "sensor data not readable".
+    pub apple_only: Option<String>,
     tx: Option<mpsc::Sender<Task>>,
     /// Crops of the visible area (mosaic, demosaic) go to their own lane, see [`crop_lane`]
     tx_crop: Option<mpsc::Sender<Task>>,
@@ -177,6 +180,7 @@ impl Default for SensorRaw {
             path: None,
             rb: None,
             error: None,
+            apple_only: None,
             tx: None,
             tx_crop: None,
             rx: None,
@@ -757,7 +761,13 @@ impl SensorRaw {
     pub fn status(&self) -> Vec<(String, bool)> {
         let mut out: Vec<(String, bool)> = Vec::new();
         if self.rb.is_none() {
-            let t = if self.error.is_some() { crate::tr("Sensordaten nicht lesbar") } else { crate::tr("Sensordaten werden gelesen …") };
+            let t = if self.apple_only.is_some() {
+                crate::tr("Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine")
+            } else if self.error.is_some() {
+                crate::tr("Sensordaten nicht lesbar")
+            } else {
+                crate::tr("Sensordaten werden gelesen …")
+            };
             out.push((t.to_string(), false));
             return out;
         }

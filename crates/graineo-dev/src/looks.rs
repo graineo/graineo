@@ -126,7 +126,7 @@ pub fn look_pair(args: &[String]) -> Result<()> {
 /// development (check Rust ↔ fitting tool).
 pub fn look_image(args: &[String]) -> Result<()> {
     let (input, out, name) = (args.first().context("IN")?, args.get(1).context("OUT")?, args.get(2).context("LOOK")?);
-    let l = if name.ends_with(".x3look") { raw::looks::Look::file(Path::new(name)) } else { raw::looks::Look::built_in(name) }.context("look not found")?;
+    let l = if name.ends_with(".x3look") { raw::looks::Look::file(Path::new(name)) } else { rawdev::looks::find(name).map(|l| (*l).clone()) }.context("look not found")?;
     let mut img = image::open(input)?.to_rgb8();
     l.apply(&mut img);
     img.save(out)?;

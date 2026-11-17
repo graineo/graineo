@@ -422,7 +422,7 @@ fn assemble(path: &Path, dev: Arc<AppleDev>, preview: Arc<Stage>) -> RawDoc {
     let as_shot = if dev.probe.as_shot.0 > 1000.0 { dev.probe.as_shot } else { (5500.0, 0.0) };
     let picture_style = raw::picture_style::read(path);
     let short = raw::picture_style::camera_short(&maker, &model);
-    let looks: Vec<String> = raw::looks::Look::names().into_iter().filter(|n| n.split('/').next() == Some(short.as_str())).map(str::to_string).collect();
+    let looks: Vec<String> = crate::looks::names_for_camera(&short);
     let auto_look = picture_style.as_ref().map(|b| format!("{}/{}", b.camera_short(), b.style)).filter(|n| looks.contains(n));
     let (info_rows, summary) = super::info_texts(&info, picture_style.as_ref(), as_shot);
     let base_ev = raw::development::BASE_EV + raw::development::camera_ev(&maker, &model) + LINEAR_OFFSET_EV;

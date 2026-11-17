@@ -149,10 +149,10 @@ pub fn affected(c: &Candidate) -> bool {
 }
 
 /// Does the old automatic camera look still show in the stored previews of this photo? Yes if the stored look is empty
-/// (neutral now) and the makernote's picture style has a bundled look (reads the start of the file only).
+/// (neutral now) and the makernote's picture style has a look (own or bundled) (reads the start of the file only).
 pub fn look_stale(path: &std::path::Path) -> bool {
     let (settings, _) = crate::sidecar::load(path);
-    settings.raw.look.is_empty() && raw::picture_style::read(path).is_some_and(|b| raw::looks::Look::for_picture_style(&b).is_some())
+    settings.raw.look.is_empty() && raw::picture_style::read(path).is_some_and(|b| rawdev::looks::for_picture_style(&b).is_some())
 }
 
 fn done_file(stage: &Stage) -> PathBuf {

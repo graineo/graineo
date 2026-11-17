@@ -19,7 +19,7 @@ fn every_old_look_name_finds_its_bundled_look() {
             n += 1;
         }
     }
-    // 17 renamed looks (Ricoh, Canon Faithful, Fujifilm Monochrome) plus the personal user styles where bundled
+    // 17 renamed looks (Ricoh, Canon Faithful, Fujifilm Monochrome); personal user styles are not bundled
     assert!(n >= 17, "only {n} old look names checked");
 }
 

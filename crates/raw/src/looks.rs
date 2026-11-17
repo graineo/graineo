@@ -15,7 +15,6 @@
 
 use rayon::prelude::*;
 
-use crate::picture_style::PictureStyle;
 use crate::RgbImage;
 
 /// Longest look name (`camera/style`, bytes).
@@ -139,19 +138,15 @@ impl Look {
         Self::from_bytes(&std::fs::read(path).ok()?)
     }
 
-    /// Load a bundled look by name (`camera/style`).
+    /// Load a bundled look by name (`camera/style`). Bundled only: the app looks a name up with
+    /// `rawdev::looks::find`, which takes the user's own looks in the data folder first.
     pub fn built_in(name: &str) -> Option<Self> {
         BUILT_IN.iter().find(|(n, _)| *n == name).and_then(|(_, b)| Self::from_bytes(b))
     }
 
-    /// Names of all bundled looks.
+    /// Names of all bundled looks (without the user's own looks, see `rawdev::looks::names`).
     pub fn names() -> Vec<&'static str> {
         BUILT_IN.iter().map(|(n, _)| *n).collect()
-    }
-
-    /// Matching bundled look for the picture style stored in the file ("as shot").
-    pub fn for_picture_style(b: &PictureStyle) -> Option<Self> {
-        Self::built_in(&format!("{}/{}", b.camera_short(), b.style))
     }
 
     /// Table (edge length, Δ per node; r slow, b fast) for the GPU.
@@ -342,6 +337,12 @@ mod tests {
         assert!(Look::from_bytes(&big_n).is_none());
         assert!(Look::from_table("cam/std", "{}", 66, vec![[0.0; 3]; 66 * 66 * 66]).is_none());
         assert!(Look::from_bytes(&[]).is_none() && Look::from_bytes(b"X3LOOK1\0").is_none());
+    }
+
+    /// Personal camera styles (`user…`) are never bundled: they live in the user's data folder (`rawdev::looks`).
+    #[test]
+    fn no_personal_styles_bundled() {
+        assert!(Look::names().iter().all(|n| !n.split('/').nth(1).unwrap_or("").starts_with("user")), "{:?}", Look::names());
     }
 
     #[test]

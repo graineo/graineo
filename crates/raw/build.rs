@@ -1,9 +1,6 @@
 //! Bundles every camera look found in `looks/<camera>/<style>.x3look` (sorted by name). The list of
 //! bundled looks is therefore exactly the set of files in that folder; nothing has to be registered twice.
-//!
-//! Packages made for publication (`GRAINEO_PUBLIC_BUILD=1`, set by `scripts/release.sh`) leave out the looks of the
-//! maintainer's own cameras (style names starting with `user`): the public source does not contain them either, so
-//! a package must not either.
+//! Personal looks never live here: they are files in the user's data folder (`rawdev::looks`).
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -11,8 +8,6 @@ use std::path::Path;
 fn main() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("looks");
     println!("cargo:rerun-if-changed={}", dir.display());
-    println!("cargo:rerun-if-env-changed=GRAINEO_PUBLIC_BUILD");
-    let public = std::env::var("GRAINEO_PUBLIC_BUILD").is_ok_and(|v| v == "1");
     let mut names = Vec::new();
     if let Ok(cams) = std::fs::read_dir(&dir) {
         for cam in cams.flatten() {
@@ -22,9 +17,6 @@ fn main() {
                 let p = f.path();
                 if p.extension().and_then(|e| e.to_str()) == Some("x3look") {
                     let style = p.file_stem().unwrap().to_string_lossy().into_owned();
-                    if public && style.starts_with("user") {
-                        continue;
-                    }
                     names.push(format!("{}/{}", cam.file_name().to_string_lossy(), style));
                 }
             }

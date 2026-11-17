@@ -12,6 +12,7 @@ pub mod calibration;
 pub mod gpu;
 pub mod lens_shots;
 pub mod learn;
+pub mod looks;
 pub mod look_lut;
 pub mod lightroom;
 pub mod lr_masks;

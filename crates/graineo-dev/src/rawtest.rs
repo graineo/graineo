@@ -159,21 +159,21 @@ pub fn run(file: &str, rest: &[String]) -> Result<()> {
         if value("--space").as_deref() == Some("srgb") {
             o.working_space = WorkingSpace::Srgb;
         }
-        // camera look: `--look camera/style` (bundled), `auto` (picture style of the
+        // camera look: `--look camera/style` (own look in the data folder, else bundled), `auto` (picture style of the
         // shot from the makernote) or a `.x3look` file; replaces the Lightroom look.
         let style_look = match value("--look") {
             Some(n) => {
                 let l = if n == "auto" {
                     let b = raw::picture_style::read(std::path::Path::new(file));
                     eprintln!("picture style: {}", b.as_ref().map(|b| format!("{}/{}", b.camera_short(), b.style)).unwrap_or("-".into()));
-                    b.and_then(|b| raw::looks::Look::for_picture_style(&b))
+                    b.and_then(|b| rawdev::looks::for_picture_style(&b)).map(|l| (*l).clone())
                 } else if n.ends_with(".x3look") {
                     raw::looks::Look::file(std::path::Path::new(&n))
                 } else {
-                    raw::looks::Look::built_in(&n)
+                    rawdev::looks::find(&n).map(|l| (*l).clone())
                 };
                 if l.is_none() && n != "auto" {
-                    anyhow::bail!("look {n} not found (bundled: {})", raw::looks::Look::names().join(", "));
+                    anyhow::bail!("look {n} not found (own and bundled: {})", rawdev::looks::names().join(", "));
                 }
                 o.look = None;
                 o.camera_look = false;

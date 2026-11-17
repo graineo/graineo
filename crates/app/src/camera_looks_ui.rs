@@ -198,8 +198,11 @@ fn camera_rows(cands: &[Candidate], scanned: Option<&[Scanned]>, include_adaptiv
 struct Status {
     /// learned look: switched on, metadata
     learned: Option<(bool, Option<serde_json::Value>)>,
-    /// bundled look of the base style (`camera/style`)
+    /// look of the base style (`camera/style`): bundled, or the user's own look in the data folder (wins over a bundled
+    /// one of the same name, `rawdev::looks`)
     bundled: Option<String>,
+    /// [`Self::bundled`] is the user's own look, not a bundled one
+    own: bool,
     /// built-in hue table of the standard development
     hue_table: bool,
 }
@@ -209,9 +212,11 @@ fn status(row: &StyleRow) -> Status {
     let (camera, style) = row.key.split_once('/').unwrap_or((&row.key, ""));
     let base = style.split('_').next().unwrap_or(style);
     let name = format!("{camera}/{base}");
-    let bundled = raw::looks::Look::names().into_iter().any(|n| n == name).then_some(name);
+    let source = rawdev::looks::source(&name);
+    let own = source == Some(rawdev::looks::Source::Own);
+    let bundled = source.map(|_| name);
     let hue_table = raw::development::camera_look(&row.camera_name, &row.camera_name).is_some();
-    Status { learned, bundled, hue_table }
+    Status { learned, bundled, own, hue_table }
 }
 
 /// Can a look be learned from these photos?
@@ -355,10 +360,10 @@ fn related(key: &str) -> Vec<(String, bool)> {
             }
         }
     }
-    for n in raw::looks::Look::names() {
+    for n in rawdev::looks::names() {
         if let Some((c, s)) = n.split_once('/') {
             if c != camera && s == base_style && common(c) >= 2 && !v.iter().any(|x| x.0 == n) {
-                v.push((n.to_string(), false, common(c)));
+                v.push((n.clone(), false, common(c)));
             }
         }
     }
@@ -368,7 +373,7 @@ fn related(key: &str) -> Vec<(String, bool)> {
 
 /// Take over the look of a related camera as the starting point of `key` (clearly marked: basis without measurement).
 fn adopt(key: &str, from: &str, learned: bool) -> Result<(), String> {
-    let look = if learned { raw::looks::Look::file(&learn::look_path(from)) } else { raw::looks::Look::built_in(from) }.ok_or("look not found")?;
+    let look = if learned { raw::looks::Look::file(&learn::look_path(from)) } else { rawdev::looks::find(from).map(|l| (*l).clone()) }.ok_or("look not found")?;
     let (camera, style) = key.split_once('/').unwrap_or((key, ""));
     let meta = serde_json::json!({"learned": false, "origin": ll::ORIGIN_BASE, "derived_from": from, "camera": camera, "style": style, "version": ll::FORMAT_VERSION, "created": today(), "interpolation": if look.tetrahedral() { "tetrahedral" } else { "trilinear" }});
     let (n, d) = look.table();
@@ -956,7 +961,7 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
         tags.push((t, GREEN));
     }
     if st.bundled.is_some() {
-        tags.push((crate::tr("MITGELIEFERT").into(), lr::BLUE_TEXT));
+        tags.push((if st.own { crate::tr("EIGENER LOOK") } else { crate::tr("MITGELIEFERT") }.into(), lr::BLUE_TEXT));
     }
     if st.hue_table {
         tags.push((crate::tr("FARBTONTABELLE").into(), lr::TEXT_DIM));
@@ -980,8 +985,8 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
     if let Some((_, Some(m))) = &st.learned {
         tip.push(crate::trf!("Gelernt: {a}", a = provenance_text(&m.to_string())));
     }
-    if let Some(b) = st.bundled.as_ref().and_then(|b| raw::looks::Look::built_in(b)) {
-        tip.push(crate::trf!("Mitgeliefert: {a}", a = provenance_text(&b.meta)));
+    if let Some(b) = st.bundled.as_ref().and_then(|b| rawdev::looks::find(b)) {
+        tip.push(if st.own { crate::trf!("Eigener Look aus dem Datenordner: {a}", a = provenance_text(&b.meta)) } else { crate::trf!("Mitgeliefert: {a}", a = provenance_text(&b.meta)) });
     }
     if st.hue_table {
         tip.push(crate::tr("Eingebaute Farbtontabelle der Standardentwicklung (an Kontrollfotos gemessen)").into());
@@ -1319,8 +1324,8 @@ fn looks_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, row: &StyleRow, st: &S
             }
         }
     }
-    if let Some(b) = st.bundled.as_ref().and_then(|b| raw::looks::Look::built_in(b)) {
-        line(ui, crate::tr("Mitgeliefert"), &format!("{}: {}", style_label(b.name.split_once('/').map_or("", |x| x.1)), provenance_text(&b.meta)));
+    if let Some(b) = st.bundled.as_ref().and_then(|b| rawdev::looks::find(b)) {
+        line(ui, if st.own { crate::tr("Eigener Look") } else { crate::tr("Mitgeliefert") }, &format!("{}: {}", style_label(b.name.split_once('/').map_or("", |x| x.1)), provenance_text(&b.meta)));
     }
     if st.hue_table {
         line(ui, crate::tr("Eingebaut"), crate::tr("Farbtontabelle der Standardentwicklung, an Kontrollfotos gemessen"));

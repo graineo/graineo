@@ -491,7 +491,7 @@ impl RawDoc {
         let std_look = raw::development::camera_look(&info.maker, &info.model).map(|l| Arc::new(raw::development::LookLut::new(&l)));
         let picture_style = raw::picture_style::read(path);
         let short = raw::picture_style::camera_short(&info.maker, &info.model);
-        let looks: Vec<String> = raw::looks::Look::names().into_iter().filter(|n| n.split('/').next() == Some(short.as_str())).map(str::to_string).collect();
+        let looks: Vec<String> = crate::looks::names_for_camera(&short);
         let auto_look = picture_style.as_ref().map(|b| format!("{}/{}", b.camera_short(), b.style)).filter(|n| looks.contains(n));
         let learn_key = picture_style.as_ref().filter(|b| raw::learn_look::learnable_style(b)).map(|b| format!("{}/{}", b.camera_short(), raw::learn_look::style_key(b)));
         let (info_rows, summary) = info_texts(&info, picture_style.as_ref(), as_shot);
@@ -673,7 +673,8 @@ impl RawDoc {
             return Some(l.clone());
         }
         // `film:<UUID>`: film profile (Camera Raw look with RGB table) from the user's files
-        let l = Arc::new(raw::looks::Look::built_in(&name).or_else(|| raw::film_profile::look_for_names(&name))?);
+        // own looks in the data folder before bundled ones (`crate::looks`)
+        let l = crate::looks::find(&name).or_else(|| raw::film_profile::look_for_names(&name).map(Arc::new))?;
         if name.starts_with("film:") {c.retain(|(n,_)| !n.contains(":film:"));}
         c.push((cache_name, l.clone()));
         Some(l)

@@ -4,7 +4,8 @@
 //! Storage (never in the library database): `<data folder>/looks/<camera>/<style>.x3look` (format `X3LOOK1`, 33³,
 //! tetrahedral; metadata: camera, style, photos, fit, version) and `<data folder>/looks/learned.json` (switched on,
 //! strength, revision, keys whose previews are due). A replaced or reset look is moved to
-//! `looks/<camera>/replaced/`, never deleted. Bundled looks are never touched.
+//! `looks/<camera>/replaced/`, never deleted. Bundled looks are never touched. Look files in the folder that are not
+//! listed in `learned.json` are the user's own looks (see [`crate::looks`]), not learned ones.
 //!
 //! A switched-on learned look is the standard development of its camera and style: for a neutral photo it replaces
 //! the built-in hue table and the per-camera saturation (see `render::Params::new`), so the two never act together.
@@ -121,7 +122,9 @@ fn recovered_state() -> State {
             }
             let Some(style) = p.file_stem().and_then(|s| s.to_str()) else { continue };
             let key = format!("{camera}/{style}");
-            if valid_key(&key) {
+            // only files the app installed (learned, derived, imported); the user's own looks placed in the folder
+            // carry none of these marks and stay own looks (see `crate::looks`)
+            if valid_key(&key) && Look::file(&p).is_some_and(|l| installed_by_app(&l.meta)) {
                 looks.push(Entry { key, enabled: true, amount: 1.0 });
             }
         }
@@ -130,6 +133,12 @@ fn recovered_state() -> State {
     let stale = looks.iter().map(|e| e.key.clone()).collect();
     let revision = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     State { revision, looks, stale }
+}
+
+/// Does the metadata of a look file carry the marks of a look the app installed (learned, derived from another look,
+/// imported)?
+fn installed_by_app(meta: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(meta).ok().is_some_and(|v| ["learned", "origin", "imported"].iter().any(|k| v.get(k).is_some()))
 }
 
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
@@ -1226,7 +1235,7 @@ pub fn read_shared(path: &Path, key: Option<&str>) -> Result<(String, Look), Str
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -1268,7 +1277,7 @@ mod tests {
     }
 
     /// The folder of the learned looks is global: the tests take turns.
-    static SERIAL: Mutex<()> = Mutex::new(());
+    pub(crate) static SERIAL: Mutex<()> = Mutex::new(());
 
     #[test]
     fn install_switch_reset_keep_files() {
