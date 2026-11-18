@@ -801,8 +801,9 @@ pub fn lens(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc) {
     ui.add_space(4.0);
 }
 
-/// Noise reduction (`crs:` sliders) – part of the "Detail" section.
-pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool) {
+/// Noise reduction (`crs:` sliders) – part of the "Detail" section; first the optional neural denoising
+/// ([`crate::ai_denoise_ui`]), then the classic sliders (they act on what it leaves).
+pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool, doc: Option<&rawdev::RawDoc>) {
     let dr = develop::settings::RawAdjust::default();
     if lr::group_label(ui, "Rauschminderung") {
         s.raw.nr_luma = dr.nr_luma;
@@ -810,7 +811,9 @@ pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool) 
         s.raw.nr_color = dr.nr_color;
         s.raw.nr_color_detail = dr.nr_color_detail;
         s.raw.false_color = dr.false_color;
+        s.raw.ai_denoise = dr.ai_denoise;
     }
+    crate::ai_denoise_ui::section(ui, s, doc);
     ui.add_enabled_ui(possible, |ui| {
         let f = |ui: &mut egui::Ui, label: &str, v: &mut f32, default_value: f32, hint: &str, on: bool| {
             ui.add_enabled_ui(on, |ui| {

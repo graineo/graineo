@@ -1326,7 +1326,8 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 return;
             }
             // graineo's own demosaicing only: the Apple engine's times would distort the measured speed of this Mac
-            if ok && !doc.finished && doc.apple.is_none() {
+            // (without the neural denoising, which is no measure of the development's speed)
+            if ok && !doc.finished && doc.apple.is_none() && rawdev::ai_denoise::percent(&settings) == 0 {
                 crate::perf_mode::simulate_slow(probe.seconds());
                 let xtrans = matches!(doc.info.sensor, raw::Sensor::XTrans);
                 crate::perf_mode::record(crate::perf_mode::Work::RawFull { xtrans }, px as f64 / 1e6, probe.seconds(), gpu, None, probe.foreign_load());
@@ -1506,6 +1507,9 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 let mp = (counts.width * counts.height) as f64 / 1e6;
                 let skip = if hit {
                     Some("cache hit")
+                } else if mode.ai > 0 {
+                    // the neural denoising is no measure of the Foveon pipeline's speed
+                    Some("with AI denoise")
                 } else if mode.prepared {
                     // Quattro: the preparation is shared with opening (running in parallel or done before), so the
                     // time of this job varies between 0.7 and 2.7 s on the reference computer – not comparable

@@ -7,7 +7,8 @@
 //! - A step is recognised by its difference (as before: a changed state once no mouse button is down). Commands
 //!   (preset, film, paste, auto, reset, rotate, eyedropper …) leave a name hint ([`hint`]) the next step takes over;
 //!   other steps are named after the fields that changed.
-//! - Steps on the same sliders within [`MERGE_SECONDS`] are merged ("Exposure (3×)").
+//! - Steps on the same sliders within [`MERGE_SECONDS`] are merged ("Exposure (3×)"). A reset by double-click
+//!   ([`reset_gesture`]) and every command step stay steps of their own: nothing merges into them or they into a slider step.
 //! - After a jump back and a new change the later steps fall away; an immediate ⌘Z brings them back with the cursor.
 //! - Photos outside the library, or with the setting "Verlauf speichern" off: the history lives only in memory.
 
@@ -184,6 +185,20 @@ impl Command {
 }
 
 static HINT: Mutex<Option<(usize, Hint, Instant)>> = Mutex::new(None);
+
+/// When a control was last reset by double-click (see [`reset_gesture`]).
+static RESET_GESTURE: Mutex<Option<Instant>> = Mutex::new(None);
+
+/// A control was reset to its default by double-click: the step recognised next is a step of its own, never merged
+/// with a slider step before or after it (the dragged value stays reachable with ⌘Z).
+pub fn reset_gesture() {
+    *RESET_GESTURE.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+}
+
+/// Was there a reset by double-click since the last step? (Taken once; old marks expire.)
+pub fn take_reset_gesture() -> bool {
+    RESET_GESTURE.lock().unwrap_or_else(|e| e.into_inner()).take().is_some_and(|t| t.elapsed() < HINT_LIFE)
+}
 
 /// Name of the photo whose settings were copied last ("Eingefügt von …").
 static CLIPBOARD: Mutex<Option<String>> = Mutex::new(None);
@@ -477,6 +492,11 @@ impl History {
     /// A change of the open photo from `before` to `after` (both as stored, view `Developed`): a new step, or merged
     /// into the newest one. Returns a status text when later steps fell away.
     pub fn record(&mut self, key: &Key, index: usize, before: &Settings, after: &Settings) -> Option<String> {
+        self.record_with(key, index, before, after, false)
+    }
+
+    /// Like [`Self::record`]; `own`: the change is a step of its own that never merges (a reset by double-click).
+    pub fn record_with(&mut self, key: &Key, index: usize, before: &Settings, after: &Settings, own: bool) -> Option<String> {
         if value(before) == value(after) {
             return None;
         }
@@ -484,10 +504,14 @@ impl History {
         self.photo(key);
         self.follow_with(key, index, before, false);
         let h = take_hint(index);
-        self.add(key, before, after, h)
+        self.add_with(key, before, after, h, own)
     }
 
     fn add(&mut self, key: &Key, before: &Settings, after: &Settings, h: Option<Hint>) -> Option<String> {
+        self.add_with(key, before, after, h, false)
+    }
+
+    fn add_with(&mut self, key: &Key, before: &Settings, after: &Settings, h: Option<Hint>, own: bool) -> Option<String> {
         let p = self.photo(key);
         let (bv, av) = (value(before), value(after));
         let t = now();
@@ -517,6 +541,7 @@ impl History {
         let fields = label.get("f").cloned();
         let top = p.steps.len() - 1;
         let merge = k == kind::SLIDER
+            && !own
             && p.mergeable
             && top > 0
             && p.steps[top].kind == kind::SLIDER
@@ -553,7 +578,8 @@ impl History {
             let step = Step { seq: p.next_seq(), time: t, kind: k.into(), label: Some(label.to_string()), patch: dh::diff(&bv, &av), count: 1, command: None };
             ops.push(Op::Put(step.clone()));
             p.steps.push(step);
-            p.mergeable = k == kind::SLIDER;
+            // a reset by double-click and command steps take no later slider step
+            p.mergeable = k == kind::SLIDER && !own;
         }
         p.cursor = p.steps.len() - 1;
         p.state = Some(Settings { view: View::Developed, ..after.clone() });
@@ -973,6 +999,7 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("raw.nr_color", "Rauschreduzierung", false),
     ("raw.nr_color_detail", "Rauschreduzierung", false),
     ("raw.false_color", "Rauschreduzierung", false),
+    ("raw.aiDenoise", "KI-Entrauschen", false),
     ("raw.calibration", "Kalibrierung", false),
     ("raw.lens", "Objektivkorrekturen", false),
     ("raw.lens_distortion", "Objektivkorrekturen", false),
@@ -1326,6 +1353,31 @@ mod tests {
         g.record(&k, 101, &s0, &s1);
         g.record(&k, 101, &s1, &s0);
         assert_eq!(g.changes(&k), 0);
+    }
+
+    /// A reset by double-click right after dragging the same slider stays a step of its own (before, the reset merged
+    /// into the drag and the dragged value was lost); a drag after the reset does not merge into it either.
+    #[test]
+    fn reset_gesture_is_its_own_step() {
+        let (mut h, k) = memory("reset");
+        let s0 = Settings::default();
+        let s1 = Settings { contrast: 0.2, ..s0.clone() };
+        let s2 = Settings { exposure: 0.7, ..s1.clone() };
+        let s3 = s1.clone();
+        let s4 = Settings { exposure: 0.4, ..s1.clone() };
+        h.record(&k, 107, &s0, &s1);
+        h.record(&k, 107, &s1, &s2);
+        h.record_with(&k, 107, &s2, &s3, true);
+        assert_eq!(h.changes(&k), 3, "drag and reset are two steps");
+        h.record(&k, 107, &s3, &s4);
+        assert_eq!(h.changes(&k), 4, "a drag after the reset is a new step");
+        assert_eq!(h.undo(&k, 107, &s4, false), Some(s3.clone()));
+        assert_eq!(h.undo(&k, 107, &s3, false), Some(s2.clone()), "the dragged value comes back");
+        assert_eq!(h.undo(&k, 107, &s2, false), Some(s1.clone()));
+        // the mark of the gesture is taken once
+        reset_gesture();
+        assert!(take_reset_gesture());
+        assert!(!take_reset_gesture());
     }
 
     /// After a jump back a new change drops the later steps; an immediate ⌘Z brings them back with the cursor.

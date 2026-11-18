@@ -100,6 +100,13 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
         println!("LRMASKS\t{}", serde_json::to_string(r)?);
     }
     rawdev::film_profiles::check(&s).map_err(|e| anyhow!(e))?;
+    // neural denoising: computed once at full resolution before the preview can show it (the app does this in the
+    // background, see rawdev::ai_denoise)
+    if rawdev::ai_denoise::percent(&s) > 0 {
+        let t = Instant::now();
+        doc.full_base_for(&s).map_err(|e| anyhow!(e))?;
+        println!("AIDENOISE\t{:.1} s\tready {}\t{}", t.elapsed().as_secs_f64(), rawdev::ai_denoise::ready(&doc), rawdev::ai_denoise::error_for(&doc.path).unwrap_or_default());
+    }
     // preview: first the detail stage (noise/lens), then measure slider runs
     let t = Instant::now();
     let st = doc.preview_stage(&s);

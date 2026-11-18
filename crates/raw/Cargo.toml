@@ -22,6 +22,12 @@ serde_json = "1"
 legacy_names = { path = "../legacy_names" }
 # color tables of the film profiles (zlib)
 flate2 = "1"
+# ONNX reader for the neural denoising (own, hand-written protobuf; ai_denoise.rs)
+faces = { path = "../faces" }
+
+# matrix products of the neural denoising off macOS (macOS: Accelerate)
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+matrixmultiply = { version = "0.3", default-features = false, features = ["std"] }
 
 # macOS: the system RAW engine (Core Image CIRAWFilter) for comparisons, called through objc2 (see src/apple.rs)
 [target.'cfg(target_os = "macos")'.dependencies]

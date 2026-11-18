@@ -469,6 +469,7 @@ fn assemble(path: &Path, dev: Arc<AppleDev>, preview: Arc<Stage>) -> RawDoc {
         matched: Mutex::new(None),
         apple: Some(dev),
         engine_request: None,
+        ai: Default::default(),
     }
 }
 

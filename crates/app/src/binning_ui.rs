@@ -40,6 +40,23 @@ pub fn default_for(cal: &Calibration) -> Binning {
     if develop::quattro::binning_camera(cal).is_some() { standard() } else { Binning::Auto }
 }
 
+/// Noise sliders (luminance, colour) greyed out? Only for Quattro: there the noise reduction runs in the
+/// preparation (x3fuse-core), and `denoise::denoise` is a no-op (no noise model), so the sliders could only switch
+/// that preparation step off. `None` = not a Sigma photo (the Bayer/X-Trans noise controls are separate).
+pub fn noise_sliders_locked(model: Option<develop::calib::Model>) -> bool {
+    model.is_some_and(|m| m.is_quattro())
+}
+
+/// Tooltip of the greyed-out sliders; `switched_off` = stored values differ from the middle (they switch the
+/// preparation's noise reduction off, as before).
+pub fn noise_locked_tip(switched_off: bool) -> &'static str {
+    if switched_off {
+        "Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab."
+    } else {
+        "Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung."
+    }
+}
+
 /// Is the photo edited ("edited" mark in filmstrip and grid)? Like `s != Settings::default()`, but the binning counts
 /// as unedited while it is the default for new photos ([`standard`]), so an untouched Quattro photo with the default
 /// "Aus" carries no mark.
@@ -269,6 +286,17 @@ pub fn scale_region(r: [usize; 4], scale: [f32; 2], size: [usize; 2]) -> [usize;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn noise_sliders_locked_only_for_quattro() {
+        use develop::calib::Model;
+        assert!(!noise_sliders_locked(Some(Model::Dp)));
+        assert!(!noise_sliders_locked(Some(Model::Sd1)));
+        assert!(noise_sliders_locked(Some(Model::DpQuattro)));
+        assert!(noise_sliders_locked(Some(Model::SdQuattro)));
+        assert!(!noise_sliders_locked(Some(Model::Classic)));
+        assert!(!noise_sliders_locked(None));
+    }
 
     #[test]
     fn default_binning_is_not_an_edit() {

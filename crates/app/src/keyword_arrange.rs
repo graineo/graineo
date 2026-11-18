@@ -393,12 +393,14 @@ impl LibraryView {
         }
         let alt = ui.input(|i| i.modifiers.alt);
         let mut scroll = egui::ScrollArea::vertical().id_salt("kw-arrange-list").auto_shrink([false; 2]).max_height(LIST_H);
+        let mut placed = false;
         if let Some(target) = a.scroll_to.take() {
             if let Some(i) = rows.iter().position(|r| r.id == target) {
                 scroll = scroll.vertical_scroll_offset((i as f32 * ROW_H - LIST_H / 2.0).max(0.0));
+                placed = true;
             }
         }
-        scroll.show_rows(ui, ROW_H, rows.len(), |ui, range| {
+        crate::lr::with_placed_scroll(ui, placed, |ui| scroll.show_rows(ui, ROW_H, rows.len(), |ui, range| {
             for i in range {
                 let row = &rows[i];
                 let Some(k) = tree.by_id.get(&row.id) else { continue };
@@ -490,7 +492,7 @@ impl LibraryView {
                     a.mode = Mode::Rename(k.name.clone());
                 }
             }
-        });
+        }));
     }
 
     /// Carry out what the dialog asked for: questions open above it, changes run as management jobs (⌘Z).

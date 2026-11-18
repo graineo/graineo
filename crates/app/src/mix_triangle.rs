@@ -99,6 +99,7 @@ pub fn show(ui: &mut egui::Ui, mix: &mut [f32; 3]) -> bool {
     let mut changed = false;
     let free = ui.input(|i| i.modifiers.alt);
     if resp.double_clicked() {
+        crate::history::reset_gesture();
         *mix = MARKS[6];
         changed = true;
     } else if resp.is_pointer_button_down_on() || resp.clicked() {

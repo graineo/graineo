@@ -4421,7 +4421,7 @@ unvollständig · {a} von {b}	incompleto · {a} de {b}
 nicht installiert · {a}	no instalado · {a}
 Gesperrt, solange {w} läuft ({p} %)	Bloqueado mientras se ejecuta {w} ({p} %)
 Gesperrt, solange {w} läuft	Bloqueado mientras se ejecuta {w}
-Lizenz: {l} · Quelle: huggingface.co/{r}	Licencia: {l} · Fuente: huggingface.co/{r}
+Lizenz: {l} · Quelle: {r}	Licencia: {l} · Fuente: {r}
 Das Suchmodell vergleicht Suchwörter mit dem Inhalt der Fotos.	El modelo de búsqueda compara las palabras buscadas con el contenido de las fotos.
 • **Schnell – klein** – wenig Speicher, liest neue Fotos schnell ein, versteht Deutsch schwächer\n• **Ausgewogen** – deutlich bessere Treffer in vielen Sprachen\n• **Beste Treffer – groß** – am genauesten, braucht viel Speicher und Zeit\n\nEin neues Modell liest alle Fotos einmal im Hintergrund ein; die Suche nutzt bis dahin das bisherige. Zurückwechseln geht sofort, eingelesene Fotos bleiben erhalten.\n\n### Qualität\nDie Skala folgt einer eigenen Messung: 1000 Fotos mit je einer kurzen Beschreibung (Testsatz XTD10); gezählt wird, wie oft das gesuchte Foto auf Platz 1 steht (Werte in der Karte jedes Modells). Die deutschen Beschreibungen sind teils maschinell übersetzt; bei eigenen Fotos liegen die Werte anders, die Reihenfolge bleibt.\n\n### Tempo\nGemessen auf einem Mac mit M1 Pro. Das Einlesen läuft gedrosselt mit halber Kraft, damit der Mac leise bleibt.	• **Rápido – pequeño** – poca memoria, lee rápido las fotos nuevas, entiende peor el alemán\n• **Equilibrado** – resultados claramente mejores en muchos idiomas\n• **Mejores resultados – grande** – el más preciso, necesita mucha memoria y tiempo\n\nUn modelo nuevo lee todas las fotos una vez en segundo plano; mientras tanto la búsqueda usa el anterior. Volver atrás es inmediato y las fotos ya leídas se conservan.\n\n### Calidad\nLa escala sigue una medición propia: 1000 fotos con una breve descripción cada una (conjunto de prueba XTD10); se cuenta cuántas veces la foto buscada queda en primer lugar (valores en la tarjeta de cada modelo). Las descripciones alemanas están en parte traducidas automáticamente; con tus propias fotos los valores cambian, el orden se mantiene.\n\n### Velocidad\nMedida en un Mac con M1 Pro. La lectura va limitada a media potencia para que el Mac siga en silencio.
 Suchmodell	Modelo de búsqueda
@@ -6303,7 +6303,7 @@ Lizenztext lesen	Leer el texto de la licencia
 Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	El modelo no lo proporciona graineo: se carga a petición tuya desde su fuente original ({s}). Todas las funciones también funcionan con el modelo libre.
 Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	Uso graineo con este modelo exclusivamente sin fines comerciales
 Nur für nicht-kommerzielle Nutzung · {l}	Solo uso no comercial · {l}
-{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}. Licencia: {l} · Fuente: huggingface.co/{r} · no proporcionado por graineo{c}
+{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}	{p}. Licencia: {l} · Fuente: {r} · no proporcionado por graineo{c}
  · nicht-kommerzielle Nutzung bestätigt	 · uso no comercial confirmado
 Tiefe (Depth Anything V2 Small)	Profundidad (Depth Anything V2 Small)
 Tiefe genauer (Depth Anything V2 Base)	Profundidad más precisa (Depth Anything V2 Base)
@@ -6446,3 +6446,32 @@ Nicht neutral messbar	No neutralizable
 Außerhalb der Skala	Fuera de la escala
 {s}×{s} · {n} Proben	{s}×{s} · {n} muestras
 Wohl nicht neutral	Quizá no sea neutro
+Schnellsammlung geleert	Colección rápida vaciada
+Name des Gesichts entfernt	Nombre de la cara eliminado
+Gesicht „{a}“ benannt	Cara nombrada «{a}»
+Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Ajuste «{a}» eliminado – ⌘Z lo recupera
+Rückgängig: Vorgabe „{a}“ gelöscht	Deshacer: ajuste «{a}» eliminado
+{a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} de {b} fotos visibles, las demás las oculta la fuente de la izquierda o un filtro
+Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	En Quattro, la reducción de ruido ya se aplica en la preparación.
+Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	En Quattro, la reducción de ruido se aplica en la preparación; los valores guardados la desactivan.
+rechnet {p} %	calculando {p} %
+Modul fehlt	falta el módulo
+Modul laden …	Cargar módulo…
+Lädt das Modell RawNIND (GPL-3.0, 58 MB) in Einstellungen → Module	Carga el modelo RawNIND (GPL-3.0, 58 MB) en Ajustes → Módulos
+KI-Entrauschen nicht möglich: {e}	Reducción de ruido IA no posible: {e}
+Entrauscht das RAW mit einem neuronalen Netz, einmal in voller Auflösung.	Reduce el ruido del RAW con una red neuronal, una vez a resolución completa.
+Ein kleines Netz (RawNIND, GPL-3.0), trainiert auf echten Rauschpaaren, rechnet nach dem Entmosaiken auf den linearen Daten. Es erfindet keine Motive; bei sehr starkem Rauschen können glatte Flächen leicht fleckig wirken, dann die Stärke senken. Die Rauschregler darunter wirken auf das Restrauschen. Dauer auf einem M1 Pro etwa 18 s je 24 MP; das Ergebnis bleibt, solange das Foto offen ist. Das Modell lädt man in Einstellungen → Module.	Una red pequeña (RawNIND, GPL-3.0), entrenada con pares de ruido reales, trabaja sobre los datos lineales tras el desmosaicado. No inventa motivos; con ruido muy fuerte, las zonas lisas pueden verse algo manchadas: entonces baja la intensidad. Los reguladores de ruido de abajo actúan sobre el ruido restante. Unos 18 s por 24 MP en un M1 Pro; el resultado se conserva mientras la foto está abierta. El modelo se carga en Ajustes → Módulos.
+KI-Entrauschen	Reducción de ruido IA
+Anteil des KI-entrauschten Bildes	Proporción de la imagen con reducción de ruido IA
+KI-Rauschminderung auf den RAW-Daten	Reducción de ruido IA sobre los datos RAW
+KI-Entrauschen (RawNIND)	Reducción de ruido IA (RawNIND)
+Entwickeln: Rauschen von RAW-Fotos mit einem neuronalen Netz mindern	Revelar: reducir el ruido de fotos RAW con una red neuronal
+Wirkt nur mit Foveon-Detail und in Farbe	Solo actúa con el detalle Foveon activado y en color
+noch etwa {m} min	quedan unos {m} min
+noch etwa {s} s	quedan unos {s} s
+Rechnet einmal in voller Auflösung: {p} %, {r} – die Vorschau zeigt das Foto bis dahin ohne	Calculando una vez a resolución completa: {p} %, {r}; hasta entonces la vista previa muestra la foto sin ello
+Rechnet einmal in voller Auflösung: {p} % – die Vorschau zeigt das Foto bis dahin ohne	Calculando una vez a resolución completa: {p} %; hasta entonces la vista previa muestra la foto sin ello
+KI-Entrauschen {p} % · {r}	Reducción de ruido IA {p} % · {r}
+KI-Entrauschen {p} %	Reducción de ruido IA {p} %
+KI-Entrauschen fertig · {s} s	Reducción de ruido IA lista · {s} s
+Fertig nach {s} s	Listo tras {s} s

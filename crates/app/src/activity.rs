@@ -158,6 +158,11 @@ impl App {
         if self.darkroom.contact.an && self.darkroom.contact.computing() {
             v.push(Task::new(Rank::ContactPrint, crate::tr("Kontaktabzug wird berechnet").to_string()));
         }
+        // neural denoising of the photo on screen (percent, time still to go), also with the panel closed
+        let current = self.current.as_ref().and_then(|c| self.entries.get(c.index)).map(|e| e.path.clone());
+        if let Some(t) = crate::ai_denoise_ui::activity(current.as_deref()) {
+            v.push(Task::new(Rank::Photo, t));
+        }
         if !self.in_grid() {
             if let Some(e) = self.loading.and_then(|i| self.entries.get(i)) {
                 v.push(Task::new(Rank::Photo, crate::trf!("Lädt {a}", a = e.name)));

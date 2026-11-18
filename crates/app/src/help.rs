@@ -417,6 +417,11 @@ static RAW_SHADOWS: Card = card("", "Wirkt örtlich in dunklen Bildbereichen, um
 static RAW_WHITES: Card = card("", "Verschiebt nur die hellsten Töne (je Pixel, nicht örtlich): + lässt Lichter früher weiß werden, − holt sie zurück.", None);
 static RAW_BLACK: Card = card("", "Verschiebt nur die tiefsten Töne: − macht Schwarz satter, + hebt es an.", None);
 static RAW_TEXTURE: Card = card("", "Verstärkt oder glättet Details von wenigen Pixeln auf der Helligkeit – zwischen Schärfen und Klarheit.\n\n### Tipp\nBei 100 % beurteilen.", None);
+static AI_DENOISE: Card = card(
+    "Entrauscht das RAW mit einem neuronalen Netz, einmal in voller Auflösung.",
+    "Ein kleines Netz (RawNIND, GPL-3.0), trainiert auf echten Rauschpaaren, rechnet nach dem Entmosaiken auf den linearen Daten. Es erfindet keine Motive; bei sehr starkem Rauschen können glatte Flächen leicht fleckig wirken, dann die Stärke senken. Die Rauschregler darunter wirken auf das Restrauschen. Dauer auf einem M1 Pro etwa 18 s je 24 MP; das Ergebnis bleibt, solange das Foto offen ist. Das Modell lädt man in Einstellungen → Module.",
+    None,
+);
 static RAW_NR: Card = card("", "Rauschminderung auf dem demosaikierten Bild mit einem aus dem Bild geschätzten Rauschmodell, getrennt nach Helligkeit und Farbe. Detail schont feine Strukturen. Standard: Farbe 25, Luminanz 0.", None);
 /// Test shots for a new lens (assistant "Objektiv hinzufügen").
 pub static LENS_SHOTS: Card = card("", "• **Gitter** (Verzeichnung, Farbsäume): ein Gitter oder gerade Linien über das ganze Bild bis in die Ecken, Kamera parallel zur Fläche, Stativ, Blende f/8. Mehrere Aufnahmen derselben Brennweite zählen zusammen.\n• **Weißfeld** (Vignettierung, Farbstich): eine gleichmäßig helle Fläche, zum Beispiel weißes Papier oder ein Diffusor vor dem Objektiv, bewusst unscharf, nichts ausgebrannt. Je Blende und Brennweite eine Aufnahme.\n• **Paar:** danach dieselbe Aufnahme mit um 180° gedrehter Kamera. So hebt sich ein Helligkeitsverlauf der Beleuchtung auf. Ohne Paar bleibt die Güte bei höchstens 70.\n• **Immer:** RAW, ISO 100, Autofokus und Bildstabilisator aus, die Objektivkorrektur der Kamera aus.\n\n### Sigma-X3F\nDer Farbstich wird je Sensorschicht gemessen (obere, mittlere, untere Schicht).", None);
@@ -545,6 +550,8 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Struktur" => &RAW_TEXTURE,
         "Luminanz" | "Luminanz-Detail" | "Farbe" | "Farb-Detail" if hint.to_lowercase().contains("rausch") || hint.contains("Höher") => &RAW_NR,
         "Verzeichnung" | "Vignettierung" => &RAW_LENS,
+        "KI-Entrauschen" => &AI_DENOISE,
+        "Stärke" if hint == "Anteil des KI-entrauschten Bildes" => &AI_DENOISE,
         "Temperatur" => &TEMPERATURE,
         "Tönung" => &TINT,
         "Belichtung" => &EXPOSURE,

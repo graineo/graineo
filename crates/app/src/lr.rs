@@ -313,6 +313,7 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
     };
     if enabled {
         if name.double_clicked() || track.double_clicked() {
+            crate::history::reset_gesture();
             *value = default;
         } else if track.drag_started() || track.clicked() {
             if let Some(p) = track.interact_pointer_pos() {
@@ -424,6 +425,7 @@ fn slider_full(
 
     if enabled {
         if name.double_clicked() || track.double_clicked() {
+            crate::history::reset_gesture();
             *value = default;
             operated = true;
         } else if track.drag_started() || track.clicked() {
@@ -1525,6 +1527,7 @@ pub fn color_wheel(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], size: f
         ui.painter().circle_stroke(c, r, Stroke::new(1.0, Color32::from_gray(0x50)));
         let shift = ui.input(|i| i.modifiers.shift);
         if resp.double_clicked() {
+            crate::history::reset_gesture();
             value[1] = 0.0;
         } else if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
             let d = p - c;
@@ -2523,6 +2526,21 @@ const TIP_WARM: f32 = 0.6;
 /// while moving on from another tooltip; below the control (above it when there is no room), so it never covers what
 /// the pointer is on; disappears on a click. Keep the text short; a keyboard shortcut goes in brackets, see
 /// [`with_shortcut`] and [`tip_key`].
+/// Runs `f` (the `ScrollArea::show` call) and, when `placed` (the app set the scroll offset itself this frame),
+/// with rubber band and coasting off. egui 0.37 still knows the content height of the previous frame in such a
+/// frame; a target behind it counts as over-scrolling, the rubber band builds a huge velocity and the area coasts
+/// for seconds to an unrelated place. `decay_time` 0 also clears the stored velocity.
+pub fn with_placed_scroll<R>(ui: &mut egui::Ui, placed: bool, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let kinetic = ui.spacing().scroll.kinetic;
+    if placed {
+        ui.spacing_mut().scroll.kinetic.rubber_band = false;
+        ui.spacing_mut().scroll.kinetic.decay_time = 0.0;
+    }
+    let r = f(ui);
+    ui.spacing_mut().scroll.kinetic = kinetic;
+    r
+}
+
 pub fn hover_tip(ui: &egui::Ui, resp: &egui::Response, text: &str) {
     if text.is_empty() {
         return;
@@ -2662,6 +2680,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
 
     if enabled {
         if name.double_clicked() || track.double_clicked() {
+            crate::history::reset_gesture();
             *value = default.clone();
         } else if track.clicked() || track.drag_started() || track.dragged() {
             if let Some(p) = track.interact_pointer_pos() {

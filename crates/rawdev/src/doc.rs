@@ -48,7 +48,7 @@ pub struct Stage {
 }
 
 impl Stage {
-    fn new(px: Vec<[f32; 3]>, w: usize, h: usize, profile: Option<noise::Profile>) -> Self {
+    pub(crate) fn new(px: Vec<[f32; 3]>, w: usize, h: usize, profile: Option<noise::Profile>) -> Self {
         Self {
             px,
             w,
@@ -179,6 +179,8 @@ pub struct DetailKey {
     pin: u64,
     /// Apple path: rendering of the engine (version, white balance; [`apple::AppleDev::key`]); 0 = graineo
     apple: u64,
+    /// neural denoising in percent ([`crate::ai_denoise`]); 0 = off
+    pub(crate) ai: u32,
 }
 
 /// Registry that turns the assignment text (`"id@version"`, `""`) into a number for the `Copy` key and back.
@@ -216,6 +218,7 @@ impl DetailKey {
             lens: r.lens.then(|| ((r.lens_distortion * 100.0).round() as u32, (r.lens_vignette * 100.0).round() as u32, r.lens_ca)),
             pin: pin_hash(r.lens_profile.as_deref()),
             apple: 0,
+            ai: crate::ai_denoise::percent(s),
         }
     }
     fn noise(&self) -> NoiseReduction {
@@ -282,6 +285,8 @@ pub struct RawDoc {
     pub apple: Option<Arc<apple::AppleDev>>,
     /// the value of `RawAdjust::engine` this document was opened for ([`Self::engine_fits`])
     pub engine_request: Option<String>,
+    /// neural denoising of this photo ([`crate::ai_denoise`]), computed once at full resolution
+    pub(crate) ai: crate::ai_denoise::Caches,
 }
 
 pub(crate) fn quarters(o: u16) -> u8 {
@@ -532,6 +537,7 @@ impl RawDoc {
             matched: Mutex::new(None),
             apple: None,
             engine_request: None,
+            ai: Default::default(),
         }))
     }
 
@@ -580,6 +586,7 @@ impl RawDoc {
             matched: Mutex::new(None),
             apple: None,
             engine_request: None,
+            ai: Default::default(),
         })
     }
 
@@ -603,6 +610,7 @@ impl RawDoc {
         *self.full.lock().unwrap() = None;
         *self.full_detail.lock().unwrap() = None;
         *self.file.lock().unwrap() = None;
+        self.ai.release();
     }
 
     /// Base exposure for these settings: with Lightroom start values without the part Lightroom does not apply, so a
@@ -745,6 +753,10 @@ impl RawDoc {
         let mut k = DetailKey::from_settings(s);
         k.pin = pin_hash(self.lens_pin(s).as_deref());
         k.apple = self.apple.as_ref().map_or(0, |a| a.key(s));
+        // neural denoising only where it can run (RAW decoded by graineo, module installed); otherwise off
+        if k.ai > 0 && !(crate::ai_denoise::applicable(self) && crate::ai_denoise::module_ready()) {
+            k.ai = 0;
+        }
         if self.finished {
             let on = s.raw.lens_image.unwrap_or_else(|| self.lens_status().default_on);
             if !on {
@@ -882,7 +894,7 @@ impl RawDoc {
     }
 
     pub fn preview_stage(&self, s: &Settings) -> Arc<Stage> {
-        let key = self.detail_key(s);
+        let key = self.preview_key(s);
         {
             let mut c = self.preview_detail.lock().unwrap();
             if let Some(i) = c.iter().position(|(k, _)| *k == key) {
@@ -897,6 +909,7 @@ impl RawDoc {
                 eprintln!("apple raw preview {}: {e}", self.path.display());
                 self.preview.clone()
             }),
+            None if key.ai > 0 => crate::ai_denoise::preview(self, key.ai).unwrap_or_else(|| self.preview.clone()),
             None => self.preview.clone(),
         };
         let st = Arc::new(self.detail(&base, key, false));
@@ -907,9 +920,19 @@ impl RawDoc {
         st
     }
 
+    /// Key of the preview's detail stage: while the neural denoising is still being computed, the preview shows the
+    /// photo without it ([`crate::ai_denoise`]).
+    fn preview_key(&self, s: &Settings) -> DetailKey {
+        let mut key = self.detail_key(s);
+        if key.ai > 0 && !self.ai.ready() {
+            key.ai = 0;
+        }
+        key
+    }
+
     /// Does the preview detail stage already have this state?
     pub fn preview_ready(&self, s: &Settings) -> bool {
-        let key = self.detail_key(s);
+        let key = self.preview_key(s);
         self.preview_detail.lock().unwrap().iter().any(|(k, _)| *k == key)
     }
 
@@ -958,7 +981,11 @@ impl RawDoc {
     pub fn full_base_for(&self, s: &Settings) -> Result<Arc<Stage>, String> {
         match &self.apple {
             Some(a) => a.full_for(s),
-            None => self.full_base(),
+            None => match self.detail_key(s).ai {
+                0 => self.full_base(),
+                // neural denoising: computed once at full resolution, mixed with the original
+                p => crate::ai_denoise::base(self, p),
+            },
         }
     }
 
@@ -1190,7 +1217,7 @@ impl RawDoc {
         }
         let key = self.detail_key(s);
         // X-Trans: mosaic directly to the GPU (demosaic, detail, output without a detour via the CPU)
-        if self.info.sensor == raw::Sensor::XTrans && std::env::var("GRAINEO_GPU_DEMOSAIC").as_deref() != Ok("0") {
+        if self.info.sensor == raw::Sensor::XTrans && key.ai == 0 && std::env::var("GRAINEO_GPU_DEMOSAIC").as_deref() != Ok("0") {
             if let Some(img) = self.render_full_gpu_mosaic(s, se, key)? {
                 return Ok(Some(img));
             }

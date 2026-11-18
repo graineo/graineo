@@ -41,7 +41,7 @@ Close-ups: [Foveon detail](https://graineo.github.io/img/closeup-foveon.jpg) · 
 
 ## Get it
 
-graineo runs on macOS 12 or later (Apple silicon and Intel). A Windows build exists and is experimental. Downloads are published under [Releases](https://github.com/graineo/graineo/releases).
+graineo runs on macOS 12 or later (Apple silicon and Intel). Windows and Linux (x86_64 and aarch64) builds exist and are experimental. Downloads are published under [Releases](https://github.com/graineo/graineo/releases).
 
 ### Build from source
 

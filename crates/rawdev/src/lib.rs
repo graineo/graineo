@@ -5,6 +5,7 @@
 //! the look stage (curve, color mixer, clarity, color grading, effects), film and cropping
 //! from `crates/develop` – this crate only holds the glue and the sliders that exist only for RAWs.
 
+pub mod ai_denoise;
 pub mod doc;
 pub mod export;
 pub mod false_color;

@@ -81,6 +81,7 @@ pub(crate) fn dev_catalog() -> std::path::PathBuf {
         .unwrap_or_else(|| sysdirs::home().unwrap_or_default().join("Pictures/Lightroom/Lightroom Catalog.lrcat"))
 }
 mod rawapp;
+mod ai_denoise_cmd;
 mod apple_raw_cmd;
 mod color_chart_raw;
 mod gpu_compare;
@@ -94,6 +95,8 @@ mod camera;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // neural denoising for Sigma bases (only acts when a setting asks for it)
+    rawdev::ai_denoise::install_sigma();
     if matches!(args.first().map(String::as_str), Some("apple-photos")) {
         if args.get(1).map(String::as_str) == Some("--sync") {
             return apple_photos_sync_cmd();
@@ -264,6 +267,10 @@ fn main() -> Result<()> {
     // color fidelity against a ColorChecker in the shot (WB on patch 22, exposure on patch 20), see color_chart_raw.rs
     if cmd == "color-chart-raw" {
         return color_chart_raw::run(file, &args[2..]);
+    }
+    // neural denoising: one tile for the comparison with a reference runtime, time per tile (ai_denoise_cmd.rs)
+    if cmd == "ai-denoise" {
+        return ai_denoise_cmd::run(&args[1..]);
     }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);

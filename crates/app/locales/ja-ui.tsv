@@ -4421,7 +4421,7 @@ unvollständig · {a} von {b}	不完全 · {a} / {b}
 nicht installiert · {a}	未インストール · {a}
 Gesperrt, solange {w} läuft ({p} %)	{w} の実行中はロック（{p} %）
 Gesperrt, solange {w} läuft	{w} の実行中はロック
-Lizenz: {l} · Quelle: huggingface.co/{r}	ライセンス: {l} · 入手元: huggingface.co/{r}
+Lizenz: {l} · Quelle: {r}	ライセンス: {l} · 入手元: {r}
 Das Suchmodell vergleicht Suchwörter mit dem Inhalt der Fotos.	検索モデルは検索語と写真の内容を照合します。
 • **Schnell – klein** – wenig Speicher, liest neue Fotos schnell ein, versteht Deutsch schwächer\n• **Ausgewogen** – deutlich bessere Treffer in vielen Sprachen\n• **Beste Treffer – groß** – am genauesten, braucht viel Speicher und Zeit\n\nEin neues Modell liest alle Fotos einmal im Hintergrund ein; die Suche nutzt bis dahin das bisherige. Zurückwechseln geht sofort, eingelesene Fotos bleiben erhalten.\n\n### Qualität\nDie Skala folgt einer eigenen Messung: 1000 Fotos mit je einer kurzen Beschreibung (Testsatz XTD10); gezählt wird, wie oft das gesuchte Foto auf Platz 1 steht (Werte in der Karte jedes Modells). Die deutschen Beschreibungen sind teils maschinell übersetzt; bei eigenen Fotos liegen die Werte anders, die Reihenfolge bleibt.\n\n### Tempo\nGemessen auf einem Mac mit M1 Pro. Das Einlesen läuft gedrosselt mit halber Kraft, damit der Mac leise bleibt.	• **高速・小** – 少ないメモリ、新しい写真をすばやく読み込み、ドイツ語の理解は弱め\n• **バランス** – 多くの言語で検索精度が大幅に向上\n• **最高精度・大** – 最も正確、多くのメモリと時間が必要\n\n新しいモデルはバックグラウンドですべての写真を一度読み込みます。それまで検索は以前のモデルを使います。以前のモデルにはすぐに戻せ、読み込み済みの写真は残ります。\n\n### 品質\n尺度は独自の測定に基づきます：短い説明が1つずつ付いた1000枚の写真（テストセット XTD10）で、探している写真が1位になる割合を数えます（値は各モデルのカードに表示）。ドイツ語の説明は一部機械翻訳です。ご自身の写真では値は異なりますが、順位は変わりません。\n\n### 速度\nM1 Pro 搭載の Mac で測定。Mac が静かに動作するよう、読み込みは処理能力を半分に抑えて実行します。
 Suchmodell	検索モデル
@@ -6303,7 +6303,7 @@ Lizenztext lesen	ライセンス本文を読む
 Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	このモデルは graineo が提供するものではなく、ご要望に応じて元の配布元（{s}）から読み込みます。すべての機能はフリーのモデルでも使えます。
 Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	このモデルを使った graineo は非商用目的でのみ使用します
 Nur für nicht-kommerzielle Nutzung · {l}	非商用のみ · {l}
-{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}。ライセンス: {l} · 配布元: huggingface.co/{r} · graineo からは提供されません{c}
+{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}	{p}。ライセンス: {l} · 配布元: {r} · graineo からは提供されません{c}
  · nicht-kommerzielle Nutzung bestätigt	 · 非商用利用を確認済み
 Tiefe (Depth Anything V2 Small)	深度（Depth Anything V2 Small）
 Tiefe genauer (Depth Anything V2 Base)	深度・高精度（Depth Anything V2 Base）
@@ -6446,3 +6446,32 @@ Nicht neutral messbar	ニュートラルにできない
 Außerhalb der Skala	スケール外
 {s}×{s} · {n} Proben	{s}×{s} · {n} サンプル
 Wohl nicht neutral	ニュートラルではない可能性
+Schnellsammlung geleert	クイックコレクションを空にしました
+Name des Gesichts entfernt	顔の名前を削除しました
+Gesicht „{a}“ benannt	顔に「{a}」と名前を付けました
+Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	プリセット「{a}」を削除しました – ⌘Z で戻せます
+Rückgängig: Vorgabe „{a}“ gelöscht	取り消し: プリセット「{a}」の削除
+{a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} / {b} 枚を表示中。残りは左のソースまたはフィルターで非表示です
+Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	Quattro ではノイズ低減は現像の準備段階で既に行われます。
+Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Quattro ではノイズ低減は準備段階で行われます。保存された値はそれをオフにします。
+rechnet {p} %	計算中 {p} %
+Modul fehlt	モジュールなし
+Modul laden …	モジュールを読み込む…
+Lädt das Modell RawNIND (GPL-3.0, 58 MB) in Einstellungen → Module	RawNIND モデル（GPL-3.0、58 MB）を 設定 → モジュール で読み込みます
+KI-Entrauschen nicht möglich: {e}	AI ノイズ除去できません: {e}
+Entrauscht das RAW mit einem neuronalen Netz, einmal in voller Auflösung.	ニューラルネットワークで RAW のノイズを除去します（フル解像度で一度だけ）。
+Ein kleines Netz (RawNIND, GPL-3.0), trainiert auf echten Rauschpaaren, rechnet nach dem Entmosaiken auf den linearen Daten. Es erfindet keine Motive; bei sehr starkem Rauschen können glatte Flächen leicht fleckig wirken, dann die Stärke senken. Die Rauschregler darunter wirken auf das Restrauschen. Dauer auf einem M1 Pro etwa 18 s je 24 MP; das Ergebnis bleibt, solange das Foto offen ist. Das Modell lädt man in Einstellungen → Module.	実際のノイズのペアで学習した小さなネットワーク（RawNIND、GPL-3.0）が、デモザイク後のリニアデータで処理します。被写体を作り出すことはありません。ノイズが非常に強いと、平坦な部分がややまだらに見えることがあります。その場合は強さを下げてください。下のノイズスライダーは残ったノイズに作用します。M1 Pro で 24 MP あたり約 18 秒。写真を開いている間、結果は保持されます。モデルは 設定 → モジュール で読み込みます。
+KI-Entrauschen	AI ノイズ除去
+Anteil des KI-entrauschten Bildes	AI ノイズ除去した画像の割合
+KI-Rauschminderung auf den RAW-Daten	RAW データでの AI ノイズ低減
+KI-Entrauschen (RawNIND)	AI ノイズ除去（RawNIND）
+Entwickeln: Rauschen von RAW-Fotos mit einem neuronalen Netz mindern	現像: ニューラルネットワークで RAW 写真のノイズを低減
+Wirkt nur mit Foveon-Detail und in Farbe	Foveon ディテールがオンでカラーのときのみ有効
+noch etwa {m} min	残り約 {m} 分
+noch etwa {s} s	残り約 {s} 秒
+Rechnet einmal in voller Auflösung: {p} %, {r} – die Vorschau zeigt das Foto bis dahin ohne	フル解像度で一度だけ計算中: {p} %、{r} – それまでプレビューは適用前の写真です
+Rechnet einmal in voller Auflösung: {p} % – die Vorschau zeigt das Foto bis dahin ohne	フル解像度で一度だけ計算中: {p} % – それまでプレビューは適用前の写真です
+KI-Entrauschen {p} % · {r}	AI ノイズ除去 {p} % · {r}
+KI-Entrauschen {p} %	AI ノイズ除去 {p} %
+KI-Entrauschen fertig · {s} s	AI ノイズ除去 完了 · {s} 秒
+Fertig nach {s} s	{s} 秒で完了

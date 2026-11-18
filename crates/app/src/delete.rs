@@ -82,14 +82,47 @@ pub struct State {
 /// Sidecars of an image (X3F settings, XMP), as far as present. The XMP follows the library's naming: a JPEG/HEIC/TIFF
 /// next to a same-named RAW has `NAME.JPG.xmp`; `NAME.xmp` then belongs to the RAW and is not touched.
 fn companions(p: &Path) -> Vec<PathBuf> {
+    companions_cached(p, &mut DirCache::default())
+}
+
+/// Folder listings, read once per folder (a deletion of many photos would otherwise list the folder per photo,
+/// slow on network drives).
+#[derive(Default)]
+struct DirCache {
+    dirs: std::collections::HashMap<PathBuf, Vec<PathBuf>>,
+    /// number of real `read_dir` calls (test)
+    reads: usize,
+}
+
+impl DirCache {
+    fn list(&mut self, dir: &Path) -> &[PathBuf] {
+        if !self.dirs.contains_key(dir) {
+            self.reads += 1;
+            let v = std::fs::read_dir(dir).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
+            self.dirs.insert(dir.to_path_buf(), v);
+        }
+        &self.dirs[dir]
+    }
+    fn xmp_path(&mut self, p: &Path) -> PathBuf {
+        match p.parent() {
+            Some(d) => {
+                let l = self.list(d).to_vec();
+                library::xmp::path_to_listed(p, &l)
+            }
+            None => library::xmp::path_to(p),
+        }
+    }
+}
+
+fn companions_cached(p: &Path, cache: &mut DirCache) -> Vec<PathBuf> {
     let mut v = if crate::image_kind::of(p) == crate::image_kind::ImageKind::Foveon { crate::sidecar::companion_files(p) } else { Vec::new() };
     let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let own = library::xmp::path_to(p);
+    let own = cache.xmp_path(p);
     let both_names = own == p.with_extension("xmp");
     // `NAME.xmp` next to a JPEG is only ours if no other same-named image (e.g. NAME.TIF) in the folder owns it
     let candidates = if both_names {
         let mut c = vec![p.with_file_name(format!("{name}.xmp"))];
-        if !other_image_owns(p, &own) {
+        if !other_image_owns(p, &own, cache) {
             c.insert(0, own.clone());
         }
         c
@@ -105,14 +138,15 @@ fn companions(p: &Path) -> Vec<PathBuf> {
 }
 
 /// Does another image with the same stem next to `p` use `xmp` as its sidecar?
-fn other_image_owns(p: &Path, xmp: &Path) -> bool {
+fn other_image_owns(p: &Path, xmp: &Path, cache: &mut DirCache) -> bool {
     let Some(stem) = p.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { return false };
-    let Some(rd) = p.parent().and_then(|d| std::fs::read_dir(d).ok()) else { return false };
-    rd.filter_map(|e| e.ok()).map(|e| e.path()).any(|q| {
+    let Some(dir) = p.parent() else { return false };
+    let siblings = cache.list(dir).to_vec();
+    siblings.iter().any(|q| {
         q != p
             && q.file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase() == stem)
             && q.file_name().and_then(|n| n.to_str()).and_then(library::format_from_extension).is_some()
-            && library::xmp::path_to(&q) == xmp
+            && library::xmp::path_to_listed(q, &siblings) == xmp
     })
 }
 
@@ -127,6 +161,7 @@ fn camera_jpeg(p: &Path) -> Option<PathBuf> {
 pub fn plan(k: Vec<Candidate>) -> Plan {
     let db = library::db::Db::standard().ok();
     let mut p = Plan::default();
+    let mut cache = DirCache::default();
     // JPEGs that are in the selection themselves are deleted as photos, not as the "camera JPEG" of a RAW
     let selected: std::collections::HashSet<PathBuf> = k.iter().map(|c| c.path.clone()).collect();
     for c in k {
@@ -160,7 +195,7 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
                 if c.path.parent().is_some_and(library::network_trash::is_network) {
                     p.network += 1;
                 }
-                p.disk.push((c.image, c.path.clone(), companions(&c.path)));
+                p.disk.push((c.image, c.path.clone(), companions_cached(&c.path, &mut cache)));
             }
             0 | 1 => p.missing.push(c.image),
             _ => p.skipped.push((name, crate::tr("Zustand unbekannt").into())),
@@ -190,6 +225,7 @@ pub fn execute(p: Plan, with_jpegs: bool, remove_missing: bool, stack_jpegs: Vec
     let mut jpeg_gone: std::collections::HashSet<i64> = std::collections::HashSet::new();
     // 1. disk → Trash (per image, so that one error does not stop everything)
     let mut removed: Vec<i64> = Vec::new();
+    let mut cache = DirCache::default();
     PROGRESS.1.store(p.disk.len() + p.apple.len(), std::sync::atomic::Ordering::Relaxed);
     PROGRESS.0.store(0, std::sync::atomic::Ordering::Relaxed);
     for (b, path, sidecars) in &p.disk {
@@ -200,7 +236,7 @@ pub fn execute(p: Plan, with_jpegs: bool, remove_missing: bool, stack_jpegs: Vec
         if with_jpegs {
             if let Some(j) = p.jpegs.iter().find(|j| j.with_extension("") == path.with_extension("") && *j != path && !files.contains(j)) {
                 files.push(j.clone());
-                for c in companions(j) {
+                for c in companions_cached(j, &mut cache) {
                     if !files.contains(&c) {
                         files.push(c);
                     }
@@ -669,6 +705,28 @@ mod tests {
         library::network_trash::discard(&dir, &files, "2026-01-01").unwrap();
         assert!(!dir.join("a.JPG").exists() && !dir.join("a.JPG.xmp").exists());
         assert!(dir.join("a.CR2").exists() && dir.join("a.xmp").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// Many JPEGs in one folder: the folder is listed once, the result is the same as without the cache.
+    #[test]
+    fn many_jpegs_list_the_folder_once() {
+        let dir = std::env::temp_dir().join(format!("graineo-delete-many-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let n = 400;
+        for i in 0..n {
+            std::fs::write(dir.join(format!("p{i}.JPG")), b"x").unwrap();
+            std::fs::write(dir.join(format!("p{i}.xmp")), b"x").unwrap();
+            if i % 2 == 0 {
+                std::fs::write(dir.join(format!("p{i}.CR2")), b"x").unwrap();
+            }
+        }
+        let mut cache = DirCache::default();
+        for i in 0..n {
+            let p = dir.join(format!("p{i}.JPG"));
+            assert_eq!(companions_cached(&p, &mut cache), companions(&p), "p{i}");
+        }
+        assert_eq!(cache.reads, 1);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

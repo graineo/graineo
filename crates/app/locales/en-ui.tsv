@@ -4423,7 +4423,7 @@ unvollständig · {a} von {b}	incomplete · {a} of {b}
 nicht installiert · {a}	not installed · {a}
 Gesperrt, solange {w} läuft ({p} %)	Locked while {w} is running ({p} %)
 Gesperrt, solange {w} läuft	Locked while {w} is running
-Lizenz: {l} · Quelle: huggingface.co/{r}	License: {l} · Source: huggingface.co/{r}
+Lizenz: {l} · Quelle: {r}	License: {l} · Source: {r}
 Das Suchmodell vergleicht Suchwörter mit dem Inhalt der Fotos.	The search model matches search terms against the content of your photos.
 • **Schnell – klein** – wenig Speicher, liest neue Fotos schnell ein, versteht Deutsch schwächer\n• **Ausgewogen** – deutlich bessere Treffer in vielen Sprachen\n• **Beste Treffer – groß** – am genauesten, braucht viel Speicher und Zeit\n\nEin neues Modell liest alle Fotos einmal im Hintergrund ein; die Suche nutzt bis dahin das bisherige. Zurückwechseln geht sofort, eingelesene Fotos bleiben erhalten.\n\n### Qualität\nDie Skala folgt einer eigenen Messung: 1000 Fotos mit je einer kurzen Beschreibung (Testsatz XTD10); gezählt wird, wie oft das gesuchte Foto auf Platz 1 steht (Werte in der Karte jedes Modells). Die deutschen Beschreibungen sind teils maschinell übersetzt; bei eigenen Fotos liegen die Werte anders, die Reihenfolge bleibt.\n\n### Tempo\nGemessen auf einem Mac mit M1 Pro. Das Einlesen läuft gedrosselt mit halber Kraft, damit der Mac leise bleibt.	• **Fast – small** – little memory, indexes new photos quickly, weaker at German\n• **Balanced** – much better results in many languages\n• **Best results – large** – most accurate, needs lots of memory and time\n\nA new model indexes all photos once in the background; until then, search keeps using the previous one. Switching back is instant, and indexed photos are kept.\n\n### Quality\nThe scale is based on our own measurement: 1000 photos with a short description each (test set XTD10), counting how often the photo searched for ranks first (values on each model’s card). The German descriptions are partly machine-translated; with your own photos the numbers will differ, but the ranking holds.\n\n### Speed\nMeasured on a Mac with M1 Pro. Indexing is throttled to half power so the Mac stays quiet.
 Suchmodell	Search model
@@ -6305,7 +6305,7 @@ Lizenztext lesen	Read the licence text
 Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	The model is not provided by graineo but loaded from its original source at your request ({s}). Every function also works with the open model.
 Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	I use graineo with this model for non-commercial purposes only
 Nur für nicht-kommerzielle Nutzung · {l}	Non-commercial use only · {l}
-{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}. Licence: {l} · Source: huggingface.co/{r} · not provided by graineo{c}
+{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}	{p}. Licence: {l} · Source: {r} · not provided by graineo{c}
  · nicht-kommerzielle Nutzung bestätigt	 · non-commercial use confirmed
 Tiefe (Depth Anything V2 Small)	Depth (Depth Anything V2 Small)
 Tiefe genauer (Depth Anything V2 Base)	Depth, more accurate (Depth Anything V2 Base)
@@ -6448,3 +6448,32 @@ Nicht neutral messbar	Not neutralizable
 Außerhalb der Skala	Outside the scale
 {s}×{s} · {n} Proben	{s}×{s} · {n} samples
 Wohl nicht neutral	Probably not neutral
+Schnellsammlung geleert	Quick collection cleared
+Name des Gesichts entfernt	Name of the face removed
+Gesicht „{a}“ benannt	Face named “{a}”
+Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Preset “{a}” deleted – ⌘Z brings it back
+Rückgängig: Vorgabe „{a}“ gelöscht	Undo: preset “{a}” deleted
+{a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} of {b} photos shown, the others are hidden by the source on the left or a filter
+Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	On Quattro, noise reduction already runs in the preparation.
+Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	On Quattro, noise reduction runs in the preparation; the stored values switch it off.
+rechnet {p} %	computing {p} %
+Modul fehlt	module missing
+Modul laden …	Load module…
+Lädt das Modell RawNIND (GPL-3.0, 58 MB) in Einstellungen → Module	Loads the RawNIND model (GPL-3.0, 58 MB) in Settings → Modules
+KI-Entrauschen nicht möglich: {e}	AI denoise not possible: {e}
+Entrauscht das RAW mit einem neuronalen Netz, einmal in voller Auflösung.	Denoises the RAW with a neural network, once at full resolution.
+Ein kleines Netz (RawNIND, GPL-3.0), trainiert auf echten Rauschpaaren, rechnet nach dem Entmosaiken auf den linearen Daten. Es erfindet keine Motive; bei sehr starkem Rauschen können glatte Flächen leicht fleckig wirken, dann die Stärke senken. Die Rauschregler darunter wirken auf das Restrauschen. Dauer auf einem M1 Pro etwa 18 s je 24 MP; das Ergebnis bleibt, solange das Foto offen ist. Das Modell lädt man in Einstellungen → Module.	A small network (RawNIND, GPL-3.0), trained on real noise pairs, works on the linear data after demosaicing. It does not invent subjects; with very strong noise, smooth areas can look slightly blotchy – then lower the strength. The noise sliders below act on the remaining noise. About 18 s per 24 MP on an M1 Pro; the result is kept while the photo is open. Load the model in Settings → Modules.
+KI-Entrauschen	AI Denoise
+Anteil des KI-entrauschten Bildes	Share of the AI-denoised image
+KI-Rauschminderung auf den RAW-Daten	AI noise reduction on the RAW data
+KI-Entrauschen (RawNIND)	AI Denoise (RawNIND)
+Entwickeln: Rauschen von RAW-Fotos mit einem neuronalen Netz mindern	Develop: reduce the noise of RAW photos with a neural network
+Wirkt nur mit Foveon-Detail und in Farbe	Only works with Foveon detail on and in colour
+noch etwa {m} min	about {m} min left
+noch etwa {s} s	about {s} s left
+Rechnet einmal in voller Auflösung: {p} %, {r} – die Vorschau zeigt das Foto bis dahin ohne	Computing once at full resolution: {p} %, {r} – until then the preview shows the photo without it
+Rechnet einmal in voller Auflösung: {p} % – die Vorschau zeigt das Foto bis dahin ohne	Computing once at full resolution: {p} % – until then the preview shows the photo without it
+KI-Entrauschen {p} % · {r}	AI Denoise {p} % · {r}
+KI-Entrauschen {p} %	AI Denoise {p} %
+KI-Entrauschen fertig · {s} s	AI Denoise done · {s} s
+Fertig nach {s} s	Done after {s} s

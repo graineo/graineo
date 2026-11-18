@@ -1659,9 +1659,12 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
     let offset_id = egui::Id::NULL.with("personen-raster-y");
     let mut sa = egui::ScrollArea::vertical().id_salt("personen-raster").auto_shrink([false; 2]);
     let restore = z.restore_y.take();
+    let mut placed = false;
     if std::mem::take(&mut z.to_start) {
         sa = sa.vertical_scroll_offset(0.0);
+        placed = true;
     } else if let Some(y) = restore {
+        placed = true;
         // back from the large photo or from Develop: the place the grid had
         sa = sa.vertical_scroll_offset(y);
         ctx.data_mut(|d| d.insert_temp(offset_id, y));
@@ -1672,17 +1675,20 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
             let view_h = ui.available_height();
             if row.0 < off {
                 sa = sa.vertical_scroll_offset(row.0);
+                placed = true;
             } else if row.0 + row.1 > off + view_h {
                 sa = sa.vertical_scroll_offset(row.0 + row.1 - view_h);
+                placed = true;
             }
         }
     }
     if let Some(y) = measuring_scroll() {
         sa = sa.vertical_scroll_offset(y);
+        placed = true;
     }
     let z_ref: &State = z;
     let ix = z_ref.index.as_ref().unwrap();
-    let out = sa.show_viewport(ui, |ui, viewport| {
+    let out = lr::with_placed_scroll(ui, placed, |ui| sa.show_viewport(ui, |ui, viewport| {
         ui.set_height(lay.total);
         let origin = ui.max_rect().min;
         let width = ui.max_rect().width();
@@ -1729,7 +1735,7 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
                 }
             }
         }
-    });
+    }));
     ctx.data_mut(|d| d.insert_temp(offset_id, out.state.clamped_offset().y));
     z.grid_y = out.state.clamped_offset().y;
     fetch_images(z, ctx, &visible);
@@ -2508,4 +2514,55 @@ fn measuring_cycle(z: &mut State, ctx: &egui::Context) -> Option<Command> {
     };
     crate::log(&format!("people-measure: step {k}: {what}"));
     cmd
+}
+
+#[cfg(test)]
+mod scroll_tests {
+    use super::*;
+
+    /// A list change in the People view: the short old list is still the content height egui knows in the frame of
+    /// the jump, the target lies behind it. Without `with_placed_scroll` the rubber band pulls the view back and it
+    /// coasts on; with it the target stays.
+    fn jump_drift(protect: bool) -> f32 {
+        let ctx = egui::Context::default();
+        lr::apply_theme(&ctx);
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 440.0));
+        let mut time = 0.0;
+        let mut content = 700.0_f32;
+        let mut target: Option<f32> = None;
+        let mut ys = Vec::new();
+        for frame in 0..120 {
+            time += 1.0 / 60.0;
+            if frame == 6 {
+                // new, much longer list and a target far behind the old end
+                content = 9000.0;
+                target = Some(5000.0);
+            }
+            let _ = crate::ui_test::run(&ctx, egui::RawInput { screen_rect: Some(rect), time: Some(time), ..Default::default() }, |root| {
+                egui::CentralPanel::default().show(root, |ui| {
+                    let mut sa = egui::ScrollArea::vertical().id_salt("personen-raster").auto_shrink([false; 2]);
+                    let placed = target.is_some();
+                    if let Some(y) = target.take() {
+                        sa = sa.vertical_scroll_offset(y);
+                    }
+                    // the content grows only after the jump frame, as with the rebuilt layout
+                    let h = if frame <= 6 { 700.0 } else { content };
+                    let out = if protect {
+                        lr::with_placed_scroll(ui, placed, |ui| sa.show(ui, |ui| ui.set_height(h)))
+                    } else {
+                        sa.show(ui, |ui| ui.set_height(h))
+                    };
+                    ys.push(out.state.clamped_offset().y);
+                });
+            });
+        }
+        let settled = ys[9];
+        ys[9..].iter().map(|y| (y - settled).abs()).fold(0.0, f32::max)
+    }
+
+    #[test]
+    fn list_change_target_behind_old_content_stays() {
+        assert!(jump_drift(true) < 1.0, "view kept moving after the jump");
+        eprintln!("unprotected drift: {}", jump_drift(false));
+    }
 }

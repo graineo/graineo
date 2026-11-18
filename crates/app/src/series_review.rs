@@ -189,7 +189,8 @@ impl LibraryView {
         let (images, cover) = match stack.and_then(|id| self.series.stacks.iter().find(|s| s.id == id)) {
             Some(s) => {
                 let mut v = s.images.clone();
-                v.retain(|b| self.index.contains_key(b));
+                // a camera JPEG folded into its RAW is no photo of its own (its rating follows the RAW)
+                v.retain(|b| self.index.contains_key(b) && !self.folded_jpeg(*b));
                 v.sort_by_key(|b| self.capture_of(b));
                 (v, Some(s.top()))
             }
@@ -552,7 +553,7 @@ impl LibraryView {
             let h = ui.label(egui::RichText::new(head).font(lr::semibold(12.0)).color(Color32::from_gray(0xe0)));
             // why the photos belong together: on the header (the row keeps its width)
             if let Some(s) = &stack {
-                lr::hover_tip(ui, &h, &library_series::reason_text(s));
+                lr::hover_tip(ui, &h, &library_series::reason_text(s, self.stack_pictures(s)));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(8.0);

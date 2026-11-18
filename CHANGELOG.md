@@ -382,6 +382,22 @@ A small update after the first reports from users.
 
 ---
 
+## 1.4.0 · AI Denoising
+
+- **AI Denoise shows its progress:** while the network computes, the status in the title bar says how far it is and how long it still takes ("AI Denoise 45 % · about 9 s left"), also with the panel closed, and briefly "done" at the end. Switching photos stops it right away. AI Denoise is now also available for Quattro and the older Foveon cameras.
+- **AI Denoise for Sigma Merrill photos (optional, off by default):** the same switch and Strength slider now also appear under Noise & Foveon Detail for Merrill files. The network runs after Sigma's own noise reduction, which still removes the coarse color blotches, and roughly halves the remaining fine noise at ISO 1600–3200 while text and edges stay crisp. Bright point lights, stars and blown highlights keep the result without it, so no dark rings appear around them. With the switch off, the Sigma development is unchanged. Quattro and the older Foveon cameras are not included.
+- **AI Denoise for raw files (optional, off by default):** a new switch in Details → Noise Reduction removes noise with a small neural network (RawNIND), with a Strength slider to mix it with the original. It works on the linear data after demosaicing, is computed once per photo at full resolution (about 18 s for 24 MP on an M1 Pro; the preview shows the photo without it until then) and the noise sliders below act on what is left. In tests with strong noise it keeps leaves, bark and fabric where the regular noise reduction smooths them. The model is a separate download in Settings → Modules (58 MB, GPL-3.0). Not for Sigma Foveon files.
+
+- **Quattro: noise sliders greyed out:** for Sigma Quattro photos the Luminance and Color noise sliders did nothing visible: the noise reduction already runs while the photo is prepared, and any slider position other than the middle only switched that step off. The sliders are now greyed out with a tooltip. Stored values are untouched and the image looks exactly as before; Binning is unchanged. Merrill and the older Foveon cameras are unaffected.
+- **Deleting many JPEGs is fast on network drives:** finding the sidecar files of each JPEG used to list the whole folder once per photo. Each folder is now listed once; results are unchanged.
+- **Undo (⌘Z) closes its gaps:** ⌘Z now only takes back moves and renames made in the current session; before, ⌘Z in the grid with nothing newer to undo moved files back from earlier sessions, one older move per press. Collection and keyword changes and moves are taken back in the order they were made. Assigning or removing keywords, removing photos from a collection, the quick collection and naming faces can now be undone in every view, not only in the grid. A double-click reset of a slider is its own history step, so the dragged value can be brought back. Adding to or removing from the quick collection (B) and clearing it can be undone. Assigning a lens profile to a selection is one undoable step for all photos. Deleting your own preset can be undone.
+- **Series numbers without gaps:** an expanded series could number its photos "1/4, 2/4, 4/4". A camera JPEG shown as part of its raw took a number of its own, and so did photos hidden by a filter. The numbers now count the photos you see, in the order of the tiles, without gaps; when some are hidden, the tooltip says how many of the series are shown. A collapsed series, its description, the "whole series" question and the series review no longer count a camera JPEG as a photo of its own.
+- **Members of the open stack stand out:** when the active photo belongs to an expanded series or stack, the bracket line below that group is brighter with taller end marks, and the numbers of its photos are bright, while the numbers of other series and stacks are dimmed. The layout and the selection look stay as they are.
+- **Grid no longer drifts after switching lists:** with a collection open, viewing a photo, choosing "All Photos" and going back to the grid, the grid first jumped to the photo and then slid for two to three seconds to an unrelated place further up. It now shows the photo at its place in the new list right away and stays there. The same applies whenever graineo places the grid itself (back from a single photo, jump to the selection, a new list starting at the top).
+- **People view and keyword list no longer drift either:** the People grid (new list, back from a large photo, jump to a tile) and the keyword arrange list now land once at their target instead of sliding on.
+
+---
+
 ## Thanks
 
 - **spektrafilm** by Andrea Volpato (GPL-3.0), film profiles CC BY-SA 4.0
@@ -392,6 +408,7 @@ A small update after the first reports from users.
 - **rawler** (LGPL-2.1), **lensfun** (data CC BY-SA 3.0), **RCD**, **Markesteijn**
 - **egui**, **wgpu**
 - **SFace** (OpenCV Zoo), **CLIP**, **M-CLIP**, **SigLIP 2**
+- **RawNIND** by Benoit Brummer (UCLouvain): UtNet2 denoising network, code and weights GPL-3.0, dataset CC BY 4.0 / CC0; ONNX package by the **darktable** project (darktable-ai)
 - **MobileSAM** (Apache-2.0, weights MIT), **LaMa** (Apache-2.0, ONNX export by Carve), **tract**, **jixel** (BSD-3-Clause or Apache-2.0)
 - Place names from **GeoNames** (CC BY 4.0)
 - **IBM Plex Mono**, **IBM Plex Sans JP**, **Syne** (SIL OFL), **Phosphor Icons** (MIT)

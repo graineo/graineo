@@ -4421,7 +4421,7 @@ unvollständig · {a} von {b}	incomplet · {a} sur {b}
 nicht installiert · {a}	non installé · {a}
 Gesperrt, solange {w} läuft ({p} %)	Verrouillé tant que {w} est en cours ({p} %)
 Gesperrt, solange {w} läuft	Verrouillé tant que {w} est en cours
-Lizenz: {l} · Quelle: huggingface.co/{r}	Licence : {l} · Source : huggingface.co/{r}
+Lizenz: {l} · Quelle: {r}	Licence : {l} · Source : {r}
 Das Suchmodell vergleicht Suchwörter mit dem Inhalt der Fotos.	Le modèle de recherche compare les mots recherchés au contenu des photos.
 • **Schnell – klein** – wenig Speicher, liest neue Fotos schnell ein, versteht Deutsch schwächer\n• **Ausgewogen** – deutlich bessere Treffer in vielen Sprachen\n• **Beste Treffer – groß** – am genauesten, braucht viel Speicher und Zeit\n\nEin neues Modell liest alle Fotos einmal im Hintergrund ein; die Suche nutzt bis dahin das bisherige. Zurückwechseln geht sofort, eingelesene Fotos bleiben erhalten.\n\n### Qualität\nDie Skala folgt einer eigenen Messung: 1000 Fotos mit je einer kurzen Beschreibung (Testsatz XTD10); gezählt wird, wie oft das gesuchte Foto auf Platz 1 steht (Werte in der Karte jedes Modells). Die deutschen Beschreibungen sind teils maschinell übersetzt; bei eigenen Fotos liegen die Werte anders, die Reihenfolge bleibt.\n\n### Tempo\nGemessen auf einem Mac mit M1 Pro. Das Einlesen läuft gedrosselt mit halber Kraft, damit der Mac leise bleibt.	• **Rapide – petit** – peu de mémoire, indexe vite les nouvelles photos, comprend moins bien l'allemand\n• **Équilibré** – résultats nettement meilleurs dans de nombreuses langues\n• **Meilleurs résultats – grand** – le plus précis, demande beaucoup de mémoire et de temps\n\nUn nouveau modèle indexe une fois toutes les photos en arrière-plan ; d'ici là, la recherche utilise le précédent. Le retour à l'ancien modèle est immédiat, les photos déjà indexées sont conservées.\n\n### Qualité\nL'échelle repose sur notre propre mesure : 1000 photos avec chacune une courte description (jeu de test XTD10) ; on compte combien de fois la photo cherchée arrive en première position (valeurs dans la fiche de chaque modèle). Les descriptions allemandes sont en partie traduites automatiquement ; avec vos propres photos, les valeurs diffèrent, mais l'ordre reste le même.\n\n### Vitesse\nMesurée sur un Mac M1 Pro. L'indexation tourne à mi-puissance pour que le Mac reste silencieux.
 Suchmodell	Modèle de recherche
@@ -6303,7 +6303,7 @@ Lizenztext lesen	Lire le texte de la licence
 Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.	Le modèle n’est pas fourni par graineo mais chargé à ta demande depuis sa source d’origine ({s}). Toutes les fonctions marchent aussi avec le modèle libre.
 Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell	J’utilise graineo avec ce modèle uniquement à des fins non commerciales
 Nur für nicht-kommerzielle Nutzung · {l}	Usage non commercial uniquement · {l}
-{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}	{p}. Licence : {l} · Source : huggingface.co/{r} · non fourni par graineo{c}
+{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}	{p}. Licence : {l} · Source : {r} · non fourni par graineo{c}
  · nicht-kommerzielle Nutzung bestätigt	 · usage non commercial confirmé
 Tiefe (Depth Anything V2 Small)	Profondeur (Depth Anything V2 Small)
 Tiefe genauer (Depth Anything V2 Base)	Profondeur plus précise (Depth Anything V2 Base)
@@ -6446,3 +6446,32 @@ Nicht neutral messbar	Non neutralisable
 Außerhalb der Skala	Hors de l'échelle
 {s}×{s} · {n} Proben	{s}×{s} · {n} échantillons
 Wohl nicht neutral	Peut-être pas neutre
+Schnellsammlung geleert	Collection rapide vidée
+Name des Gesichts entfernt	Nom du visage supprimé
+Gesicht „{a}“ benannt	Visage nommé « {a} »
+Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Préréglage « {a} » supprimé – ⌘Z le rétablit
+Rückgängig: Vorgabe „{a}“ gelöscht	Annuler : préréglage « {a} » supprimé
+{a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} photos sur {b} affichées, les autres sont masquées par la source à gauche ou un filtre
+Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	Sur Quattro, la réduction du bruit est déjà appliquée lors de la préparation.
+Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Sur Quattro, la réduction du bruit est appliquée lors de la préparation ; les valeurs enregistrées la désactivent.
+rechnet {p} %	calcul {p} %
+Modul fehlt	module manquant
+Modul laden …	Charger le module…
+Lädt das Modell RawNIND (GPL-3.0, 58 MB) in Einstellungen → Module	Charge le modèle RawNIND (GPL-3.0, 58 Mo) dans Réglages → Modules
+KI-Entrauschen nicht möglich: {e}	Débruitage IA impossible : {e}
+Entrauscht das RAW mit einem neuronalen Netz, einmal in voller Auflösung.	Débruite le RAW avec un réseau de neurones, une seule fois en pleine résolution.
+Ein kleines Netz (RawNIND, GPL-3.0), trainiert auf echten Rauschpaaren, rechnet nach dem Entmosaiken auf den linearen Daten. Es erfindet keine Motive; bei sehr starkem Rauschen können glatte Flächen leicht fleckig wirken, dann die Stärke senken. Die Rauschregler darunter wirken auf das Restrauschen. Dauer auf einem M1 Pro etwa 18 s je 24 MP; das Ergebnis bleibt, solange das Foto offen ist. Das Modell lädt man in Einstellungen → Module.	Un petit réseau (RawNIND, GPL-3.0), entraîné sur de vraies paires de bruit, travaille sur les données linéaires après le dématriçage. Il n’invente aucun motif ; avec un bruit très fort, les zones lisses peuvent paraître un peu marbrées – baissez alors l’intensité. Les curseurs de bruit en dessous agissent sur le bruit restant. Environ 18 s pour 24 Mpx sur un M1 Pro ; le résultat est conservé tant que la photo est ouverte. Le modèle se charge dans Réglages → Modules.
+KI-Entrauschen	Débruitage IA
+Anteil des KI-entrauschten Bildes	Part de l’image débruitée par l’IA
+KI-Rauschminderung auf den RAW-Daten	Réduction du bruit par IA sur les données RAW
+KI-Entrauschen (RawNIND)	Débruitage IA (RawNIND)
+Entwickeln: Rauschen von RAW-Fotos mit einem neuronalen Netz mindern	Développer : réduire le bruit des photos RAW avec un réseau de neurones
+Wirkt nur mit Foveon-Detail und in Farbe	N’agit qu’avec le détail Foveon activé et en couleur
+noch etwa {m} min	encore environ {m} min
+noch etwa {s} s	encore environ {s} s
+Rechnet einmal in voller Auflösung: {p} %, {r} – die Vorschau zeigt das Foto bis dahin ohne	Calcul unique en pleine résolution : {p} %, {r} – d’ici là, l’aperçu montre la photo sans
+Rechnet einmal in voller Auflösung: {p} % – die Vorschau zeigt das Foto bis dahin ohne	Calcul unique en pleine résolution : {p} % – d’ici là, l’aperçu montre la photo sans
+KI-Entrauschen {p} % · {r}	Débruitage IA {p} % · {r}
+KI-Entrauschen {p} %	Débruitage IA {p} %
+KI-Entrauschen fertig · {s} s	Débruitage IA terminé · {s} s
+Fertig nach {s} s	Terminé après {s} s

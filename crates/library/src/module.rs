@@ -380,7 +380,83 @@ pub const DEPTH_BASE: Definition = Definition {
     class: LicenseClass::NonCommercial(&DEPTH_NC_TERMS),
 };
 
-pub const ALL: [&Definition; 7] = [&TEXT, &MCLIP, &IMAGE, &MOBILESAM, &LAMA, &DEPTH, &DEPTH_BASE];
+/// Neural denoising of RAWs (RawNIND UtNet2, linear variant), run by graineo's own executor (`raw::ai_denoise`). The
+/// package of the darktable project bundles a Bayer and a linear variant; only the linear one is kept (it runs after
+/// the classic demosaic). Not on Hugging Face: the GitHub release of darktable-ai at the commit of tag
+/// `release-5.6.0`, size and SHA-256 pinned like every module.
+pub const AI_DENOISE: Definition = Definition {
+    id: "ai-denoise",
+    name: "KI-Entrauschen (RawNIND)",
+    repo: "https://github.com/darktable-org/darktable-ai/releases/download/release-5.6.0",
+    revision: "6bcd41c6f296ca692e6f845b25cf7cdb8148305c",
+    files: &[f("rawdenoise-nind.dtmodel", "rawdenoise-nind.dtmodel", 57700134, "d71b5f1e727c85a359e6f74dca9e2016c9d8fc3e2f7ac3e9b347d80ceca969af")],
+    license: "GPL-3.0 (code and weights: B. Brummer, UCLouvain, github.com/trougnouf/rawnind_jddc; ONNX package darktable-ai); training data RawNIND CC BY 4.0 / CC0",
+    purpose: "Entwickeln: Rauschen von RAW-Fotos mit einem neuronalen Netz mindern",
+    derived: Some(&Derived {
+        from: "rawdenoise-nind.dtmodel",
+        target: AI_DENOISE_MODEL,
+        size: 31_053_823,
+        sha256: "df957efadcc152c007d5d3b0917bdff9e41c0d4a0efe56584ef30b36393cd181",
+        make: extract_linear_model,
+    }),
+    info: None,
+    class: LicenseClass::Open,
+};
+
+/// File of the installed denoising network in the module folder.
+pub const AI_DENOISE_MODEL: &str = "model_linear.onnx";
+
+/// Unpacks the linear variant from the downloaded package (a zip file).
+fn extract_linear_model(src: &Path, out: &Path) -> Result<(), String> {
+    let data = std::fs::read(src).map_err(|e| e.to_string())?;
+    let bytes = zip_entry(&data, "/model_linear.onnx", 64 << 20)?;
+    std::fs::write(out, bytes).map_err(|e| e.to_string())
+}
+
+/// One entry of a zip archive whose name ends with `suffix` (stored or deflated, at most `limit` bytes unpacked).
+fn zip_entry(z: &[u8], suffix: &str, limit: usize) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let u16_at = |p: usize| z.get(p..p + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as usize).ok_or("zip: truncated");
+    let u32_at = |p: usize| z.get(p..p + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize).ok_or("zip: truncated");
+    // end of central directory: the last signature within the trailing comment window
+    let start = z.len().saturating_sub(22 + 65535);
+    let eocd = (start..z.len().saturating_sub(21)).rev().find(|&p| z[p..p + 4] == [0x50, 0x4b, 0x05, 0x06]).ok_or("zip: no directory")?;
+    let (count, mut p) = (u16_at(eocd + 10)?, u32_at(eocd + 16)?);
+    for _ in 0..count {
+        if u32_at(p)? != 0x0201_4b50 {
+            return Err("zip: damaged directory".into());
+        }
+        let (method, csize, usize_, nlen, xlen, clen, local) = (u16_at(p + 10)?, u32_at(p + 20)?, u32_at(p + 24)?, u16_at(p + 28)?, u16_at(p + 30)?, u16_at(p + 32)?, u32_at(p + 42)?);
+        let name = z.get(p + 46..p + 46 + nlen).ok_or("zip: truncated")?;
+        p += 46 + nlen + xlen + clen;
+        if !String::from_utf8_lossy(name).ends_with(suffix) {
+            continue;
+        }
+        if usize_ > limit {
+            return Err("zip: entry too large".into());
+        }
+        if u32_at(local)? != 0x0403_4b50 {
+            return Err("zip: damaged entry".into());
+        }
+        let off = local + 30 + u16_at(local + 26)? + u16_at(local + 28)?;
+        let raw = z.get(off..off + csize).ok_or("zip: truncated")?;
+        let mut out = Vec::with_capacity(usize_);
+        match method {
+            0 => out.extend_from_slice(raw),
+            8 => {
+                flate2::read::DeflateDecoder::new(raw).take(limit as u64 + 1).read_to_end(&mut out).map_err(|e| format!("zip: {e}"))?;
+            }
+            m => return Err(format!("zip: method {m} not supported")),
+        }
+        if out.len() != usize_ {
+            return Err("zip: size differs".into());
+        }
+        return Ok(out);
+    }
+    Err(format!("zip: {suffix} not found"))
+}
+
+pub const ALL: [&Definition; 8] = [&TEXT, &MCLIP, &IMAGE, &MOBILESAM, &LAMA, &DEPTH, &DEPTH_BASE, &AI_DENOISE];
 
 /// Modules not offered for download (Settings → Modules lists them only once installed, so they can be
 /// removed; the tools that need them stay hidden without the files). Empty: LaMa was withheld for a short
@@ -403,7 +479,18 @@ pub fn url_for(d: &Definition, path: &str) -> String {
     // graineo never hosts a non-commercial module: always its original source
     match mirror_base().filter(|_| non_commercial(d).is_none()) {
         Some(base) => format!("{}/{}/{}/{}", base.trim_end_matches('/'), d.id, d.revision, path),
+        // a module outside Hugging Face: `repo` is the fixed https base (e.g. a GitHub release)
+        None if d.repo.starts_with("https://") => format!("{}/{}", d.repo.trim_end_matches('/'), path),
         None => format!("https://huggingface.co/{}/resolve/{}/{}", d.repo, d.revision, path),
+    }
+}
+
+/// Where the module comes from, for the settings and the module notes (`huggingface.co/<repo>` or the host and path of
+/// a fixed https source).
+pub fn source_label(d: &Definition) -> String {
+    match d.repo.strip_prefix("https://") {
+        Some(rest) => rest.replace("/releases/download/", " · "),
+        None => format!("huggingface.co/{}", d.repo),
     }
 }
 
@@ -508,6 +595,18 @@ pub fn install(d: &Definition, progress: &dyn Fn(u64, u64, &str), cancel: &Atomi
         if let Some(p) = z.parent() {
             std::fs::create_dir_all(p).map_err(|e| e.to_string())?;
         }
+        if let Some(q) = local.as_ref().filter(|_| d.repo.starts_with("https://")) {
+            // Test: a module outside Hugging Face from a plain local folder (read-only, linked)
+            let real = std::fs::canonicalize(q.join(path)).map_err(|_| format!("{path} nicht im lokalen Ordner"))?;
+            progress(finished, total.max(1), &format!("prüfe {path}"));
+            if std::fs::metadata(&real).map_or(0, |m| m.len()) != size || crate::relocate::sha256(&real)? != sha {
+                return Err(format!("Prüfsumme von {path} stimmt nicht"));
+            }
+            let _ = std::fs::remove_file(&z);
+            crate::platform::pointer(&real, &z).map_err(|e| e.to_string())?;
+            finished += size;
+            continue;
+        }
         if let Some(q) = &local {
             // Test: link an existing HF cache (read-only)
             let snap = std::fs::read_dir(q.join("hub").join(format!("models--{}", d.repo.replace('/', "--"))).join("snapshots"))
@@ -586,7 +685,7 @@ pub fn install(d: &Definition, progress: &dyn Fn(u64, u64, &str), cancel: &Atomi
         // the source (or, in test mode, the link to it) is no longer needed
         std::fs::remove_file(&src).map_err(|e| e.to_string())?;
     }
-    let meta = json!({"id": d.id, "repo": d.repo, "revision": d.revision, "license": d.license, "installed": crate::now(), "source": if local.is_some() { "local-cache (test)" } else { "huggingface" }, "verified": "sha256 fixed in app"});
+    let meta = json!({"id": d.id, "repo": d.repo, "revision": d.revision, "license": d.license, "installed": crate::now(), "source": if local.is_some() { "local-cache (test)".to_string() } else { source_label(d) }, "verified": "sha256 fixed in app"});
     crate::files::write_atomic(&o.join("module.json"), serde_json::to_string_pretty(&meta).unwrap_or_default().as_bytes()).map_err(|e| e.to_string())?;
     progress(total, total, "fertig");
     Ok(())
@@ -723,6 +822,57 @@ mod integrity_tests {
         // open modules need none
         confirm_non_commercial(&DEPTH, "9.9.9").unwrap();
         assert!(crate::settings::value(CONSENTS).get(DEPTH.id).is_none());
+    }
+
+    #[test]
+    fn zip_entries_are_read() {
+        // stored and deflated entries, written by hand in the zip layout
+        use std::io::Write;
+        let body = b"denoise weights".repeat(50);
+        let mut deflated = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+        deflated.write_all(&body).unwrap();
+        let deflated = deflated.finish().unwrap();
+        let mut z = Vec::new();
+        let mut central = Vec::new();
+        for (name, method, data) in [("pkg/config.json", 0u16, &b"{}"[..]), ("pkg/model_linear.onnx", 8, &deflated[..])] {
+            let usize_ = if method == 0 { data.len() } else { body.len() };
+            let local = z.len() as u32;
+            z.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+            z.extend_from_slice(&[20, 0, 0, 0]);
+            z.extend_from_slice(&method.to_le_bytes());
+            z.extend_from_slice(&[0; 8]);
+            z.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            z.extend_from_slice(&(usize_ as u32).to_le_bytes());
+            z.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            z.extend_from_slice(&0u16.to_le_bytes());
+            z.extend_from_slice(name.as_bytes());
+            z.extend_from_slice(data);
+            central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+            central.extend_from_slice(&[20, 0, 20, 0, 0, 0]);
+            central.extend_from_slice(&method.to_le_bytes());
+            central.extend_from_slice(&[0; 8]);
+            central.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(usize_ as u32).to_le_bytes());
+            central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            central.extend_from_slice(&[0; 12]);
+            central.extend_from_slice(&local.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let cd = z.len() as u32;
+        z.extend_from_slice(&central);
+        z.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+        z.extend_from_slice(&[0, 0, 0, 0, 2, 0, 2, 0]);
+        z.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        z.extend_from_slice(&cd.to_le_bytes());
+        z.extend_from_slice(&[0, 0]);
+        assert_eq!(zip_entry(&z, "/model_linear.onnx", 1 << 20).unwrap(), body);
+        assert_eq!(zip_entry(&z, "/config.json", 1 << 20).unwrap(), b"{}");
+        assert!(zip_entry(&z, "/missing.onnx", 1 << 20).is_err());
+        assert!(zip_entry(&z, "/model_linear.onnx", 10).is_err());
+        // the source of a module outside Hugging Face
+        assert_eq!(url_for(&AI_DENOISE, "rawdenoise-nind.dtmodel"), "https://github.com/darktable-org/darktable-ai/releases/download/release-5.6.0/rawdenoise-nind.dtmodel");
+        assert_eq!(source_label(&AI_DENOISE), "github.com/darktable-org/darktable-ai · release-5.6.0");
+        assert_eq!(source_label(&LAMA), "huggingface.co/Carve/LaMa-ONNX");
     }
 
     #[test]

@@ -21,15 +21,36 @@ use library::series::{self as ser, Kind as StackKind, Stack};
 pub(super) struct Mark {
     /// index into `SeriesView::stacks`
     pub stack: usize,
-    /// 1-based place in the shown order (cover = 1)
+    /// 1-based place among the shown pictures of the stack (cover = 1), see [`shown_order`]
     pub pos: usize,
+    /// pictures of the stack ([`LibraryView::stack_pictures`])
     pub total: usize,
-    /// collapsed: members matching the filter
+    /// pictures of the stack that are shown (filter, source); a virtual copy shares the place of its original
     pub shown: usize,
     pub collapsed: bool,
     /// expanded: first / last tile of the stack in the grid (ends of the bracket line)
     pub first: bool,
     pub last: bool,
+}
+
+/// A member file of a stack as the grid orders it.
+#[derive(Clone, Copy, Debug)]
+struct Member {
+    file: i64,
+    /// index into `SeriesView::stacks`
+    stack: usize,
+    /// place in the stack order (`stack_image.position`)
+    order: usize,
+    cover: bool,
+}
+
+/// Order of the shown pictures of one stack (files, each once): the cover first, then the stack order, turned round
+/// when the grid shows the newest first. The tile numbers are the places in this list, so they have no gaps
+/// when members are hidden.
+fn shown_order(mut shown: Vec<Member>, backwards: bool) -> Vec<i64> {
+    shown.sort_by_key(|m| (!m.cover, if backwards { usize::MAX - m.order } else { m.order }, m.file));
+    shown.dedup_by_key(|m| m.file);
+    shown.into_iter().map(|m| m.file).collect()
 }
 
 /// What an export, delete or move should do with a collapsed stack.
@@ -110,8 +131,8 @@ fn span_text(s: i64) -> String {
 }
 
 /// Explanation of a stack: why the photos belong together.
-pub(super) fn reason_text(s: &Stack) -> String {
-    let n = s.images.len();
+/// `n`: pictures of the stack ([`LibraryView::stack_pictures`]).
+pub(super) fn reason_text(s: &Stack, n: usize) -> String {
     let r = &s.reason;
     match s.kind {
         StackKind::Bracket => crate::trf!(
@@ -138,6 +159,17 @@ fn collapsed(s: &Stack, forced: bool) -> bool {
 }
 
 impl LibraryView {
+    /// A camera JPEG folded into its RAW (RAW+JPEG stacks on): no picture of its own, it follows the RAW.
+    pub(super) fn folded_jpeg(&self, image: i64) -> bool {
+        self.stack && self.index.get(&image).is_some_and(|&i| self.rows[i].jpeg_for.is_some())
+    }
+
+    /// Pictures of a stack as the grid counts them: members in the library; a camera JPEG folded into its RAW is
+    /// part of that picture (the grouping puts both files of a RAW+JPEG shot into the stack).
+    pub(super) fn stack_pictures(&self, s: &Stack) -> usize {
+        s.images.iter().filter(|&&i| self.index.contains_key(&i) && !self.folded_jpeg(i)).count()
+    }
+
     /// Every frame: read the stacks again when the series job or a command changed them (background, read-only).
     pub(super) fn series_poll(&mut self) {
         if let Some(rx) = &self.series.loading {
@@ -198,41 +230,44 @@ impl LibraryView {
         // the members follow the cover in the direction of the grid: newest first when the grid shows the newest first
         let backwards = matches!(self.sort_order, SortOrder::CaptureTime) && !matches!(self.source, Source::Collection(_));
         let backwards = backwards != self.sort_reversed;
-        // place of each member's file in its stack, 0 = cover, then in the grid's direction (virtual copies follow
-        // their original)
-        let mut rank: HashMap<i64, (usize, usize)> = HashMap::new();
+        // each member's file: its stack, its place in the stack order and whether it is the cover (virtual copies
+        // follow their original through the file)
+        let mut member: HashMap<i64, Member> = HashMap::new();
         for (k, s) in st.stacks.iter().enumerate() {
             let top = s.top();
-            let present: Vec<(i64, bool)> = s.images.iter().filter_map(|img| self.index.get(img).map(|&ri| (rows[ri].file, *img == top))).collect();
-            let last = present.iter().filter(|x| !x.1).count();
-            let mut place = 0;
-            for (file, is_top) in present {
-                let p = if is_top {
-                    0
-                } else {
-                    place += 1;
-                    if backwards { last + 1 - place } else { place }
-                };
-                rank.insert(file, (k, p));
+            for (j, img) in s.images.iter().enumerate() {
+                if let Some(&ri) = self.index.get(img) {
+                    member.insert(rows[ri].file, Member { file: rows[ri].file, stack: k, order: j, cover: *img == top });
+                }
             }
         }
-        let stack_of = |z: &Row| -> Option<(usize, usize)> {
+        let stack_of = |z: &Row| -> Option<Member> {
             if let Some(&k) = st.by_image.get(&z.image) {
-                return rank.get(&z.file).copied().filter(|r| r.0 == k);
+                return member.get(&z.file).copied().filter(|m| m.stack == k);
             }
-            z.copy.as_ref().and_then(|_| rank.get(&z.file).copied())
+            z.copy.as_ref().and_then(|_| member.get(&z.file).copied())
         };
         let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
         for &i in &v {
-            if let Some((k, _)) = stack_of(&rows[i]) {
-                members.entry(k).or_default().push(i);
+            if let Some(m) = stack_of(&rows[i]) {
+                members.entry(m.stack).or_default().push(i);
             }
         }
+        // place of each shown picture (file → 0-based), counted over the shown pictures only: the numbers on the tiles
+        // run 1, 2, 3 … without gaps, also when members are hidden (filter, source, a camera JPEG folded into its RAW)
+        let mut rank: HashMap<i64, usize> = HashMap::new();
+        for vis in members.values() {
+            let shown: Vec<Member> = vis.iter().filter_map(|&r| stack_of(&rows[r])).collect();
+            for (p, file) in shown_order(shown, backwards).into_iter().enumerate() {
+                rank.insert(file, p);
+            }
+        }
+        let place = |z: &Row| rank.get(&z.file).copied().unwrap_or(usize::MAX);
         let mut out = Vec::with_capacity(v.len());
         let mut marks = HashMap::new();
         let mut done: HashSet<usize> = HashSet::new();
         for &i in &v {
-            let Some((k, _)) = stack_of(&rows[i]) else {
+            let Some(k) = stack_of(&rows[i]).map(|m| m.stack) else {
                 if !forced {
                     out.push(i);
                 }
@@ -243,7 +278,9 @@ impl LibraryView {
             }
             let s = &st.stacks[k];
             let vis = &members[&k];
-            let total = s.images.len();
+            let total = self.stack_pictures(s);
+            // pictures shown (a virtual copy shares the place of its original)
+            let shown = vis.iter().map(|&r| rows[r].file).collect::<HashSet<_>>().len();
             if collapsed(s, forced) {
                 let top = s.top();
                 // the cover if it matches the filter, else the matching original rated best
@@ -251,18 +288,17 @@ impl LibraryView {
                     .iter()
                     .copied()
                     .find(|&r| rows[r].image == top)
-                    .or_else(|| vis.iter().copied().filter(|&r| rows[r].copy.is_none()).max_by_key(|&r| ((rows[r].flag == 1) as u8, rows[r].stars, std::cmp::Reverse(stack_of(&rows[r]).map_or(0, |x| x.1)))))
+                    .or_else(|| vis.iter().copied().filter(|&r| rows[r].copy.is_none()).max_by_key(|&r| ((rows[r].flag == 1) as u8, rows[r].stars, std::cmp::Reverse(place(&rows[r])))))
                     .unwrap_or(vis[0]);
-                let shown = vis.iter().filter(|&&r| rows[r].copy.is_none()).count();
                 out.push(rep);
-                marks.insert(rows[rep].image, Mark { stack: k, pos: stack_of(&rows[rep]).map_or(1, |x| x.1 + 1), total, shown, collapsed: true, first: true, last: true });
+                marks.insert(rows[rep].image, Mark { stack: k, pos: place(&rows[rep]).saturating_add(1), total, shown, collapsed: true, first: true, last: true });
             } else {
                 let mut ordered = vis.clone();
-                ordered.sort_by_key(|&r| (stack_of(&rows[r]).map_or(usize::MAX, |x| x.1), rows[r].copy.is_some(), rows[r].image));
+                ordered.sort_by_key(|&r| (place(&rows[r]), rows[r].copy.is_some(), rows[r].image));
                 let n = ordered.len();
                 for (j, &r) in ordered.iter().enumerate() {
                     out.push(r);
-                    marks.insert(rows[r].image, Mark { stack: k, pos: stack_of(&rows[r]).map_or(1, |x| x.1 + 1), total, shown: n, collapsed: false, first: j == 0, last: j + 1 == n });
+                    marks.insert(rows[r].image, Mark { stack: k, pos: place(&rows[r]).saturating_add(1), total, shown, collapsed: false, first: j == 0, last: j + 1 == n });
                 }
             }
         }
@@ -289,6 +325,7 @@ impl LibraryView {
     pub(super) fn paint_series_mark(&self, ui: &egui::Ui, rect: egui::Rect, z: &Row, tex: Option<&TextureHandle>) -> Option<StackCmd> {
         let m = *self.series.marks.get(&z.image)?;
         let s = &self.series.stacks[m.stack];
+        let look = mark_look(&m, open_stack(&self.series.marks, self.active));
         let p = ui.painter();
         let inner = rect.shrink(3.0);
         let area = egui::Rect::from_min_max(inner.min + egui::vec2(8.0, 25.0), inner.max - egui::vec2(8.0, 22.0));
@@ -308,31 +345,29 @@ impl LibraryView {
                 p.add(egui::Shape::line(pts, egui::Stroke::new(1.0, c)));
             }
         } else {
-            // bracket line below the tiles of the stack
+            // bracket line below the tiles of the stack (brighter, with taller end marks for the open stack of the
+            // active photo)
             let y = inner.bottom() + 1.5;
             let (x0, x1) = (if m.first { inner.left() + 4.0 } else { rect.left() }, if m.last { inner.right() - 4.0 } else { rect.right() });
-            let c = Color32::from_gray(0x6a);
-            p.line_segment([egui::pos2(x0, y), egui::pos2(x1, y)], egui::Stroke::new(1.0, c));
+            let w = egui::Stroke::new(look.width, look.bracket);
+            p.line_segment([egui::pos2(x0, y), egui::pos2(x1, y)], w);
             if m.first {
-                p.line_segment([egui::pos2(x0, y), egui::pos2(x0, y - 4.0)], egui::Stroke::new(1.0, c));
+                p.line_segment([egui::pos2(x0, y), egui::pos2(x0, y - look.tick)], w);
             }
             if m.last {
-                p.line_segment([egui::pos2(x1, y), egui::pos2(x1, y - 4.0)], egui::Stroke::new(1.0, c));
+                p.line_segment([egui::pos2(x1, y), egui::pos2(x1, y - look.tick)], w);
             }
         }
-        // number at the bottom right of the photo: "7" / "3/7" collapsed, "2/7" expanded
-        let text = if m.collapsed {
-            if m.shown < m.total { format!("{}/{}", m.shown, m.total) } else { m.total.to_string() }
-        } else {
-            format!("{}/{}", m.pos, m.total)
-        };
-        let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), Color32::from_gray(if m.collapsed { 0xf0 } else { 0xc0 }));
+        // number at the bottom right of the photo: "7" / "3/7" (shown of all) collapsed, "2/7" (place among the
+        // shown) expanded
+        let text = tile_number(&m);
+        let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), look.text);
         let symbol_w = if m.collapsed || m.first { 12.0 } else { 0.0 };
         let dot_w = if s.is_series() && s.reviewed.is_none() && (m.collapsed || m.first) { 8.0 } else { 0.0 };
         let size = egui::vec2(g.size().x + 10.0 + symbol_w + dot_w, 16.0);
         let field = egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(3.0, 3.0), size);
         let resp = ui.interact(field, egui::Id::unique(("stapel-zahl", z.image)), egui::Sense::click());
-        let bg = if resp.hovered() { Color32::from_black_alpha(230) } else { Color32::from_black_alpha(170) };
+        let bg = if resp.hovered() { Color32::from_black_alpha(230) } else { look.ground };
         p.rect_filled(field, 0.0, bg);
         let mut x = field.left() + 5.0;
         let cy = field.center().y;
@@ -353,7 +388,11 @@ impl LibraryView {
         };
         let mut tip = lr::with_shortcut(toggle, "stack_toggle");
         tip.push('\n');
-        tip.push_str(&reason_text(s));
+        tip.push_str(&reason_text(s, m.total));
+        if !m.collapsed && m.shown < m.total {
+            tip.push('\n');
+            tip.push_str(&crate::trf!("{a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus", a = m.shown, b = m.total));
+        }
         if s.is_series() && s.reviewed.is_none() {
             tip.push('\n');
             tip.push_str(crate::tr("Noch nicht gesichtet"));
@@ -546,7 +585,8 @@ impl LibraryView {
             let Some(m) = self.series.marks.get(&b).filter(|m| m.collapsed) else { continue };
             let s = &self.series.stacks[m.stack];
             stacks.push(s.id);
-            hidden.extend(s.images.iter().copied().filter(|&i| i != b));
+            // a folded camera JPEG comes along with its RAW (as everywhere with RAW+JPEG stacks)
+            hidden.extend(s.images.iter().copied().filter(|&i| i != b && !self.folded_jpeg(i)));
         }
         if hidden.is_empty() {
             return false;
@@ -754,6 +794,51 @@ impl LibraryView {
     }
 }
 
+/// The expanded stack the active photo belongs to (index into `SeriesView::stacks`): its members are marked in the
+/// grid (brighter bracket line and number), the numbers of the other stacks are dimmed.
+fn open_stack(marks: &HashMap<i64, Mark>, active: Option<i64>) -> Option<usize> {
+    active.and_then(|a| marks.get(&a)).filter(|m| !m.collapsed).map(|m| m.stack)
+}
+
+/// How the stack marks of a tile are drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct MarkLook {
+    /// bracket line below expanded stacks: colour, width, height of the end marks
+    bracket: Color32,
+    width: f32,
+    tick: f32,
+    /// number field: text and ground
+    text: Color32,
+    ground: Color32,
+}
+
+/// Look of a tile's stack marks: members of the open stack of the active photo bright (bracket and number, no gold,
+/// no ground behind the tile), the numbers of other stacks dimmed while such a stack is open; else as before.
+fn mark_look(m: &Mark, open: Option<usize>) -> MarkLook {
+    let normal = MarkLook {
+        bracket: Color32::from_gray(0x6a),
+        width: 1.0,
+        tick: 4.0,
+        text: Color32::from_gray(if m.collapsed { 0xf0 } else { 0xc0 }),
+        ground: Color32::from_black_alpha(170),
+    };
+    match open {
+        Some(k) if k == m.stack => MarkLook { bracket: Color32::from_gray(0xd0), width: 1.5, tick: 7.0, text: Color32::from_gray(0xf8), ground: Color32::from_black_alpha(215), ..normal },
+        Some(_) => MarkLook { text: Color32::from_gray(0x86), ground: Color32::from_black_alpha(110), ..normal },
+        None => normal,
+    }
+}
+
+/// Text of the stack number on a tile: collapsed "7" or "3/7" (shown of all pictures), expanded "2/3" (place among
+/// the shown pictures of the stack, so the numbers run without gaps).
+fn tile_number(m: &Mark) -> String {
+    if m.collapsed {
+        if m.shown < m.total { format!("{}/{}", m.shown, m.total) } else { m.total.to_string() }
+    } else {
+        format!("{}/{}", m.pos, m.shown)
+    }
+}
+
 /// Small symbol of the kind: two rectangles (series), a step (exposure bracket), three sheets (own stack).
 fn paint_kind(p: &egui::Painter, c: egui::Pos2, s: &Stack) {
     let w = egui::Stroke::new(1.0, Color32::from_gray(0xd0));
@@ -825,6 +910,118 @@ mod tests {
         let with = height(&mut library);
         assert!(without > 0.0);
         assert_eq!(with, without);
+    }
+
+    /// Library rows for the stack tests: RAW `image` with an optional camera JPEG `image + 100` (same name).
+    fn rows_with_pairs(raws: &[(i64, &str, bool)]) -> Vec<Row> {
+        let mut v = Vec::new();
+        for &(image, name, jpeg) in raws {
+            let mut raw = Row { image, file: image, folder: 1, name: format!("{name}.DNG"), format: "DNG".into(), capture: Some(format!("2026-11-01T10:00:{:02}", image)), ..Row::default() };
+            if jpeg {
+                raw.sidecar_jpeg = Some(image + 100);
+                v.push(Row { image: image + 100, file: image + 100, folder: 1, name: format!("{name}.JPG"), format: "JPG".into(), capture: raw.capture.clone(), jpeg_for: Some(image), ..Row::default() });
+            }
+            v.push(raw);
+        }
+        v
+    }
+
+    fn stack(id: i64, images: Vec<i64>, collapsed: bool) -> Stack {
+        Stack { id, kind: StackKind::Series, origin: "auto".into(), cover: Some(images[0]), cover_by_user: false, collapsed, reviewed: None, reason: Default::default(), day: None, images }
+    }
+
+    /// The grid's numbers after filtering: (image, tile text) in grid order.
+    fn numbers(library: &mut LibraryView, shown: impl Fn(&Row) -> bool) -> Vec<(i64, String)> {
+        let v: Vec<usize> = (0..library.rows.len()).filter(|&i| shown(&library.rows[i]) && !(library.stack && library.rows[i].jpeg_for.is_some())).collect();
+        let out = library.series_collapse(v);
+        out.iter().map(|&i| library.rows[i].image).filter_map(|b| library.series.marks.get(&b).map(|m| (b, tile_number(m)))).collect()
+    }
+
+    fn library_with(rows: Vec<Row>, stacks: Vec<Stack>) -> LibraryView {
+        let ctx = egui::Context::default();
+        let mut library = LibraryView::new(&ctx);
+        library.stack = true;
+        library.index = rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
+        library.rows = Arc::new(rows);
+        library.series.set(stacks);
+        library
+    }
+
+    /// Nutzerbefund 1.3.2: the grouping puts RAW and camera JPEG of a shot into the series; the JPEG folded into its
+    /// RAW took a number of its own, so the grid showed "1/4, 2/4, 4/4" (and "1/3, 3/3"). The numbers now count the
+    /// shown pictures and run without gaps.
+    #[test]
+    fn numbers_skip_no_place_for_a_folded_camera_jpeg() {
+        // series A: 1 (+JPEG), 2; series B: 3, 4 (+JPEG), 5 – in capture order, as the grouping writes them
+        let rows = rows_with_pairs(&[(1, "S5399", true), (2, "S5400", false), (3, "S5396", false), (4, "S5397", true), (5, "S5398", false)]);
+        let mut library = library_with(rows, vec![stack(1, vec![1, 101, 2], false), stack(2, vec![3, 4, 104, 5], false)]);
+        // grid newest first (default): cover first, then the newest
+        let n = numbers(&mut library, |_| true);
+        let text = |b: i64| n.iter().find(|x| x.0 == b).map(|x| x.1.clone()).unwrap();
+        assert_eq!((text(1).as_str(), text(2).as_str()), ("1/2", "2/2"), "{n:?}");
+        assert_eq!((text(3).as_str(), text(5).as_str(), text(4).as_str()), ("1/3", "2/3", "3/3"), "{n:?}");
+        // the members stand together in the order of their numbers
+        let b: Vec<&str> = n.iter().filter(|x| [3, 4, 5].contains(&x.0)).map(|x| x.1.as_str()).collect();
+        assert_eq!(b, ["1/3", "2/3", "3/3"]);
+        // sorted by name: oldest first after the cover
+        library.sort_order = SortOrder::Name;
+        let n = numbers(&mut library, |_| true);
+        let b: Vec<(i64, &str)> = n.iter().filter(|x| [3, 4, 5].contains(&x.0)).map(|x| (x.0, x.1.as_str())).collect();
+        assert_eq!(b, [(3, "1/3"), (4, "2/3"), (5, "3/3")]);
+        // the explanation counts pictures, not files
+        assert_eq!(library.stack_pictures(&library.series.stacks[1]), 3);
+        // without RAW+JPEG stacks the camera JPEG is a tile of its own and gets its own number
+        library.stack = false;
+        let n = numbers(&mut library, |_| true);
+        let b: Vec<&str> = n.iter().filter(|x| [3, 4, 104, 5].contains(&x.0)).map(|x| x.1.as_str()).collect();
+        assert_eq!(b, ["1/4", "2/4", "3/4", "4/4"]);
+    }
+
+    /// A member hidden by a filter: the shown ones are numbered 1…n of the shown; collapsed: "shown/all".
+    #[test]
+    fn numbers_of_a_filtered_stack_have_no_gap() {
+        let rows = rows_with_pairs(&[(1, "A", false), (2, "B", false), (3, "C", false), (4, "D", false)]);
+        let mut library = library_with(rows, vec![stack(1, vec![1, 2, 3, 4], false)]);
+        library.sort_order = SortOrder::Name;
+        let n = numbers(&mut library, |z| z.image != 2);
+        assert_eq!(n, [(1, "1/3".to_string()), (3, "2/3".to_string()), (4, "3/3".to_string())]);
+        library.series.stacks[0].collapsed = true;
+        assert_eq!(numbers(&mut library, |z| z.image != 2), [(1, "3/4".to_string())]);
+    }
+
+    #[test]
+    fn shown_order_cover_first_then_stack_order() {
+        let m = |file, order, cover| Member { file, stack: 0, order, cover };
+        let shown = vec![m(30, 3, false), m(10, 1, false), m(20, 2, true), m(30, 3, false)];
+        assert_eq!(shown_order(shown.clone(), false), [20, 10, 30]);
+        assert_eq!(shown_order(shown, true), [20, 30, 10]);
+    }
+
+    /// Members of the open stack of the active photo are marked (bright bracket, taller end marks, bright number),
+    /// the numbers of other stacks are dimmed; without an open stack of the active photo everything stays as before.
+    #[test]
+    fn open_stack_of_the_active_photo_is_marked() {
+        let mark = |stack, collapsed| Mark { stack, pos: 1, total: 3, shown: 3, collapsed, first: true, last: true };
+        let marks: HashMap<i64, Mark> = HashMap::from([(1, mark(0, false)), (2, mark(0, false)), (3, mark(1, false)), (4, mark(2, true))]);
+        assert_eq!(open_stack(&marks, Some(2)), Some(0));
+        assert_eq!(open_stack(&marks, Some(3)), Some(1));
+        // a collapsed stack or a photo outside any stack marks nothing
+        assert_eq!(open_stack(&marks, Some(4)), None);
+        assert_eq!(open_stack(&marks, Some(99)), None);
+        assert_eq!(open_stack(&marks, None), None);
+        let normal = mark_look(&marks[&1], None);
+        let member = mark_look(&marks[&1], Some(0));
+        let other = mark_look(&marks[&3], Some(0));
+        let other_collapsed = mark_look(&marks[&4], Some(0));
+        assert!(member.bracket.r() > normal.bracket.r() && member.width > normal.width && member.tick > normal.tick);
+        assert!(member.text.r() >= normal.text.r() && member.ground.a() > normal.ground.a());
+        assert!(other.text.r() < normal.text.r() && other_collapsed.text.r() < mark_look(&marks[&4], None).text.r());
+        // other stacks keep their bracket; no colour (gold) anywhere
+        assert_eq!(other.bracket, normal.bracket);
+        for l in [normal, member, other, other_collapsed] {
+            assert!(l.bracket.r() == l.bracket.g() && l.bracket.g() == l.bracket.b());
+            assert!(l.text.r() == l.text.g() && l.text.g() == l.text.b());
+        }
     }
 
     #[test]

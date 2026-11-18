@@ -108,7 +108,9 @@ fn unique(name: &str, used: &mut std::collections::HashSet<String>) -> String {
 
 /// Temporary folder of the copies; folders of earlier copies are removed (only the app's own files).
 fn folder(generation: u64) -> PathBuf {
-    let base = std::env::temp_dir().join("graineo Clipboard");
+    // tests run in parallel processes (several test runs, the installed app) and share the system temp folder:
+    // a folder per process keeps them from deleting each other's copies
+    let base = if cfg!(test) { std::env::temp_dir().join(format!("graineo Clipboard test {}", std::process::id())) } else { std::env::temp_dir().join("graineo Clipboard") };
     if let Ok(rd) = std::fs::read_dir(&base) {
         for e in rd.flatten() {
             if e.file_name().to_str().and_then(|n| n.parse::<u64>().ok()).is_some_and(|g| g < generation) {
@@ -329,6 +331,9 @@ impl App {
 mod tests {
     use super::*;
 
+    /// The tests share the global job state (`GENERATION`, `STATE`): one at a time.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
     #[test]
     fn names_without_extension_and_unique() {
         assert_eq!(copy_name("DP2M5418.X3F", None), "DP2M5418");
@@ -343,6 +348,7 @@ mod tests {
     /// A finished copy with a developed view: JPEG next to the name, data on the item.
     #[test]
     fn view_becomes_a_named_jpeg() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
         let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
         let rgb = Arc::new(vec![128u8; 4 * 3 * 3]);
         prepare(generation, vec![Source::View { name: "Test".into(), width: 4, height: 3, rgb }], egui::Context::default());
@@ -352,6 +358,6 @@ mod tests {
         assert_eq!(items[0].file.file_name().unwrap(), "Test.jpg");
         assert!(items[0].file.is_file());
         assert!(items[0].jpeg.as_ref().is_some_and(|j| j.starts_with(&[0xFF, 0xD8])));
-        let _ = std::fs::remove_dir_all(items[0].file.parent().unwrap());
+        let _ = std::fs::remove_dir_all(items[0].file.parent().unwrap().parent().unwrap());
     }
 }

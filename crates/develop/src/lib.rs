@@ -27,6 +27,7 @@ pub mod defects;
 pub mod defringe;
 pub mod spp_defringe;
 pub mod dehaze;
+pub mod ai_denoise;
 pub mod denoise;
 pub mod diskcache;
 pub mod dng;

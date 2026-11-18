@@ -69,6 +69,8 @@ pub struct SppKey {
     pub prepared: bool,
     /// Binning setting (Quattro, see [`crate::quattro::binning_factor`]); always `Auto` for Merrill
     pub binning: Binning,
+    /// Neural denoising after Sigma's noise reduction in percent ([`crate::ai_denoise`]); 0 = off (colour bases only)
+    pub ai: u8,
 }
 
 impl SppKey {
@@ -348,6 +350,11 @@ pub struct RawAdjust {
     pub nr_color_detail: f32,
     /// False colour suppression (X-Trans only), 0 … 1
     pub false_color: f32,
+    /// Neural denoising (`rawdev::ai_denoise`, RawNIND): share of the denoised image, 0 = off … 1 = full; for Sigma
+    /// photos after Sigma's noise reduction ([`crate::ai_denoise`], key [`SppKey::ai`]). Not written
+    /// while off, so the JSON of existing photos stays byte-identical; older versions ignore the field.
+    #[serde(rename = "aiDenoise", default, skip_serializing_if = "is_zero")]
+    pub ai_denoise: f32,
     /// Calibration: hue and saturation of red, green, blue, then shadow tint (+ magenta), each −1 … +1 (Lightroom XMP value ÷ 100)
     pub calibration: [f32; 7],
     /// Upright mode from Lightroom XMP (1 Auto, 2 Level, 3 Vertical, 4 Full); applied with our own detection on first open
@@ -403,6 +410,7 @@ impl Default for RawAdjust {
             nr_color: 25.0,
             nr_color_detail: 50.0,
             false_color: 0.6,
+            ai_denoise: 0.0,
             calibration: [0.0; 7],
             upright_from_lr: None,
             lens: true,
@@ -603,7 +611,9 @@ impl Settings {
     pub fn spp_key_class(&self, prepared: bool) -> SppKey {
         let mono = self.monochrome;
         let step = |v: f64| (v.clamp(NR_OFF, 1.0) * 4.0).round() as i8;
-        SppKey { mode: self.color_mode.clone(), nr: (step(self.nr_luma), step(self.nr_chroma)), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning }
+        // neural denoising after Sigma's noise reduction (every Foveon generation), colour only
+        let ai = if mono || self.raw.ai_denoise <= 0.0 || !crate::ai_denoise::installed() { 0 } else { (self.raw.ai_denoise.clamp(0.0, 1.0) * 100.0).round() as u8 };
+        SppKey { mode: self.color_mode.clone(), nr: (step(self.nr_luma), step(self.nr_chroma)), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning, ai }
             .for_class(prepared)
     }
 
@@ -626,6 +636,27 @@ impl Settings {
     /// Key of the noise reduction; if it changes, denoising must be redone.
     pub fn denoise_key(&self) -> Option<(u8, u8)> {
         self.denoise.then(|| ((self.nr_luma * 4.0).round() as u8, (self.nr_chroma * 4.0).round() as u8))
+    }
+}
+
+#[cfg(test)]
+mod ai_denoise_settings_tests {
+    use super::*;
+
+    /// Off is not written (existing photos stay byte-identical); a missing field loads as off; a value survives.
+    #[test]
+    fn ai_denoise_json() {
+        let mut s = Settings::default();
+        s.raw.nr_luma = 10.0;
+        let t = serde_json::to_string(&s).unwrap();
+        assert!(!t.contains("aiDenoise"), "{t}");
+        assert_eq!(serde_json::from_str::<Settings>(&t).unwrap().raw.ai_denoise, 0.0);
+        assert_eq!(serde_json::from_str::<Settings>(r#"{"raw":{"nr_luma":10.0}}"#).unwrap().raw.ai_denoise, 0.0);
+        s.raw.ai_denoise = 0.8;
+        let t = serde_json::to_string(&s).unwrap();
+        assert!(t.contains("\"aiDenoise\":0.8"), "{t}");
+        assert_eq!(serde_json::from_str::<Settings>(&t).unwrap().raw.ai_denoise, 0.8);
+        assert!(!RawAdjust { ai_denoise: 0.5, ..Default::default() }.is_default());
     }
 }
 

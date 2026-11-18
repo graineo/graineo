@@ -1,7 +1,8 @@
 //! ⌘Z / ⇧⌘Z by time, not by kind: every undoable action carries the time it was made ([`tick`]), and ⌘Z takes back
 //! the most recent one of all stacks – commands for several photos and turns (`library_turn.rs`), ratings
-//! (`library_ui.rs`), managing the library and moves (grid only: collections, keywords, order …) and the develop history
-//! of the open photo (`history.rs`). ⇧⌘Z does again what was taken back last (commands and the develop history; the
+//! (`library_ui.rs`), managing the library and moves of this session (collections, keywords, quick collection, faces
+//! named outside the people view, order …; in every view), deleted own presets and the develop history of the open
+//! photo (`history.rs`). Moves of earlier sessions are never taken back by ⌘Z. ⇧⌘Z does again what was taken back last (commands and the develop history; the
 //! other stacks have no redo). The people view keeps its own ⌘Z; text fields are not affected (they take ⌘Z before
 //! the menu).
 
@@ -33,6 +34,8 @@ pub enum Stack {
     Library,
     /// develop history of the open photo
     Photo,
+    /// own presets deleted ("VORGABE LÖSCHEN")
+    Preset,
 }
 
 /// The stack with the most recent action (`None`: nothing to take back). Equal times keep the order of the list.
@@ -56,8 +59,13 @@ impl crate::App {
         if let Some(t) = self.lib.rating_stamp() {
             v.push((Stack::Rating, t));
         }
-        if self.in_grid() {
-            v.push((Stack::Library, self.lib.external_stamp()));
+        // managing the library and moves of this session count in every view (a keyword assigned in Develop is
+        // taken back there too); journals of earlier sessions never count
+        if let Some(t) = self.lib.external_stamp() {
+            v.push((Stack::Library, t));
+        }
+        if let Some(t) = self.preset_undo.last().map(|p| p.0) {
+            v.push((Stack::Preset, t));
         }
         if let Some(i) = self.current.as_ref().map(|c| c.index) {
             let key = self.history_key(i);
@@ -91,8 +99,29 @@ impl crate::App {
                 self.library_actions(a);
             }
             Some(Stack::Photo) => self.undo(false),
+            Some(Stack::Preset) => self.undo_preset_delete(),
             None => {}
         }
+    }
+
+    /// "VORGABE LÖSCHEN": take the own preset out of the list; ⌘Z puts it back.
+    pub(crate) fn delete_own_preset(&mut self, i: usize) {
+        if i >= self.presets.len() {
+            return;
+        }
+        let p = self.presets.remove(i);
+        crate::presets::save(&self.presets);
+        self.status = crate::trf!("Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück", a = p.name);
+        self.preset_undo.push((tick(), i, p));
+        self.lib.rating_not_recent();
+    }
+
+    /// ⌘Z of a deleted own preset: back to its place in the list.
+    pub(crate) fn undo_preset_delete(&mut self) {
+        let Some((_, i, p)) = self.preset_undo.pop() else { return };
+        self.status = crate::trf!("Rückgängig: Vorgabe „{a}“ gelöscht", a = p.name);
+        self.presets.insert(i.min(self.presets.len()), p);
+        crate::presets::save(&self.presets);
     }
 
     /// ⇧⌘Z: do again what was taken back last (a command for several photos, or a step of the open photo).
@@ -153,6 +182,69 @@ mod tests {
             stamps.retain(|(x, _)| *x != s);
         }
         assert_eq!(order, [Stack::Photo, Stack::Rating, Stack::Library, Stack::Commands]);
+    }
+
+    /// ⌘Z outside the grid, by time over all stacks: a slider step, the quick collection (B), a move of this session,
+    /// a deleted own preset are taken back newest first in Develop; a management step older than a move waits for it.
+    /// A finished move journal of an earlier session is never touched. Needs `GRAINEO_DATA_DIR`.
+    #[test]
+    fn session_steps_in_develop_and_old_journals_untouched() {
+        assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
+        let folder = std::env::temp_dir().join(format!("graineo-undo-session-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        image::RgbImage::from_pixel(64, 48, image::Rgb([90, 100, 120])).save(folder.join("b.png")).unwrap();
+        // a finished move of an earlier session
+        let journals = library::relocate::journal_folder();
+        std::fs::create_dir_all(&journals).unwrap();
+        let old = journals.join("1000.json");
+        std::fs::write(&old, r#"{"id":"1000","title":"alt","status":"done","message":"","kind":"","steps":[],"db":[]}"#).unwrap();
+        assert!(library::relocate::journals().iter().any(|v| v.id == "1000" && v.status == "done"));
+        let ctx = eframe::egui::Context::default();
+        let cc = eframe::CreationContext::_new_kittest(ctx.clone());
+        let _app_lock = crate::ui_test::app_lock();
+        let mut a = crate::App::new(&cc);
+        assert!(a.undo_candidates().iter().all(|c| c.0 != Stack::Library), "journals of earlier sessions do not count");
+        a.open_folder_inner(folder.clone());
+        a.to_single_image();
+        let deadline = std::time::Instant::now() + crate::ui_test::WAIT;
+        while a.current.is_none() || a.loading.is_some() {
+            a.handle_results(&ctx);
+            a.schedule(0.0);
+            assert!(std::time::Instant::now() < deadline, "photo does not open");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(!a.in_grid());
+        let cur = a.current.as_ref().unwrap().index;
+        let image = a.entries[cur].image;
+        a.track_history(&ctx);
+        a.entries[cur].settings.exposure = 0.3;
+        a.track_history(&ctx);
+        assert!(a.lib.quick_toggle(&[image]).is_some());
+        assert!(a.lib.in_quick(image));
+        a.lib.moves.push((tick(), "999".into()));
+        a.presets.push(crate::presets::Preset { name: "Test".into(), settings: develop::Settings::default(), scope: crate::presets::Scope::Look, hint: String::new() });
+        let n = a.presets.len();
+        a.delete_own_preset(n - 1);
+        assert_eq!(a.presets.len(), n - 1);
+        let mut undo = |a: &mut crate::App| {
+            a.undo_latest();
+            a.track_history(&ctx);
+        };
+        undo(&mut a);
+        assert_eq!(a.presets.len(), n, "the deleted preset is back");
+        undo(&mut a);
+        assert!(a.lib.moves.is_empty() && a.lib.in_quick(image), "the move is newer than the quick collection");
+        undo(&mut a);
+        assert!(!a.lib.in_quick(image), "B taken back in Develop");
+        assert_eq!(a.entries[cur].settings.exposure, 0.3, "the slider step is older");
+        undo(&mut a);
+        assert_eq!(a.entries[cur].settings.exposure, 0.0);
+        undo(&mut a);
+        let _ = a.lib.undo_external();
+        assert!(a.undo_candidates().is_empty());
+        assert!(library::relocate::journals().iter().any(|v| v.id == "1000" && v.status == "done"), "the old journal stays done");
+        let _ = std::fs::remove_file(&old);
+        let _ = std::fs::remove_dir_all(&folder);
     }
 
     /// The whole app: a slider step, then a command for several photos (reset), then another slider step. ⌘Z takes

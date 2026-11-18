@@ -104,6 +104,7 @@ mod jobs;
 mod lr;
 mod presets;
 mod raw_app;
+mod ai_denoise_ui;
 mod mask_list_ui;
 mod mask_parts;
 mod masks_ui;
@@ -218,6 +219,8 @@ fn main() -> eframe::Result {
     // Crashes go to the trace log and, lastingly, to the crash log (on Windows there is no console window to show them)
     crash_log::install();
     threads::init();
+    // neural denoising for Sigma bases (only acts when a photo's settings ask for it, see ai_denoise_ui.rs)
+    rawdev::ai_denoise::install_sigma();
     // started again by "Sicherung ansehen" or "Zurück zur Bibliothek": the previous process ends first
     library::backup_view::wait_for_parent();
     single_instance_or_exit();
@@ -527,6 +530,8 @@ struct App {
     copy_from: Option<usize>,
     // View options
     presets: Vec<presets::Preset>,
+    /// own presets deleted in this session: (time, place in the list, preset); ⌘Z puts the newest back
+    preset_undo: Vec<(u64, usize, presets::Preset)>,
     new_preset_name: String,
     /// Confirmation dialog "Delete rejected" open
     confirm_delete: bool,
@@ -909,6 +914,7 @@ impl App {
             copy_dialog: false,
             copy_from: None,
             presets: presets::load(),
+            preset_undo: Vec::new(),
             new_preset_name: String::new(),
             confirm_delete: false,
             delete_info: None,
@@ -2752,6 +2758,21 @@ impl App {
             }
         }
         let Some(c) = &self.current else { return };
+        // neural denoising of the photo on screen: computed in the background, rendered again once it is there
+        let ai = crate::ai_denoise_ui::step(c.loaded.previews.foreign.as_ref(), &self.entries[c.index].settings);
+        if let Some(text) = ai.done {
+            self.notes.done(text, now);
+        }
+        if ai.rerender {
+            if let Some(c) = self.current.as_mut() {
+                c.detail = None;
+                c.detail_grain = None;
+                c.detail_hover = None;
+            }
+            self.panes.invalidate();
+            self.rendered_for = None;
+        }
+        let Some(c) = &self.current else { return };
         let s = self.entries[c.index].settings.clone();
         self.edit_log.observe(c.index, &self.entries[c.index].path, &s);
         // Colour mode changed: recompute the SPP base (converted linearly until then)
@@ -2909,6 +2930,11 @@ impl App {
             return;
         }
         let Some(session) = loaded.session.clone() else { return };
+        // a base with the neural denoising is not computed ahead (seconds of full load for a photo perhaps never
+        // shown); it starts, with its progress in the title bar, when the photo is shown
+        if settings.spp_key(&self.entries[next].path).ai > 0 {
+            return;
+        }
         let need = (loaded.full_size[0] * loaded.full_size[1]) as u64 * mem_budget::BASE_BYTES_PER_PIXEL;
         if !mem_budget::room_ahead("Sigma base ahead", need) {
             return;
@@ -3185,7 +3211,8 @@ impl App {
         match &self.committed {
             Some((i, s)) if *i == index && *s != current => {
                 let before = s.clone();
-                if let Some(t) = self.history.record(&key, index, &before, &current) {
+                let own = history::take_reset_gesture();
+                if let Some(t) = self.history.record_with(&key, index, &before, &current, own) {
                     self.status = t;
                 }
                 self.lib.rating_not_recent();
@@ -4821,8 +4848,7 @@ impl App {
             self.preset_cursor = Some(k);
         }
         if let Some(i) = delete {
-            self.presets.remove(i);
-            presets::save(&self.presets);
+            self.delete_own_preset(i);
         }
         if let (Some(s), Some(i)) = (apply, self.current.as_ref().map(|c| c.index)) {
             self.entries[i].settings = s;
@@ -6924,7 +6950,7 @@ impl App {
         }
 
         let nr_changed = s.denoise != d.denoise || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
-            || s.raw.nr_luma != d.raw.nr_luma || s.raw.nr_luma_detail != d.raw.nr_luma_detail || s.raw.nr_color != d.raw.nr_color || s.raw.nr_color_detail != d.raw.nr_color_detail || s.raw.false_color != d.raw.false_color;
+            || s.raw.nr_luma != d.raw.nr_luma || s.raw.nr_luma_detail != d.raw.nr_luma_detail || s.raw.nr_color != d.raw.nr_color || s.raw.nr_color_detail != d.raw.nr_color_detail || s.raw.false_color != d.raw.false_color || s.raw.ai_denoise != d.raw.ai_denoise;
         let raw_nr = foreign.as_ref().map(|doc| doc.preview.profile.is_some());
         let reset_nr = lr::section_reset(ui, "Details", true, nr_changed, |ui| {
             if lr::group_label(ui, "Schärfen") {
@@ -6959,7 +6985,7 @@ impl App {
             });
             ui.add_space(4.0);
             if let Some(possible) = raw_nr {
-                raw_app::noise(ui, s, possible, foreign.as_ref().is_some_and(|d| d.info.sensor == raw::Sensor::XTrans));
+                raw_app::noise(ui, s, possible, foreign.as_ref().is_some_and(|d| d.info.sensor == raw::Sensor::XTrans), foreign.as_deref());
             } else {
                 // Sigma's "noise reduction" is also Sigma's detail level (base and detail layer,
                 // base sharpness) – switching it off therefore also removes the typical Merrill sharpness
@@ -6968,12 +6994,21 @@ impl App {
                     ui.checkbox(&mut s.denoise, crate::tr("Foveon-Detail"));
                     help::info(ui, "sigma-detail", "Foveon-Detail", &help::SIGMA_DETAIL);
                 });
-                ui.add_enabled_ui(s.denoise, |ui| {
+                // Quattro: the noise reduction already runs in the preparation; the sliders only switch it off
+                // (see `binning_ui::noise_sliders_locked`). Greyed out, the stored values stay and still apply.
+                let locked = binning_ui::noise_sliders_locked(Some(binning_cal.model));
+                let sliders = ui.add_enabled_ui(s.denoise && !locked, |ui| {
                     lr::slider(ui, "Luminanz", &mut s.nr_luma, 0.0..=1.0, 0.5, 0.25);
                     lr::slider(ui, "Farbe", &mut s.nr_chroma, 0.0..=1.0, 0.5, 0.25);
                 });
+                if locked {
+                    let r = ui.interact(sliders.response.rect, ui.id().with("nr-locked"), egui::Sense::hover());
+                    lr::hover_tip(ui, &r, binning_ui::noise_locked_tip(s.nr_luma != 0.5 || s.nr_chroma != 0.5));
+                }
                 // Quattro at high ISO: binning per photo (binning_ui.rs)
                 binning_ui::switch(ui, &binning_cal, s);
+                // neural denoising after Sigma's noise reduction (ai_denoise_ui.rs)
+                crate::ai_denoise_ui::section_sigma(ui, s, &lens_path);
             }
         });
         if reset_nr {
@@ -6990,6 +7025,7 @@ impl App {
             s.raw.nr_color = d.raw.nr_color;
             s.raw.nr_color_detail = d.raw.nr_color_detail;
             s.raw.false_color = d.raw.false_color;
+            s.raw.ai_denoise = d.raw.ai_denoise;
         }
 
         ui.add_space(6.0);

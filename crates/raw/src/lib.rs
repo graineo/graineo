@@ -12,6 +12,8 @@
 //! capture sharpening. Ported GPL-3 parts (RawTherapee, darktable) are credited in the
 //! header of the respective module.
 
+/// Neural denoising (RawNIND UtNet2, linear variant) with an own executor
+pub mod ai_denoise;
 pub mod picture_style;
 pub mod focus;
 pub mod development;

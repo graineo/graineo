@@ -207,6 +207,7 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
         s.raw.nr_color = src.raw.nr_color;
         s.raw.nr_color_detail = src.raw.nr_color_detail;
         s.raw.false_color = src.raw.false_color;
+        s.raw.ai_denoise = src.raw.ai_denoise;
     }
     if on("Freistellen & Drehen") {
         s.crop = src.crop;

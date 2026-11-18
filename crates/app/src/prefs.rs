@@ -1586,7 +1586,7 @@ fn non_commercial_dialog(ctx: &egui::Context) {
             crate::dialog::warning(ui, crate::tr("Nur für nicht-kommerzielle Nutzung"));
             crate::dialog::text(ui, &crate::trf!("Lizenz: {l}. {s}", l = t.name, s = crate::tr(t.summary)));
             ui.hyperlink_to(crate::tr("Lizenztext lesen"), t.url);
-            crate::dialog::hint(ui, &crate::trf!("Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.", s = format!("huggingface.co/{}", d.repo)));
+            crate::dialog::hint(ui, &crate::trf!("Das Modell wird nicht von graineo bereitgestellt, sondern auf deinen Wunsch von der Originalquelle geladen ({s}). Alle Funktionen gibt es auch mit dem freien Modell.", s = library::module::source_label(d)));
             ui.add_space(4.0);
             ui.checkbox(&mut ticked, crate::tr("Ich nutze graineo mit diesem Modell ausschließlich nicht-kommerziell"));
         },
@@ -1813,12 +1813,12 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
             let note = crate::trf!("Nur für nicht-kommerzielle Nutzung · {l}", l = t.name);
             let r = ui.add(dim(note, Color32::from_rgb(0xe0, 0xb0, 0x40)));
             let confirmed = library::module::confirmation(d).is_some();
-            lr::hover_tip(ui, &r, &crate::trf!("{p}. Lizenz: {l} · Quelle: huggingface.co/{r} · nicht von graineo bereitgestellt{c}", p = crate::tr(d.purpose), l = d.license, r = d.repo, c = if confirmed { crate::tr(" · nicht-kommerzielle Nutzung bestätigt").to_string() } else { String::new() }));
+            lr::hover_tip(ui, &r, &crate::trf!("{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}", p = crate::tr(d.purpose), l = d.license, r = library::module::source_label(d), c = if confirmed { crate::tr(" · nicht-kommerzielle Nutzung bestätigt").to_string() } else { String::new() }));
             ui.hyperlink_to(egui::RichText::new(crate::tr("Lizenz")).small(), t.url);
         } else {
             let t = crate::trf!("{a} · Lizenz {b}", a = crate::tr(d.purpose), b = short_license(d.license));
             let r = ui.add(dim(t, lr::TEXT_DIM));
-            lr::hover_tip(ui, &r, &crate::trf!("Lizenz: {l} · Quelle: huggingface.co/{r}", l = d.license, r = d.repo));
+            lr::hover_tip(ui, &r, &crate::trf!("Lizenz: {l} · Quelle: {r}", l = d.license, r = library::module::source_label(d)));
         }
     });
 }

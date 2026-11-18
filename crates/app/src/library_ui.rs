@@ -388,8 +388,9 @@ pub struct LibraryView {
     rating_undo: Vec<Vec<crate::rating::Value>>,
     /// when each rating change was made (parallel to `rating_undo`, [`crate::undo_order::tick`])
     rating_at: Vec<u64>,
-    /// when the last move / rename of this session finished (⌘Z of the grid takes it back, see `undo_order.rs`)
-    pub(crate) move_at: u64,
+    /// moves / renames finished in this session: (time, journal id), oldest first. ⌘Z takes back only these; journals
+    /// of earlier sessions are never touched by ⌘Z (see `undo_order.rs`)
+    pub(crate) moves: Vec<(u64, String)>,
     /// the last undoable action was a rating
     last_was_rating: bool,
     /// show RAW+JPEG pairs as one image (setting `rawJpegStacks`, on by default)
@@ -860,7 +861,7 @@ impl LibraryView {
             writer: crate::rating::Writer::new(Some(library::db_path())),
             rating_undo: Vec::new(),
             rating_at: Vec::new(),
-            move_at: 0,
+            moves: Vec::new(),
             last_was_rating: false,
             stack: library::settings::value("rawJpegStacks").as_bool().unwrap_or(true),
             kind: library::settings::value("libraryKind").as_u64().map_or(0, |v| v.min(2) as u8),
@@ -1608,6 +1609,8 @@ impl LibraryView {
             self.active_settle = 0;
             self.grid_top = true;
             self.grid_back_y = None;
+            // a pending return to the place in the old list must not win over the new list
+            self.grid_anchor = None;
             self.source_nr += 1;
         }
     }
@@ -2680,9 +2683,10 @@ impl LibraryView {
         self.last_was_rating = !self.rating_undo.is_empty();
     }
 
-    /// When the step ⌘Z of the grid takes back was made: the management (collections, keywords …) or the last move.
-    pub fn external_stamp(&self) -> u64 {
-        self.manage.undo_at.last().copied().unwrap_or(0).max(self.move_at)
+    /// When the step ⌘Z of the library takes back was made: the management (collections, keywords …) or a move of
+    /// this session (`None`: nothing of this session to take back).
+    pub fn external_stamp(&self) -> Option<u64> {
+        self.manage.undo_at.last().copied().max(self.moves.last().map(|m| m.0))
     }
 
     /// Another undoable action (slider, move) came after the last rating.
@@ -4266,14 +4270,18 @@ impl LibraryView {
             }
             ui.ctx().request_repaint();
         }
+        // the app places the grid itself this frame (list change, return, jump): see `placed` below
+        let mut placed = false;
         if std::mem::take(&mut self.grid_top) && !self.to_active {
             area = area.vertical_scroll_offset(0.0);
             self.grid_y = 0.0;
+            placed = true;
         }
         if let Some(y) = self.grid_back_y.take() {
             // position from back then; if the active photo is not in view with it (the grid has changed in the meantime),
             // the "to the active photo" check below still applies
             area = area.vertical_scroll_offset(y);
+            placed = true;
         }
         // back from single image view: the photo opened stays at the same height on screen. Applied for a
         // few frames, because the list or the layout may still settle after the first frame; any scrolling ends it.
@@ -4297,6 +4305,7 @@ impl LibraryView {
                     Some(pos) => {
                         let y = (layout.top(row_of(pos)) - dy).max(0.0);
                         area = area.vertical_scroll_offset(y);
+                        placed = true;
                         if left > 1 {
                             self.grid_anchor = Some((image, dy, left - 1));
                         }
@@ -4315,6 +4324,7 @@ impl LibraryView {
             if let Some(pos) = self.active.and_then(|a| self.visible.iter().position(|&i| self.rows[i].image == a)) {
                 let row = row_of(pos);
                 area = area.vertical_scroll_offset(crate::grid_jump::center_offset(layout.top(row), cell, ui.available_height()));
+                placed = true;
             }
             self.active_settle = 0;
         }
@@ -4335,17 +4345,20 @@ impl LibraryView {
                     let old = self.grid_y;
                     if y < old || y + cell > old + view_h {
                         area = area.vertical_scroll_offset((y - view_h / 2.0 + cell / 2.0).max(0.0));
+                        placed = true;
                     }
                 }
             }
             ui.ctx().request_repaint();
         }
-        // While returning to a remembered place, the scroll area still has the state of the last grid frame:
-        // kinetic velocity from scrolling before leaving would let the grid coast on, and with the content
-        // height of an older layout the rubber band would pull it back towards that old edge.
-        // Both off while anchoring (decay 0 also clears the stored velocity).
+        // Whenever the app places the grid (list change, return from the single view, jump to the active photo,
+        // remembered place), the scroll area still has the state of the last grid frame: kinetic velocity from
+        // scrolling before would let the grid coast on, and with the content height of the old list (e.g. a short
+        // collection before "All photos") a target past its end counted as overscroll: the rubber band pulled it
+        // back with a large velocity, and the grid then coasted for seconds to an unrelated place (report 1.3.2).
+        // Both off in such a frame (decay 0 also clears the stored velocity): the grid lands once and stays.
         let kinetic = ui.spacing().scroll.kinetic;
-        if self.grid_anchor.is_some() {
+        if self.grid_anchor.is_some() || placed {
             ui.spacing_mut().scroll.kinetic.rubber_band = false;
             ui.spacing_mut().scroll.kinetic.decay_time = 0.0;
         }
@@ -5319,6 +5332,8 @@ impl LibraryView {
             return None;
         }
         let add = !target.iter().all(|b| self.quick.contains(b));
+        // ⌘Z takes back exactly what changed (photos already in stay in)
+        let changed: Vec<i64> = target.iter().copied().filter(|b| self.quick.contains(b) != add).collect();
         if add {
             self.quick.extend(target.iter().copied());
         } else {
@@ -5331,12 +5346,30 @@ impl LibraryView {
         }
         self.quick_send(QuickJob::Set(target.to_vec(), add));
         let n = target.len();
-        Some(match (add, n) {
+        let text = match (add, n) {
             (true, 1) => crate::tr("Zur Schnellsammlung hinzugefügt").to_string(),
             (true, n) => crate::trf!("{n} Fotos zur Schnellsammlung hinzugefügt", n = n),
-            (false, 1) => "Aus der Schnellsammlung entfernt".to_string(),
+            (false, 1) => crate::tr("Aus der Schnellsammlung entfernt").to_string(),
             (false, n) => crate::trf!("{n} Fotos aus der Schnellsammlung entfernt", n = n),
-        })
+        };
+        let label = text.clone();
+        self.manage.push(if add { library_manage::Undo::Quick { label, images: changed } } else { library_manage::Undo::QuickRemoved { label, images: changed } });
+        self.last_was_rating = false;
+        Some(text)
+    }
+
+    /// Empty the quick collection; ⌘Z puts the photos back in.
+    fn quick_clear_undoable(&mut self) {
+        let images: Vec<i64> = self.quick.drain().collect();
+        if self.source == Source::Quick {
+            self.source_changed();
+        }
+        self.quick_send(QuickJob::Clear);
+        if !images.is_empty() {
+            let label = crate::tr("Schnellsammlung geleert").to_string();
+            self.manage.push(library_manage::Undo::QuickRemoved { label, images });
+            self.last_was_rating = false;
+        }
     }
 
     /// ⌘B: show the quick collection.
@@ -5384,11 +5417,7 @@ impl LibraryView {
                 match a {
                     dialog::Answer::Primary => {
                         self.quick_query = QuickQuery::Off;
-                        self.quick.clear();
-                        if self.source == Source::Quick {
-                            self.source_changed();
-                        }
-                        self.quick_send(QuickJob::Clear);
+                        self.quick_clear_undoable();
                     }
                     dialog::Answer::Cancel => self.quick_query = QuickQuery::Off,
                     dialog::Answer::Open => {}
@@ -5415,11 +5444,7 @@ impl LibraryView {
                         self.quick_query = QuickQuery::Off;
                         self.quick_send(QuickJob::Save(name.trim().to_string()));
                         if clear {
-                            self.quick.clear();
-                            if self.source == Source::Quick {
-                                self.source_changed();
-                            }
-                            self.quick_send(QuickJob::Clear);
+                            self.quick_clear_undoable();
                         }
                     }
                     dialog::Answer::Cancel => self.quick_query = QuickQuery::Off,
@@ -6388,7 +6413,7 @@ impl LibraryView {
             |b, actions, r| match r {
                 Ok((v, loaded)) => {
                     actions.push(Action::Status(crate::trf!("{a} – ⌘Z macht es rückgängig", a = v.title)));
-                    b.move_at = crate::undo_order::tick();
+                    b.moves.push((crate::undo_order::tick(), v.id.clone()));
                     b.adopt_or_reload(loaded);
                 }
                 Err(e) => b.dialog = Some(Dialog::Error(e)),
@@ -6408,17 +6433,22 @@ impl LibraryView {
     }
 
     fn undo(&mut self, _actions: &mut Vec<Action>) {
-        // the newest step of managing the library (remove, rename, move, drop onto a collection) first
-        if self.manage_undo() {
+        // the newer of the newest management step (remove, rename collections, drop onto a collection …) and the
+        // newest move of this session
+        let manage_at = self.manage.undo_at.last().copied();
+        if manage_at.is_some() && manage_at > self.moves.last().map(|m| m.0) {
+            self.manage_undo();
             return;
         }
-        // the move of this session is taken back (older journals count as old)
-        self.move_at = 0;
+        let Some((_, id)) = self.moves.pop() else {
+            self.manage_message = Some(crate::tr("Nichts rückgängig zu machen").into());
+            return;
+        };
         // in the background; the message comes with the result, after a move still running (jobs run in order)
         let ticket = self.load_ticket();
         self.in_background(
             move |db| {
-                let Some(mut v) = library::relocate::journals().into_iter().find(|v| v.status == "done") else { return Ok(None) };
+                let Some(mut v) = library::relocate::journals().into_iter().find(|v| v.id == id && v.status == "done") else { return Ok(None) };
                 library::relocate::undo(db, &mut v).map(|_| Some((v.title, ticket.load(db).ok())))
             },
             |b, actions, r| match r {
@@ -6981,6 +7011,12 @@ impl LibraryView {
                 self.ask_new_collection(library::manage::COLLECTION, None);
             }
             "imports" => self.ask_imports(),
+            // "rename:<new name>": the rename dialog of the first photo, filled in (⌘Z tests)
+            n if n.starts_with("rename:") => {
+                if let Some(z) = self.visible.first().map(|&i| self.rows[i].clone()) {
+                    self.dialog = Some(Dialog::Rename { file: z.file, name: n["rename:".len()..].to_string() });
+                }
+            }
             "delete-collection" => {
                 if let Some(c) = self.collections.iter().find(|c| c.kind == 1).cloned() {
                     self.ask_delete(library_manage::Target::Collection(c.id), c.name);
@@ -7565,17 +7601,25 @@ impl LibraryView {
     /// In the background; errors come as a status message.
     pub fn name_face(&mut self, face: i64, name: &str) {
         let name = name.to_string();
+        let label = if name.trim().is_empty() { crate::tr("Name des Gesichts entfernt").to_string() } else { crate::trf!("Gesicht „{a}“ benannt", a = name.trim()) };
         self.in_background(
             move |db| {
+                // the state before, for ⌘Z (as in the people view)
+                let snap = library::face_index::snapshot(db, &[face], None)?;
                 if name.trim().is_empty() {
-                    library::people::apply_answer(db, face, library::people::Answer::RemoveName)
+                    library::people::apply_answer(db, face, library::people::Answer::RemoveName)?;
                 } else {
-                    library::people::apply_answer_with_name(db, face, &name)
+                    library::people::apply_answer_with_name(db, face, &name)?;
                 }
+                Ok(snap)
             },
             |b, actions, r| {
-                if let Err(e) = r {
-                    actions.push(Action::Status(e));
+                match r {
+                    Ok(snap) => {
+                        b.manage.push(library_manage::Undo::Faces { label, snap });
+                        b.last_was_rating = false;
+                    }
+                    Err(e) => actions.push(Action::Status(e)),
                 }
                 b.reload();
                 actions.push(Action::FacesChanged);
@@ -8290,6 +8334,75 @@ mod media_library_tests {
         let row_y = (6 / b.columns) as f32 * b.grid_cell;
         assert_ne!(b.columns, columns, "test needs a changed column count");
         assert!((row_y - b.grid_y - dy).abs() < 1.0 || b.grid_y == 0.0 && row_y < dy + 1.0, "photo moved on screen: before {dy}, now {} (grid_y {}, pitch {}, columns {} -> {})", row_y - b.grid_y, b.grid_y, b.grid_cell, columns, b.columns);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// User report (1.3.2): a short collection in the grid, a photo opened, "All photos" chosen, back to the grid: the
+    /// grid must show the active photo at once and stay there. Before, the jump went past the end of the old (short)
+    /// content, egui's rubber band pulled it back with a huge velocity, and the grid then coasted for seconds to some
+    /// unrelated place.
+    #[test]
+    fn list_switch_lands_on_the_active_photo_and_stays() {
+        assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some());
+        let dir = std::env::temp_dir().join(format!("graineo-list-jump-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for i in 0..600 {
+            image::RgbImage::from_pixel(8, 6, image::Rgb([60, 100, 80])).save(dir.join(format!("p-{i:04}.png"))).unwrap();
+        }
+        let ctx = egui::Context::default();
+        lr::apply_theme(&ctx);
+        let mut b = LibraryView::new(&ctx);
+        b.browse_folder(&dir, None);
+        b.centre_width = 580.0;
+        b.cell_size = 140.0;
+        let all = b.visible.clone();
+        assert_eq!(all.len(), 600);
+        let ids: Vec<i64> = all.iter().map(|&i| b.rows[i].image).collect();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(600.0, 440.0));
+        let mut time = 0.0;
+        let mut frame = |b: &mut LibraryView| {
+            time += 1.0 / 60.0;
+            let _ = crate::ui_test::run(&ctx, egui::RawInput { screen_rect: Some(rect), time: Some(time), ..Default::default() }, |root| {
+                egui::CentralPanel::default().show(root, |ui| b.raster(ui, &mut Vec::new()));
+            });
+        };
+        // "collection": the first 40 photos (taller than the view), the 21st active
+        b.source = Source::Quick;
+        b.visible = all[..40].to_vec();
+        b.active = Some(ids[20]);
+        for _ in 0..5 {
+            frame(&mut b);
+        }
+        // single image view, "All photos" there, back to the grid with the photo at position 400
+        b.remember_grid();
+        b.set_source(Source::Browse(dir.clone()));
+        b.visible = all.clone();
+        b.refilter = false;
+        b.set_active(ids[400]);
+        b.restore_grid();
+        let mut ys = Vec::new();
+        for _ in 0..200 {
+            frame(&mut b);
+            ys.push(b.grid_y);
+        }
+        eprintln!("grid_y after the switch (every 0.25 s): {:?}", ys.iter().step_by(15).map(|y| y.round()).collect::<Vec<_>>());
+        let top = (400 / b.columns) as f32 * b.grid_cell;
+        let view_h = b.grid_view_h;
+        assert!(crate::grid_jump::in_view(top, b.grid_cell - 2.0, b.grid_y, view_h + 2.0), "active photo not in view: row top {top}, grid_y {}, view {view_h}", b.grid_y);
+        // no coasting: from the third frame on the position never changes
+        let settled = ys[2];
+        let drift = ys[2..].iter().map(|y| (y - settled).abs()).fold(0.0, f32::max);
+        assert!(drift < 1.0, "grid kept moving after the jump by up to {drift} pt (positions {:?} … {:?})", &ys[..12], &ys[ys.len() - 3..]);
+        // the same in the grid itself: a list change goes to the start and stays there
+        b.set_source(Source::Quick);
+        b.visible = all[..40].to_vec();
+        b.refilter = false;
+        let mut ys = Vec::new();
+        for _ in 0..60 {
+            frame(&mut b);
+            ys.push(b.grid_y);
+        }
+        assert!(ys.iter().all(|&y| y == 0.0), "list change in the grid must stay at the start: {:?}", &ys[..10]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

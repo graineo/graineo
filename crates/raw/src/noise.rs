@@ -320,6 +320,16 @@ pub struct Profile {
     pub sigma: [[f32; LAYERS_C]; 3],
 }
 
+impl Profile {
+    /// The same noise with its amplitude multiplied by `k` (variance by `k²`): the residual noise of an image mixed
+    /// from a noise-free version and `k` parts of the original. The level thresholds are relative to the stabilized
+    /// noise and stay.
+    pub fn scaled(&self, k: f32) -> Profile {
+        let k2 = k * k;
+        Profile { model: NoiseModel { a: self.model.a.map(|v| v * k2), b: self.model.b.map(|v| v * k2) }, sigma: self.sigma }
+    }
+}
+
 /// *One* transform for all channels (mean of the models): this way gray stays gray in the stabilized
 /// space (U = V = 0), and shrinking the color levels does not shift hues. The residual variance that differs
 /// per channel (white balance) is contained in the simulated level thresholds.

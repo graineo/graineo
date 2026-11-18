@@ -54,7 +54,7 @@ impl App {
             Scope::Photo => self.lens_set_pin(cur.into_iter().collect(), a.choice.pin()),
             Scope::Selection => {
                 let v = self.selection();
-                self.lens_set_pin(v, a.choice.pin());
+                self.lens_set_pin_command(v, a.choice.pin());
             }
             Scope::Rule => {
                 self.lens_set_rule(&a.ident, &a.choice);
@@ -75,6 +75,33 @@ impl App {
             }
             Err(e) => self.status = crate::trf!("Vorgabe nicht gespeichert: {err}", err = e),
         }
+    }
+
+    /// The assignment for several photos: one command like pasting settings (a step in each photo's history, one ⌘Z
+    /// for all of them).
+    fn lens_set_pin_command(&mut self, indices: Vec<usize>, pin: Option<String>) {
+        let (targets, unreachable) = self.without_unreachable(indices);
+        let Some(&first) = targets.first() else {
+            if unreachable > 0 {
+                self.status = crate::trf!("Zugewiesen; {a} übersprungen: Original nicht erreichbar", a = unreachable);
+            }
+            return;
+        };
+        self.ensure_entry(first);
+        let before = self.entries[first].settings.clone();
+        let mut after = before.clone();
+        after.raw.lens_profile = pin.clone();
+        let (kind, label) = crate::history::describe(&before, &after);
+        let cmd = crate::history::Command::new(crate::history::Hint { kind, label });
+        self.settings_command(&targets, cmd, move |s| {
+            let mut s = s.clone();
+            s.raw.lens_profile = pin.clone();
+            s
+        });
+        if unreachable > 0 {
+            self.status = crate::trf!("Zugewiesen; {a} übersprungen: Original nicht erreichbar", a = unreachable);
+        }
+        self.compute_thumbnails();
     }
 
     /// Set the assignment (`None` = automatic, `Some("")` = none) on the given photos, like pasting settings.

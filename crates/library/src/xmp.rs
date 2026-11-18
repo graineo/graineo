@@ -120,15 +120,25 @@ pub fn path(image: &Path, format: &str, raw_beside: bool) -> PathBuf {
 pub fn path_to(p: &Path) -> PathBuf {
     let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let format = crate::format_from_extension(name).unwrap_or("DNG");
-    let raw_beside = !crate::is_raw(format)
-        && p.parent().and_then(|d| std::fs::read_dir(d).ok()).is_some_and(|rd| {
-            let root = p.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
-            rd.filter_map(|e| e.ok()).any(|e| {
-                let q = e.path();
-                q.file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase() == root)
-                    && q.file_name().and_then(|n| n.to_str()).and_then(crate::format_from_extension).is_some_and(crate::is_raw)
-            })
-        });
+    if crate::is_raw(format) {
+        return path(p, format, false);
+    }
+    let siblings: Vec<PathBuf> = p.parent().and_then(|d| std::fs::read_dir(d).ok()).map(|rd| rd.filter_map(|e| e.ok()).map(|e| e.path()).collect()).unwrap_or_default();
+    path_to_listed(p, &siblings)
+}
+
+/// Like `path_to`, but with the folder's content already listed (`siblings`), so callers that handle many files of
+/// one folder read it once instead of once per file (slow on network drives).
+pub fn path_to_listed(p: &Path, siblings: &[PathBuf]) -> PathBuf {
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let format = crate::format_from_extension(name).unwrap_or("DNG");
+    let raw_beside = !crate::is_raw(format) && {
+        let root = p.file_stem().map(|s| s.to_string_lossy().to_lowercase()).unwrap_or_default();
+        siblings.iter().any(|q| {
+            q.file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase() == root)
+                && q.file_name().and_then(|n| n.to_str()).and_then(crate::format_from_extension).is_some_and(crate::is_raw)
+        })
+    };
     path(p, format, raw_beside)
 }
 

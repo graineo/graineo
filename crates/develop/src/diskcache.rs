@@ -93,6 +93,8 @@ fn key_text_for(path: &Path, key: &SppKey, gpu: bool, version: u32) -> Option<St
     // (only the parts that act in the base; the others act in the output stage)
     let new: Vec<&str> = x3f_core::merrill_new::active_parts().into_iter().filter(|t| ["outliers", "highlights", "ca", "noise"].contains(t)).collect();
     let ca = if new.is_empty() { ca } else { ca + &format!("merrill_new={}\n", new.join(",")) };
+    // neural denoising after Sigma's noise reduction (only when on, so existing entries stay valid)
+    let ca = if key.ai == 0 { ca } else { ca + &format!("ai={}\n", key.ai) };
     Some(format!(
         "path={}\nsize={}\nmtime={}\nmode={:?}\nnr={:?}\ngpu={}\n{}",
         path.display(),
@@ -127,7 +129,9 @@ pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) ->
     LAST_HIT.with(|h| h.set(false));
     let gpu = gpu && pools::gpu_allowed();
     // Grey bases (black and white the Sigma way) are cheap to compute and are not stored
-    let entry = if disabled() || key.mono { None } else { key_text(path, key, gpu).and_then(|t| Some((file_for(path, &t)?, t))) };
+    // a mix of the neural denoising (0 < ai < 100) is cheap from its two stored bases and is not stored itself
+    let mix = key.ai > 0 && key.ai < 100;
+    let entry = if disabled() || key.mono || mix { None } else { key_text(path, key, gpu).and_then(|t| Some((file_for(path, &t)?, t))) };
     if let Some((file, text)) = &entry {
         if let Some(lin) = load(file, text) {
             log(|| format!("Plattencache: Treffer {}", file.display()));
@@ -135,7 +139,11 @@ pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) ->
             return Ok(lin);
         }
     }
-    let lin = crate::spp::working_key(path, key, gpu, cancel)?;
+    let lin = if key.ai > 0 {
+        crate::ai_denoise::working(path, key, cancel, &|k| working_key(path, k, gpu, cancel))?
+    } else {
+        crate::spp::working_key(path, key, gpu, cancel)?
+    };
     if let Some((file, text)) = entry {
         let detail_bytes = lin.detail.as_ref().map_or(0, |d| d.l.len() * 2);
         // also when cancelled after all: the computation finished (a cancel in time ends it with an error), the base is

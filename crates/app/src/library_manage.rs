@@ -62,6 +62,8 @@ pub(super) enum Undo {
     QuickRemoved { label: String, images: Vec<i64> },
     /// a change of series and stacks (library_series.rs)
     Stack { label: String, change: library::series::Change },
+    /// a face named outside the people view (frame in the single image, Info): its state before
+    Faces { label: String, snap: library::face_index::Snapshot },
 }
 
 #[derive(Default)]
@@ -95,7 +97,7 @@ impl Undo {
         match self {
             Undo::Snap { snap, .. } | Undo::Order { snap, .. } | Undo::Added { snap, .. } => snap.size(),
             Undo::Quick { images, .. } | Undo::QuickRemoved { images, .. } => images.len(),
-            Undo::Stack { .. } => 1,
+            Undo::Stack { .. } | Undo::Faces { .. } => 1,
         }
     }
 }
@@ -475,6 +477,19 @@ impl LibraryView {
                             b.manage.put_back(Undo::Stack { label, change: kept }, at);
                             actions.push(Action::Status(crate::trf!("Stapel nicht geändert: {e}", e = e)));
                         }
+                    },
+                );
+            }
+            Undo::Faces { label, snap } => {
+                self.in_background(
+                    move |db| library::face_index::restore(db, &snap),
+                    move |b, actions, r| {
+                        match r {
+                            Ok(()) => actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label))),
+                            Err(e) => b.dialog = Some(Dialog::Error(e)),
+                        }
+                        b.reload();
+                        actions.push(Action::FacesChanged);
                     },
                 );
             }
