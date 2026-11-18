@@ -26,6 +26,8 @@ pub enum Rank {
     ContactPrint,
     /// work the user started in the settings or the library menu (check, rebuild …)
     Started,
+    /// the face model download started with "Laden" (progress, ready, cause of a failure): always visible in the bar
+    FaceModel,
     /// the opened photo is loading
     Photo,
     /// previews of the photos visible in the grid
@@ -42,7 +44,7 @@ pub enum Rank {
 impl Rank {
     pub fn tier(self) -> u8 {
         match self {
-            Rank::Import | Rank::Export | Rank::Move | Rank::Delete | Rank::ContactPrint | Rank::Started => 1,
+            Rank::Import | Rank::Export | Rank::Move | Rank::Delete | Rank::ContactPrint | Rank::Started | Rank::FaceModel => 1,
             Rank::Photo | Rank::Visible => 2,
             _ => 3,
         }
@@ -500,7 +502,7 @@ mod tests {
         let mut v = vec![Task::new(Rank::Faces, "f".into()), Task::new(Rank::Visible, "v".into()), Task::new(Rank::Delete, "d".into())];
         v.sort_by_key(|t| t.rank);
         assert_eq!(v.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["d", "v", "f"]);
-        let all = [Rank::Import, Rank::Export, Rank::Move, Rank::Delete, Rank::ContactPrint, Rank::Started, Rank::Photo, Rank::Visible, Rank::Library, Rank::Backup, Rank::Settings, Rank::Faces, Rank::Series, Rank::Previews];
+        let all = [Rank::Import, Rank::Export, Rank::Move, Rank::Delete, Rank::ContactPrint, Rank::Started, Rank::FaceModel, Rank::Photo, Rank::Visible, Rank::Library, Rank::Backup, Rank::Settings, Rank::Faces, Rank::Series, Rank::Previews];
         assert!(all.windows(2).all(|w| w[0].tier() <= w[1].tier()));
     }
 

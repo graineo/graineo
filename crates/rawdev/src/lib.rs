@@ -18,6 +18,7 @@ pub mod lightroom;
 pub mod lr_masks;
 pub mod render;
 pub mod wb;
+pub mod wb_pick;
 pub mod timings;
 
 pub use doc::{apple, is_editable, is_image, is_raw, RawDoc, Stage};

@@ -657,7 +657,6 @@ abgelehntes Foto	除外した写真
 abgelehnte Fotos	除外した写真
 Es ist kein Foto ausgewählt, das sich löschen lässt.	削除できる写真が選択されていません。
 Abgelehnt wird mit X. In dieser Liste ist kein Foto abgelehnt.	除外は X キーです。このリストに除外した写真はありません。
-Dateien gehen in den Papierkorb und lassen sich von dort zurückholen. Nichts wird endgültig gelöscht.	ファイルはゴミ箱に移動され、そこから戻せます。完全には削除されません。
 {a}, deren Datei fehlt → nur aus der Bibliothek	{a}（ファイルなし）→ ライブラリからのみ
 {a} übersprungen (z. B. Volume nicht verbunden)	{a}件をスキップ（例：ボリューム未接続）
 Kamera-JPEGs mitlöschen	カメラJPEGも削除
@@ -2334,7 +2333,7 @@ Im Satz „Importe“ ablegen	セット「読み込み」に入れる
 Import {a}	読み込み{a}
 Die Ordner werden aufgenommen …	フォルダを追加しています…
 Dieses Sigma-Foto ist in Schwarzweiß oder Sepia aufgenommen – dafür gibt es die Foveon-Basis nicht, graineo rechnet selbst.	このSigma写真はモノクロまたはセピアで撮影されています。この場合Foveonベースは使えないため、graineo が独自に処理します。
-{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	そのうち{a}件はネットワークドライブにあります。ネットワークドライブにはゴミ箱がないため、ファイルはドライブ上のゴミ箱フォルダに移動します。「設定 → ストレージ」から戻せます。
+{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	{a}件はネットワークドライブにあります。ネットワークドライブにはゴミ箱がないため、ファイルはドライブのゴミ箱フォルダに移動され、設定 → ストレージで元に戻せます。
 Papierkorb auf Netzlaufwerken	ネットワークドライブのゴミ箱
 Dorthin wandert, was du auf einem Netzlaufwerk löschst (dort gibt es keinen Papierkorb). Relativ zum Stammordner des Laufwerks oder ein Ordner auf demselben Laufwerk.	ネットワークドライブで削除したものの移動先です（そこにはゴミ箱がありません）。ドライブのルートフォルダからの相対パス、または同じドライブ上のフォルダ。
 Standard	標準
@@ -6415,3 +6414,35 @@ Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine	センサ�
 Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine	HEファイルではセンサービューを利用できません – AppleのRAWエンジンで現像
 Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})	このファイルではセンサービューを利用できません – AppleのRAWエンジンで現像（{a}）
 Kamera-Look nicht gefunden – neutral entwickelt	カメラルックが見つかりません – ニュートラルで現像
+Das Programm „curl“ lässt sich nicht starten.	プログラム「curl」を起動できません。
+Keine Verbindung zum Server (Internet, DNS, Proxy oder Firewall prüfen).	サーバーに接続できません(インターネット、DNS、プロキシ、ファイアウォールを確認してください)。
+Zeitüberschreitung beim Laden (Verbindung zu langsam oder blockiert).	ダウンロードがタイムアウトしました(接続が遅いかブロックされています)。
+Sichere Verbindung fehlgeschlagen (Zertifikat, Uhrzeit oder Proxy mit Zertifikatsprüfung).	安全な接続に失敗しました(証明書、時刻、または証明書を検査するプロキシ)。
+Der Server hat die Anfrage abgelehnt.	サーバーがリクエストを拒否しました。
+Die Datei konnte nicht gespeichert werden (Platz oder Schreibrechte im Datenordner prüfen).	ファイルを保存できませんでした(空き容量とデータフォルダーの書き込み権限を確認してください)。
+Die geladene Datei ist beschädigt (Prüfsumme stimmt nicht).	ダウンロードしたファイルが破損しています(チェックサムが一致しません)。
+Unbekannter Fehler beim Laden.	ダウンロード中に不明なエラーが発生しました。
+Gesichtsmodell konnte nicht geladen werden: {a} Details stehen im Fehlerbericht.	顔モデルをダウンロードできませんでした: {a} 詳細はエラーレポートにあります。
+Gesichtsmodell wird geladen … {a} von {b} MB	顔モデルをダウンロード中 … {a} / {b} MB
+Gesichtserkennung bereit	顔認識の準備ができました
+{a} → nur aus der Bibliothek	{a} → ライブラリのみ
+Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	ファイル（隣のXMPも）はゴミ箱に移動されます。編集、評価、キーワード、コレクションは完全に削除されます。
+Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	編集、評価、キーワード、コレクションは完全に削除されます。
+Virtuelle Kopien werden mit ihrer Entwicklung endgültig gelöscht. Die Fotos bleiben.	仮想コピーは現像内容とともに完全に削除されます。写真は残ります。
+Pipette: neutrale Bildstelle anklicken	スポイト：写真のニュートラルな部分をクリック
+Weißabgleich-Pipette: neutrale Stelle anklicken · ⇧ weitere Probe · −/+ Größe · Esc beendet	ホワイトバランススポイト：ニュートラルな部分をクリック · ⇧ サンプル追加 · −/+ サイズ · Esc で終了
+Weißabgleich-Pipette: kleinere Probe	ホワイトバランススポイト：サンプルを小さく
+Weißabgleich-Pipette: größere Probe	ホワイトバランススポイト：サンプルを大きく
+Weißabgleich-Pipette: größere Probe (US-Tastatur)	ホワイトバランススポイト：サンプルを大きく（USキーボード）
+⇧-Klick mit der Pipette	スポイトで ⇧-クリック
+weitere Probe: Weißabgleich aus dem Mittel aller Proben, Pipette bleibt an	サンプル追加：全サンプルの平均からホワイトバランスを設定、スポイトはオンのまま
+Tönung {t}	色かぶり補正 {t}
+Temperatur {t}	色温度 {t}
+Rot ×{v}	赤 ×{v}
+Blau ×{v}	青 ×{v}
+Ausgefressen	白飛び
+Zu dunkel	暗すぎる
+Nicht neutral messbar	ニュートラルにできない
+Außerhalb der Skala	スケール外
+{s}×{s} · {n} Proben	{s}×{s} · {n} サンプル
+Wohl nicht neutral	ニュートラルではない可能性

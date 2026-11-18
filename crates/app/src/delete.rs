@@ -46,6 +46,19 @@ pub struct Plan {
     pub apple: Vec<(i64, String)>,
 }
 
+/// Which switches the dialog offers: only those that can be chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Options {
+    pub jpegs: bool,
+    pub missing: bool,
+}
+
+impl Plan {
+    pub fn options(&self) -> Options {
+        Options { jpegs: !self.jpegs.is_empty(), missing: !self.missing.is_empty() }
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Outcome {
     pub trash: usize,
@@ -66,16 +79,41 @@ pub struct State {
     pub loaded: Option<crate::library_ui::Loaded>,
 }
 
-/// Sidecars of an image (X3F settings, XMP), as far as present.
+/// Sidecars of an image (X3F settings, XMP), as far as present. The XMP follows the library's naming: a JPEG/HEIC/TIFF
+/// next to a same-named RAW has `NAME.JPG.xmp`; `NAME.xmp` then belongs to the RAW and is not touched.
 fn companions(p: &Path) -> Vec<PathBuf> {
     let mut v = if crate::image_kind::of(p) == crate::image_kind::ImageKind::Foveon { crate::sidecar::companion_files(p) } else { Vec::new() };
     let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    for x in [p.with_extension("xmp"), p.with_file_name(format!("{name}.xmp"))] {
+    let own = library::xmp::path_to(p);
+    let both_names = own == p.with_extension("xmp");
+    // `NAME.xmp` next to a JPEG is only ours if no other same-named image (e.g. NAME.TIF) in the folder owns it
+    let candidates = if both_names {
+        let mut c = vec![p.with_file_name(format!("{name}.xmp"))];
+        if !other_image_owns(p, &own) {
+            c.insert(0, own.clone());
+        }
+        c
+    } else {
+        vec![own]
+    };
+    for x in candidates {
         if !v.contains(&x) {
             v.push(x);
         }
     }
     v.into_iter().filter(|x| x != p && x.exists()).collect()
+}
+
+/// Does another image with the same stem next to `p` use `xmp` as its sidecar?
+fn other_image_owns(p: &Path, xmp: &Path) -> bool {
+    let Some(stem) = p.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { return false };
+    let Some(rd) = p.parent().and_then(|d| std::fs::read_dir(d).ok()) else { return false };
+    rd.filter_map(|e| e.ok()).map(|e| e.path()).any(|q| {
+        q != p
+            && q.file_stem().is_some_and(|s| s.to_string_lossy().to_lowercase() == stem)
+            && q.file_name().and_then(|n| n.to_str()).and_then(library::format_from_extension).is_some()
+            && library::xmp::path_to(&q) == xmp
+    })
 }
 
 fn camera_jpeg(p: &Path) -> Option<PathBuf> {
@@ -89,6 +127,8 @@ fn camera_jpeg(p: &Path) -> Option<PathBuf> {
 pub fn plan(k: Vec<Candidate>) -> Plan {
     let db = library::db::Db::standard().ok();
     let mut p = Plan::default();
+    // JPEGs that are in the selection themselves are deleted as photos, not as the "camera JPEG" of a RAW
+    let selected: std::collections::HashSet<PathBuf> = k.iter().map(|c| c.path.clone()).collect();
     for c in k {
         let name = c.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         if c.copy {
@@ -113,7 +153,7 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
         match c.state {
             0 if c.path.exists() => {
                 p.bytes += std::fs::metadata(&c.path).map(|m| m.len()).unwrap_or(0);
-                if let Some(j) = camera_jpeg(&c.path) {
+                if let Some(j) = camera_jpeg(&c.path).filter(|j| !selected.contains(j)) {
                     p.bytes += std::fs::metadata(&j).map(|m| m.len()).unwrap_or(0);
                     p.jpegs.push(j);
                 }
@@ -158,9 +198,13 @@ pub fn execute(p: Plan, with_jpegs: bool, remove_missing: bool, stack_jpegs: Vec
         files.extend(sidecars.iter().cloned());
         let mut with_jpeg = false;
         if with_jpegs {
-            if let Some(j) = p.jpegs.iter().find(|j| j.with_extension("") == path.with_extension("")) {
+            if let Some(j) = p.jpegs.iter().find(|j| j.with_extension("") == path.with_extension("") && *j != path && !files.contains(j)) {
                 files.push(j.clone());
-                files.extend(companions(j));
+                for c in companions(j) {
+                    if !files.contains(&c) {
+                        files.push(c);
+                    }
+                }
                 with_jpeg = true;
             }
         }
@@ -387,7 +431,9 @@ impl App {
         let n = p.disk.len() + p.missing.len() + p.copies.len() + p.apple.len();
         let only_apple = !p.apple.is_empty() && n == p.apple.len();
         let selection_mode = self.delete_selection.is_some();
+        let only_copies = n > 0 && n == p.copies.len() && p.skipped.is_empty();
         let title = match (n == 0 && p.skipped.is_empty(), selection_mode) {
+            _ if only_copies => crate::trf!("{a} löschen?", a = dialog::count(n, crate::tr("virtuelle Kopie"), crate::tr("virtuelle Kopien"))),
             (true, true) => crate::tr("Nichts zu löschen").to_string(),
             (true, false) => crate::tr("Keine abgelehnten Fotos").to_string(),
             (false, true) => crate::trf!("{a} löschen?", a = dialog::count(n + p.skipped.len(), crate::tr("Foto"), crate::tr("Fotos"))),
@@ -412,6 +458,7 @@ impl App {
                 if only_apple {
                     dialog::chip(ui, &crate::trf!("{a} aus Apple Fotos → „Zuletzt gelöscht“ in Apple Fotos", a = dialog::count(p.apple.len(), crate::tr("Foto"), crate::tr("Fotos"))));
                     dialog::hint(ui, crate::tr("Fotos aus Apple Fotos werden dort gelöscht – mit iCloud-Fotos auch auf iPhone, iPad und allen anderen Geräten. Sie bleiben 30 Tage unter „Zuletzt gelöscht“ und lassen sich dort zurückholen. macOS fragt gleich noch einmal nach."));
+                    dialog::text(ui, crate::tr("Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht."));
                     ui.allocate_ui(egui::vec2(ui.available_width(), 26.0), |ui| {
                         if running_snapshot {
                             dialog::progress(ui, None, crate::tr("wartet auf Apple Fotos …"));
@@ -419,10 +466,31 @@ impl App {
                     });
                     return;
                 }
-                dialog::text(ui, crate::tr("Dateien gehen in den Papierkorb und lassen sich von dort zurückholen. Nichts wird endgültig gelöscht."));
+                if only_copies {
+                    dialog::text(ui, crate::tr("Virtuelle Kopien werden mit ihrer Entwicklung endgültig gelöscht. Die Fotos bleiben."));
+                    ui.allocate_ui(egui::vec2(ui.available_width(), 26.0), |ui| {
+                        if running_snapshot {
+                            dialog::progress(ui, None, crate::tr("löscht …"));
+                        }
+                    });
+                    return;
+                }
+                // the "permanently deleted" sentence only where something really leaves the library
+                if !p.disk.is_empty() {
+                    dialog::text(ui, crate::tr("Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht."));
+                } else if !p.copies.is_empty() || !p.apple.is_empty() || (missing && !p.missing.is_empty()) {
+                    dialog::text(ui, crate::tr("Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht."));
+                }
                 // two numbers, one row each (fixed places)
-                dialog::chip(ui, &crate::trf!("{a} auf der Platte · {b} → Papierkorb", a = dialog::count(p.disk.len(), crate::tr("Foto"), crate::tr("Fotos")), b = dialog::size(p.bytes)));
-                dialog::chip(ui, &crate::trf!("{a}, deren Datei fehlt → nur aus der Bibliothek", a = dialog::count(p.missing.len(), crate::tr("Eintrag"), crate::tr("Einträge"))));
+                if !p.disk.is_empty() {
+                    dialog::chip(ui, &crate::trf!("{a} auf der Platte · {b} → Papierkorb", a = dialog::count(p.disk.len(), crate::tr("Foto"), crate::tr("Fotos")), b = dialog::size(p.bytes)));
+                }
+                if !p.missing.is_empty() {
+                    dialog::chip(ui, &crate::trf!("{a}, deren Datei fehlt → nur aus der Bibliothek", a = dialog::count(p.missing.len(), crate::tr("Eintrag"), crate::tr("Einträge"))));
+                }
+                if !p.copies.is_empty() {
+                    dialog::chip(ui, &crate::trf!("{a} → nur aus der Bibliothek", a = dialog::count(p.copies.len(), crate::tr("virtuelle Kopie"), crate::tr("virtuelle Kopien"))));
+                }
                 if !p.apple.is_empty() {
                     dialog::chip(ui, &crate::trf!("{a} aus Apple Fotos → „Zuletzt gelöscht“ in Apple Fotos", a = dialog::count(p.apple.len(), crate::tr("Foto"), crate::tr("Fotos"))));
                     dialog::hint(ui, crate::tr("Fotos aus Apple Fotos werden dort gelöscht – mit iCloud-Fotos auch auf iPhone, iPad und allen anderen Geräten. Sie bleiben 30 Tage unter „Zuletzt gelöscht“ und lassen sich dort zurückholen. macOS fragt gleich noch einmal nach."));
@@ -439,11 +507,21 @@ impl App {
                         dialog::hint(ui, &crate::trf!("{a} übersprungen", a = dialog::number(p.skipped.len() - unreachable)));
                     }
                 }
-                dialog::options(ui, |ui| {
-                    dialog::option(ui, &mut with_jpegs, crate::tr("Kamera-JPEGs mitlöschen"), &crate::trf!("{a} gefunden", a = dialog::count(p.jpegs.len(), crate::tr("gleichnamige Datei"), crate::tr("gleichnamige Dateien"))), p.jpegs.is_empty().then_some(crate::tr("Keine gleichnamigen JPEGs neben diesen Fotos")));
-                    ui.add_space(2.0);
-                    dialog::option(ui, &mut missing, crate::tr("Einträge fehlender Dateien entfernen"), &crate::trf!("{a} – nur die Bibliothek, keine Datei", a = dialog::count(p.missing.len(), crate::tr("Eintrag"), crate::tr("Einträge"))), p.missing.is_empty().then_some(crate::tr("Keine Einträge mit fehlender Datei")));
-                });
+                // only options that can be chosen; no frame without a switch
+                let shown = p.options();
+                if shown.jpegs || shown.missing {
+                    dialog::options(ui, |ui| {
+                        if shown.jpegs {
+                            dialog::option(ui, &mut with_jpegs, crate::tr("Kamera-JPEGs mitlöschen"), &crate::trf!("{a} gefunden", a = dialog::count(p.jpegs.len(), crate::tr("gleichnamige Datei"), crate::tr("gleichnamige Dateien"))), None);
+                        }
+                        if shown.jpegs && shown.missing {
+                            ui.add_space(2.0);
+                        }
+                        if shown.missing {
+                            dialog::option(ui, &mut missing, crate::tr("Einträge fehlender Dateien entfernen"), &crate::trf!("{a} – nur die Bibliothek, keine Datei", a = dialog::count(p.missing.len(), crate::tr("Eintrag"), crate::tr("Einträge"))), None);
+                        }
+                    });
+                }
                 ui.allocate_ui(egui::vec2(ui.available_width(), 26.0), |ui| {
                     if running_snapshot {
                         dialog::progress(ui, None, crate::tr("löscht …"));
@@ -454,7 +532,7 @@ impl App {
                 Buttons::close()
             } else if only_apple {
                 Buttons::destructive(crate::tr("In Apple Fotos löschen"), !running)
-            } else if !p.apple.is_empty() {
+            } else if !p.apple.is_empty() || p.disk.is_empty() {
                 Buttons::destructive(crate::tr("Löschen"), !running)
             } else {
                 Buttons::destructive(crate::tr("In den Papierkorb"), !running)
@@ -556,6 +634,69 @@ mod tests {
         assert_eq!(p.apple, vec![(7, "ABC-123".to_string())]);
         assert!(p.disk.is_empty() && p.missing.is_empty() && p.skipped.is_empty());
         assert!(file.exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn options_only_when_selectable() {
+        let mut p = Plan::default();
+        assert_eq!(p.options(), Options { jpegs: false, missing: false });
+        p.disk.push((1, PathBuf::from("a.CR2"), vec![]));
+        assert_eq!(p.options(), Options { jpegs: false, missing: false });
+        p.jpegs.push(PathBuf::from("a.JPG"));
+        assert_eq!(p.options(), Options { jpegs: true, missing: false });
+        p.missing.push(2);
+        assert_eq!(p.options(), Options { jpegs: true, missing: true });
+        p.jpegs.clear();
+        assert_eq!(p.options(), Options { jpegs: false, missing: true });
+    }
+
+    /// The XMP goes to the Trash with its photo; in a RAW+JPEG pair each file takes only its own XMP.
+    #[test]
+    fn companions_follow_xmp_naming_of_pairs() {
+        let dir = std::env::temp_dir().join(format!("graineo-delete-xmp-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in ["a.CR2", "a.xmp", "a.JPG", "a.JPG.xmp", "b.JPG", "b.xmp", "c.CR2"] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        assert_eq!(companions(&dir.join("a.CR2")), vec![dir.join("a.xmp")]);
+        assert_eq!(companions(&dir.join("a.JPG")), vec![dir.join("a.JPG.xmp")]);
+        // JPEG without RAW: NAME.xmp is its own
+        assert_eq!(companions(&dir.join("b.JPG")), vec![dir.join("b.xmp")]);
+        assert!(companions(&dir.join("c.CR2")).is_empty());
+        // to the Trash (here: the drive's trash folder, same logic as on a NAS): photo and XMP, not the neighbour's XMP
+        let files = vec![dir.join("a.JPG"), dir.join("a.JPG.xmp")];
+        library::network_trash::discard(&dir, &files, "2026-01-01").unwrap();
+        assert!(!dir.join("a.JPG").exists() && !dir.join("a.JPG.xmp").exists());
+        assert!(dir.join("a.CR2").exists() && dir.join("a.xmp").exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// `NAME.xmp` of a JPEG is left alone when another same-named image (TIF) in the folder uses it.
+    #[test]
+    fn shared_xmp_of_jpeg_and_tif_is_not_taken() {
+        let dir = std::env::temp_dir().join(format!("graineo-delete-xmp2-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in ["d.JPG", "d.TIF", "d.xmp", "e.JPG", "e.xmp"] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        assert!(!companions(&dir.join("d.JPG")).contains(&dir.join("d.xmp")));
+        assert_eq!(companions(&dir.join("e.JPG")), vec![dir.join("e.xmp")]);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// RAW and its JPEG both in the selection: the JPEG is a photo of its own, not additionally the RAW's camera JPEG.
+    #[test]
+    fn jpeg_in_selection_is_not_a_camera_jpeg() {
+        let dir = std::env::temp_dir().join(format!("graineo-delete-sel-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for n in ["f.CR2", "f.JPG", "g.CR2", "g.JPG"] {
+            std::fs::write(dir.join(n), b"x").unwrap();
+        }
+        let cand = |i: i64, n: &str| Candidate { image: i, file: i, path: dir.join(n), state: 0, copy: false };
+        let p = plan(vec![cand(1, "f.CR2"), cand(2, "f.JPG"), cand(3, "g.CR2")]);
+        assert_eq!(p.disk.len(), 3);
+        assert_eq!(p.jpegs, vec![dir.join("g.JPG")]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

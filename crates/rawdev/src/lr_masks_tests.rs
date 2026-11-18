@@ -42,6 +42,7 @@ fn modern_wins_over_legacy_and_own_masks_win_over_import() {
         orientation: 0,
         finished: true,
         size: [30, 20],
+        as_shot: None,
     };
     let initial = to_settings(&w, &b, &Settings::default());
     let mut own = initial.clone();

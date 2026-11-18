@@ -545,7 +545,7 @@ impl RawDoc {
         let small = raw::development::downscale(&px, w, h, pw, ph);
         let profile = noise_model.map(|m| image_profile(m, f));
         let cam_xyz_shot = color::determine([1.0; 3], &info.calibration, &color::diag([1.0; 3])).map(|c| c.camera_to_xyz_d50).unwrap_or(color::diag([1.0; 3]));
-        let (info_rows, summary) = info_texts(&info, None, (6504.0, 0.0));
+        let (info_rows, summary) = info_texts(&info, None, crate::wb::image_white());
         let hdr = HdrMap::read(path, &small, pw, ph).map(Arc::new);
         let full = Arc::new(Stage::new(px, w, h, noise_model.map(|m| image_profile(m, 1.0))));
         Ok(RawDoc {
@@ -560,7 +560,7 @@ impl RawDoc {
             learn_key: None,
             plain: Default::default(),
             looks: Vec::new(),
-            as_shot: (6504.0, 0.0),
+            as_shot: crate::wb::image_white(),
             auto_neutral: [1.0; 3],
             base_ev: 0.0,
             lr_offset: 0.0,

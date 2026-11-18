@@ -1441,7 +1441,7 @@ fn export(ui: &mut egui::Ui) {
         separator(ui);
         row(ui, crate::tr("JPEG-Qualität"), None, |ui| {
             let mut q = e["quality"].as_u64().unwrap_or(92) as u8;
-            if ui.add(egui::Slider::new(&mut q, 60..=100)).changed() {
+            if ui.add(egui::Slider::new(&mut q, 60..=100).clamping(egui::SliderClamping::Edits)).changed() {
                 e["quality"] = json!(q);
             }
         });

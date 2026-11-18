@@ -129,3 +129,80 @@ fn unreadable_folder_marks_nothing_missing() {
     drop(db);
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// A root folder that was not reachable (network drive not mounted) and is back: its files are present again, and the
+/// report says that states changed – the app reloads its views only then (a sync that only turned "not reachable"
+/// into "present" left the Develop module at "Original nicht erreichbar" until a restart).
+#[test]
+fn root_back_online_is_reported_as_change() {
+    let d = std::env::temp_dir().join(format!("graineo-offline-back-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let f = d.join("NAS");
+    std::fs::create_dir_all(&f).unwrap();
+    for n in ["a.x3f", "b.jpg"] {
+        std::fs::write(f.join(n), b"\xFF\xD8x").unwrap();
+    }
+    let db = Db::open(&d.join("library.sqlite")).unwrap();
+    reconcile::add_root(&db, &f, &|_| {}).unwrap();
+    age(&f, 0);
+    let first = run(&db, Depth::Full);
+    assert_eq!(first.status_changed, 0);
+    // drive gone: all files "not reachable" (2), reported as a change
+    std::fs::rename(&f, d.join("NAS-weg")).unwrap();
+    let q = run(&db, Depth::Quick);
+    assert_eq!(q.offline.len(), 1);
+    assert_eq!((status(&db, "a.x3f"), status(&db, "b.jpg")), (2, 2));
+    assert_eq!(q.status_changed, 2);
+    // still gone: nothing changes
+    assert_eq!(run(&db, Depth::Quick).status_changed, 0);
+    // drive back (folder unchanged since the last listing): present again, reported as a change
+    std::fs::rename(d.join("NAS-weg"), &f).unwrap();
+    age(&f, 0);
+    let q = run(&db, Depth::Quick);
+    assert!(q.offline.is_empty());
+    assert_eq!((status(&db, "a.x3f"), status(&db, "b.jpg")), (0, 0));
+    assert_eq!((q.status_changed, q.missing, q.newly_added), (2, 0, 0));
+    assert_eq!(q.json()["status_changed"], 2);
+    // next quick run: nothing left to report
+    assert_eq!(run(&db, Depth::Quick).status_changed, 0);
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+/// The system refuses access (macOS privacy: network volumes not allowed for the app; here: Unix permissions, same
+/// `PermissionDenied`): never "missing", never "volume missing", reported as denied; a folder that cannot be listed
+/// but whose files can be read brings "volume missing" files back.
+#[cfg(unix)]
+#[test]
+fn permission_denied_keeps_state_and_is_reported() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &std::path::Path, m: u32| std::fs::set_permissions(p, std::fs::Permissions::from_mode(m)).unwrap();
+    let d = std::env::temp_dir().join(format!("graineo-denied-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    let outer = d.join("share");
+    let f = outer.join("NAS");
+    std::fs::create_dir_all(&f).unwrap();
+    std::fs::write(f.join("a.x3f"), b"\xFF\xD8x").unwrap();
+    let db = Db::open(&d.join("library.sqlite")).unwrap();
+    reconcile::add_root(&db, &f, &|_| {}).unwrap();
+    run(&db, Depth::Full);
+    assert_eq!(status(&db, "a.x3f"), 0);
+    // root not even stat-able: denied, the state stays (present)
+    mode(&outer, 0o000);
+    let q = run(&db, Depth::Quick);
+    mode(&outer, 0o755);
+    assert!(q.offline.is_empty() && q.missing == 0, "{:?}", q.json());
+    assert_eq!(q.denied.len(), 1);
+    assert_eq!(status(&db, "a.x3f"), 0);
+    // drive gone → 2
+    std::fs::rename(&f, outer.join("weg")).unwrap();
+    run(&db, Depth::Quick);
+    assert_eq!(status(&db, "a.x3f"), 2);
+    // back, but the root cannot be listed (files can be read): present again, folder reported as denied
+    std::fs::rename(outer.join("weg"), &f).unwrap();
+    mode(&f, 0o100);
+    let q = run(&db, Depth::Quick);
+    mode(&f, 0o755);
+    assert_eq!((q.missing, q.status_changed, q.denied.len()), (0, 1, 1), "{:?}", q.json());
+    assert_eq!(status(&db, "a.x3f"), 0);
+    let _ = std::fs::remove_dir_all(&d);
+}

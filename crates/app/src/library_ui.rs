@@ -225,6 +225,14 @@ fn display_name(z: &Row) -> String {
 }
 
 
+/// A finished sync changed nothing the views show: no reload (no flicker). `missing_rows`: photos the views show as
+/// missing (state 1). A change of state alone (e.g. a network drive back: "not reachable" → present) counts as a
+/// change – without it the grid and Develop kept "Original nicht erreichbar" until the next start.
+fn sync_changed_nothing(v: &serde_json::Value, missing_rows: usize) -> bool {
+    let a = &v["sync"];
+    v["kind"] == "sync" && ["newly_added", "relinked", "sidecar_new", "from_sidecar", "status_changed"].iter().all(|k| a[*k].as_u64().unwrap_or(0) == 0) && a["missing"].as_u64() == Some(missing_rows as u64)
+}
+
 /// An image of the shared image source (Library ↔ Develop).
 #[derive(Clone, Debug)]
 pub struct SourceImage {
@@ -676,6 +684,8 @@ pub struct LibraryView {
     last_round: std::time::Instant,
     net_round: std::time::Instant,
     reachable: HashMap<i64, bool>,
+    /// root folders the last sync found unreachable (see [`sync_changed_nothing`] and the mount check in `maintenance`)
+    offline_roots: HashSet<i64>,
     import: Option<import_ui::Import>,
     backup_status: Arc<Mutex<Option<String>>>,
     // semantic search
@@ -1039,6 +1049,7 @@ impl LibraryView {
             last_round: std::time::Instant::now(),
             net_round: std::time::Instant::now(),
             reachable: HashMap::new(),
+            offline_roots: HashSet::new(),
             import: None,
             backup_status: Arc::new(Mutex::new(None)),
             semantic: Arc::new(Mutex::new(None)),
@@ -2504,10 +2515,16 @@ impl LibraryView {
                     return Some(self.swap_rebuild(&v));
                 }
                 // silent sync without changes: don't reload (no flicker)
-                let a = &v["sync"];
-                let nothing = v["kind"] == "sync"
-                    && ["newly_added", "relinked", "sidecar_new", "from_sidecar"].iter().all(|k| a[*k].as_u64().unwrap_or(0) == 0)
-                    && a["missing"].as_u64() == Some(self.rows.iter().filter(|z| z.status == 1).count() as u64);
+                let nothing = sync_changed_nothing(&v, self.rows.iter().filter(|z| z.status == 1).count());
+                // root folders the sync found unreachable: when they come back, the next round syncs them, also when
+                // they were connected before the first round looked (start with the network drive still mounting)
+                if v["kind"] == "sync" {
+                    for o in v["sync"]["offline"].as_array().into_iter().flatten() {
+                        if let Some(id) = o["path"].as_str().and_then(|p| self.roots.iter().find(|s| s.path == p)).map(|s| s.id) {
+                            self.offline_roots.insert(id);
+                        }
+                    }
+                }
                 if !nothing {
                     self.reload();
                 }
@@ -3803,6 +3820,22 @@ impl LibraryView {
         }
     }
 
+    /// Plain-language reason why the face model could not be downloaded (German key text, translated here).
+    fn face_download_failure_text(f: &library::people::DownloadFailure) -> String {
+        use library::people::DownloadCause as C;
+        let why = match f.cause {
+            C::NoCurl => crate::tr("Das Programm „curl“ lässt sich nicht starten."),
+            C::Connection => crate::tr("Keine Verbindung zum Server (Internet, DNS, Proxy oder Firewall prüfen)."),
+            C::Timeout => crate::tr("Zeitüberschreitung beim Laden (Verbindung zu langsam oder blockiert)."),
+            C::Tls => crate::tr("Sichere Verbindung fehlgeschlagen (Zertifikat, Uhrzeit oder Proxy mit Zertifikatsprüfung)."),
+            C::Http => crate::tr("Der Server hat die Anfrage abgelehnt."),
+            C::Write => crate::tr("Die Datei konnte nicht gespeichert werden (Platz oder Schreibrechte im Datenordner prüfen)."),
+            C::Checksum => crate::tr("Die geladene Datei ist beschädigt (Prüfsumme stimmt nicht)."),
+            C::Other => crate::tr("Unbekannter Fehler beim Laden."),
+        };
+        crate::trf!("Gesichtsmodell konnte nicht geladen werden: {a} Details stehen im Fehlerbericht.", a = why)
+    }
+
     /// Notice before the one-time model download of the face recognition (in the app window, not a system dialog).
     /// "Load" starts the download and the search, "Later" does nothing until the next start.
     fn face_model_dialog(&mut self, ctx: &egui::Context) {
@@ -3818,10 +3851,30 @@ impl LibraryView {
             dialog::WIDTH,
             |ui| {
                 dialog::text(ui, &crate::trf!("graineo lädt einmalig {a} MB für die Gesichtserkennung. Danach arbeitet sie ohne Internet.", a = dialog::number(mb)));
+                if let Some(f) = library::people::last_download_failure() {
+                    // the last attempt failed: say why; "Laden" tries again
+                    dialog::text(ui, &Self::face_download_failure_text(&f));
+                }
                 dialog::text(ui, crate::tr("Mit „Später“ wird nichts geladen; die Frage kommt beim nächsten Start wieder. Abschalten: Einstellungen → Entwickeln → Personen → „Gesichter automatisch erkennen“."));
             },
             dialog::Buttons { cancel: "Später", primary: Some(("Laden", dialog::Style::Normal, true)) },
         );
+        // Test aid `GRAINEO_FACE_RUN=allow`: 3 s after the dialog appeared, take the "Laden" path (same code as the
+        // button below, no separate route). `GRAINEO_FACE_RUN=1` only opens the dialog.
+        static SHOWN: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+        static FIRED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        let a = if matches!(a, dialog::Answer::Open) && crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_FACE_RUN").is_ok_and(|v| v == "allow") && !FIRED.load(Ordering::SeqCst) {
+            let t = *SHOWN.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(std::time::Instant::now);
+            if t.elapsed().as_secs() >= 3 {
+                FIRED.store(true, Ordering::SeqCst); // once: after a failure the dialog stays for the screenshot
+                dialog::Answer::Primary
+            } else {
+                ctx.request_repaint_after(std::time::Duration::from_millis(500));
+                a
+            }
+        } else {
+            a
+        };
         match a {
             dialog::Answer::Primary => {
                 self.face_model_notice = false;
@@ -4095,7 +4148,15 @@ impl LibraryView {
             v.push(Task::new(Rank::Backup, crate::tr("Sicherung der Bibliothek").to_string()));
         }
         let st = self.people_status.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        if !st.is_empty() {
+        if let Some((got, total)) = library::people::download_progress() {
+            // the one-time model download: size so far from the growing partial file
+            v.push(Task::new(Rank::FaceModel, crate::trf!("Gesichtsmodell wird geladen … {a} von {b} MB", a = got / 1_000_000, b = total.div_ceil(1_000_000))));
+        } else if library::people::download_done_within(6) {
+            v.push(Task::new(Rank::FaceModel, crate::tr("Gesichtserkennung bereit").to_string()));
+        } else if let Some(f) = library::people::last_download_failure().filter(|_| !library::people::model_present() && !self.people_active.load(Ordering::SeqCst)) {
+            // the cause of the last failed download stays in the bar until the next attempt
+            v.push(Task::new(Rank::FaceModel, Self::face_download_failure_text(&f)));
+        } else if !st.is_empty() {
             v.push(Task::new(Rank::Faces, crate::menu::i18n::tr_msg(&st).into_owned()));
         } else if self.people_follow {
             // open work that has not started yet (waiting time, or other work first): says what is still to do
@@ -6487,7 +6548,7 @@ impl LibraryView {
                         }
                         1 => {
                             ui.horizontal(|ui| {
-                                crate::lr::text_field(ui, egui::DragValue::new(hours).range(-48..=48).suffix(" h"));
+                                crate::lr::text_field(ui, egui::DragValue::new(hours).range(-48..=48).clamp_existing_to_range(false).suffix(" h"));
                                 ui.label(egui::RichText::new(crate::tr("z. B. für eine andere Zeitzone")).small().color(lr::TEXT_DIM));
                             });
                         }
@@ -6561,6 +6622,14 @@ impl LibraryView {
     /// names to review.
     fn people_maintenance(&mut self, ctx: &egui::Context) {
         let now = std::time::Instant::now();
+        if library::people::download_progress().is_some() || library::people::download_done_within(6) {
+            ctx.request_repaint_after(std::time::Duration::from_millis(400));
+        }
+        // a model download just failed: the dialog comes back with the cause and "Laden" to try again
+        if FACE_DOWNLOAD_FAILED.swap(false, Ordering::SeqCst) {
+            self.face_model_notice = true;
+            ctx.request_repaint();
+        }
         if let Some((review, suggestions)) = self.people_counts.lock().unwrap_or_else(|e| e.into_inner()).take() {
             self.review_n = review;
             self.suggestion_n = suggestions;
@@ -6592,7 +6661,7 @@ impl LibraryView {
                 self.people_counting.store(false, Ordering::SeqCst);
             }
         }
-        let forced = crate::env::var_os("GRAINEO_FACE_RUN").is_some();
+        let forced = crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var_os("GRAINEO_FACE_RUN").is_some();
         let env_ok = forced || (crate::env::var_os("GRAINEO_LIBRARY_NO_SYNC").is_none() && crate::env::var_os("GRAINEO_FACE_OFF").is_none());
         let allowed = env_ok && (forced || library::people::automatic_enabled());
         self.people_follow = allowed;
@@ -6678,7 +6747,7 @@ impl LibraryView {
     /// Background thread: `search` = face search of the open photos (then suggestions), otherwise only the suggestions.
     fn spawn_people_work(&mut self, ctx: &egui::Context, search: bool) {
         // The search needs the face model: if it is not there yet, ask before the first download.
-        if search && !library::people::model_present() {
+        if search && !library::people::model_present() && !library::people::download_allowed() {
             // only when there are photos to search (an empty library needs no model); later the follow-up asks
             if !self.face_model_later && self.people_work.lock().unwrap_or_else(|e| e.into_inner()).photos > 0 {
                 self.face_model_notice = true;
@@ -6712,7 +6781,16 @@ impl LibraryView {
                             crate::log(&format!("Gesichter: {e}"));
                             active.store(false, Ordering::SeqCst);
                             *ended.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
-                            report(crate::trf!("Gesichter: {e}", e = e));
+                            // a failed model download gets its cause in plain words (the technical line is in the log above)
+                            match library::people::last_download_failure() {
+                                Some(f) if !library::people::model_present() => {
+                                    // the permission is used up: the next search asks again, the dialog shows the cause
+                                    library::people::revoke_download();
+                                    FACE_DOWNLOAD_FAILED.store(true, Ordering::SeqCst);
+                                    report(Self::face_download_failure_text(&f));
+                                }
+                                _ => report(crate::trf!("Gesichter: {e}", e = e)),
+                            }
                             return;
                         }
                     }
@@ -6780,14 +6858,25 @@ impl LibraryView {
         }
         if now.duration_since(self.last_round).as_secs() >= 15 {
             self.last_round = now;
-            // volume (re)mounted → sync right away
-            let mut new_available = None;
+            // volume (re)mounted → sync right away. Also a root the last sync found unreachable and that is there now
+            // (the drive was mounted before this check first looked, e.g. while the start sync ran); for those the
+            // volume must really be mounted – an empty mount point left on the system disk would sync every round
+            let mut back: Vec<PathBuf> = Vec::new();
             for s in &self.roots {
-                let da = crate::path_check::folder_exists(Path::new(&s.path));
-                if self.reachable.insert(s.id, da) == Some(false) && da {
-                    new_available = Some(PathBuf::from(&s.path));
+                let p = Path::new(&s.path);
+                let da = crate::path_check::folder_exists(p);
+                let was = self.reachable.insert(s.id, da);
+                if da && (was == Some(false) || (self.offline_roots.contains(&s.id) && library::relink::volume_present(p))) {
+                    self.offline_roots.remove(&s.id);
+                    back.push(PathBuf::from(&s.path));
                 }
             }
+            // several roots on the same drive come back together: sync all of them (one root per round lost the others)
+            let new_available = match back.len() {
+                0 => None,
+                1 => Some(back.pop()),
+                _ => Some(None),
+            };
             // network drives: check every 15 minutes, one root folder per round (all of them in turn)
             let net_due = now.duration_since(self.net_round).as_secs() >= 900;
             let net: Option<PathBuf> = if net_due {
@@ -6800,7 +6889,16 @@ impl LibraryView {
             if net_due {
                 self.net_round = now;
             }
-            if let Some(p) = new_available.or(net) {
+            if let Some(p) = new_available {
+                // another job is running (e.g. the post-processing of the start sync): queue the root instead of
+                // dropping it, the reachable state is already remembered and would not trigger again
+                if self.work.lock().unwrap_or_else(|e| e.into_inner()).running {
+                    self.changed_since.get_or_insert(now);
+                    self.changed_roots.insert(p);
+                } else {
+                    self.start_job(ctx, "sync", p);
+                }
+            } else if let Some(p) = net {
                 self.start_job(ctx, "sync", Some(p));
             }
             // daily backup (background, own connection)
@@ -7845,7 +7943,7 @@ impl LibraryView {
 
 #[cfg(test)]
 mod request_order_tests {
-    use super::request_order;
+    use super::{request_order, sync_changed_nothing};
 
     #[test]
     fn still_keeps_top_first_and_scrolling_starts_at_the_leading_edge() {
@@ -7855,6 +7953,17 @@ mod request_order_tests {
         assert_eq!(request_order(-1, &shown, &after, &before), vec![0, 1, 2, 3, 4, 5, 6, 7]);
         // at the ends of the list the rows before or after are missing
         assert_eq!(request_order(1, &shown, &[], &[]), vec![5, 4, 3, 2]);
+    }
+
+    #[test]
+    fn sync_with_only_state_changes_reloads() {
+        let quiet = serde_json::json!({"kind": "sync", "sync": {"newly_added": 0, "missing": 0, "status_changed": 0}});
+        assert!(sync_changed_nothing(&quiet, 0));
+        // network drive back: "not reachable" → present, nothing added or missing – the views must reload
+        let back = serde_json::json!({"kind": "sync", "sync": {"newly_added": 0, "missing": 0, "status_changed": 2}});
+        assert!(!sync_changed_nothing(&back, 0));
+        // missing count differs from the shown one
+        assert!(!sync_changed_nothing(&quiet, 3));
     }
 }
 
@@ -8371,6 +8480,9 @@ fn offset_text(d: i64) -> String {
 }
 
 /// Status text at the start of a background run (before its first report).
+/// Set by the search thread when the model download failed; the UI thread then opens the dialog again.
+static FACE_DOWNLOAD_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn report_start(status: &Arc<Mutex<String>>, ctx: &egui::Context, search: bool) {
     *status.lock().unwrap_or_else(|e| e.into_inner()) = if search { "Gesichter werden gesucht …" } else { "Namensvorschläge werden aktualisiert …" }.to_string();
     ctx.request_repaint();

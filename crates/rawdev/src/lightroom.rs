@@ -183,15 +183,27 @@ impl Lua<'_> {
     }
 }
 
-/// Read the text from `Adobe_imageDevelopSettings.text` ("s = { … }").
+/// Read the text from `Adobe_imageDevelopSettings.text` ("s = { … }"). A reference line graineo appended at the
+/// handover (Lightroom's own as-shot white balance, [`library::lr_develop::AS_SHOT_KEY`]) comes in as a table under
+/// that key.
 pub fn from_catalog(text: &str) -> Option<Values> {
     let start = text.find('{')?;
     let mut l = Lua { b: text[start..].as_bytes(), i: 0, depth: 0 };
-    match l.value()? {
-        Value::Table(t) => Some(t),
-        Value::List(v) if v.is_empty() => Some(HashMap::new()),
-        _ => None,
+    let mut w = match l.value()? {
+        Value::Table(t) => t,
+        Value::List(v) if v.is_empty() => HashMap::new(),
+        _ => return None,
+    };
+    let rest = &text[start + l.i..];
+    if let Some(i) = rest.find(&format!("\n{} = ", library::lr_develop::AS_SHOT_KEY)) {
+        if let Some(j) = rest[i..].find('{') {
+            let mut r = Lua { b: rest[i + j..].as_bytes(), i: 0, depth: 0 };
+            if let Some(v @ Value::Table(_)) = r.value() {
+                w.insert(library::lr_develop::AS_SHOT_KEY.to_string(), v);
+            }
+        }
     }
+    Some(w)
 }
 
 // ------------------------------------------------------------------------------------------
@@ -273,6 +285,18 @@ pub struct ImageContext<'a> {
     pub finished: bool,
     /// sensor orientation, before crop and quarter turn (mask coordinates).
     pub size: [usize; 2],
+    /// the file's own as-shot white balance ([`own_as_shot`]); with Lightroom's as-shot reference a changed white
+    /// balance is carried over relative to it ([`crate::wb::from_lightroom_relative`]). `None`: absolute numbers.
+    pub as_shot: Option<crate::wb::OwnAsShot>,
+}
+
+/// The as-shot white balance of `doc` for [`ImageContext::as_shot`]: only for RAW files graineo develops itself
+/// (finished images have relative sliders, the system engine balances by itself).
+pub fn own_as_shot(doc: &crate::RawDoc) -> Option<crate::wb::OwnAsShot> {
+    if doc.finished || doc.apple.is_some() {
+        return None;
+    }
+    crate::wb::own_as_shot(&doc.info)
 }
 
 /// Lightroom's profile name → our look (`""` = automatic, `"neutral"`, `camera/style`).
@@ -487,10 +511,33 @@ pub fn to_settings(w: &Values, b: &ImageContext, base: &Settings) -> Settings {
             s.raw.temperature = k;
             s.raw.tint = g;
         }
+        // Lightroom's temperature and tint are on the same scale with the same sign as ours ([`crate::wb`], + = magenta),
+        // but computed with Lightroom's camera profile. With Lightroom's own as-shot value (taken over from the catalog)
+        // they are carried over as a distance from it onto our as-shot value; without it they stay absolute.
         (_, Some(t), tint) => {
-            s.raw.wb_mode = "custom".into();
-            s.raw.temperature = t as f32;
-            s.raw.tint = tint.unwrap_or(0.0) as f32;
+            let lr = (t as f32, tint.unwrap_or(0.0) as f32);
+            let reference = match w.get(library::lr_develop::AS_SHOT_KEY) {
+                Some(Value::Table(r)) => {
+                    let n = |k: &str| r.get(k).and_then(Value::number).filter(|v| v.is_finite());
+                    n("Temperature").zip(n("Tint")).map(|(k, g)| (k as f32, g as f32))
+                }
+                _ => None,
+            };
+            match (reference, b.as_shot) {
+                (Some(r), Some(own)) => match crate::wb::from_lightroom_relative(lr, r, own) {
+                    crate::wb::FromLightroom::AsShot => s.raw.wb_mode = "as_shot".into(),
+                    crate::wb::FromLightroom::Custom(k, g) => {
+                        s.raw.wb_mode = "custom".into();
+                        s.raw.temperature = k;
+                        s.raw.tint = g;
+                    }
+                },
+                _ => {
+                    s.raw.wb_mode = "custom".into();
+                    s.raw.temperature = lr.0;
+                    s.raw.tint = lr.1;
+                }
+            }
         }
         ("Auto", None, _) => s.raw.wb_mode = "auto".into(),
         (v, None, _) => {
@@ -805,7 +852,7 @@ pub fn initial_settings_from_catalog(doc: &crate::RawDoc, catalog: &std::path::P
 
 fn start_settings(doc: &crate::RawDoc, lightroom_text: impl FnOnce() -> Option<String>) -> Option<Settings> {
     let short = raw::picture_style::camera_short(&doc.info.maker, &doc.info.model);
-    let img = ImageContext { camera_short: &short, looks: &doc.looks, orientation: doc.orientation, finished: doc.finished, size: doc.full_size };
+    let img = ImageContext { camera_short: &short, looks: &doc.looks, orientation: doc.orientation, finished: doc.finished, size: doc.full_size, as_shot: own_as_shot(doc) };
     // finished images: can be disabled (setting "apply Lightroom edits to JPEGs"); a reference export already carries its edits
     if doc.finished && (library::settings::value("lightroomJpegEdits").as_bool() == Some(false) || is_lightroom_export(&doc.path)) {
         return None;
@@ -831,7 +878,7 @@ mod tests {
     use super::*;
 
     fn empty_image() -> ImageContext<'static> {
-        ImageContext { camera_short: "gr3", looks: &[], orientation: 0, finished: false, size: [600, 400] }
+        ImageContext { camera_short: "gr3", looks: &[], orientation: 0, finished: false, size: [600, 400], as_shot: None }
     }
 
     /// Finished images: Lightroom stores the white balance relatively (IncrementalTemperature/-Tint).
@@ -904,7 +951,7 @@ mod tests {
         assert_eq!(w["Exposure2012"].number(), Some(0.35));
         assert_eq!(w["CameraProfile"].text(), Some("Camera Classic Chrome"));
         let looks = vec!["x-t30/classic-chrome".to_string()];
-        let b = ImageContext { camera_short: "x-t30", looks: &looks, orientation: 0, finished: false, size: [600, 400] };
+        let b = ImageContext { camera_short: "x-t30", looks: &looks, orientation: 0, finished: false, size: [600, 400], as_shot: None };
         let s = to_settings(&w, &b, &Settings::default());
         assert_eq!(s.raw.look, "x-t30/classic-chrome");
         assert!((s.raw.blacks + 0.05).abs() < 1e-6);
@@ -915,11 +962,41 @@ mod tests {
     fn xmp() {
         let t = r#"<rdf:Description crs:Exposure2012="+0.50" crs:WhiteBalance="Custom" crs:Temperature="4800" crs:Tint="+7"><crs:ToneCurvePV2012><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></crs:ToneCurvePV2012></rdf:Description>"#;
         let w = from_xmp(t);
-        let b = ImageContext { camera_short: "eos-rp", looks: &[], orientation: 0, finished: false, size: [600, 400] };
+        let b = ImageContext { camera_short: "eos-rp", looks: &[], orientation: 0, finished: false, size: [600, 400], as_shot: None };
         let s = to_settings(&w, &b, &Settings::default());
         assert_eq!(s.exposure, 0.5);
         assert_eq!((s.raw.wb_mode.as_str(), s.raw.temperature, s.raw.tint), ("custom", 4800.0, 7.0));
         assert!(s.tone_curve.is_identity());
+        // XMP "Custom" carries no as-shot reference: absolute numbers, also with our own as-shot value known
+        let b = ImageContext { as_shot: Some(crate::wb::OwnAsShot { kelvin: 17173.0, tint: 8.4, exact: true }), ..b };
+        let s = to_settings(&w, &b, &Settings::default());
+        assert_eq!((s.raw.wb_mode.as_str(), s.raw.temperature, s.raw.tint), ("custom", 4800.0, 7.0));
+    }
+
+    /// White balance with Lightroom's as-shot reference (line appended at the handover): relative to our as-shot value.
+    #[test]
+    fn white_balance_relative_to_lightrooms_as_shot() {
+        let text = |wb: &str, k: i32, t: i32| library::lr_develop::with_as_shot(&format!("s = {{ Temperature = {k},\nTint = {t},\nWhiteBalance = \"{wb}\" }}\n"), 8000.0, 1.0);
+        let leica_q = Some(crate::wb::OwnAsShot { kelvin: 17173.0, tint: 8.4, exact: true });
+        let b = ImageContext { camera_short: "q", looks: &[], orientation: 0, finished: false, size: [600, 400], as_shot: leica_q };
+        let wb = |text: &str, b: &ImageContext| {
+            let s = to_settings(&from_catalog(text).unwrap(), b, &Settings::default());
+            (s.raw.wb_mode, s.raw.temperature, s.raw.tint)
+        };
+        assert_eq!(wb(&text("Custom", 9000, 1), &b), ("custom".into(), 22552.0, 8.4));
+        assert_eq!(wb(&text("Daylight", 5500, 10), &b), ("custom".into(), 8692.0, 17.4), "presets with numbers alike");
+        assert_eq!(wb(&text("Custom", 8000, 1), &b).0, "as_shot", "Lightroom's own as-shot numbers");
+        assert_eq!(wb(&text("As Shot", 8000, 1), &b).0, "as_shot");
+        // our as-shot not faithful: as shot
+        let bad = ImageContext { as_shot: Some(crate::wb::OwnAsShot { kelvin: 50000.0, tint: 30.0, exact: false }), ..b };
+        assert_eq!(wb(&text("Custom", 9000, 1), &bad).0, "as_shot");
+        // without our as-shot value (finished image, system engine) or without the reference: absolute, as before
+        let none = ImageContext { as_shot: None, ..b };
+        assert_eq!(wb(&text("Custom", 9000, 1), &none), ("custom".into(), 9000.0, 1.0));
+        let plain = library::lr_develop::without_as_shot(&text("Custom", 9000, 1)).to_string();
+        assert_eq!(wb(&plain, &b), ("custom".into(), 9000.0, 1.0));
+        // the reference line is no Lightroom setting: the rest of the text reads the same
+        assert_eq!(from_catalog(&text("Custom", 9000, 1)).unwrap().len(), 4);
     }
 }
 
@@ -929,7 +1006,7 @@ mod film_reference_tests {
     #[test]
     fn missing_look_keeps_name_and_package() {
         let text=r#"s = { Look = { UUID = "SYNTHETIC-MISSING", Name = "Synthetic Film", Group = "Synthetic package", Amount = 0.7 } }"#;
-        let b=ImageContext {camera_short:"gr3",looks:&[],orientation:0,finished:false,size:[600,400]};
+        let b=ImageContext {camera_short:"gr3",looks:&[],orientation:0,finished:false,size:[600,400],as_shot:None};
         let s=to_settings(&from_catalog(text).unwrap(),&b,&Settings::default());
         assert_eq!(s.raw.look,"film:SYNTHETIC-MISSING");assert_eq!(s.raw.look_name,"Synthetic Film");assert_eq!(s.raw.look_package,"Synthetic package");assert_eq!(s.profile_amount,0.7);
         let adobe=to_settings(&from_catalog(&text.replace("Synthetic Film","Adobe Color")).unwrap(),&b,&Settings::default());

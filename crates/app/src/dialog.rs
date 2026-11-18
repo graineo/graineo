@@ -143,6 +143,8 @@ pub fn warning(ui: &mut egui::Ui, t: &str) {
 
 /// Grey chip with key figures, e.g. "184 photos · 2.3 GB".
 pub fn chip(ui: &mut egui::Ui, t: &str) {
+    // air above (not below the text before it): a chip as the last element must not add space before the divider
+    ui.add_space(8.0);
     egui::Frame::new().fill(Color32::from_gray(0x2a)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(9, 3)).show(ui, |ui| {
         ui.label(egui::RichText::new(crate::tr(t)).small().color(Color32::from_gray(0xc8)));
     });
@@ -150,7 +152,7 @@ pub fn chip(ui: &mut egui::Ui, t: &str) {
 
 /// Framed option group.
 pub fn options<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    ui.add_space(4.0);
+    ui.add_space(10.0);
     egui::Frame::new()
         .fill(Color32::from_gray(0x19))
         .stroke(egui::Stroke::new(1.0, Color32::from_gray(0x30)))

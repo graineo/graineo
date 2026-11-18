@@ -657,7 +657,6 @@ abgelehntes Foto	photo rejetée
 abgelehnte Fotos	photos rejetées
 Es ist kein Foto ausgewählt, das sich löschen lässt.	Aucune photo sélectionnée ne peut être supprimée.
 Abgelehnt wird mit X. In dieser Liste ist kein Foto abgelehnt.	Pour rejeter une photo, appuyez sur X. Aucune photo de cette liste n'est rejetée.
-Dateien gehen in den Papierkorb und lassen sich von dort zurückholen. Nichts wird endgültig gelöscht.	Les fichiers sont placés dans la corbeille et peuvent en être récupérés. Rien n'est supprimé définitivement.
 {a}, deren Datei fehlt → nur aus der Bibliothek	{a} dont le fichier manque → bibliothèque uniquement
 {a} übersprungen (z. B. Volume nicht verbunden)	{a} ignoré(s) (p. ex. volume non connecté)
 Kamera-JPEGs mitlöschen	Supprimer aussi les JPEG de l'appareil
@@ -2334,7 +2333,7 @@ Im Satz „Importe“ ablegen	Ranger dans l'ensemble « Imports »
 Import {a}	Import {a}
 Die Ordner werden aufgenommen …	Ajout des dossiers…
 Dieses Sigma-Foto ist in Schwarzweiß oder Sepia aufgenommen – dafür gibt es die Foveon-Basis nicht, graineo rechnet selbst.	Cette photo Sigma a été prise en noir et blanc ou en sépia – la base Foveon n'est pas disponible dans ce cas, graineo effectue le calcul lui-même.
-{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	{a} d'entre eux se trouvent sur des disques réseau : il n'y a pas de corbeille, les fichiers vont dans le dossier corbeille du disque et peuvent être restaurés depuis Réglages → Stockage.
+{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	{a} se trouvent sur des lecteurs réseau, qui n'ont pas de corbeille : les fichiers sont déplacés dans le dossier corbeille du lecteur et peuvent être remis dans Réglages → Stockage.
 Papierkorb auf Netzlaufwerken	Corbeille sur disques réseau
 Dorthin wandert, was du auf einem Netzlaufwerk löschst (dort gibt es keinen Papierkorb). Relativ zum Stammordner des Laufwerks oder ein Ordner auf demselben Laufwerk.	Destination de ce que vous supprimez sur un disque réseau (il n'y a pas de corbeille). Chemin relatif à la racine du disque, ou dossier sur le même disque.
 Standard	Par défaut
@@ -6415,3 +6414,35 @@ Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine	Vue capteu
 Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine	Vue capteur indisponible pour les fichiers HE – développé avec le moteur RAW d'Apple
 Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})	Vue capteur indisponible pour ce fichier – développé avec le moteur RAW d'Apple ({a})
 Kamera-Look nicht gefunden – neutral entwickelt	Look d'appareil introuvable – développé en neutre
+Das Programm „curl“ lässt sich nicht starten.	Le programme « curl » ne peut pas être lancé.
+Keine Verbindung zum Server (Internet, DNS, Proxy oder Firewall prüfen).	Pas de connexion au serveur (vérifiez Internet, DNS, proxy ou pare-feu).
+Zeitüberschreitung beim Laden (Verbindung zu langsam oder blockiert).	Délai dépassé lors du téléchargement (connexion trop lente ou bloquée).
+Sichere Verbindung fehlgeschlagen (Zertifikat, Uhrzeit oder Proxy mit Zertifikatsprüfung).	Échec de la connexion sécurisée (certificat, horloge ou proxy inspectant les certificats).
+Der Server hat die Anfrage abgelehnt.	Le serveur a refusé la requête.
+Die Datei konnte nicht gespeichert werden (Platz oder Schreibrechte im Datenordner prüfen).	Le fichier n’a pas pu être enregistré (vérifiez l’espace libre et les droits d’écriture du dossier de données).
+Die geladene Datei ist beschädigt (Prüfsumme stimmt nicht).	Le fichier téléchargé est endommagé (somme de contrôle incorrecte).
+Unbekannter Fehler beim Laden.	Erreur inconnue lors du téléchargement.
+Gesichtsmodell konnte nicht geladen werden: {a} Details stehen im Fehlerbericht.	Le modèle de visages n’a pas pu être téléchargé : {a} Les détails figurent dans le rapport d’erreurs.
+Gesichtsmodell wird geladen … {a} von {b} MB	Téléchargement du modèle de visages … {a} sur {b} Mo
+Gesichtserkennung bereit	Reconnaissance des visages prête
+{a} → nur aus der Bibliothek	{a} → bibliothèque uniquement
+Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Les fichiers (avec le XMP à côté) sont placés dans la corbeille. Modifications, notes, mots-clés et collections sont définitivement supprimés.
+Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Modifications, notes, mots-clés et collections sont définitivement supprimés.
+Virtuelle Kopien werden mit ihrer Entwicklung endgültig gelöscht. Die Fotos bleiben.	Les copies virtuelles sont définitivement supprimées avec leur développement. Les photos restent.
+Pipette: neutrale Bildstelle anklicken	Pipette : cliquez sur une zone neutre de la photo
+Weißabgleich-Pipette: neutrale Stelle anklicken · ⇧ weitere Probe · −/+ Größe · Esc beendet	Pipette de balance des blancs : cliquez sur une zone neutre · ⇧ autre échantillon · −/+ taille · Échap termine
+Weißabgleich-Pipette: kleinere Probe	Pipette de balance des blancs : échantillon plus petit
+Weißabgleich-Pipette: größere Probe	Pipette de balance des blancs : échantillon plus grand
+Weißabgleich-Pipette: größere Probe (US-Tastatur)	Pipette de balance des blancs : échantillon plus grand (clavier US)
+⇧-Klick mit der Pipette	⇧-clic avec la pipette
+weitere Probe: Weißabgleich aus dem Mittel aller Proben, Pipette bleibt an	autre échantillon : balance des blancs d'après la moyenne de tous les échantillons, la pipette reste active
+Tönung {t}	Teinte {t}
+Temperatur {t}	Température {t}
+Rot ×{v}	Rouge ×{v}
+Blau ×{v}	Bleu ×{v}
+Ausgefressen	Surexposé
+Zu dunkel	Trop sombre
+Nicht neutral messbar	Non neutralisable
+Außerhalb der Skala	Hors de l'échelle
+{s}×{s} · {n} Proben	{s}×{s} · {n} échantillons
+Wohl nicht neutral	Peut-être pas neutre

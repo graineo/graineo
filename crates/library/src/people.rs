@@ -269,6 +269,16 @@ pub fn allow_download() {
     DOWNLOAD_ALLOWED.store(true, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Take the permission back (after a failed download): the next search asks again, with the cause shown.
+pub fn revoke_download() {
+    DOWNLOAD_ALLOWED.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Has the download been allowed (by [`allow_download`]) in this run?
+pub fn download_allowed() -> bool {
+    DOWNLOAD_ALLOWED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
 /// Default of the setting `facesAutomatic`: on where the system finds the faces (macOS, Apple Vision), off where
 /// graineo computes the detection itself on the CPU (YuNet: Windows, Linux).
 pub fn automatic_default() -> bool {
@@ -312,26 +322,208 @@ pub fn load_model() -> Result<faces::sface::Sface, String> {
     faces::sface::Sface::load(&p)
 }
 
-fn download_model(target: &std::path::Path) -> Result<(), String> {
-    if let Some(d) = target.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+/// Why the model download failed (shown to the user in plain words by the app; the technical line goes to the log).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DownloadCause {
+    /// curl could not be started (not installed, blocked).
+    NoCurl,
+    /// Proxy, DNS or connection problem (curl 5, 6, 7, 35 via proxy).
+    Connection,
+    /// Timeout (curl 28).
+    Timeout,
+    /// TLS / certificate problem (curl 35, 51, 58, 60).
+    Tls,
+    /// The server answered with an error (curl 22).
+    Http,
+    /// Could not write the file (curl 23, or the folder is not writable / disk full).
+    Write,
+    /// The file arrived but the checksum is wrong.
+    Checksum,
+    Other,
+}
+
+/// Last failed download: cause and technical line (for the app's message and log).
+#[derive(Clone, Debug)]
+pub struct DownloadFailure {
+    pub cause: DownloadCause,
+    pub technical: String,
+}
+
+static LAST_FAILURE: std::sync::Mutex<Option<DownloadFailure>> = std::sync::Mutex::new(None);
+
+/// The failure of the last model download attempt (`None` after a success or before the first attempt).
+pub fn last_download_failure() -> Option<DownloadFailure> {
+    LAST_FAILURE.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Translate a curl exit code (and its message) into a cause. Exit 56 is "receive error", but with the message
+/// "Failure writing output to destination" the target is not writable.
+pub fn curl_cause(code: i32, stderr: &str) -> DownloadCause {
+    match code {
+        56 if stderr.contains("Failure writing output") => DownloadCause::Write,
+        5 | 6 | 7 | 52 | 55 | 56 => DownloadCause::Connection,
+        28 => DownloadCause::Timeout,
+        35 | 51 | 58 | 59 | 60 | 77 | 82 | 83 | 90 | 91 => DownloadCause::Tls,
+        22 | 47 => DownloadCause::Http,
+        23 => DownloadCause::Write,
+        _ => DownloadCause::Other,
     }
-    let part = target.with_extension("onnx.teil");
-    let st = std::process::Command::new("curl")
+}
+
+/// Free space in bytes of the volume holding `path` (macOS/Linux via `df`; `None` where unknown).
+fn free_space(path: &std::path::Path) -> Option<u64> {
+    let out = std::process::Command::new("df").arg("-k").arg(path).output().ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let cols: Vec<&str> = text.lines().nth(1)?.split_whitespace().collect();
+    cols.get(3)?.parse::<u64>().ok().map(|k| k * 1024)
+}
+
+fn fail(cause: DownloadCause, technical: String) -> DownloadFailure {
+    DownloadFailure { cause, technical }
+}
+
+/// One curl run for `url` into `part`. Error: cause and technical line (curl exit code and its own message).
+fn curl_once(url: &str, part: &std::path::Path) -> Result<(), DownloadFailure> {
+    let out = std::process::Command::new("curl")
         .args(["-sSfL", "--proto", "=https", "--proto-redir", "=https", "--max-redirs", "5", "--connect-timeout", "20", "--max-time", "900", "-o"])
-        .arg(&part)
-        .arg(faces::sface::SOURCE_URL)
-        .status()
-        .map_err(|e| format!("curl: {e}"))?;
-    if !st.success() {
-        let _ = std::fs::remove_file(&part);
-        return Err("Gesichtsmodell konnte nicht geladen werden".into());
+        .arg(part)
+        .arg(url)
+        .output()
+        .map_err(|e| fail(DownloadCause::NoCurl, format!("curl could not be started: {e}")))?;
+    if out.status.success() {
+        return Ok(());
     }
-    if crate::relocate::sha256(&part)? != faces::sface::SHA256 {
-        let _ = std::fs::remove_file(&part);
-        return Err("Gesichtsmodell: Prüfsumme stimmt nicht".into());
+    let code = out.status.code().unwrap_or(-1);
+    let msg = String::from_utf8_lossy(&out.stderr).trim().replace('\n', " ");
+    let mut technical = format!("curl exit {code} for {url}: {msg}");
+    let cause = curl_cause(code, &msg);
+    if cause == DownloadCause::Write {
+        let dir = part.parent().unwrap_or(part);
+        technical.push_str(&format!(" (target {}", part.display()));
+        if let Some(f) = free_space(dir) {
+            technical.push_str(&format!(", {} MB free", f / 1_000_000));
+        }
+        technical.push(')');
     }
-    std::fs::rename(&part, target).map_err(|e| e.to_string())
+    // proxy hints for the log: curl only knows the environment proxies, not the system settings
+    for v in ["https_proxy", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"] {
+        if std::env::var_os(v).is_some() {
+            technical.push_str(&format!(" [{v} set]"));
+        }
+    }
+    Err(fail(cause, technical))
+}
+
+static DOWNLOAD_PART: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+static DOWNLOAD_DONE: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// Progress of a running model download as (bytes so far, total bytes), read from the growing partial file
+/// (no parsing of curl output). `None` when no download is running.
+pub fn download_progress() -> Option<(u64, u64)> {
+    let part = DOWNLOAD_PART.lock().unwrap_or_else(|e| e.into_inner()).clone()?;
+    let got = std::fs::metadata(part).map(|m| m.len()).unwrap_or(0);
+    Some((got.min(faces::sface::SIZE_BYTES), faces::sface::SIZE_BYTES))
+}
+
+/// Did a model download finish successfully within the last `secs` seconds?
+pub fn download_done_within(secs: u64) -> bool {
+    DOWNLOAD_DONE.lock().unwrap_or_else(|e| e.into_inner()).is_some_and(|t| t.elapsed().as_secs() < secs)
+}
+
+fn download_model(target: &std::path::Path) -> Result<(), String> {
+    *DOWNLOAD_DONE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    let result = download_model_inner(target);
+    *DOWNLOAD_PART.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    if result.is_ok() {
+        *DOWNLOAD_DONE.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+    }
+    result
+}
+
+fn download_model_inner(target: &std::path::Path) -> Result<(), String> {
+    let run = || -> Result<(), DownloadFailure> {
+        if let Some(d) = target.parent() {
+            std::fs::create_dir_all(d).map_err(|e| fail(DownloadCause::Write, format!("folder {} cannot be created: {e}", d.display())))?;
+        }
+        let part = target.with_extension("onnx.part");
+        // a partial file left behind by an older version
+        let _ = std::fs::remove_file(target.with_extension("onnx.teil"));
+        *DOWNLOAD_PART.lock().unwrap_or_else(|e| e.into_inner()) = Some(part.clone());
+        let mut last = None;
+        let mut technical = Vec::new();
+        for url in [faces::sface::SOURCE_URL, faces::sface::FALLBACK_URL] {
+            match curl_once(url, &part) {
+                Ok(()) => {
+                    let sum = crate::relocate::sha256(&part).map_err(|e| fail(DownloadCause::Write, format!("checksum of {} not readable: {e}", part.display())))?;
+                    if sum == faces::sface::SHA256 {
+                        return std::fs::rename(&part, target).map_err(|e| fail(DownloadCause::Write, format!("rename to {} failed: {e}", target.display())));
+                    }
+                    let _ = std::fs::remove_file(&part);
+                    technical.push(format!("{url}: checksum {sum} does not match"));
+                    last = Some(DownloadCause::Checksum);
+                }
+                Err(f) => {
+                    let _ = std::fs::remove_file(&part);
+                    // a write problem will not get better with another host
+                    if f.cause == DownloadCause::Write || f.cause == DownloadCause::NoCurl {
+                        technical.push(f.technical);
+                        return Err(fail(f.cause, technical.join(" | ")));
+                    }
+                    last = Some(f.cause);
+                    technical.push(f.technical);
+                }
+            }
+        }
+        Err(fail(last.unwrap_or(DownloadCause::Other), technical.join(" | ")))
+    };
+    match run() {
+        Ok(()) => {
+            *LAST_FAILURE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            Ok(())
+        }
+        Err(f) => {
+            let text = format!("face model download failed ({:?}): {}", f.cause, f.technical);
+            *LAST_FAILURE.lock().unwrap_or_else(|e| e.into_inner()) = Some(f);
+            Err(text)
+        }
+    }
+}
+
+#[cfg(test)]
+mod download_tests {
+    use super::*;
+
+    #[test]
+    fn curl_codes_become_causes() {
+        assert_eq!(curl_cause(6, ""), DownloadCause::Connection);
+        assert_eq!(curl_cause(7, ""), DownloadCause::Connection);
+        assert_eq!(curl_cause(28, ""), DownloadCause::Timeout);
+        assert_eq!(curl_cause(35, ""), DownloadCause::Tls);
+        assert_eq!(curl_cause(60, ""), DownloadCause::Tls);
+        assert_eq!(curl_cause(22, ""), DownloadCause::Http);
+        assert_eq!(curl_cause(23, ""), DownloadCause::Write);
+        assert_eq!(curl_cause(2, ""), DownloadCause::Other);
+        // exit 56: write error of the target versus a real connection loss
+        assert_eq!(curl_cause(56, "curl: (56) Failure writing output to destination, passed 1370 returned 0"), DownloadCause::Write);
+        assert_eq!(curl_cause(56, "curl: (56) Recv failure: Connection reset by peer"), DownloadCause::Connection);
+        assert_eq!(curl_cause(56, ""), DownloadCause::Connection);
+    }
+
+    #[test]
+    fn unreachable_host_gives_connection_cause() {
+        let dir = std::env::temp_dir().join(format!("graineo-dl-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let r = curl_once("https://127.0.0.1:1/x.onnx", &dir.join("x.part"));
+        let _ = std::fs::remove_dir_all(&dir);
+        match r {
+            Err(f) => {
+                // without curl on the machine the start itself fails
+                assert!(matches!(f.cause, DownloadCause::Connection | DownloadCause::NoCurl), "{f:?}");
+                assert!(!f.technical.is_empty());
+            }
+            Ok(()) => panic!("nothing listens on port 1"),
+        }
+    }
 }
 
 // ───────────────────────────────────────────── Face detection (Vision) and features (SFace)

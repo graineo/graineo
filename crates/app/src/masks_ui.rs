@@ -161,7 +161,7 @@ fn point(ui: &mut Ui, label: &str, p: &mut [f32; 2]) {
         ui.add_space(lr::TEXT_INSET);
         ui.label(label);
         for v in p {
-            crate::lr::text_field(ui, egui::DragValue::new(v).speed(0.005).range(-2.0..=2.0));
+            crate::lr::text_field(ui, egui::DragValue::new(v).speed(0.005).range(-2.0..=2.0).clamp_existing_to_range(false));
         }
     });
 }

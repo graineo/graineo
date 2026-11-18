@@ -2,7 +2,8 @@
 //! afterwards (Lightroom can then be removed and the catalog archived).
 //!
 //! For every photo of the library with develop settings in the catalog, the settings text of the
-//! catalog (unchanged), the orientation in Lightroom and the "edited" mark go into the library
+//! catalog (unchanged; for a white balance other than "As Shot" followed by Lightroom's own as-shot value as a
+//! reference line, [`crate::lr_develop::AS_SHOT_KEY`]), the orientation in Lightroom and the "edited" mark go into the library
 //! ([`crate::store`], `develop_state`); those of virtual copies into the copy's entry. Own develop settings of
 //! graineo, ratings and keywords stay untouched. Since 08.11.2026 the library is the main store: the handover
 //! takes seconds instead of hours; the sidecar next to the photo (same fields as before, [`crate::xmp::Lightroom`])
@@ -13,7 +14,8 @@
 //! at least folder + name) – also for photos that moved (e.g. to the NAS with the same relative path).
 //!
 //! Repeatable and resumable: what is already in the library counts as "already there" and is not
-//! written again.
+//! written again. A photo taken over before the reference line existed gets it on the next run (only its Lightroom
+//! data changes; own settings stay).
 //! The catalog is only read ([`crate::lightroom::open_catalog`]).
 
 use std::collections::{HashMap, HashSet};
@@ -132,6 +134,15 @@ impl Catalog {
                         x.edited |= edited > 0.0;
                     }
                     None => list.push(CatalogImage { image, master, copy: copy.filter(|c| !c.is_empty()), text, orientation: orientation.filter(|o| !o.is_empty()), edited: edited > 0.0 }),
+                }
+            }
+        }
+        // Lightroom's own as-shot white balance as the reference of a changed white balance (only photos whose
+        // white balance is not "As Shot"; see `lr_develop::AS_SHOT_KEY`)
+        for list in images.values_mut() {
+            for x in list.iter_mut() {
+                if let Some(t) = x.text.take() {
+                    x.text = Some(crate::lr_develop::attach_as_shot(&conn, x.image, x.master, t));
                 }
             }
         }

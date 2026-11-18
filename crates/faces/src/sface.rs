@@ -9,6 +9,8 @@ use crate::onnx;
 /// SHA-256 of the expected model file `face_recognition_sface_2021dec.onnx` (OpenCV Zoo).
 pub const SHA256: &str = "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79";
 pub const SOURCE_URL: &str = "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx";
+/// Second source (other host, same file, same checksum), tried when the first one cannot be reached.
+pub const FALLBACK_URL: &str = "https://huggingface.co/opencv/face_recognition_sface/resolve/main/face_recognition_sface_2021dec.onnx";
 /// Size of the model file in bytes (shown in the notice before the download).
 pub const SIZE_BYTES: u64 = 38_696_353;
 pub const FILE_NAME: &str = "face_recognition_sface_2021dec.onnx";

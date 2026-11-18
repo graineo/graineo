@@ -160,7 +160,7 @@ fn fmt1(v: f64) -> String {
 
 /// Text field for a length in mm.
 fn mm_field(ui: &mut egui::Ui, value: &mut f64, range: std::ops::RangeInclusive<f64>) -> bool {
-    ui.add_sized([70.0, 20.0], egui::DragValue::new(value).range(range).speed(0.5).max_decimals(1).suffix(" mm")).changed()
+    ui.add_sized([70.0, 20.0], egui::DragValue::new(value).range(range).clamp_existing_to_range(false).speed(0.5).max_decimals(1).suffix(" mm")).changed()
 }
 
 /// Row: name on the left, control on the right.
@@ -806,9 +806,9 @@ impl App {
             ui.label(egui::RichText::new(crate::tr("Ränder auf den bedruckbaren Bereich des Druckers angehoben")).color(lr::TEXT_DIM).small());
         }
         row(ui, crate::tr("Reihen × Spalten"), |ui| {
-            ui.add_sized([44.0, 20.0], egui::DragValue::new(&mut t.grid.columns).range(1..=tpl::MAX_CELLS).speed(0.1));
+            ui.add_sized([44.0, 20.0], egui::DragValue::new(&mut t.grid.columns).range(1..=tpl::MAX_CELLS).clamp_existing_to_range(false).speed(0.1));
             ui.label("×");
-            ui.add_sized([44.0, 20.0], egui::DragValue::new(&mut t.grid.rows).range(1..=tpl::MAX_CELLS).speed(0.1));
+            ui.add_sized([44.0, 20.0], egui::DragValue::new(&mut t.grid.rows).range(1..=tpl::MAX_CELLS).clamp_existing_to_range(false).speed(0.1));
         });
         row(ui, crate::tr("Abstand"), |ui| {
             mm_field(ui, &mut t.grid.gap_mm[1], 0.0..=100.0);
@@ -839,7 +839,7 @@ impl App {
         switch_row(ui, crate::tr("Kontur"), &mut t.image.stroke.on, "Linie außen um jedes Foto");
         if t.image.stroke.on {
             row(ui, crate::tr("Konturbreite"), |ui| {
-                ui.add_sized([70.0, 20.0], egui::DragValue::new(&mut t.image.stroke.width_pt).range(0.25..=10.0).speed(0.05).max_decimals(2).suffix(" pt"));
+                ui.add_sized([70.0, 20.0], egui::DragValue::new(&mut t.image.stroke.width_pt).range(0.25..=10.0).clamp_existing_to_range(false).speed(0.05).max_decimals(2).suffix(" pt"));
             });
             row(ui, crate::tr("Konturfarbe"), |ui| {
                 lr::segmented_pad(ui, &mut t.image.stroke.color, &[(Ink::Black, "Schwarz"), (Ink::Gray, "Grau"), (Ink::White, "Weiß")], 6.0);
@@ -871,7 +871,7 @@ impl App {
         }
         if t.page.photo_info.mode != InfoMode::Off {
             row(ui, crate::tr("Schriftgrad"), |ui| {
-                ui.add_sized([70.0, 20.0], egui::DragValue::new(&mut t.page.photo_info.size_pt).range(6.0..=16.0).speed(0.1).max_decimals(1).suffix(" pt"));
+                ui.add_sized([70.0, 20.0], egui::DragValue::new(&mut t.page.photo_info.size_pt).range(6.0..=16.0).clamp_existing_to_range(false).speed(0.1).max_decimals(1).suffix(" pt"));
             });
         }
 

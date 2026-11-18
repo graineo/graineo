@@ -6,6 +6,8 @@
 //!   --lr                 starting values from the Lightroom catalog (read only)
 //!   --katalog PATH       a different catalog
 //!   --lr-pfad PATH       location of the file in the Lightroom catalog (e.g. for an archived RAW that lives at the target)
+//!   --lr-text FILE       starting values from a Lightroom settings text as the library keeps it (`s = { … }`,
+//!                        optionally with the as-shot reference line, `library::lr_develop::AS_SHOT_KEY`)
 //!   --xmp FILE           starting values from the crs: fields of an XMP file
 //!   --vergleich REF|eingebettet   compare with a reference image or the embedded preview; a reference in sensor
 //!                         orientation is turned like the output (automatic if the format differs, `--ref-sensor` always)
@@ -51,7 +53,7 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
     if let Some(j) = value("--settings") {
         s = serde_json::from_str(&std::fs::read_to_string(j)?)?;
     }
-    let photo_path = rawdev::lightroom::ImageContext { camera_short: &raw::picture_style::camera_short(&doc.info.maker, &doc.info.model), looks: &doc.looks, orientation: doc.orientation, finished: doc.finished, size: doc.full_size };
+    let photo_path = rawdev::lightroom::ImageContext { camera_short: &raw::picture_style::camera_short(&doc.info.maker, &doc.info.model), looks: &doc.looks, orientation: doc.orientation, finished: doc.finished, size: doc.full_size, as_shot: rawdev::lightroom::own_as_shot(&doc) };
     let mut lr_text = None;
     if has_flag("--lr") {
         let catalog = value("--catalog").map(std::path::PathBuf::from).unwrap_or_else(crate::dev_catalog);
@@ -61,6 +63,13 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
         let w = rawdev::lightroom::from_catalog(&e.text).context("settings not readable")?;
         s = rawdev::lightroom::to_settings(&w, &photo_path, &s);
         lr_text = Some(e.text);
+    }
+    if let Some(x) = value("--lr-text") {
+        // a settings text as the library keeps it (catalog text, optionally with graineo's as-shot reference line)
+        let t = std::fs::read_to_string(&x)?;
+        let w = rawdev::lightroom::from_catalog(&t).context("settings not readable")?;
+        s = rawdev::lightroom::to_settings(&w, &photo_path, &s);
+        lr_text = Some(t);
     }
     if let Some(x) = value("--xmp") {
         let w = rawdev::lightroom::from_xmp(&std::fs::read_to_string(x)?);

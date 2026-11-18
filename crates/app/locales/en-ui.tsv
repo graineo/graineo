@@ -662,7 +662,6 @@ abgelehntes Foto	rejected photo
 abgelehnte Fotos	rejected photos
 Es ist kein Foto ausgewählt, das sich löschen lässt.	No deletable photos selected.
 Abgelehnt wird mit X. In dieser Liste ist kein Foto abgelehnt.	Press X to reject a photo. There are no rejected photos in this list.
-Dateien gehen in den Papierkorb und lassen sich von dort zurückholen. Nichts wird endgültig gelöscht.	Files are moved to the Trash and can be restored from there. Nothing is permanently deleted.
 {a}, deren Datei fehlt → nur aus der Bibliothek	{a} with missing files → removed from library only
 {a} übersprungen (z. B. Volume nicht verbunden)	{a} skipped (e.g. volume not connected)
 Kamera-JPEGs mitlöschen	Also delete camera JPEGs
@@ -6417,3 +6416,35 @@ Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine	Sensor vie
 Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine	Sensor view not available for HE files – developed with Apple's RAW engine
 Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})	Sensor view not available for this file – developed with Apple's RAW engine ({a})
 Kamera-Look nicht gefunden – neutral entwickelt	Camera look not found – developed neutral
+Das Programm „curl“ lässt sich nicht starten.	The program “curl” cannot be started.
+Keine Verbindung zum Server (Internet, DNS, Proxy oder Firewall prüfen).	No connection to the server (check internet, DNS, proxy or firewall).
+Zeitüberschreitung beim Laden (Verbindung zu langsam oder blockiert).	Timeout while downloading (connection too slow or blocked).
+Sichere Verbindung fehlgeschlagen (Zertifikat, Uhrzeit oder Proxy mit Zertifikatsprüfung).	Secure connection failed (certificate, system clock or a proxy inspecting certificates).
+Der Server hat die Anfrage abgelehnt.	The server rejected the request.
+Die Datei konnte nicht gespeichert werden (Platz oder Schreibrechte im Datenordner prüfen).	The file could not be saved (check free space and write permissions of the data folder).
+Die geladene Datei ist beschädigt (Prüfsumme stimmt nicht).	The downloaded file is damaged (checksum does not match).
+Unbekannter Fehler beim Laden.	Unknown error while downloading.
+Gesichtsmodell konnte nicht geladen werden: {a} Details stehen im Fehlerbericht.	The face model could not be downloaded: {a} Details are in the error report.
+Gesichtsmodell wird geladen … {a} von {b} MB	Downloading face model … {a} of {b} MB
+Gesichtserkennung bereit	Face recognition ready
+{a} → nur aus der Bibliothek	{a} → library only
+Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Files (with the XMP next to them) are moved to the Trash. Edits, ratings, keywords and collections are permanently deleted.
+Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Edits, ratings, keywords and collections are permanently deleted.
+Virtuelle Kopien werden mit ihrer Entwicklung endgültig gelöscht. Die Fotos bleiben.	Virtual copies are permanently deleted with their development. The photos stay.
+Pipette: neutrale Bildstelle anklicken	Eyedropper: click a neutral area of the photo
+Weißabgleich-Pipette: neutrale Stelle anklicken · ⇧ weitere Probe · −/+ Größe · Esc beendet	White balance eyedropper: click a neutral area · ⇧ another sample · −/+ size · Esc ends
+Weißabgleich-Pipette: kleinere Probe	White balance eyedropper: smaller sample
+Weißabgleich-Pipette: größere Probe	White balance eyedropper: larger sample
+Weißabgleich-Pipette: größere Probe (US-Tastatur)	White balance eyedropper: larger sample (US keyboard)
+⇧-Klick mit der Pipette	⇧-click with the eyedropper
+weitere Probe: Weißabgleich aus dem Mittel aller Proben, Pipette bleibt an	another sample: white balance from the mean of all samples, the eyedropper stays on
+Tönung {t}	Tint {t}
+Temperatur {t}	Temperature {t}
+Rot ×{v}	Red ×{v}
+Blau ×{v}	Blue ×{v}
+Ausgefressen	Blown out
+Zu dunkel	Too dark
+Nicht neutral messbar	Not neutralizable
+Außerhalb der Skala	Outside the scale
+{s}×{s} · {n} Proben	{s}×{s} · {n} samples
+Wohl nicht neutral	Probably not neutral

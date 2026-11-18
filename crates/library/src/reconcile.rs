@@ -76,6 +76,12 @@ pub struct Report {
     pub folders_listed: usize,
     /// of those unchanged since the last run (no `stat` per file)
     pub folders_unchanged: usize,
+    /// files whose state changed in this run (present / missing / volume missing): the views must reload even if
+    /// no file was added or lost, e.g. after a network drive was connected again (state 2 → 0)
+    pub status_changed: usize,
+    /// folders (root folders included) the system refused to read (macOS privacy: network volumes or files and folders
+    /// not allowed for graineo); their files keep their state
+    pub denied: Vec<String>,
     /// files whose size and time were read (`stat`)
     pub files_stat: usize,
 }
@@ -112,6 +118,8 @@ impl Report {
             "folders_listed": self.folders_listed,
             "folders_unchanged": self.folders_unchanged,
             "files_stat": self.files_stat,
+            "status_changed": self.status_changed,
+            "denied": self.denied,
         })
     }
 }
@@ -270,9 +278,17 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
         let root_dir = PathBuf::from(&s.path);
         // not only "is a folder": an empty mount point left on the system disk for a disconnected network drive is
         // one too – everything in it would count as missing instead of "drive not connected"
-        if !crate::location::root_reachable(&s.path) {
+        let access = crate::location::root_access(&s.path);
+        if access == crate::location::Reach::Denied {
+            // not "not reachable": the drive may well be there, graineo is only not allowed to look
+            b.denied.push(s.path.clone());
+            done += s_expected;
+            continue;
+        }
+        if access != crate::location::Reach::Yes {
             steps.push(Step::Offline(s.id));
             b.offline.push((s.path.clone(), count));
+            b.status_changed += files.values().flat_map(|m| m.values()).filter(|d| d.status != 2).count();
             done += s_expected;
             continue;
         }
@@ -284,6 +300,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
         let mut scanned: HashSet<String> = HashSet::new();
         // folders that could not be listed this time (network hiccup, rights): what is below them is unknown, not missing
         let mut unreadable: Vec<String> = Vec::new();
+        let mut denied_here: Vec<String> = Vec::new();
         // recursive run over the disk
         let mut batch: Vec<String> = vec![String::new()];
         while let Some(rel) = batch.pop() {
@@ -297,11 +314,19 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
             // time of the folder before listing it: a change during the listing makes the next run look again
             let now_ns = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as i128);
             let mtime_ns = std::fs::metadata(&abs).ok().and_then(|m| folder_mtime(&m, now_ns));
-            let Ok(rd) = std::fs::read_dir(&abs) else {
-                if abs.exists() {
-                    unreadable.push(rel.clone());
+            let rd = match std::fs::read_dir(&abs) {
+                Ok(rd) => rd,
+                Err(e) => {
+                    // refused by the system (privacy permission): unknown, never "missing" – even if `stat` is refused too
+                    let refused = e.kind() == std::io::ErrorKind::PermissionDenied;
+                    if refused {
+                        denied_here.push(format!("{}{rel}", s.path));
+                    }
+                    if refused || abs.exists() {
+                        unreadable.push(rel.clone());
+                    }
+                    continue;
                 }
-                continue;
             };
             b.folders_listed += 1;
             let mut names: Vec<(String, Option<std::fs::DirEntry>)> = Vec::new();
@@ -378,6 +403,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
                 .collect();
             for (name, d) in &known {
                 if !on_disk.contains(name.as_str()) {
+                    b.status_changed += usize::from(d.status != 1);
                     steps.push(Step::Missing { id: d.id, folder: folder_id.unwrap_or_default(), name: name.clone() });
                     missing_items.push((d.id, d.size, name.clone()));
                     b.missing += 1;
@@ -414,6 +440,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
                 match known_file {
                     Some(d) => {
                         b.existing += 1;
+                        b.status_changed += usize::from(d.status != 0);
                         if d.status != 0 || d.size != Some(size) || d.mtime != mtime {
                             steps.push(Step::Present { id: d.id, size, mtime });
                         }
@@ -428,11 +455,26 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
         }
         // known folders that do not exist (any more) on disk
         for (rel, folder_id) in &folder {
-            if visited.contains(rel) || unreadable.iter().any(|u| rel.starts_with(u.as_str())) {
+            if visited.contains(rel) {
+                continue;
+            }
+            if unreadable.iter().any(|u| rel.starts_with(u.as_str())) {
+                // the root is reachable now: files that were "volume missing" (2) are asked for one by one (a folder
+                // that cannot be listed may still allow its files to be read); what still cannot be read keeps its state
+                for d in files.get(folder_id).into_iter().flat_map(|m| m.iter()).filter(|(_, d)| d.status == 2).map(|(n, d)| (root_dir.join(rel).join(n), d)) {
+                    b.files_stat += 1;
+                    if let Some(m) = d.0.metadata().ok().filter(|m| m.is_file()) {
+                        let mtime = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|x| x.as_secs() as i64);
+                        b.status_changed += 1;
+                        b.existing += 1;
+                        steps.push(Step::Present { id: d.1.id, size: m.len() as i64, mtime });
+                    }
+                }
                 continue;
             }
             if let Some(list) = files.remove(folder_id) {
                 for (name, d) in list {
+                    b.status_changed += usize::from(d.status != 1);
                     steps.push(Step::Missing { id: d.id, folder: *folder_id, name: name.clone() });
                     b.missing += 1;
                     *b.missing_per_folder.entry(format!("{}{rel}", s.path)).or_default() += 1;
@@ -442,6 +484,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
                 }
             }
         }
+        b.denied.extend(denied_here);
         // folders of the last run that are gone: forget their state
         for rel in last.keys().filter(|r| !scanned.contains(*r)) {
             steps.push(Step::Unscan { root: s.id, rel: rel.clone() });

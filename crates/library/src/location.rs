@@ -28,8 +28,34 @@ pub fn root_of_file(db: &Db, file: i64) -> Option<(i64, String)> {
 /// Is the location of this root folder reachable (the folder exists, and on `/Volumes` the drive is really mounted –
 /// not an empty mount point left over on the system disk)?
 pub fn root_reachable(path: &str) -> bool {
+    root_access(path) == Reach::Yes
+}
+
+/// Access to a root folder as the sync sees it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reach {
+    /// the folder is there (and its drive is mounted)
+    Yes,
+    /// the drive is not connected (or the folder is gone): its files are "volume missing" (2)
+    Offline,
+    /// the system refuses access (macOS privacy: "Files and Folders" / "Network Volumes" not allowed for graineo).
+    /// Nothing is known about the files: their state stays as it is, never "missing" or "volume missing"
+    Denied,
+}
+
+/// [`Reach`] of a root folder.
+pub fn root_access(path: &str) -> Reach {
     let p = Path::new(path);
-    p.is_dir() && crate::relink::volume_present(p)
+    reach(std::fs::metadata(p).map(|m| m.is_dir()).map_err(|e| e.kind()), || crate::relink::volume_present(p))
+}
+
+/// [`Reach`] from the answer of `stat` on the root folder (is a folder / error kind); `volume`: is its drive mounted.
+pub fn reach(stat: Result<bool, std::io::ErrorKind>, volume: impl FnOnce() -> bool) -> Reach {
+    match stat {
+        Ok(true) if volume() => Reach::Yes,
+        Err(std::io::ErrorKind::PermissionDenied) => Reach::Denied,
+        _ => Reach::Offline,
+    }
 }
 
 /// Is the location of this file reachable? Unknown files count as reachable (nothing to queue).
@@ -60,6 +86,19 @@ pub fn note_before_change(_db: &Db, _files: &[i64]) {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn permission_denied_is_not_offline() {
+        use std::io::ErrorKind;
+        assert_eq!(reach(Ok(true), || true), Reach::Yes);
+        // empty mount point left on the system disk / drive not connected
+        assert_eq!(reach(Ok(true), || false), Reach::Offline);
+        assert_eq!(reach(Err(ErrorKind::NotFound), || true), Reach::Offline);
+        assert_eq!(reach(Ok(false), || true), Reach::Offline);
+        // macOS privacy refuses access (network volumes not allowed for the app): not "not reachable"
+        assert_eq!(reach(Err(ErrorKind::PermissionDenied), || true), Reach::Denied);
+    }
+
     use crate::xmp::{self, ReadResult, Values};
     use rusqlite::params;
 

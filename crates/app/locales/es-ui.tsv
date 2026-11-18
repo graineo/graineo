@@ -657,7 +657,6 @@ abgelehntes Foto	foto rechazada
 abgelehnte Fotos	fotos rechazadas
 Es ist kein Foto ausgewählt, das sich löschen lässt.	No hay ninguna foto seleccionada que se pueda eliminar.
 Abgelehnt wird mit X. In dieser Liste ist kein Foto abgelehnt.	Las fotos se rechazan con X. En esta lista no hay ninguna foto rechazada.
-Dateien gehen in den Papierkorb und lassen sich von dort zurückholen. Nichts wird endgültig gelöscht.	Los archivos van a la papelera y se pueden recuperar desde allí. No se elimina nada de forma definitiva.
 {a}, deren Datei fehlt → nur aus der Bibliothek	{a} sin archivo → solo de la biblioteca
 {a} übersprungen (z. B. Volume nicht verbunden)	{a} omitidos (p. ej., volumen no conectado)
 Kamera-JPEGs mitlöschen	Eliminar también los JPEG de cámara
@@ -2334,7 +2333,7 @@ Im Satz „Importe“ ablegen	Guardar en el conjunto «Importaciones»
 Import {a}	Importación {a}
 Die Ordner werden aufgenommen …	Añadiendo las carpetas…
 Dieses Sigma-Foto ist in Schwarzweiß oder Sepia aufgenommen – dafür gibt es die Foveon-Basis nicht, graineo rechnet selbst.	Esta foto Sigma se tomó en blanco y negro o sepia; para estos modos no existe la base Foveon y graineo hace el cálculo por su cuenta.
-{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	{a} de ellos están en unidades de red: allí no hay papelera, los archivos van a la carpeta de papelera de la unidad y se pueden recuperar en Ajustes → Almacenamiento.
+{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.	{a} están en unidades de red, que no tienen papelera: los archivos se mueven a la carpeta de papelera de la unidad y se pueden recuperar en Ajustes → Almacenamiento.
 Papierkorb auf Netzlaufwerken	Papelera en unidades de red
 Dorthin wandert, was du auf einem Netzlaufwerk löschst (dort gibt es keinen Papierkorb). Relativ zum Stammordner des Laufwerks oder ein Ordner auf demselben Laufwerk.	Aquí van los archivos que borres en una unidad de red (que no tiene papelera). Ruta relativa a la carpeta raíz de la unidad o una carpeta de la misma unidad.
 Standard	Estándar
@@ -6415,3 +6414,35 @@ Sensoransicht nicht verfügbar – entwickelt über Apples RAW-Engine	Vista del 
 Sensoransicht für HE-Dateien nicht verfügbar – entwickelt über Apples RAW-Engine	Vista del sensor no disponible para archivos HE: revelado con el motor RAW de Apple
 Sensoransicht für diese Datei nicht verfügbar – entwickelt über Apples RAW-Engine ({a})	Vista del sensor no disponible para este archivo: revelado con el motor RAW de Apple ({a})
 Kamera-Look nicht gefunden – neutral entwickelt	Look de cámara no encontrado: revelado neutro
+Das Programm „curl“ lässt sich nicht starten.	No se puede iniciar el programa «curl».
+Keine Verbindung zum Server (Internet, DNS, Proxy oder Firewall prüfen).	Sin conexión con el servidor (revisa internet, DNS, proxy o cortafuegos).
+Zeitüberschreitung beim Laden (Verbindung zu langsam oder blockiert).	Tiempo de espera agotado en la descarga (conexión demasiado lenta o bloqueada).
+Sichere Verbindung fehlgeschlagen (Zertifikat, Uhrzeit oder Proxy mit Zertifikatsprüfung).	Falló la conexión segura (certificado, hora del sistema o proxy que inspecciona certificados).
+Der Server hat die Anfrage abgelehnt.	El servidor rechazó la solicitud.
+Die Datei konnte nicht gespeichert werden (Platz oder Schreibrechte im Datenordner prüfen).	No se pudo guardar el archivo (revisa el espacio libre y los permisos de escritura de la carpeta de datos).
+Die geladene Datei ist beschädigt (Prüfsumme stimmt nicht).	El archivo descargado está dañado (la suma de comprobación no coincide).
+Unbekannter Fehler beim Laden.	Error desconocido durante la descarga.
+Gesichtsmodell konnte nicht geladen werden: {a} Details stehen im Fehlerbericht.	No se pudo descargar el modelo de rostros: {a} Los detalles están en el informe de errores.
+Gesichtsmodell wird geladen … {a} von {b} MB	Descargando el modelo de rostros … {a} de {b} MB
+Gesichtserkennung bereit	Reconocimiento facial listo
+{a} → nur aus der Bibliothek	{a} → solo de la biblioteca
+Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Los archivos (con el XMP a su lado) van a la papelera. Ediciones, valoraciones, palabras clave y colecciones se eliminan definitivamente.
+Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht.	Ediciones, valoraciones, palabras clave y colecciones se eliminan definitivamente.
+Virtuelle Kopien werden mit ihrer Entwicklung endgültig gelöscht. Die Fotos bleiben.	Las copias virtuales se eliminan definitivamente con su revelado. Las fotos permanecen.
+Pipette: neutrale Bildstelle anklicken	Cuentagotas: haz clic en una zona neutra de la foto
+Weißabgleich-Pipette: neutrale Stelle anklicken · ⇧ weitere Probe · −/+ Größe · Esc beendet	Cuentagotas de balance de blancos: haz clic en una zona neutra · ⇧ otra muestra · −/+ tamaño · Esc termina
+Weißabgleich-Pipette: kleinere Probe	Cuentagotas de balance de blancos: muestra más pequeña
+Weißabgleich-Pipette: größere Probe	Cuentagotas de balance de blancos: muestra más grande
+Weißabgleich-Pipette: größere Probe (US-Tastatur)	Cuentagotas de balance de blancos: muestra más grande (teclado de EE. UU.)
+⇧-Klick mit der Pipette	⇧-clic con el cuentagotas
+weitere Probe: Weißabgleich aus dem Mittel aller Proben, Pipette bleibt an	otra muestra: balance de blancos a partir de la media de todas las muestras; el cuentagotas sigue activo
+Tönung {t}	Matiz {t}
+Temperatur {t}	Temperatura {t}
+Rot ×{v}	Rojo ×{v}
+Blau ×{v}	Azul ×{v}
+Ausgefressen	Quemado
+Zu dunkel	Demasiado oscuro
+Nicht neutral messbar	No neutralizable
+Außerhalb der Skala	Fuera de la escala
+{s}×{s} · {n} Proben	{s}×{s} · {n} muestras
+Wohl nicht neutral	Quizá no sea neutro

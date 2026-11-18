@@ -417,11 +417,17 @@ fn slider_full(
     let v_of = |x: f32| lo + (hi - lo) * ((x - track_rect.left()) / track_rect.width()).clamp(0.0, 1.0) as f64;
     let quantize = |v: f64, q: f64| ((v / q).round() * q).clamp(lo, hi);
     let alt = ui.input(|i| i.modifiers.alt);
+    // Only real operation counts as a change (double-click, click, drag, typing, arrow keys). A value outside
+    // `range` (e.g. an as-shot temperature of 50000 K on a 2000…12000 K slider) is shown at the end of the track
+    // and kept as it is: drawing never changes it.
+    let mut operated = false;
 
     if enabled {
         if name.double_clicked() || track.double_clicked() {
             *value = default;
+            operated = true;
         } else if track.drag_started() || track.clicked() {
+            operated = true;
             // Click beside the knob: jump there; on the knob: drag relatively
             if let Some(p) = track.interact_pointer_pos() {
                 if (p.x - x_of(*value)).abs() > 9.0 {
@@ -430,6 +436,7 @@ fn slider_full(
             }
             ui.data_mut(|d| d.insert_temp(id, *value));
         } else if track.dragged() {
+            operated = true;
             let mut raw: f64 = ui.data(|d| d.get_temp(id)).unwrap_or(*value);
             let k = if alt { 0.1 } else { 1.0 };
             raw = (raw + track.drag_delta().x as f64 * (hi - lo) / track_rect.width() as f64 * k).clamp(lo, hi);
@@ -526,10 +533,13 @@ fn slider_full(
         v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_stroke = Stroke::NONE;
     }
-    child.add_sized(
+    let field = child.add_sized(
         value_rect.size(),
         egui::DragValue::new(value)
             .range(range.clone())
+            // keep values outside the range as they are while drawing (egui clamps them by default and reports a
+            // change); typed or dragged values are still clamped
+            .clamp_existing_to_range(false)
             .speed(step)
             .custom_formatter(move |v, _| {
                 if signed && v.abs() >= 0.5 * 10f64.powi(-(dec as i32)) {
@@ -539,6 +549,7 @@ fn slider_full(
                 }
             }),
     );
+    operated |= field.changed();
     name_hover(ui, name, name_text, id, hot, label, hint, SLIDER_CONTROLS);
 
     if enabled && hot {
@@ -546,12 +557,14 @@ fn slider_full(
         let k = if shift { 10.0 } else if alt { 0.1 } else { 1.0 };
         if up {
             *value = (*value + step * k).clamp(lo, hi);
+            operated = true;
         }
         if down {
             *value = (*value - step * k).clamp(lo, hi);
+            operated = true;
         }
     }
-    *value != before
+    operated && *value != before
 }
 
 /// Operation of a slider (shown in the "?" card of the slider).
@@ -3108,6 +3121,124 @@ mod tests {
         // fix: arrow pointer
         let link = cursor_over(|ui| link_text(ui, egui::RichText::new("Anna"), TEXT));
         assert_eq!(link, egui::CursorIcon::Default);
+    }
+
+    /// One slider drawn headless, frame by frame, with the pointer events of each frame.
+    struct SliderProbe {
+        ctx: egui::Context,
+        row: egui::Rect,
+    }
+
+    impl SliderProbe {
+        fn new() -> Self {
+            Self { ctx: egui::Context::default(), row: egui::Rect::NOTHING }
+        }
+
+        /// Draws `value` with `range` (default `default`, step `step`); returns what the slider reported.
+        fn frame(&mut self, events: Vec<egui::Event>, value: &mut f64, range: std::ops::RangeInclusive<f64>, default: f64, step: f64) -> bool {
+            let input = egui::RawInput { events, screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0))), ..Default::default() };
+            let mut changed = false;
+            let mut row = egui::Rect::NOTHING;
+            let _ = self.ctx.run_ui(input, |ui| {
+                let top = ui.cursor().min;
+                row = egui::Rect::from_min_size(top + egui::vec2(0.0, SLIDER_AIR / 2.0), egui::vec2(ui.available_width(), 31.0));
+                changed = slider_gradient(ui, "Testregler", value, range.clone(), default, step, "", GRADIENT_TEMP);
+            });
+            self.row = row;
+            changed
+        }
+
+        /// A point on the track at fraction `f` (0 … 1).
+        fn track(&self, f: f32) -> egui::Pos2 {
+            egui::pos2(self.row.left() + 7.0 + (self.row.width() - 14.0) * f, self.row.top() + 24.0)
+        }
+
+        fn name(&self) -> egui::Pos2 {
+            self.row.left_top() + egui::vec2(10.0, 8.0)
+        }
+    }
+
+    fn press(pos: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }
+    }
+
+    /// Regression: a value outside the range (as-shot 50000 K on a narrower slider, tint −200) was clamped while the
+    /// slider was only drawn, and the slider reported that as a change (the white balance turned "custom").
+    #[test]
+    fn drawing_a_value_outside_the_range_changes_nothing() {
+        for (start, range, default, step) in [(50000.0, 2000.0..=12000.0, 5000.0, 50.0), (-200.0, -150.0..=150.0, 0.0, 1.0), (1500.0, 2000.0..=50000.0, 5000.0, 50.0)] {
+            let mut p = SliderProbe::new();
+            let mut v = start;
+            for _ in 0..3 {
+                assert!(!p.frame(vec![], &mut v, range.clone(), default, step), "no change reported for {start}");
+            }
+            // hovering the track and the value field neither
+            let over = vec![egui::Event::PointerMoved(p.track(0.5))];
+            assert!(!p.frame(over, &mut v, range.clone(), default, step));
+            let field = egui::Event::PointerMoved(egui::pos2(p.row.right() - 20.0, p.row.top() + 8.0));
+            assert!(!p.frame(vec![field], &mut v, range.clone(), default, step));
+            assert!(!p.frame(vec![], &mut v, range.clone(), default, step));
+            assert_eq!(v, start, "the value outside the range is kept as it is");
+        }
+    }
+
+    /// Values inside the range: drawing reports nothing, a click on the track sets the value there.
+    #[test]
+    fn a_click_on_the_track_still_changes_the_value() {
+        let mut p = SliderProbe::new();
+        let mut v = 0.0;
+        assert!(!p.frame(vec![], &mut v, -100.0..=100.0, 0.0, 1.0));
+        let at = p.track(0.75);
+        p.frame(vec![egui::Event::PointerMoved(at)], &mut v, -100.0..=100.0, 0.0, 1.0);
+        let a = p.frame(vec![press(at, true)], &mut v, -100.0..=100.0, 0.0, 1.0);
+        let b = p.frame(vec![press(at, false)], &mut v, -100.0..=100.0, 0.0, 1.0);
+        assert!(a || b, "the click is reported");
+        assert!((v - 50.0).abs() <= 1.0, "value at 3/4 of the track: {v}");
+        // clicking a slider whose value lies outside: the value jumps into the range, reported as a change
+        let mut p = SliderProbe::new();
+        let mut v = 50000.0;
+        p.frame(vec![], &mut v, 2000.0..=12000.0, 5000.0, 50.0);
+        let at = p.track(0.5);
+        p.frame(vec![egui::Event::PointerMoved(at)], &mut v, 2000.0..=12000.0, 5000.0, 50.0);
+        let a = p.frame(vec![press(at, true)], &mut v, 2000.0..=12000.0, 5000.0, 50.0);
+        let b = p.frame(vec![press(at, false)], &mut v, 2000.0..=12000.0, 5000.0, 50.0);
+        assert!(a || b);
+        assert!((v - 7000.0).abs() <= 50.0, "{v}");
+    }
+
+    /// A double-click on the name resets to the default value, also from outside the range.
+    #[test]
+    fn a_double_click_resets_the_slider() {
+        for start in [37.0, 250.0] {
+            let mut p = SliderProbe::new();
+            let mut v = start;
+            p.frame(vec![], &mut v, -100.0..=100.0, 0.0, 1.0);
+            let at = p.name();
+            let mut reported = false;
+            reported |= p.frame(vec![egui::Event::PointerMoved(at)], &mut v, -100.0..=100.0, 0.0, 1.0);
+            for _ in 0..2 {
+                reported |= p.frame(vec![press(at, true)], &mut v, -100.0..=100.0, 0.0, 1.0);
+                reported |= p.frame(vec![press(at, false)], &mut v, -100.0..=100.0, 0.0, 1.0);
+            }
+            assert!(reported, "the reset is reported ({start})");
+            assert_eq!(v, 0.0);
+        }
+    }
+
+    /// ↑ over the slider steps the value (and clamps it into the range on the way).
+    #[test]
+    fn arrow_keys_over_the_slider_step_the_value() {
+        let key = |k| egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+        let mut p = SliderProbe::new();
+        let mut v = 10.0;
+        p.frame(vec![], &mut v, -100.0..=100.0, 0.0, 1.0);
+        let at = p.track(0.2);
+        p.frame(vec![egui::Event::PointerMoved(at)], &mut v, -100.0..=100.0, 0.0, 1.0);
+        assert!(p.frame(vec![key(egui::Key::ArrowUp)], &mut v, -100.0..=100.0, 0.0, 1.0));
+        assert_eq!(v, 11.0);
+        let mut v = 130.0;
+        assert!(p.frame(vec![key(egui::Key::ArrowDown)], &mut v, -100.0..=100.0, 0.0, 1.0));
+        assert_eq!(v, 100.0);
     }
 }
 

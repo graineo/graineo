@@ -85,7 +85,8 @@ fn fallback_prefers_newest() -> bool {
     library::settings::value(FALLBACK_SETTING).as_str() == Some("newest")
 }
 
-/// White balance handed to the engine: (Kelvin, tint) in the engine's terms; `None` = as shot. "Automatic" is as shot
+/// White balance handed to the engine: (Kelvin, tint), the engine uses the same temperature scale and tint sign as
+/// [`crate::wb`] (+ = magenta); `None` = as shot. "Automatic" is as shot
 /// on this path (the engine has no automatic white balance of its own; open point).
 pub fn white_for(s: &Settings) -> Option<(f32, f32)> {
     let r = &s.raw;
@@ -138,12 +139,19 @@ pub struct AppleDev {
     failed: Mutex<Vec<(Option<(i32, i32)>, bool, String)>>,
     /// renderings asked of the engine (for tests and the log)
     renders: AtomicUsize,
+    /// white balance (Kelvin, tint) of the preview rendered on opening: the document's preview (the app's sample
+    /// image for the white balance picker, [`crate::wb_pick`]) is balanced for it
+    opened_white: (f32, f32),
 }
 
 impl AppleDev {
     /// Document value of the version used (`"apple:8"`): what is pinned on first development.
     pub fn pin_value(&self) -> String {
         apple_value(&self.used)
+    }
+    /// White balance the document's preview was rendered with (see the field).
+    pub fn opened_white(&self) -> (f32, f32) {
+        self.opened_white
     }
     pub fn times(&self) -> Times {
         *self.times.lock().unwrap_or_else(|e| e.into_inner())
@@ -178,6 +186,7 @@ impl AppleDev {
             times: Mutex::new(Times::default()),
             failed: Mutex::new(Vec::new()),
             renders: AtomicUsize::new(0),
+            opened_white: (5500.0, 0.0),
         }
     }
 
@@ -287,7 +296,8 @@ pub(crate) fn open(path: &Path, s: &Settings, requested: Option<&str>, reason: R
         }
         None => (engine::fallback_version(&probe.versions, &probe.engine_default, fallback_prefers_newest()).ok_or("no decoder version")?, None),
     };
-    let dev = AppleDev::new(path, probe, used, pinned_missing, reason, blocked);
+    let mut dev = AppleDev::new(path, probe, used, pinned_missing, reason, blocked);
+    dev.opened_white = white_for(s).unwrap_or(if dev.probe.as_shot.0 > 1000.0 { dev.probe.as_shot } else { (5500.0, 0.0) });
     let preview = dev.preview_for(s)?;
     let doc = assemble(path, Arc::new(dev), preview);
     if std::env::var_os("GRAINEO_LOG").is_some() {

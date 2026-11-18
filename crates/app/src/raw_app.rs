@@ -616,7 +616,7 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         let wb: Vec<&(&str, lr::Icon, &str)> = WB.iter().filter(|w| !doc.finished || matches!(w.0, "as_shot" | "auto")).collect();
         let items: Vec<(lr::Icon, &str)> = wb.iter().map(|(_, i, n)| (*i, *n)).collect();
         let selected = wb.iter().position(|(v, ..)| *v == s.raw.wb_mode);
-        let (picked, picker) = lr::icon_select(ui, "wb-raw", "Weißabgleich", &items, selected, (lr::Icon::Custom, "Eigener"), lr::Icon::Picker, *wb_picker, "Pipette (W): neutrale Bildstelle anklicken");
+        let (picked, picker) = lr::icon_select(ui, "wb-raw", "Weißabgleich", &items, selected, (lr::Icon::Custom, "Eigener"), lr::Icon::Picker, *wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"));
         if picker {
             *wb_picker = !*wb_picker;
         }
@@ -625,20 +625,28 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
             *wb_picker = false;
         }
         let (t, g) = doc.temp_tint(s);
+        // Moving one slider switches to "Eigener"; the other number keeps the exact current value (never the
+        // rounded or range-limited value of its slider).
         if doc.finished {
             // relative as in common photo apps for JPEG: −100 … +100 (cooler/warmer, greener/magenta)
-            let (mut rt, mut rg) = (rawdev::wb::relative_from(t, g).0.round() as f64, rawdev::wb::relative_from(t, g).1.round() as f64);
-            let a = lr::slider_gradient(ui, "Temperatur", &mut rt, -100.0..=100.0, 0.0, 1.0, "Relativ: − kühler (blau), + wärmer (gelb)", lr::GRADIENT_TEMP);
-            let b = lr::slider_gradient(ui, "Tönung", &mut rg, -100.0..=100.0, 0.0, 1.0, "− grüner, + magenta", lr::GRADIENT_TINT);
-            if a || b {
-                let (k, tt) = rawdev::wb::relative_to(rt as f32, rg as f32);
+            let (rel_t, rel_g) = rawdev::wb::relative_from(t, g);
+            let (mut rt, mut rg) = (rel_t.round() as f64, rel_g.round() as f64);
+            if lr::slider_gradient(ui, "Temperatur", &mut rt, -100.0..=100.0, 0.0, 1.0, "Relativ: − kühler (blau), + wärmer (gelb)", lr::GRADIENT_TEMP) {
                 s.raw.wb_mode = "custom".into();
-                s.raw.temperature = k;
-                s.raw.tint = tt;
+                s.raw.temperature = rawdev::wb::relative_to(rt as f32, 0.0).0;
+                s.raw.tint = g;
+            }
+            if lr::slider_gradient(ui, "Tönung", &mut rg, -100.0..=100.0, 0.0, 1.0, "− grüner, + magenta", lr::GRADIENT_TINT) {
+                s.raw.wb_mode = "custom".into();
+                s.raw.temperature = t;
+                s.raw.tint = rawdev::wb::relative_to(0.0, rg as f32).1;
             }
         } else {
+            // usual range of the track; values beyond it (as-shot and auto up to 50000 K) stay as they are: the knob
+            // sits at the edge and the number shows the real value (the slider never clamps a value it only draws)
+            let k_range = 2000.0..=12000.0;
             let mut tv = t as f64;
-            if lr::slider_gradient(ui, "Temperatur", &mut tv, 2000.0..=12000.0, doc.as_shot.0 as f64, 50.0, "Farbtemperatur in Kelvin: kleiner kühler (blau), größer wärmer (gelb)", lr::GRADIENT_TEMP) {
+            if lr::slider_gradient(ui, "Temperatur", &mut tv, k_range, doc.as_shot.0 as f64, 50.0, "Farbtemperatur in Kelvin: kleiner kühler (blau), größer wärmer (gelb)", lr::GRADIENT_TEMP) {
                 s.raw.wb_mode = "custom".into();
                 s.raw.temperature = tv as f32;
                 s.raw.tint = g;
@@ -731,25 +739,6 @@ pub fn noise_brake(ui: &mut egui::Ui, value: &mut develop::NoiseBrake, lifted: b
         }
         lr::steps(ui, "Rauschbremse", value, &[(B::Off, "Aus"), (B::Color, "Farbe"), (B::ColorGrain, "Farbe + Korn")], B::Off, hint);
     });
-}
-
-/// Picker: camera values (white-balanced as shot) of an image spot → own white balance.
-pub fn pipette(doc: &RawDoc, s: &mut Settings, p: [f64; 3]) -> bool {
-    let wb = doc.info.wb.unwrap_or([1.0; 3]);
-    if p.iter().any(|&v| !(0.002..0.95).contains(&v)) {
-        return false;
-    }
-    let cam = [p[0] as f32 / wb[0], p[1] as f32 / wb[1], p[2] as f32 / wb[2]];
-    let n = [cam[0] / cam[1], 1.0, cam[2] / cam[1]];
-    match rawdev::wb::temp_from_neutral(&doc.info, n) {
-        Some((k, t)) => {
-            s.raw.wb_mode = "custom".into();
-            s.raw.temperature = k;
-            s.raw.tint = t;
-            true
-        }
-        None => false,
-    }
 }
 
 /// Lens correction (profile) – part of the "Lens corrections" section. The source of the

@@ -93,6 +93,7 @@ mod paste;
 mod settings_group;
 mod display_color;
 mod help;
+mod wb_picker;
 mod vectorscope;
 // develop history of the open photo (steps, cursor, kept in the library)
 mod history;
@@ -751,6 +752,8 @@ struct App {
     readout: Option<String>,
     /// White balance picker active (W)
     wb_picker: bool,
+    /// size of its sample and the samples taken with ⇧-click
+    wb_pick: wb_picker::State,
     /// Measurement tool active (M): drag a rectangle → statistics per layer
     measure: bool,
     measure_start: Option<egui::Pos2>,
@@ -1038,6 +1041,7 @@ impl App {
             view_size: egui::Vec2::ZERO,
             readout: None,
             wb_picker: false,
+            wb_pick: wb_picker::State::default(),
             measure: false,
             measure_start: None,
             measure_rect: None,
@@ -3627,6 +3631,15 @@ impl App {
             self.wb_picker = !self.wb_picker;
             self.tab = Tab::Develop;
         }
+        // size of the picker's sample (only while it is on)
+        if self.wb_picker {
+            if shortcuts::pressed(ctx, "eyedropper_smaller") {
+                self.wb_pick.resize(false);
+            }
+            if shortcuts::pressed(ctx, "eyedropper_larger") || shortcuts::pressed(ctx, "eyedropper_larger_us") {
+                self.wb_pick.resize(true);
+            }
+        }
         if !cmd && pressed(egui::Key::H) && self.current.is_some() {
             retouch_ui::toggle_overlays(ctx);
         }
@@ -6184,32 +6197,40 @@ impl App {
                 });
                 if self.wb_picker {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-                    if resp.clicked() {
-                        // 5×5 mean of the preview (camera space without white balance)
-                        let mut acc = [0.0f64; 3];
-                        let mut n = 0.0;
-                        for yy in py.saturating_sub(2)..(py + 3).min(p.lin.height) {
-                            for xx in px.saturating_sub(2)..(px + 3).min(p.lin.width) {
-                                let q = p.lin.pixel(xx, yy);
-                                for k in 0..3 {
-                                    acc[k] += q[k] as f64;
-                                }
-                                n += 1.0;
-                            }
-                        }
-                        let index = c.index;
-                        let cal = c.loaded.cal.clone();
-                        let foreign = c.loaded.previews.foreign.clone();
+                    let index = c.index;
+                    let s = &self.entries[index].settings;
+                    let lv = wb_picker::levels(&c.loaded);
+                    self.wb_pick.follow(index);
+                    let side = self.wb_pick.side();
+                    let lin = &p.lin;
+                    let sample = wb_picker::sample(&|x, y| lin.pixel(x, y), lin.width, lin.height, px, py, side, &lv);
+                    // ⇧: this spot together with the samples taken before (⇧-click)
+                    let shift = ui.input(|i| i.modifiers.shift);
+                    let mut all = if shift { self.wb_pick.taken.clone() } else { Vec::new() };
+                    all.push(sample.mean);
+                    let mean = wb_picker::combine(&all).unwrap_or(sample.mean);
+                    let outcome = if sample.verdict.usable() { wb_picker::outcome(&c.loaded, s, mean) } else { wb_picker::Outcome::None };
+                    let probe = wb_picker::Probe { sample, outcome, samples: all.len() };
+                    if crate::env::var_os("GRAINEO_LOG").is_some() && resp.clicked() {
+                        eprintln!("wb picker: preview {px},{py} of {}x{}, side {side}, {:?} → {:?}", lin.width, lin.height, probe.sample, probe.outcome);
+                    }
+                    // the loupe: magnified image around the pointer with the sampled square and what a click sets
+                    // each preview pixel is one flat block: all four corners sample the texel's middle (sharp, no smoothing)
+                    wb_picker::paint_loupe(&painter, avail, pos, (px, py), (lin.width, lin.height), side, &probe, |lp, r, x, y| {
+                        let uv = egui::pos2((x as f32 + 0.5) / lin.width as f32, (y as f32 + 0.5) / lin.height as f32);
+                        let mut mesh = egui::Mesh::with_texture(tex_id);
+                        mesh.add_rect_with_uv(r, egui::Rect::from_min_max(uv, uv), Color32::WHITE);
+                        lp.add(egui::Shape::mesh(mesh));
+                    });
+                    if resp.clicked() && probe.sample.verdict.usable() && probe.outcome != wb_picker::Outcome::None {
                         history::hint(index, history::Hint::white_balance_picker());
-                        let s = &mut self.entries[index].settings;
-                        if let Some(doc) = &foreign {
-                            raw_app::pipette(doc, s, acc.map(|a| a / n));
-                        } else if let Some(mult) = develop::pick_white_balance(&cal, s, acc.map(|a| a / n)) {
-                            s.wb_mult = mult;
-                            s.wb_temp = 0.0;
-                            s.wb_tint = 0.0;
+                        wb_picker::apply(&probe.outcome, &mut self.entries[index].settings);
+                        if shift {
+                            // ⇧-click: one more sample, the picker stays on
+                            self.wb_pick.taken = all;
+                        } else {
+                            self.wb_picker = false;
                         }
-                        self.wb_picker = false;
                     }
                 }
             }
@@ -6220,10 +6241,13 @@ impl App {
             self.crop_overlay(ui, &resp, &painter, rect, tex_id);
         }
         if self.wb_picker {
-            badge(&painter, avail, crate::tr("Weißabgleich-Pipette: neutrale Stelle anklicken · Esc bricht ab"), None);
+            badge(&painter, avail, crate::tr("Weißabgleich-Pipette: neutrale Stelle anklicken · ⇧ weitere Probe · −/+ Größe · Esc beendet"), None);
             if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.wb_picker = false;
             }
+        } else {
+            self.wb_pick.taken.clear();
+            self.wb_pick.image = None;
         }
         if self.crop_mode.is_none() && !self.compare && !self.show_before && !self.show_camera_jpeg && !self.measure && !self.wb_picker {
             let index=self.current.as_ref().unwrap().index;
@@ -6439,7 +6463,7 @@ impl App {
                             Some(n) => wb_names.iter().position(|m| m == n).map(|i| i + 1),
                         }
                     };
-                    let (picked, picker) = lr::icon_select(ui, "wb", "Weißabgleich", &items, selected, (lr::Icon::Picker, "Eigener"), lr::Icon::Picker, wb_picker, "Pipette (W): neutrale Bildstelle anklicken");
+                    let (picked, picker) = lr::icon_select(ui, "wb", "Weißabgleich", &items, selected, (lr::Icon::Picker, "Eigener"), lr::Icon::Picker, wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"));
                     if picker {
                         wb_picker = !wb_picker;
                     }
@@ -8539,7 +8563,7 @@ impl App {
             let mut v = quality;
             export_row(ui, "Qualität", |ui| {
                 ui.spacing_mut().slider_width = 220.0;
-                ui.add(egui::Slider::new(&mut v, 60..=100));
+                ui.add(egui::Slider::new(&mut v, 60..=100).clamping(egui::SliderClamping::Edits));
                 ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
             });
             self.export_format = Format::Jpeg { quality: v };
@@ -8548,7 +8572,7 @@ impl App {
             let mut v = quality;
             export_row(ui, "Qualität", |ui| {
                 ui.spacing_mut().slider_width = 220.0;
-                ui.add(egui::Slider::new(&mut v, 60..=100));
+                ui.add(egui::Slider::new(&mut v, 60..=100).clamping(egui::SliderClamping::Edits));
                 ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
             });
             self.export_format = Format::Jxl { quality: v, lossless: false, bits16 };
@@ -8621,7 +8645,7 @@ impl App {
             if self.export_limit_size {
                 export_row(ui, "", |ui| {
                     let px = |ui: &mut egui::Ui, n: &mut u32| {
-                        crate::lr::text_field(ui, egui::DragValue::new(n).range(64..=30000).speed(10.0));
+                        crate::lr::text_field(ui, egui::DragValue::new(n).range(64..=30000).clamp_existing_to_range(false).speed(10.0));
                     };
                     match &mut self.export_size {
                         OutputSize::LongEdge(n) | OutputSize::ShortEdge(n) => {
@@ -8641,7 +8665,7 @@ impl App {
                             ui.label("px");
                         }
                         OutputSize::Megapixel(mp) => {
-                            crate::lr::text_field(ui, egui::DragValue::new(mp).range(0.5..=100.0).speed(0.1).max_decimals(1));
+                            crate::lr::text_field(ui, egui::DragValue::new(mp).range(0.5..=100.0).clamp_existing_to_range(false).speed(0.1).max_decimals(1));
                             ui.label("MP");
                         }
                     }
