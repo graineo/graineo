@@ -26,6 +26,7 @@ mod start_migration;
 mod backup_view_ui;
 mod workspace;
 mod cell_label;
+mod cell_info;
 mod click_mods;
 mod edge_peek;
 mod sticky;
@@ -140,6 +141,7 @@ mod apple_raw;
 #[cfg(test)] mod list_switch_test;
 #[cfg(test)] mod people_develop_test;
 #[cfg(test)] mod grid_selection_test;
+#[cfg(test)] mod view_folder_refresh_test;
 #[cfg(test)] mod multi_edit_load_test;
 mod stress;
 mod shortcuts;
@@ -157,6 +159,10 @@ mod sensor_ui;
 mod delete;
 mod dialog;
 mod export_probe;
+mod export_names;
+mod export_naming_ui;
+mod export_ui;
+mod export_templates;
 mod test_matrix;
 mod image_kind;
 mod rating;
@@ -301,6 +307,13 @@ fn single_instance_or_exit() {
         Ok(library::instance_lock::Outcome::Busy(pid)) => {
             // not `log`: that would rotate the trace log of the instance already running
             eprintln!("second instance: library {} is in use by process {pid:?}, exiting", db.display());
+            // started with a folder or photo (Explorer menu "Mit graineo ansehen", "Open with"): the running graineo
+            // shows it (open_requests), no message
+            if let Some(p) = std::env::args().nth(1).map(PathBuf::from).filter(|p| p.exists()) {
+                if library::instance_lock::hand_over(&db, &p).is_ok() {
+                    std::process::exit(0);
+                }
+            }
             let folder = db.parent().map(|p| p.display().to_string()).unwrap_or_default();
             let _ = rfd::MessageDialog::new()
                 .set_level(rfd::MessageLevel::Warning)
@@ -802,6 +815,9 @@ struct App {
     export_format: Format,
     export_engine: Engine,
     export_dir: Option<PathBuf>,
+    /// file names, subfolders and existing files of the export (last used, kept in the settings)
+    export_naming: export_names::Naming,
+    export_names_ui: export_naming_ui::State,
     export_status: String,
     exporting: bool,
     /// Export dialog (⌘⇧E)
@@ -1074,6 +1090,8 @@ impl App {
             export_format: Format::Jpeg { quality: 92 },
             export_engine: Engine::Spp,
             export_dir: None,
+            export_naming: serde_json::from_value(library::settings::value("exportNaming")).unwrap_or_default(),
+            export_names_ui: Default::default(),
             export_status: String::new(),
             exporting: false,
             show_export: false,
@@ -1115,6 +1133,8 @@ impl App {
             app.export_engine = if ev["engine"] == "own" { Engine::Own } else { Engine::Spp };
             app.reveal_after_export = ev["reveal"].as_bool().unwrap_or(true);
         }
+        // the export folder chosen last (a folder opened below suggests its own "export" folder instead)
+        app.export_dir = library::settings::value("exportDir").as_str().filter(|d| !d.is_empty()).map(PathBuf::from).filter(|d| library::write_target::check(d).is_ok());
         // The image source is the library's (last chosen source). A folder or file
         // from the command line (test runs) is shown like ⌘O as "Browse folder".
         // Test hook GRAINEO_IMAGE=<path to a file> (as the scripts use it) behaves like that file on the command line;
@@ -1122,16 +1142,15 @@ impl App {
         // the develop view showed the last chosen photo.
         let image_path = crate::env::var("GRAINEO_IMAGE").ok().filter(|v| v.trim().parse::<usize>().is_err()).map(PathBuf::from).filter(|p| p.is_file());
         let arg = std::env::args().nth(1).map(PathBuf::from).filter(|p| p.exists()).or(image_path);
-        if let Some(dir) = arg.clone().filter(|p| p.is_dir()) {
-            app.open_folder_inner(dir);
-        } else if let Some(file) = arg.filter(|p| p.is_file()) {
-            if let Some(dir) = file.parent() {
-                app.lib.browse_folder(dir, Some(&file));
-                app.folder = Some(dir.to_path_buf());
-                app.export_dir = export_default(dir);
-            }
+        if let Some(p) = arg {
+            app.open_path(p);
         }
         app.sync_source(true);
+        // Windows: an Explorer menu entry that starts another graineo.exe (the unzipped folder was moved) follows
+        if library::platform::explorer_menu::AVAILABLE {
+            let label = crate::tr(prefs::EXPLORER_MENU_LABEL).to_string();
+            let _ = std::thread::Builder::new().name("explorer-menu".into()).spawn(move || library::platform::explorer_menu::renew(&label));
+        }
         if !app.entries.is_empty() { app.status.clear(); }
         // Prepare the GPU for full resolution of non-Sigma RAWs (compile shaders)
         std::thread::spawn(rawdev::gpu::warm_up);
@@ -1268,6 +1287,46 @@ impl App {
     /// Develop always shows exactly the library's list.
     fn open_folder(&mut self, dir: PathBuf) {
         self.open_folder_inner(dir);
+    }
+
+    /// A folder or photo from the command line or handed over by a second start: shown like ⌘O (a photo: its
+    /// folder, the photo active).
+    fn open_path(&mut self, p: PathBuf) {
+        if p.is_dir() {
+            self.open_folder_inner(p);
+        } else if let Some(dir) = p.parent().filter(|_| p.is_file()) {
+            self.save_current();
+            self.lib.browse_folder(dir, Some(&p));
+            self.folder = Some(dir.to_path_buf());
+            self.export_dir = export_default(dir);
+        }
+    }
+
+    /// Paths handed over by a second start (`library::instance_lock::hand_over`): a quiet thread looks for the request
+    /// file once a second and wakes the window only when there is one.
+    fn open_requests(&mut self, ctx: &egui::Context) {
+        static WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        static WATCH: std::sync::Once = std::sync::Once::new();
+        WATCH.call_once(|| {
+            let (ctx, file) = (ctx.clone(), library::instance_lock::request_path(&library::real_db_path()));
+            let _ = std::thread::Builder::new().name("open-requests".into()).spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if file.exists() && !WAITING.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    ctx.request_repaint();
+                }
+            });
+        });
+        if !WAITING.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        if let Some(p) = library::instance_lock::take_request(&library::real_db_path()).filter(|p| p.exists()) {
+            log(&format!("open request from a second start: {}", p.display()));
+            self.open_path(p);
+            self.sync_source(true);
+            self.to_grid();
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
     }
 
     fn open_folder_inner(&mut self, dir: PathBuf) {
@@ -3160,9 +3219,10 @@ impl App {
         self.save_current();
         if self.export_original {
             // the files unchanged: every reachable photo (also finished images and videos), with the stacked camera JPEG
-            let items: Vec<(PathBuf, i64, Option<i64>)> = indices
+            let written = self.export_written(&indices);
+            let names = self.export_job_names(&written);
+            let items: Vec<(PathBuf, i64, Option<i64>)> = written
                 .into_iter()
-                .filter(|&i| self.entries[i].state == 0)
                 .map(|i| {
                     let e = &self.entries[i];
                     (e.path.clone(), e.image, self.export_original_pair.then(|| self.lib.sidecar_jpeg_of(e.image)).flatten())
@@ -3173,15 +3233,16 @@ impl App {
             self.exporting = true;
             jobs::EXPORT_CANCEL.store(false, std::sync::atomic::Ordering::SeqCst);
             self.export_status = crate::tr("Export startet …").into();
-            self.worker.send(Job::ExportOriginal { items, dir, sidecars: self.export_original_sidecars });
+            self.worker.send(Job::ExportOriginal { items, dir, sidecars: self.export_original_sidecars, names });
             return;
         }
         for &i in &indices {
             self.ensure_entry(i);
         }
-        let items = indices
+        let written = self.export_written(&indices);
+        let names = self.export_job_names(&written);
+        let items = written
             .into_iter()
-            .filter(|&i| image_kind::of(&self.entries[i].path).editable() && self.entries[i].state == 0)
             .map(|i| {
                 let mut st = self.entries[i].settings.clone();
                 // The size limit only applies to finished images (JPEG/TIFF), DNG stays at full resolution
@@ -3195,7 +3256,7 @@ impl App {
         self.exporting = true;
         jobs::EXPORT_CANCEL.store(false, std::sync::atomic::Ordering::SeqCst);
         self.export_status = crate::tr("Look-Profile werden geprüft …").into();
-        self.profile_export = Some(film_profiles_ui::ExportCheck::new(&self.egui_ctx, Job::Export { items, format: self.export_format, engine: self.export_engine, dir, gain_map: self.export_gain_map, allow_missing_profiles: false, as_print: self.export_as_print, color_space: self.export_color_space, options: self.export_options.clone() }));
+        self.profile_export = Some(film_profiles_ui::ExportCheck::new(&self.egui_ctx, Job::Export { items, format: self.export_format, engine: self.export_engine, dir, gain_map: self.export_gain_map, allow_missing_profiles: false, as_print: self.export_as_print, color_space: self.export_color_space, options: self.export_options.clone(), names }));
     }
 
     /// Identity of entry `i` in the develop history.
@@ -4105,6 +4166,7 @@ impl eframe::App for App {
         });
         zoom_test_frame(true, self.zoom); // Test hook: frame times with GRAINEO_ZOOM_TEST
         remote_access::frame(self, ui.ctx()); // browser access: start by setting, changes made in the browser
+        self.open_requests(&ui.ctx().clone()); // a folder or photo handed over by a second start
         // narrow window: collapse a side panel once when the window falls below the threshold
         if self.preview_full.is_none() {
             let dark = self.darkroom_active();
@@ -4612,6 +4674,8 @@ impl eframe::App for App {
         if self.show_export {
             self.export_dialog(&ctx);
         }
+        // folder chosen for a waiting export, "overwrite?" (export_naming_ui.rs)
+        self.export_naming_step(&ctx);
         if self.confirm_delete {
             self.delete_dialog(&ctx);
         } else {
@@ -5077,10 +5141,16 @@ impl App {
                         if thumb_h >= 40.0 {
                             let inside = self.lib.in_quick(e.image);
                             let badge = ui.interact(lr::quick_badge_rect(ir), ui.scope_id().with(("strip-quick", e.image)), egui::Sense::click());
-                            if inside || resp.hovered() || badge.hovered() {
+                            // a photo of a viewed folder: no ring to add (the quick collection cannot hold it), the reason on hover
+                            let possible = self.lib.quick_possible(e.image);
+                            if inside || (possible && (resp.hovered() || badge.hovered())) {
                                 lr::quick_badge(ui.painter(), ir, inside, badge.hovered());
                             }
-                            lr::tip_key(ui, &badge, if inside { "Aus der Schnellsammlung entfernen" } else { "Zur Schnellsammlung hinzufügen" }, "quick");
+                            if possible {
+                                lr::tip_key(ui, &badge, if inside { "Aus der Schnellsammlung entfernen" } else { "Zur Schnellsammlung hinzufügen" }, "quick");
+                            } else {
+                                lr::hover_tip(ui, &badge, crate::tr(library_ui::QUICK_REFUSED));
+                            }
                             if badge.clicked() {
                                 quick_click = Some(i);
                             }
@@ -8419,462 +8489,6 @@ impl App {
             self.rendered_for = None;
         }
     }
-
-    /// Content of the export dialog; `in_dialog`: without its own start button (the dialog has it).
-    /// Returns: the images that "Export" would take.
-    fn export_controls(&mut self, ui: &mut egui::Ui, in_dialog: bool) -> Vec<usize> {
-        let mono = self.settings().is_some_and(|s| s.monochrome);
-        use graineo_color::Space;
-        use develop::export::OutputSize;
-
-        // ── Images
-        let sel = self.selection();
-        let visible = self.visible();
-        let all = self.entries.len();
-        let mut options: Vec<(usize, String)> = vec![(0, if sel.len() > 1 { crate::trf!("Auswahl ({a})", a = sel.len()) } else { crate::tr("Dieses Bild").into() })];
-        if visible.len() != all {
-            options.push((1, crate::trf!("Gefilterte ({a})", a = visible.len())));
-        }
-        options.push((2, crate::trf!("Alle ({all})", all = all)));
-        let labels: Vec<(usize, &str)> = options.iter().map(|(i, l)| (*i, l.as_str())).collect();
-        let mut scope = self.export_scope.min(2);
-        if scope == 1 && visible.len() == all {
-            scope = 0;
-        }
-        export_section(ui, "Bilder");
-        export_row(ui, "Umfang", |ui| {
-            lr::segmented(ui, &mut scope, &labels);
-        });
-        self.export_scope = scope;
-        let items: Vec<usize> = match scope {
-            1 => visible,
-            2 => (0..all).collect(),
-            _ => sel,
-        };
-        // originals on an unreachable location cannot be exported (the previews are only for viewing)
-        let unreachable = items.iter().filter(|&&i| self.entries[i].state == 2).count();
-        let items: Vec<usize> = items.into_iter().filter(|&i| self.entries[i].state != 2).collect();
-        if unreachable > 0 {
-            export_hint(ui, &crate::trf!("{a} übersprungen: Original nicht erreichbar", a = unreachable));
-        }
-        let x3f_only = !items.is_empty() && items.iter().all(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
-        let has_x3f = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
-        let has_finished = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Done);
-        if !x3f_only && !self.export_format.is_finished_image() {
-            self.export_format = Format::Jpeg { quality: 92 };
-        }
-
-        // ── File
-        export_section(ui, "Datei");
-        let q = match self.export_format {
-            Format::Jpeg { quality } => quality,
-            _ => 92,
-        };
-        #[derive(Clone, Copy, PartialEq)]
-        enum Kind {
-            Jpeg,
-            Jxl,
-            Tiff,
-            Png,
-            Dng,
-            Linear,
-            Exr,
-            Original,
-        }
-        let mut kind = match self.export_format {
-            _ if self.export_original => Kind::Original,
-            Format::Jpeg { .. } => Kind::Jpeg,
-            Format::Jxl { .. } => Kind::Jxl,
-            Format::Tiff16 | Format::TiffFloat | Format::RawLayers => Kind::Tiff,
-            Format::Png16 => Kind::Png,
-            Format::DngProfiles => Kind::Dng,
-            Format::Dng => Kind::Linear,
-            Format::Exr { .. } => Kind::Exr,
-        };
-        let mut kinds = vec![(Kind::Jpeg, "JPEG"), (Kind::Jxl, "JPEG XL"), (Kind::Tiff, "TIFF"), (Kind::Png, "PNG")];
-        if x3f_only {
-            kinds.push((Kind::Dng, "DNG (Raw)"));
-            kinds.push((Kind::Linear, crate::tr("Lineares DNG")));
-            kinds.push((Kind::Exr, "OpenEXR"));
-        }
-        kinds.push((Kind::Original, crate::tr("Original")));
-        // tooltip only where the label alone does not say what the format is
-        let tips: Vec<&str> = kinds.iter().map(|(k, _)| if *k == Kind::Jxl { crate::tr("JPEG XL (.jxl): kleiner als JPEG bei gleicher Qualität, auch verlustfrei und mit 16 Bit") } else { "" }).collect();
-        export_row(ui, "Format", |ui| {
-            lr::segmented_tips(ui, &mut kind, &kinds, &tips, if x3f_only { 7.0 } else { 10.0 });
-            crate::help::info(ui, "export-verlustfrei", crate::tr("Verlustfrei exportieren"), &crate::help::EXPORT_LOSSLESS);
-        });
-        self.export_original = kind == Kind::Original;
-        let before_options = self.export_options.clone();
-        self.export_format = match kind {
-            Kind::Jpeg => Format::Jpeg { quality: q },
-            Kind::Jxl => match self.export_format {
-                f @ Format::Jxl { .. } => f,
-                _ => Format::JXL_DEFAULT,
-            },
-            Kind::Tiff => match self.export_format {
-                Format::TiffFloat | Format::RawLayers if x3f_only => self.export_format,
-                _ => Format::Tiff16,
-            },
-            Kind::Png => Format::Png16,
-            Kind::Dng => Format::DngProfiles,
-            Kind::Linear => Format::Dng,
-            Kind::Exr => match self.export_format {
-                Format::Exr { half } => Format::Exr { half },
-                _ => Format::Exr { half: true },
-            },
-            // the format stays for the next time; it does not apply to the originals
-            Kind::Original => self.export_format,
-        };
-        // ── Bit depth: TIFF (16 bit, 32-bit float, sensor layers), OpenEXR (half/float), linear DNG (16/32)
-        #[derive(Clone, Copy, PartialEq)]
-        enum Depth {
-            B16,
-            Float,
-            Layers,
-        }
-        match kind {
-            Kind::Tiff => {
-                let mut d = match self.export_format {
-                    Format::TiffFloat => Depth::Float,
-                    Format::RawLayers => Depth::Layers,
-                    _ => Depth::B16,
-                };
-                let mut depths = vec![(Depth::B16, crate::tr("16 Bit"))];
-                if x3f_only {
-                    depths.push((Depth::Float, crate::tr("32 Bit linear")));
-                    depths.push((Depth::Layers, crate::tr("Sensorschichten (unbearbeitet)")));
-                }
-                export_row(ui, "Bit-Tiefe", |ui| {
-                    lr::segmented(ui, &mut d, &depths);
-                });
-                self.export_format = match d {
-                    Depth::Float => Format::TiffFloat,
-                    Depth::Layers => Format::RawLayers,
-                    Depth::B16 => Format::Tiff16,
-                };
-            }
-            Kind::Exr => {
-                let mut half = matches!(self.export_format, Format::Exr { half: true });
-                export_row(ui, "Bit-Tiefe", |ui| {
-                    lr::segmented(ui, &mut half, &[(true, crate::tr("16 Bit (half)")), (false, crate::tr("32 Bit"))]);
-                });
-                self.export_format = Format::Exr { half };
-            }
-            Kind::Jxl => {
-                if let Format::Jxl { quality, mut lossless, mut bits16 } = self.export_format {
-                    export_row(ui, "Kompression", |ui| {
-                        lr::segmented(ui, &mut lossless, &[(false, crate::tr("verlustbehaftet")), (true, crate::tr("verlustfrei"))]);
-                    });
-                    if lossless {
-                        export_row(ui, "Bit-Tiefe", |ui| {
-                            lr::segmented(ui, &mut bits16, &[(false, crate::tr("8 Bit")), (true, crate::tr("16 Bit"))]);
-                        });
-                    }
-                    self.export_format = Format::Jxl { quality, lossless, bits16 };
-                }
-            }
-            Kind::Linear => {
-                export_row(ui, "Bit-Tiefe", |ui| {
-                    lr::segmented(ui, &mut self.export_options.dng_float, &[(false, crate::tr("16 Bit")), (true, crate::tr("32 Bit Gleitkomma"))]);
-                });
-                export_row(ui, "", |ui| {
-                    ui.checkbox(&mut self.export_options.dng_embed_original, crate::tr("Original-X3F einbetten"));
-                });
-            }
-            _ => {}
-        }
-        if self.export_format.is_scene_linear() && !self.export_original {
-            export_row(ui, "Farbraum", |ui| {
-                use graineo_color::LinearSpace as L;
-                lr::segmented(ui, &mut self.export_options.linear_space, &[(L::Rec2020, "Rec. 2020 linear"), (L::AcesCg, "ACEScg"), (L::ProPhoto, "ProPhoto linear")]);
-            });
-        }
-        if matches!(self.export_format, Format::Tiff16 | Format::TiffFloat | Format::RawLayers) && !self.export_original {
-            export_row(ui, "Kompression", |ui| {
-                use develop::tiffw::Compression as C;
-                lr::segmented(ui, &mut self.export_options.tiff_compression, &[(C::None, crate::tr("keine")), (C::Deflate, "ZIP"), (C::Lzw, "LZW")]);
-            });
-        }
-        if self.export_options != before_options {
-            if let Ok(v) = serde_json::to_value(&self.export_options) {
-                library::settings::set("exportOptions", v);
-            }
-        }
-        let format_hint = match (kind, self.export_format) {
-            (Kind::Jpeg, _) => crate::tr("Fertiges Bild zum Teilen, für Web und Handy."),
-            (Kind::Jxl, Format::Jxl { lossless: true, .. }) => crate::tr("Fertiges Bild ohne Verlust, kleiner als TIFF und PNG."),
-            (Kind::Jxl, _) => crate::tr("Fertiges Bild, kleiner als JPEG bei gleicher Qualität."),
-            (Kind::Tiff, Format::TiffFloat) => crate::tr("Szenenlinear ohne Tonkurve, nichts beschnitten."),
-            (Kind::Tiff, Format::RawLayers) => crate::tr("Die drei Sensorschichten unverändert, ohne Farbe."),
-            (Kind::Tiff | Kind::Png, _) => crate::tr("Fertiges Bild ohne Verlust, für Druck und Bildbearbeitung."),
-            (Kind::Dng, _) if mono => crate::tr("Foveon-Schwarzweiß als Raw; deine Regler kommen als XMP mit."),
-            (Kind::Dng, _) => crate::tr("Raw mit dem Farbmodus der Kamera als Kameraprofil; deine Regler kommen als XMP mit."),
-            (Kind::Linear, _) => crate::tr("Raw aus graineos eigener Entwicklung, ohne Sigma-Profile."),
-            (Kind::Exr, _) => crate::tr("Szenenlinear ohne Tonkurve, nichts beschnitten."),
-            (Kind::Original, _) => crate::tr("Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben."),
-        };
-        export_hint(ui, format_hint);
-        if self.export_original {
-            export_row(ui, "", |ui| {
-                ui.checkbox(&mut self.export_original_sidecars, crate::tr("Begleitdatei (XMP) mit Bewertung und Entwicklung"));
-            });
-            let pairs = items.iter().filter(|&&i| self.lib.sidecar_jpeg_of(self.entries[i].image).is_some()).count();
-            if pairs > 0 {
-                export_row(ui, "", |ui| {
-                    ui.checkbox(&mut self.export_original_pair, crate::tr("Kamera-JPEG der RAW+JPEG-Paare"));
-                });
-            }
-        }
-        if let (Format::Jpeg { quality }, false) = (self.export_format, self.export_original) {
-            let mut v = quality;
-            export_row(ui, "Qualität", |ui| {
-                ui.spacing_mut().slider_width = 220.0;
-                ui.add(egui::Slider::new(&mut v, 60..=100).clamping(egui::SliderClamping::Edits));
-                ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
-            });
-            self.export_format = Format::Jpeg { quality: v };
-        }
-        if let (Format::Jxl { quality, lossless: false, bits16 }, false) = (self.export_format, self.export_original) {
-            let mut v = quality;
-            export_row(ui, "Qualität", |ui| {
-                ui.spacing_mut().slider_width = 220.0;
-                ui.add(egui::Slider::new(&mut v, 60..=100).clamping(egui::SliderClamping::Edits));
-                ui.label(egui::RichText::new(crate::tr("92 ist kaum vom Original zu unterscheiden")).small().color(lr::TEXT_DIM));
-            });
-            self.export_format = Format::Jxl { quality: v, lossless: false, bits16 };
-        }
-        let finished_image = self.export_format.is_finished_image() && !self.export_original;
-        if finished_image {
-            let before = self.export_color_space;
-            export_row(ui, "Farbraum", |ui| {
-                lr::segmented(ui, &mut self.export_color_space, &[(Space::Srgb, "sRGB"), (Space::DisplayP3, "Display P3"), (Space::AdobeRgb, "Adobe RGB"), (Space::ProPhotoRgb, "ProPhoto")]);
-            });
-            if self.export_color_space != before {
-                if let Ok(v) = serde_json::to_value(self.export_color_space) {
-                    library::settings::set("exportColorSpace", v);
-                }
-            }
-            export_hint(
-                ui,
-                match self.export_color_space {
-                    Space::Srgb => crate::tr("Für Web, E-Mail, Handy und fast alle Programme."),
-                    Space::DisplayP3 => crate::tr("Kräftigere Farben auf Apple-Bildschirmen; ohne Farbmanagement etwas flau."),
-                    Space::AdobeRgb => crate::tr("Für Druckereien und Labore, die Adobe RGB verlangen."),
-                    Space::ProPhotoRgb => crate::tr("Größter Farbraum zum Weiterbearbeiten, am besten als TIFF 16 Bit."),
-                },
-            );
-            if matches!(self.export_format, Format::Jpeg { .. }) && has_finished {
-                export_row(ui, "HDR", |ui| {
-                    ui.add_enabled_ui(self.export_color_space == Space::Srgb, |ui| {
-                        ui.checkbox(&mut self.export_gain_map, crate::tr("Gain-Map behalten (iPhone-HDR)"));
-                    });
-                    if self.export_color_space != Space::Srgb {
-                        ui.label(egui::RichText::new(crate::tr("nur bei sRGB")).small().color(lr::TEXT_DIM));
-                    }
-                });
-            }
-            export_row(ui, "Abzug", |ui| {
-                ui.checkbox(&mut self.export_as_print, crate::tr("Papier- und Filmrand aus der Dunkelkammer mitnehmen"));
-            });
-
-            // ── Image size
-            export_section(ui, "Bildgröße");
-            let before = (self.export_limit_size, self.export_size);
-            export_row(ui, "Größe", |ui| {
-                ui.checkbox(&mut self.export_limit_size, crate::tr("begrenzen"));
-                if self.export_limit_size {
-                    #[derive(Clone, Copy, PartialEq)]
-                    enum G {
-                        Long,
-                        Short,
-                        Frame,
-                        Mp,
-                    }
-                    let mut g = match self.export_size {
-                        OutputSize::LongEdge(_) => G::Long,
-                        OutputSize::ShortEdge(_) => G::Short,
-                        OutputSize::BoundingBox { .. } => G::Frame,
-                        OutputSize::Megapixel(_) => G::Mp,
-                    };
-                    let alt = g;
-                    lr::segmented(ui, &mut g, &[(G::Long, crate::tr("Lange Kante")), (G::Short, crate::tr("Kurze Kante")), (G::Frame, crate::tr("Breite × Höhe")), (G::Mp, "Megapixel")]);
-                    if g != alt {
-                        self.export_size = match g {
-                            G::Long => OutputSize::LongEdge(2048),
-                            G::Short => OutputSize::ShortEdge(1080),
-                            G::Frame => OutputSize::BoundingBox { width: 1920, height: 1080 },
-                            G::Mp => OutputSize::Megapixel(12.0),
-                        };
-                    }
-                }
-            });
-            if self.export_limit_size {
-                export_row(ui, "", |ui| {
-                    let px = |ui: &mut egui::Ui, n: &mut u32| {
-                        crate::lr::text_field(ui, egui::DragValue::new(n).range(64..=30000).clamp_existing_to_range(false).speed(10.0));
-                    };
-                    match &mut self.export_size {
-                        OutputSize::LongEdge(n) | OutputSize::ShortEdge(n) => {
-                            px(ui, n);
-                            ui.label("px");
-                            ui.add_space(10.0);
-                            for v in [1080u32, 2048, 3840] {
-                                if ui.add(egui::Button::new(v.to_string()).small().selected(*n == v)).clicked() {
-                                    *n = v;
-                                }
-                            }
-                        }
-                        OutputSize::BoundingBox { width: width, height: height } => {
-                            px(ui, width);
-                            ui.label("×");
-                            px(ui, height);
-                            ui.label("px");
-                        }
-                        OutputSize::Megapixel(mp) => {
-                            crate::lr::text_field(ui, egui::DragValue::new(mp).range(0.5..=100.0).clamp_existing_to_range(false).speed(0.1).max_decimals(1));
-                            ui.label("MP");
-                        }
-                    }
-                });
-                export_hint(ui, crate::tr("Hoch- wie Querformat; kleinere Bilder werden nicht vergrößert."));
-            } else {
-                export_hint(ui, crate::tr("Volle Auflösung."));
-            }
-            if (self.export_limit_size, self.export_size) != before {
-                library::settings::set("exportLimitSize", serde_json::Value::Bool(self.export_limit_size));
-                if let Ok(v) = serde_json::to_value(self.export_size) {
-                    library::settings::set("exportSize", v);
-                }
-            }
-
-            // ── Metadata (never serial numbers or names of people)
-            export_section(ui, "Metadaten");
-            let before = (self.export_options.metadata, self.export_options.gps);
-            export_row(ui, "Inhalt", |ui| {
-                use develop::export::Metadata as M;
-                lr::segmented_tips(
-                    ui,
-                    &mut self.export_options.metadata,
-                    &[(M::None, crate::tr("Keine")), (M::Shooting, crate::tr("Aufnahmedaten")), (M::All, crate::tr("Alles"))],
-                    &[
-                        crate::tr("Keine Metadaten: nur Bild und Farbprofil"),
-                        crate::tr("Aufnahmedaten: Kamera, Objektiv, Blende, Zeit, ISO, Datum, Urheber"),
-                        crate::tr("Alles: zusätzlich Stichwörter, Beschreibung, Sterne, Etikett"),
-                    ],
-                    10.0,
-                );
-            });
-            export_row(ui, "", |ui| {
-                ui.add_enabled_ui(self.export_options.metadata != develop::export::Metadata::None, |ui| {
-                    let r = ui.checkbox(&mut self.export_options.gps, crate::tr("Standort (GPS) mitschreiben"));
-                    lr::hover_tip(ui, &r, crate::tr("Nur wenn das Original einen Standort hat"));
-                });
-            });
-            if (self.export_options.metadata, self.export_options.gps) != before {
-                if let Ok(v) = serde_json::to_value(&self.export_options) {
-                    library::settings::set("exportOptions", v);
-                }
-            }
-            // keywords: parent terms in dc:subject (default on), the hierarchy (lr:hierarchicalSubject) optional
-            let personal = self.export_options.metadata == develop::export::Metadata::All;
-            export_row(ui, "", |ui| crate::keyword_export::controls(ui, personal));
-
-            // ── Development (Sigma only)
-            if has_x3f {
-                export_section(ui, "Entwicklung");
-                export_row(ui, "Foveon", |ui| {
-                    lr::segmented(ui, &mut self.export_engine, &[(Engine::Spp, crate::tr("Beste Qualität")), (Engine::Own, crate::tr("Entwurf (schnell)"))]);
-                });
-                export_hint(
-                    ui,
-                    match self.export_engine {
-                        Engine::Spp => crate::tr("Volle Foveon-Verarbeitung wie in der Vorschau, etwa 1–3 s je Bild."),
-                        Engine::Own => crate::tr("Entwurf: ohne Foveon-Schärfung und ohne erweiterte Rauschminderung, etwas weicher, etwa 1 s je Bild."),
-                    },
-                );
-            }
-        }
-
-        // ── Save
-        export_section(ui, "Speichern");
-        export_row(ui, "Ordner", |ui| {
-            let dir = self.export_dir.as_ref().map(|d| d.display().to_string()).unwrap_or_else(|| crate::tr("– noch kein Ordner –").into());
-            ui.add_sized([(ui.available_width() - 90.0).max(60.0), 18.0], egui::Label::new(egui::RichText::new(dir).color(lr::TEXT)).truncate());
-            if ui.button(crate::tr("Ändern …")).clicked() {
-                file_dialog::target_folder(ui.ctx(), "export-ordner", |d| d);
-            }
-            if let Some(d) = file_dialog::fetch_one("export-ordner") {
-                self.export_dir = Some(d);
-            }
-        });
-        if let Some(e) = self.current.as_ref().map(|c| &self.entries[c.index]) {
-            let stem = e.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-            let suffix = if e.settings.monochrome { "_mono" } else { "" };
-            export_hint(ui, &crate::trf!("Dateiname z. B.: {stem}{suffix}.{a}", stem = stem, suffix = format!("{suffix}{}", self.export_format.name_suffix()), a = self.export_format.extension()));
-        }
-        export_row(ui, "", |ui| {
-            ui.checkbox(&mut self.reveal_after_export, crate::tr("Danach im Finder zeigen"));
-        });
-        ui.add_space(10.0);
-        let can = !self.exporting && self.export_dir.is_some() && !items.is_empty();
-        if !in_dialog {
-            let label = if items.len() == 1 { crate::tr("Exportieren").to_string() } else { crate::trf!("{a} Bilder exportieren", a = items.len()) };
-            let go = lr::main_button_min(ui, &label, can, ui.available_width());
-            if go.clicked() {
-                self.export(items.clone());
-                self.show_export = false;
-            }
-        }
-        // fixed height for progress/message (no jumping)
-        ui.allocate_ui(egui::vec2(ui.available_width(), 30.0), |ui| {
-            if self.exporting {
-                let (d, t) = self.export_progress;
-                ui.horizontal(|ui| {
-                    let cancelling = jobs::EXPORT_CANCEL.load(std::sync::atomic::Ordering::SeqCst);
-                    let w = (ui.available_width() - 100.0).max(60.0);
-                    ui.allocate_ui(egui::vec2(w, 30.0), |ui| crate::dialog::progress(ui, (t > 0).then(|| d as f32 / t as f32), &self.export_status));
-                    if ui.add_enabled(!cancelling, egui::Button::new(if cancelling { crate::tr("Wird angehalten …") } else { crate::tr("Abbrechen") })).clicked() {
-                        jobs::EXPORT_CANCEL.store(true, std::sync::atomic::Ordering::SeqCst);
-                    }
-                });
-            } else if !self.export_status.is_empty() {
-                crate::dialog::hint(ui, &self.export_status);
-            }
-        });
-        items
-    }
-}
-
-/// Section in the export dialog: small capitals heading with space before it.
-fn export_section(ui: &mut egui::Ui, title: &str) {
-    ui.add_space(10.0);
-    ui.label(egui::RichText::new(crate::tr(title).to_uppercase()).small().strong().color(lr::TEXT_DIM));
-    ui.add_space(2.0);
-}
-
-/// Width of the labels in the export dialog.
-const EXPORT_LABEL: f32 = 96.0;
-
-/// Row in the export dialog: label on the left (fixed width), controls on the right.
-fn export_row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
-    ui.horizontal(|ui| {
-        ui.allocate_ui_with_layout(egui::vec2(EXPORT_LABEL, 22.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.set_width(EXPORT_LABEL);
-            if !label.is_empty() {
-                ui.label(egui::RichText::new(crate::tr(label)).color(lr::TEXT));
-            }
-        });
-        add(ui);
-    });
-}
-
-/// Hint below a row, indented like the controls.
-fn export_hint(ui: &mut egui::Ui, text: &str) {
-    ui.horizontal(|ui| {
-        ui.add_space(EXPORT_LABEL + ui.spacing().item_spacing.x);
-        ui.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT_DIM)).wrap());
-    });
 }
 
 /// File that holds the last opened folder.

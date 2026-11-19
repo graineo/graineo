@@ -240,6 +240,11 @@ impl App {
         let key = self.history_key(index);
         let Some(state) = self.history.state_of(&key, step, current) else { return };
         let source = self.entries[index].image;
+        // versions are virtual copies in the library: refused for a photo of a viewed folder
+        if crate::library_ui::needs_library(&[source]) {
+            self.status = crate::tr(crate::library_ui::view_folder_guard::NEEDS_LIBRARY).to_string();
+            return;
+        }
         let from = match &self.entries[index].copy {
             Some(c) => format!("{} ({c})", self.entries[index].name),
             None => self.entries[index].name.clone(),

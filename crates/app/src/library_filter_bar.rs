@@ -446,9 +446,15 @@ impl LibraryView {
         ui.add_space(1.0);
         ui.scope(|ui| {
             lr::field_style(ui);
-            egui::ComboBox::from_id_salt("bib-sort").selected_text(name(self.sort_order)).width(124.0).height(240.0).show_ui(ui, |ui| {
+            // a viewed folder has no capture times until "Aufnahme" is chosen: until then it is ordered by name, and
+            // the field says so
+            let shown = if self.viewed_folder().is_some() && !self.view_sort_chosen { SortOrder::Name } else { self.sort_order };
+            egui::ComboBox::from_id_salt("bib-sort").selected_text(name(shown)).width(124.0).height(240.0).show_ui(ui, |ui| {
                 for m in [SortOrder::CaptureTime, SortOrder::Name, SortOrder::Stars] {
-                    ui.selectable_value(&mut self.sort_order, m, name(m));
+                    if ui.selectable_label(m == shown, name(m)).clicked() {
+                        self.sort_order = m;
+                        self.view_sort_chosen = true;
+                    }
                 }
             });
         });

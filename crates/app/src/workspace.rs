@@ -168,6 +168,9 @@ impl App {
             let an = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!an));
         }
+        if crate::shortcuts::pressed(ctx, "refresh_folder") {
+            self.lib.refresh_viewed(true);
+        }
         if crate::shortcuts::pressed(ctx, "quick_show") {
             self.lib.show_quick();
             self.to_grid();
@@ -461,6 +464,11 @@ impl App {
     /// without losing the first version) and is opened in single image view right away.
     pub(crate) fn create_virtual_copy(&mut self, image: Option<i64>) {
         let Some(source) = image.or_else(|| self.active_entry().and_then(|i| self.entries.get(i)).map(|e| e.image)) else { return };
+        // a virtual copy lives in the library: refused for a photo of a viewed folder (before: "keine Bibliothek" error)
+        if crate::library_ui::needs_library(&[source]) {
+            self.status = crate::tr(crate::library_ui::view_folder_guard::NEEDS_LIBRARY).to_string();
+            return;
+        }
         let single = !self.in_grid();
         self.save_current();
         let of = self.entries.iter().position(|e| e.image == source);

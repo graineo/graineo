@@ -107,6 +107,8 @@ pub const ALL: &[Shortcut] = &[
     t("print", U, C, Key::P, "Drucken (Druckraum)"),
     t("import", U, CS, Key::I, "Importieren (Speicherkarte oder Ordner)"),
     t("open_folder", U, C, Key::O, "Ordner ansehen, ohne zu importieren"),
+    // ⌘R turns the photo and F5 is the top bar: ⌥⌘R (Ctrl+Alt+R on Windows) reads a viewed folder again
+    t("refresh_folder", U, CA, Key::R, "angesehenen Ordner neu einlesen"),
     t("settings", U, C, Key::Comma, "Einstellungen"),
     t("overview", U, C, Key::Slash, "diese Übersicht"),
     t("show_in_finder", U, CS, Key::F, "Im Finder zeigen"),

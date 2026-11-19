@@ -4939,7 +4939,6 @@ Ausgleich	Balance
 Feineinstellung	Fine-Tuning
 Der Ordner ist nicht lesbar (keine Berechtigung oder Laufwerk nicht verbunden).	Can’t read the folder (no permission or drive not connected).
 Keine Fotos oder Videos. Gefunden: {a} andere Dateien in diesem Ordner und {b} Unterordnern, keine in einem Format, das graineo zeigt.	No photos or videos. Found {a} other files in this folder and {b} subfolders, none in a format graineo supports.
-Keine Fotos oder Videos – auch nicht in den {a} Unterordnern (bis {b} Ebenen tief).	No photos or videos – not even in the {a} subfolders (up to {b} levels deep).
 Der Ordner ist leer.	The folder is empty.
 Keine Fotos in diesem Ordner	No photos in this folder
 Bibliothek wiederherstellen?	Restore library?
@@ -6401,13 +6400,11 @@ Bearbeitung aus neuerer Version – geschützt	edit from a newer version – pro
 Bearbeitung aus einer neueren Version	Edit from a newer version
 Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	This edit comes from a newer version of graineo and will not be overwritten. This version cannot read it and shows the initial values; changes to this photo are not saved, ratings and flags are. The newer version opens the edit again.
 Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	This folder is only open, it is not in the library. graineo never changes the photos themselves.
-### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### What is saved\n• **Develop** – every slider change (virtual copies too) is saved as a sidecar NAME.xmp next to the photo\n• **Rating** (stars, flag, label) – locked while “Ratings as XMP” is off; when on, ratings are also written as XMP next to the photos\n\n### What works here\n• Viewing, developing, exporting\n• Filtering by stars, flag and label (values from existing XMP)\n• Searching by file name\n\n### Only after adding\nColumn filters (camera, lens, date …), search by content, keywords and places, collections, people, duplicates and series. When adding, the library takes over ratings and develop settings from the XMP.\n\n### Leaving\n**Close** in the band, or choose a source on the left, e.g. “All Photos”. **Add to Library…** opens the import with this folder.
-Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	You are viewing the folder “{a}” – it is not in the library
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Ordnerbaum\nLinks unter „Angesehen“ zeigt ein Klick auf einen Ordner seine Fotos; „Unterordner einbeziehen“ aus: nur die Fotos direkt darin. **Aktualisieren** liest den Ordner neu, leise auch, wenn du zu graineo zurückkehrst.\n\n### Verlassen\n**Schließen** im Streifen oder per Rechtsklick auf den Ordner links. Eine andere Quelle zeigt die Bibliothek; der Ordner bleibt unter „Angesehen“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### What is saved\n• **Develop** – every slider change (virtual copies too) is saved as a sidecar NAME.xmp next to the photo\n• **Rating** (stars, flag, label) – locked while “Ratings as XMP” is off; when on, ratings are also written as XMP next to the photos\n\n### What works here\n• Viewing, developing, exporting\n• Filtering by stars, flag and label (values from existing XMP)\n• Searching by file name\n\n### Only after adding\nColumn filters (camera, lens, date …), search by content, keywords and places, collections, people, duplicates and series. When adding, the library takes over ratings and develop settings from the XMP.\n\n### Folder tree\nOn the left under “Viewed”, a click on a folder shows its photos; with “Include subfolders” off, only the photos directly in it. **Update** reads the folder again, and quietly when you return to graineo.\n\n### Leaving\n**Close** in the band or right-click the folder on the left. Another source shows the library; the folder stays under “Viewed”. **Add to Library…** opens the import with this folder.
 Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	Stop viewing the folder – back to “All Photos”
 Öffnet den Import mit diesem Ordner	Opens the import with this folder
 Bewertungen als XMP	Ratings as XMP
 Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	Write stars, flags and labels as sidecar files (XMP) next to the photos. Off: rating is locked here.
-Deine Bibliothek – der angesehene Ordner gehört nicht dazu	Your library – the viewed folder is not part of it
 Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	To rate, add to the library or turn on “Ratings as XMP” in the band at the top
 EIGENER LOOK	OWN LOOK
 Eigener Look	Own look
@@ -6496,3 +6493,99 @@ Toleranz (%)	Tolerance (%)
 Wie ähnlich die Farbe sein muss	How similar the colour must be
 Erst „Auto-Maske“ einschalten	Switch on “Auto mask” first
 Pinsel malt · ⌥ radiert · ⇧-Klick Linie	Brush paints · ⌥ erases · ⇧-click line
+Angesehen	Viewed
+Ordner neu einlesen	Read the folder again
+angesehenen Ordner neu einlesen	read the viewed folder again
+Keine Fotos direkt in diesem Ordner. „Unterordner einbeziehen“ zeigt auch die {a} Unterordner.	No photos directly in this folder. “Include subfolders” also shows the {a} subfolders.
+Keine Fotos oder Videos – auch nicht in den {a} Unterordnern.	No photos or videos – not in the {a} subfolders either.
+Nur die ersten {a} Fotos gezeigt	Only the first {a} photos shown
+Nur die ersten {a} Unterordner durchsucht	Only the first {a} subfolders searched
+„{a}“ · nur angesehen, nicht in der Bibliothek	“{a}” · only viewed, not in the library
+Ordner aktualisiert – keine Änderung	Folder refreshed – no change
+{a} neu	{a} new
+{a} neu, {b} entfernt	{a} new, {b} removed
+Unterordner einbeziehen	Include subfolders
+Aus: nur die Fotos direkt im gewählten Ordner	Off: only the photos directly in the chosen folder
+nicht lesbar	not readable
+Erst zur Bibliothek hinzufügen	Add to the library first
+Explorer	Explorer
+Im Explorer-Menü anbieten	Offer in the Explorer menu
+Rechtsklick auf Ordner, Laufwerke und Fotos: „Mit graineo ansehen“. Unter Windows 11 bei „Weitere Optionen anzeigen“.	Right-click on folders, drives and photos: “View with graineo”. On Windows 11 under “Show more options”.
+Mit graineo ansehen	View with graineo
+Die Dateien (mit XMP daneben) kommen in den Papierkorb.	Files (with the XMP next to them) are moved to the Trash.
+Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen	Network drive without a Trash – add to the library first
+Video	Video
+Infozeilen	Info lines
+Zeile 1	Line 1
+Zeile 2	Line 2
+Aufnahmedatum	Capture date
+Pixelmaße	Pixel size
+Dateigröße	File size
+Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.	Viewing, developing, exporting and printing work here. Everything else only in the library.
+Ordner schließen	Close folder
+Keine automatische Installation auf diesem System	No automatic installation on this system
+Apple RAW {a} · Rückfall	Apple RAW {a} · fallback
+entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)	developed with Apple RAW {a} (graineo's decoding unusable)
+graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	graineo's decoding gives no usable image for this file (values far above the white point). macOS decodes this photo (Apple RAW {a}); color, tone, looks, film and masks are computed by graineo. The version is pinned for this photo; change it in the Sensor panel under “Pipeline”.
+Automatik · Rückfall	Automatic · fallback
+festgehalten · Rückfall	pinned · fallback
+nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild	not possible: graineo's decoding gives no usable image for this file
+Ordner wählen und exportieren …	Choose folder and export …
+Vorhandene Dateien überschreiben?	Overwrite existing files?
+Dateien gleichen Namens im Zielordner werden durch den Export ersetzt ({n} Bilder). Die alten kommen in den Papierkorb.	Files with the same name in the target folder are replaced by the export ({n} images). The old ones go to the Trash.
+Das Original eines Fotos wird nie ersetzt.	A photo's original is never replaced.
+Überschreiben	Overwrite
+Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14	Year/day of capture, e.g. 2026/2026-07-14
+Name des Ordners, in dem das Original liegt	Name of the folder the original is in
+Zurück zum Originalnamen	Back to the original name
+Originalname	Original name
+Text	Text
+Eigener Text: im Feld überschreiben	Your own text: overwrite it in the field
+Nummer	Number
+Titel aus der Bibliothek, falls vorhanden	Title from the library, if any
+„_mono“ bei Schwarzweiß	“_mono” for black and white
+Stellen	Digits
+Start	Start
+Nummer anhängen	Add number
+Name-2.jpg; nichts wird überschrieben	Name-2.jpg; nothing is overwritten
+Ersetzt Dateien gleichen Namens (alte in den Papierkorb); wird vorher gefragt	Replaces files with the same name (old ones to the Trash); asks first
+Überspringen	Skip
+Fotos, deren Datei es schon gibt, nicht exportieren	Don't export photos whose file already exists
+→ {f} · {n}	→ {f} · {n}
+→ keine Datei	→ no file
+{n} gleiche Namen → bekommen eine Nummer	{n} identical names → get a number
+{n} gibt es schon → bekommen eine Nummer	{n} already exist → get a number
+{n} gibt es schon → werden ersetzt	{n} already exist → will be replaced
+{n} gibt es schon → werden übersprungen	{n} already exist → will be skipped
+„{a}“ gibt es schon.	“{a}” already exists.
+Name der Vorlage	Template name
+– keine –	– none –
+Noch keine Vorlagen	No templates yet
+Sichern …	Save …
+Name, Ordnerregel, Format und Größe als Vorlage sichern	Save name, folder rule, format and size as a template
+Vorlage in den Papierkorb legen	Move template to the Trash
+{a} übersprungen: gibt es schon	{a} skipped: already exists
+fertig – {n} gespeichert, {b} übersprungen (gibt es schon) in {a}	done – {n} saved, {b} skipped (already exist) in {a}
+Vorlage	Template
+Originalname {name}	Original name {name}
+Nr.	No.
+Laufende Nummer {n:3}	Sequence number {n:3}
+GPS	GPS
+Unterordner nach Datum	Subfolders by date
+Unterordner nach Ordner	Subfolders by folder
+Abzug, Foveon, GPS, Stichwörter, Unterordner, Nummer	Print, Foveon, GPS, keywords, subfolders, number
+Kompression	Compression
+Bit-Tiefe	Bit depth
+Unverändert, geprüft kopiert (SHA-256)	Unchanged, verified copy (SHA-256)
+XMP-Begleitdatei	XMP sidecar
+Papier- und Filmrand mitnehmen	Include paper and film border
+Export anhalten	Stop export
+Verlustbehaftet; 92 ist kaum vom Original zu unterscheiden	Lossy; 92 is hard to tell from the original
+Oberbegriffe	Parent terms
+Hierarchie	Hierarchy
+Größe und Metadaten	Size and metadata
+Zurück zum Originalnamen ({name})	Back to the original name ({name})
+Wenn vorhanden	If it exists
+Gain-Map behalten	Keep gain map
+HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Keep the HDR brightness of iPhone photos; sRGB only
+Mehr	More

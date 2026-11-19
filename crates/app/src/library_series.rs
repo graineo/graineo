@@ -438,7 +438,12 @@ impl LibraryView {
             item(ui, StackCmd::Review, crate::tr("Serie sichten …"), display("stack_review"), true);
         }
         if several {
-            item(ui, StackCmd::Group, crate::tr("Als Stapel bündeln"), display("stack_group"), true);
+            // a viewed folder: greyed with the reason (stacks live in the library)
+            let refused = self.needs_library(&self.target());
+            let why = if refused { crate::tr(super::view_folder_guard::NEEDS_LIBRARY) } else { "" };
+            if lr::menu_item_why(ui, crate::tr("Als Stapel bündeln"), &display("stack_group"), !refused, why) {
+                chosen = Some(StackCmd::Group);
+            }
         }
         chosen
     }
@@ -521,6 +526,11 @@ impl LibraryView {
             StackCmd::Review => self.series_review_open(k.map(|k| self.series.stacks[k].id), actions),
             StackCmd::Group => {
                 let mut sel: Vec<i64> = self.target();
+                // stacks live in the library: photos of a viewed folder are refused with the reason
+                if let Some(t) = self.refuse_viewed(&sel) {
+                    actions.push(Action::Status(t));
+                    return;
+                }
                 // the photos of collapsed stacks in the selection come along
                 let extra: Vec<i64> = sel.iter().filter(|b| self.series.marks.get(b).is_some_and(|m| m.collapsed)).filter_map(|b| self.series.of(*b)).flat_map(|k| self.series.stacks[k].images.clone()).collect();
                 sel.extend(extra);
@@ -1060,10 +1070,10 @@ mod tests {
         assert_eq!(status(&library.stack_menu_command(StackMenu::ToggleAll)).as_deref(), Some("Noch keine Serien oder Stapel"));
         library.active = Some(ids[0]);
         assert_eq!(status(&library.stack_menu_command(StackMenu::Dissolve)).as_deref(), Some("Das Foto liegt in keiner Serie und keinem Stapel"));
-        // one photo cannot be bundled
+        // photos of a viewed folder are never bundled (stacks live in the library): the reason, nothing else
         library.selection = HashSet::from([ids[0]]);
         library.nothing_selected = false;
-        assert_eq!(status(&library.stack_menu_command(StackMenu::Group)).as_deref(), Some("Zum Bündeln mindestens zwei Fotos auswählen"));
+        assert_eq!(status(&library.stack_menu_command(StackMenu::Group)).as_deref(), Some(crate::tr(super::view_folder_guard::NEEDS_LIBRARY)));
         // a selection of three photos opens the review like a series
         library.selection = ids.iter().copied().collect();
         let a = library.stack_menu_command(StackMenu::Review);

@@ -408,6 +408,17 @@ A small update after the first reports from users.
 - **No colour flash for photos switched to black & white:** a photo that had been set to black & white together with others briefly showed its old colour version in Develop before the black & white one appeared. Only matching views stand in now.
 - **Smaller:** the selection frame of look tiles is no longer cut off on the left.
 
+
+## 1.4.2 · Viewing Folders, More Formats, File Names on Export
+
+- **Viewing a folder is clearer and does more:** a "Viewed" section in the left panel with a folder tree (no depth limit), a switch for including subfolders, Refresh (⌥⌘R, and quietly when you return to the window) and a note when the 5,000-photo limit is reached. The library below stands back, and one line says what works while you only view a folder. Functions that need the library (keywords, collections, rename, move, quick collection …) are greyed out with the reason instead of failing.
+- **Windows Explorer menu:** Settings → General → "Offer in Explorer menu" adds "View with graineo" to the context menu of folders and photos (no admin rights needed).
+- **Grid info lines:** Settings → Interface → Display: up to two lines under each tile (file name, capture date, camera, lens, exposure, size, file size, format). Off by default.
+- **More formats work:** Olympus/OM System ORF (tiles were blank), Samsung SRW, Pentax PEF, Leica RWL, Panasonic RAW, Minolta MRW, Epson ERF, Hasselblad 3FR/FFF, Phase One IIQ, Kodak DCR/KDC and more are listed and developed; Canon CRW and Sony SRF/SR2 develop; previews are computed from the sensor data when a file has none. Lossy DNG files no longer come out pink, monochrome DNG no longer has a blue cast, and Galaxy S23 Ultra DNG falls back to Apple RAW on a Mac. Tested with 93 free raw files from many cameras.
+- **Capture dates and camera data on Windows and Linux:** a built-in reader fills date, camera, lens, exposure and place from the file, so sorting by date works there.
+- **File names on export:** build the name from pieces (original name, text, number, capture date, camera, title) with a live preview, save templates, choose what happens to existing files (add a number, replace, skip) and sort into sub-folders by date or folder. The export dialog is tidier, with the main button always in view.
+- **Update check on Linux:** tells you when a new version exists and opens the release page.
+
 ---
 
 ## Thanks

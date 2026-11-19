@@ -36,12 +36,13 @@ impl ImageKind {
     }
 }
 
-/// Only from the extension or the library's format name (X3F, RAF, JPG …), without file access.
+/// Only from the extension or the library's format name (X3F, RAF, JPG …), without file access. Both come from
+/// the one list `library::EXTENSIONS` (every format name is also one of its extensions).
 pub fn from_extension(extension: &str) -> ImageKind {
-    match extension.to_ascii_lowercase().as_str() {
-        "x3f" => ImageKind::Foveon,
-        "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "nrw" | "orf" | "rw2" | "pef" | "srw" => ImageKind::Raw,
-        "jpg" | "jpeg" | "heic" | "heif" | "hif" | "tif" | "tiff" | "png" => ImageKind::Done,
+    match library::extension_format(extension) {
+        Some("X3F") => ImageKind::Foveon,
+        Some(f) if library::is_raw(f) => ImageKind::Raw,
+        Some(f) if library::is_finished_image(f) => ImageKind::Done,
         _ => ImageKind::Other,
     }
 }
@@ -78,14 +79,15 @@ mod tests {
         assert_eq!(from_extension("X3F"), ImageKind::Foveon);
         // Sigma fp/fp L/BF write Bayer DNGs → general path
         assert_eq!(from_extension("DNG"), ImageKind::Raw);
-        for e in ["RAF", "cr3", "CR2", "ARW", "NEF", "nef", "NRW", "nrw"] {
+        for e in ["RAF", "cr3", "CR2", "ARW", "NEF", "nef", "NRW", "nrw", "ORF", "ori", "RW2", "rwl", "PEF", "SRW", "CRW", "MRW", "3FR", "IIQ", "ERF"] {
             assert_eq!(from_extension(e), ImageKind::Raw, "{e}");
         }
-        for e in ["JPG", "jpeg", "HEIC", "TIFF", "png"] {
+        for e in ["JPG", "jpeg", "HEIC", "hif", "TIFF", "png"] {
             assert_eq!(from_extension(e), ImageKind::Done, "{e}");
         }
         assert_eq!(from_extension("MOV"), ImageKind::Other);
         assert_eq!(from_extension("VIDEO"), ImageKind::Other);
+        assert_eq!(from_extension("PSD"), ImageKind::Other);
     }
 
     #[test]

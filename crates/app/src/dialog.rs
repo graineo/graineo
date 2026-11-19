@@ -90,6 +90,70 @@ pub fn show(ctx: &egui::Context, id: &str, title: &str, width: f32, content: imp
     answer
 }
 
+/// Part of a [`show_scrolling`] dialog the content closure draws.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Part {
+    /// the content (scrolls when the window is too low)
+    Body,
+    /// fixed lines above the buttons (always visible)
+    Footer,
+    /// controls at the right end of the title row (e.g. a template choice that applies to the whole dialog)
+    Header,
+}
+
+/// Space between a dialog and the window edge.
+const SCREEN_GAP: f32 = 24.0;
+
+/// Like [`show`] for long dialogs: the body scrolls when the window is too low, the footer (`footer_h` high) and the
+/// buttons always stay at the bottom; the dialog is never higher than the window. ↩ triggers the main action only
+/// when no text field had the keyboard (in a text field ↩ just confirms the field).
+pub fn show_scrolling(ctx: &egui::Context, id: &str, title: &str, width: f32, footer_h: f32, mut content: impl FnMut(&mut egui::Ui, Part), buttons: Buttons) -> Answer {
+    let typing = ctx.egui_wants_keyboard_input();
+    let max_h = (ctx.content_rect().height() - 2.0 * SCREEN_GAP - 2.0 * MARGIN).max(160.0);
+    let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
+    let mut answer = Answer::Open;
+    let r = egui::Modal::new(egui::Id::unique(("dialog", id))).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
+        ui.set_width(width);
+        ui.spacing_mut().item_spacing.y = 6.0;
+        let top = ui.cursor().top();
+        ui.horizontal(|ui| {
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(title)).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))).truncate());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| content(ui, Part::Header));
+        });
+        ui.add_space(4.0);
+        // below the body: space, separator, space, footer, space, buttons (with the item spacing between them)
+        let spacing = ui.spacing().item_spacing.y;
+        let below = 8.0 + 1.0 + 4.0 + footer_h + 4.0 + BUTTON_H + 6.0 * spacing;
+        let body_h = (max_h - (ui.cursor().top() - top) - below).max(60.0);
+        egui::ScrollArea::vertical().id_salt(("dialog-body", id)).max_height(body_h).auto_shrink([false, true]).show(ui, |ui| {
+            lr::bounded(ui, |ui| content(ui, Part::Body));
+        });
+        ui.add_space(8.0);
+        ui.separator();
+        ui.add_space(4.0);
+        ui.allocate_ui_with_layout(egui::vec2(width, footer_h), egui::Layout::top_down(egui::Align::Min), |ui| {
+            ui.set_min_size(egui::vec2(width, footer_h));
+            content(ui, Part::Footer);
+        });
+        ui.add_space(4.0);
+        answer = button_row(ui, &buttons);
+    });
+    if !r.is_top_modal {
+        return answer;
+    }
+    if answer == Answer::Open && (r.should_close() || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
+        answer = Answer::Cancel;
+    }
+    if answer == Answer::Open && !typing {
+        if let Some((_, Style::Normal, true)) = buttons.primary {
+            if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+                answer = Answer::Primary;
+            }
+        }
+    }
+    answer
+}
+
 fn button_row(ui: &mut egui::Ui, k: &Buttons) -> Answer {
     let mut a = Answer::Open;
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), BUTTON_H), egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -323,25 +387,124 @@ pub fn count(n: usize, one: &str, many: &str) -> String {
 // ───────────────────────────────────────────── App dialogs
 
 impl crate::App {
-    /// Export dialog: title with count, content as before, "Export" as main action (↩).
+    /// Export dialog: title with count; two columns when the window is wide enough, the body scrolls, the footer
+    /// (name preview, conflicts, progress) and "Export" (↩) stay at the bottom.
     pub(crate) fn export_dialog(&mut self, ctx: &egui::Context) {
         let n = self.export_count;
         let title = if n == 1 { crate::tr("1 Bild exportieren").to_string() } else { crate::trf!("{a} exportieren", a = count(n, crate::tr("Bild"), crate::tr("Bilder"))) };
-        let mut items = Vec::new();
         // an earlier target inside an Apple Photos library or another program's package is never suggested
         if self.export_dir.as_deref().is_some_and(|d| library::write_target::check(d).is_err()) {
             self.export_dir = None;
         }
-        let can = !self.exporting && self.export_dir.is_some();
-        let a = show(ctx, "export", &title, 620.0, |ui| items = self.export_controls(ui, true), Buttons::confirm(crate::tr("Exportieren"), can && n > 0));
+        // without a folder the main button chooses one first, then exports
+        let can = !self.exporting && self.export_names_ui.pick.is_none();
+        let label = if self.export_dir.is_none() { crate::tr("Ordner wählen und exportieren …") } else { crate::tr("Exportieren") };
+        let width = (ctx.content_rect().width() - 2.0 * SCREEN_GAP - 2.0 * MARGIN).clamp(340.0, 940.0);
+        let two_columns = width >= crate::export_ui::TWO_COLUMNS_MIN;
+        let mut scope = crate::export_ui::Scope::default();
+        let a = show_scrolling(
+            ctx,
+            "export",
+            &title,
+            width,
+            crate::export_ui::STATUS_H,
+            |ui, part| match part {
+                Part::Body => scope = self.export_body(ui, two_columns),
+                Part::Footer => self.export_status_lines(ui, &scope),
+                // a fixed block at the right end of the title row, filled from the left
+                Part::Header => {
+                    let w = ui.available_width().min(470.0);
+                    ui.allocate_ui_with_layout(egui::vec2(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.set_min_width(w);
+                        ui.label(egui::RichText::new(crate::tr("Vorlage")).color(lr::TEXT_DIM));
+                        self.export_template_controls(ui);
+                    });
+                }
+            },
+            Buttons::confirm(label, can && n > 0),
+        );
+        let items = scope.items;
         self.export_count = items.len();
         match a {
             Answer::Primary if !items.is_empty() => {
-                self.export(items);
-                self.show_export = false;
+                if self.export_requested(ctx, items) {
+                    self.show_export = false;
+                }
             }
-            Answer::Cancel => self.show_export = false,
+            Answer::Cancel => {
+                self.show_export = false;
+                self.export_names_ui.pick = None;
+            }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(ctx: &egui::Context, events: Vec<egui::Event>, lines: usize, field: bool) -> (Answer, egui::Rect) {
+        let mut answer = Answer::Open;
+        let mut footer = egui::Rect::NOTHING;
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 720.0));
+        let mut text = String::new();
+        let _ = crate::ui_test::run(ctx, egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| {
+            answer = show_scrolling(
+                ui.ctx(),
+                "test-scrolling",
+                "Test",
+                600.0,
+                36.0,
+                |ui, part| match part {
+                    Part::Body => {
+                        if field {
+                            let r = ui.text_edit_singleline(&mut text);
+                            r.request_focus();
+                        }
+                        for i in 0..lines {
+                            ui.label(format!("row {i}"));
+                        }
+                    }
+                    Part::Header => {}
+                    Part::Footer => {
+                        ui.label("footer");
+                        footer = ui.min_rect();
+                    }
+                },
+                Buttons::confirm("OK", true),
+            );
+        });
+        (answer, footer)
+    }
+
+    fn key(k: egui::Key) -> egui::Event {
+        egui::Event::Key { key: k, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }
+    }
+
+    /// A body far higher than the window scrolls; footer and buttons stay inside the window.
+    #[test]
+    fn long_body_keeps_footer_and_buttons_in_the_window() {
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            let (a, footer) = frame(&ctx, vec![], 200, false);
+            assert_eq!(a, Answer::Open);
+            assert!(footer.is_positive(), "{footer:?}");
+            // the buttons sit below the footer: footer + buttons must end above the window's lower edge
+            assert!(footer.bottom() + BUTTON_H < 720.0, "{footer:?}");
+        }
+    }
+
+    /// ↩ triggers the main action, Esc cancels; ↩ in a text field only confirms the field.
+    #[test]
+    fn enter_and_escape() {
+        let ctx = egui::Context::default();
+        frame(&ctx, vec![], 3, false);
+        assert_eq!(frame(&ctx, vec![key(egui::Key::Enter)], 3, false).0, Answer::Primary);
+        assert_eq!(frame(&ctx, vec![key(egui::Key::Escape)], 3, false).0, Answer::Cancel);
+        let ctx = egui::Context::default();
+        frame(&ctx, vec![], 3, true);
+        frame(&ctx, vec![], 3, true);
+        assert_eq!(frame(&ctx, vec![key(egui::Key::Enter)], 3, true).0, Answer::Open);
     }
 }

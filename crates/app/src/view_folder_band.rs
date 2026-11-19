@@ -1,9 +1,10 @@
 //! "Ordner ansehen" (⌘O): the band that says so in every view. While a folder outside the library is only being viewed
 //! (`Source::Browse`), a fixed band below the navigation names the folder, says that it is not in the library, offers
 //! the way in ("Zur Bibliothek hinzufügen …", the gold main button of the window then) and out ("Schließen"), holds the
-//! switch for ratings as sidecars and a "?" card that explains what is saved where. The band has the same height and
-//! place in the library grid, Develop and the darkroom, so switching views moves nothing. The left panel shows a quiet
-//! line of the same height above the library sources, so they no longer look like part of the viewed folder.
+//! switch for ratings as sidecars, "Aktualisieren" and a "?" card that explains what is saved where. The band has the
+//! same height and place in the library grid, Develop and the darkroom, so switching views moves nothing. The folder
+//! tree is the section "ANGESEHEN" of the left panel (view_folder_tree.rs); the band keeps a short sentence and, when
+//! the listing hit its limit, says so.
 //!
 //! Only presentation: what is stored (develop edits always as a sidecar next to the photo, ratings only with the
 //! switch) is decided elsewhere (`raw_app::save_settings`, `LibraryView::rate_images`).
@@ -16,7 +17,7 @@ use super::{view_folder_sidecars, LibraryView, Source, VIEW_SIDECARS_KEY};
 use crate::lr;
 
 /// Height of the band (and of the matching line in the left panel).
-pub const BAND_H: f32 = 32.0;
+pub const BAND_H: f32 = 28.0;
 /// Background: a cool dark blue-grey, clearly not the library (gold stays for the main button, amber for backups).
 const BAND: Color32 = Color32::from_rgb(0x17, 0x22, 0x2c);
 const BAND_TEXT: Color32 = Color32::from_rgb(0xd6, 0xe2, 0xec);
@@ -29,8 +30,11 @@ pub fn folder_name(dir: &Path) -> String {
 
 /// Main sentence of the band (German key, translated).
 pub fn band_text(dir: &Path) -> String {
-    crate::trf!("Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek", a = folder_name(dir))
+    crate::trf!("„{a}“ · nur angesehen, nicht in der Bibliothek", a = folder_name(dir))
 }
+
+/// Limit note of the band (amber).
+const LIMIT: Color32 = Color32::from_rgb(0xe0, 0xb0, 0x60);
 
 /// Is the band shown? Only while a folder is viewed, and not in the fullscreen preview (F) or the darkroom's
 /// "image only" mode (nothing but the photo there).
@@ -50,36 +54,44 @@ impl LibraryView {
     /// The band below the navigation while a folder is viewed (nothing otherwise). `ui` is the window's root: the band
     /// is a top panel over the whole width, drawn right after the navigation.
     pub fn view_folder_band(&mut self, ui: &mut egui::Ui, fullscreen: bool, image_only: bool) {
-        let Some(dir) = self.viewed_folder().map(Path::to_path_buf) else { return };
+        let Some(root) = self.viewed_folder().map(Path::to_path_buf) else { return };
         if !band_shown(true, fullscreen, image_only) {
             return;
         }
+        // the folder shown (a subfolder chosen in the tree) and whether its listing hit the limit
+        let dir = self.view_tree.as_ref().map(|t| t.shown_dir()).unwrap_or_else(|| root.clone());
+        let note = self.viewed_listing.as_ref().and_then(crate::view_folder::Listing::limit_note);
         let ctx = ui.ctx().clone();
-        let (mut add, mut close) = (false, false);
+        let (mut add, mut close, mut refresh) = (false, false, false);
         let frame = egui::Frame::new().fill(BAND).inner_margin(egui::Margin::symmetric(12, 0));
         egui::Panel::top("ansehen-band").show_separator_line(false).resizable(false).exact_size(BAND_H).frame(frame).show(ui, |ui| {
             let full = ui.available_rect_before_wrap();
-            // right first (it takes precedence): close, add (gold), the ratings switch; the sentence gets what is left
+            // right first (it takes precedence), from the edge inwards: close and refresh as small icons, the way in
+            // as an outlined button, the ratings option; the sentence gets what is left
             let mut right = ui.new_child(egui::UiBuilder::new().max_rect(full).layout(egui::Layout::right_to_left(egui::Align::Center)));
             {
                 let ui = &mut right;
-                ui.spacing_mut().item_spacing.x = 8.0;
-                let r = ui.add(egui::Button::new(egui::RichText::new(crate::tr("Schließen")).color(BAND_TEXT)).frame(false));
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let r = band_button(ui, crate::tr("Schließen"));
                 lr::hover_tip(ui, &r, crate::tr("Ordner nicht mehr ansehen – zurück zu „Alle Fotos“"));
                 close = r.clicked();
-                let r = lr::main_button(ui, crate::tr("Zur Bibliothek hinzufügen …"), true);
+                let r = band_icon(ui, lr::Icon::RotCw);
+                lr::tip_key(ui, &r, "Ordner neu einlesen", "refresh_folder");
+                refresh = r.clicked();
+                ui.add_space(10.0);
+                let r = band_button(ui, crate::tr("Zur Bibliothek hinzufügen …"));
                 lr::hover_tip(ui, &r, crate::tr("Öffnet den Import mit diesem Ordner"));
                 add = r.clicked();
-                ui.add_space(14.0);
-                let sw = ui.label(egui::RichText::new(crate::tr("Bewertungen als XMP")).color(BAND_DIM));
-                lr::hover_tip(ui, &sw, crate::tr("Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt."));
+                ui.add_space(18.0);
                 let mut on = view_folder_sidecars();
-                if crate::dialog::toggle(ui, &mut on) {
+                let r = band_check(ui, &mut on, crate::tr("Bewertungen als XMP"));
+                lr::hover_tip(ui, &r, crate::tr("Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt."));
+                if r.clicked() {
                     library::settings::set(VIEW_SIDECARS_KEY, serde_json::json!(on));
                 }
             }
             let used = right.min_rect();
-            let left_rect = egui::Rect::from_min_max(full.min, egui::pos2((used.left() - 16.0).max(full.left()), full.bottom()));
+            let left_rect = egui::Rect::from_min_max(full.min, egui::pos2((used.left() - 24.0).max(full.left()), full.bottom()));
             let mut left = ui.new_child(egui::UiBuilder::new().max_rect(left_rect).layout(egui::Layout::left_to_right(egui::Align::Center)));
             left.set_clip_rect(left_rect.intersect(ui.clip_rect()));
             {
@@ -93,27 +105,65 @@ impl LibraryView {
                 // shortened in a narrow window: the whole sentence and the path on hover
                 lr::hover_tip(ui, &r, &format!("{text}\n{}", dir.display()));
                 crate::help::info(ui, "ordner-ansehen", "Ordner ansehen", &crate::help::VIEW_FOLDER);
+                if let Some(note) = &note {
+                    ui.add_space(6.0);
+                    ui.add(egui::Label::new(egui::RichText::new(note).color(LIMIT)).truncate());
+                }
             }
         });
         if add {
-            self.import_folder(&ctx, dir);
+            self.import_folder(&ctx, root);
         } else if close {
             self.close_view_folder();
+        } else if refresh {
+            self.refresh_viewed(true);
         }
     }
+}
 
-    /// Top of the left panel while a folder is viewed: a quiet line of the band's height saying that the sources
-    /// below are the library, without the viewed folder. Nothing clickable.
-    pub(super) fn view_folder_sources_note(&self, ui: &mut egui::Ui) {
-        if self.viewed_folder().is_none() {
-            return;
-        }
-        egui::Panel::top("bib-links-ansehen").show_separator_line(true).resizable(false).exact_size(BAND_H).frame(egui::Frame::new()).show(ui, |ui| {
-            ui.horizontal_centered(|ui| {
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Deine Bibliothek – der angesehene Ordner gehört nicht dazu")).small().color(lr::TEXT_DIM)).wrap());
-            });
-        });
+/// Small square icon button of the band (no frame; a quiet fill on hover).
+fn band_icon(ui: &mut egui::Ui, icon: lr::Icon) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 20.0), egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 1.0, Color32::from_rgb(0x22, 0x31, 0x3d));
     }
+    let color = if resp.hovered() { BAND_TEXT } else { BAND_DIM };
+    lr::paint_icon(ui.painter(), egui::Rect::from_center_size(rect.center(), egui::vec2(12.0, 12.0)), icon, color);
+    resp
+}
+
+/// The way in: a small outlined button (the band's one call to action; gold stays for the real main buttons).
+fn band_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, BAND_TEXT);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(galley.size().x + 22.0, 20.0), egui::Sense::click());
+    let hot = resp.hovered();
+    if hot {
+        ui.painter().rect_filled(rect, 1.0, Color32::from_rgb(0x22, 0x31, 0x3d));
+    }
+    ui.painter().rect_stroke(rect, 1.0, egui::Stroke::new(1.0, if hot { Color32::from_rgb(0x8f, 0xa4, 0xb4) } else { Color32::from_rgb(0x4c, 0x62, 0x73) }), egui::StrokeKind::Inside);
+    ui.painter().galley(egui::pos2(rect.left() + 11.0, rect.center().y - galley.size().y / 2.0), galley, BAND_TEXT);
+    resp
+}
+
+/// Option with a small box and a label (the same box as the options of the left panel).
+fn band_check(ui: &mut egui::Ui, on: &mut bool, text: &str) -> egui::Response {
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, BAND_DIM);
+    let (rect, mut resp) = ui.allocate_exact_size(egui::vec2(16.0 + galley.size().x, 20.0), egui::Sense::click());
+    let hot = resp.hovered();
+    let square = egui::Rect::from_center_size(egui::pos2(rect.left() + 5.0, rect.center().y), egui::vec2(10.0, 10.0));
+    ui.painter().rect_stroke(square, 1.0, egui::Stroke::new(1.0, if hot { BAND_TEXT } else { BAND_DIM }), egui::StrokeKind::Inside);
+    if *on {
+        ui.painter().rect_filled(square.shrink(2.5), 0.0, BAND_TEXT);
+    }
+    let color = if hot { BAND_TEXT } else { BAND_DIM };
+    ui.painter().galley(egui::pos2(rect.left() + 16.0, rect.center().y - galley.size().y / 2.0), galley, color);
+    if resp.clicked() {
+        *on = !*on;
+        resp.mark_changed();
+    }
+    resp
 }
 
 #[cfg(test)]

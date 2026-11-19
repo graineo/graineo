@@ -15,7 +15,7 @@ a photo library and a darkroom with film and paper simulation.</p>
 
 Photos from different cameras in one library, with film and paper simulation for your own looks.
 
-- **Every RAW.** Sigma Foveon (Merrill, Quattro, classic X3F), Fujifilm X-Trans, and Bayer files from Canon (CR2, CR3), Nikon (NEF, NRW), Sony (ARW), Panasonic, Ricoh and others, plus DNG, JPEG, HEIC, TIFF and PNG. Nikon “High Efficiency” files (HE/HE★) are developed through macOS’s own RAW engine on a Mac where macOS supports them (reportedly from macOS 26.4); on Windows and Linux graineo shows the camera’s preview but does not develop them yet.
+- **Every RAW.** Sigma Foveon (Merrill, Quattro, classic X3F), Fujifilm X-Trans, and Bayer files from Canon (CR2, CR3), Nikon (NEF, NRW), Sony (ARW), Olympus/OM System (ORF), Pentax (PEF), Samsung (SRW), Panasonic, Ricoh and others, plus DNG, JPEG, HEIC, TIFF and PNG. Nikon “High Efficiency” files (HE/HE★) are developed through macOS’s own RAW engine on a Mac where macOS supports them (reportedly from macOS 26.4); on Windows and Linux graineo shows the camera’s preview but does not develop them yet.
 - **Library.** Browse tens of thousands of photos, filter by camera, lens, year, keyword, person or ranges such as aperture and ISO, and search by words or by meaning. Originals are never modified.
 - **Darkroom.** Choose a negative film and a print paper. The picture runs through a spectral model of film dyes, enlarger light and paper, with grain and halation. Test strip, dodge and burn, contact sheet, compare. Results can be saved as a film look and used in Develop.
 
@@ -80,10 +80,12 @@ graineo is a spare-time project; answers can take a while. Known issues and plan
 
 graineo stands on the work of others, most of all [spektrafilm](https://github.com/andreavolpato/spektrafilm) by Andrea Volpato (the spectral film model and the film data), [spektrafilm-rs](https://github.com/turbasvin/spektrafilm-rs), [X3Fuse](https://github.com/sagwaco/x3fuse) (reading Sigma X3F files), [rawler / dnglab](https://github.com/dnglab/dnglab) (decoding other RAW formats), [lensfun](https://lensfun.github.io/), [darktable](https://www.darktable.org/) and [RawTherapee](https://www.rawtherapee.com/) (demosaicing), [egui](https://github.com/emilk/egui) and [wgpu](https://wgpu.rs/). The full list with licenses is in [THIRD_PARTY.md](THIRD_PARTY.md).
 
+This product includes DNG technology under license by Adobe Systems Incorporated.
+
 The photographs in the screenshots are the author's own. The help cards in the app also use free RAW files from [Signature Edits](https://www.signatureedits.com/free-raw-photos/); see [THIRD_PARTY.md](THIRD_PARTY.md).
 
 ## License
 
 graineo is free software under the [GPL-3.0-only](LICENSE). Bundled third-party components keep their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md). What changed: [CHANGELOG.md](CHANGELOG.md).
 
-Sigma, Foveon, Fujifilm, X-Trans, Canon, Sony, Nikon, Panasonic, Ricoh, Kodak, Ilford, Adobe, Lightroom and other product names are trademarks of their owners. They are used only to describe the file formats the app reads, the catalogs it can import and the films it simulates. graineo is not affiliated with or endorsed by any of them.
+Sigma, Foveon, Fujifilm, X-Trans, Canon, Sony, Nikon, Olympus, OM System, Pentax, Samsung, Panasonic, Ricoh, Kodak, Ilford, Adobe, Lightroom and other product names are trademarks of their owners. They are used only to describe the file formats the app reads, the catalogs it can import and the films it simulates. graineo is not affiliated with or endorsed by any of them.

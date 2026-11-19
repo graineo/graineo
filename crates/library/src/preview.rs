@@ -1042,6 +1042,58 @@ fn nef_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
     None
 }
 
+/// ORF (Olympus, OM System): the preview JPEG lies in the maker note (CameraSettings 0x2020, PreviewImageStart 0x0101
+/// and PreviewImageLength 0x0102), which the RAW reader does not offer, so ORF thumbnails stayed empty. The file starts
+/// with its own TIFF magic ("IIRO", "IIRS", "MMOR"). Maker note headers: "OLYMPUS\0II" and "OM SYSTEM\0\0\0II" (IFD
+/// after 12 or 16 bytes, offsets relative to the maker note), old "OLYMP\0" (IFD after 8 bytes, offsets relative to the
+/// TIFF header). The preview is returned even if it is smaller than `min`: there is no larger embedded image.
+fn orf_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let (header, _) = read_header(path, 1 << 20)?;
+    let le = match header.get(0..4)? {
+        b"IIRO" | b"IIRS" | b"II*\0" => true,
+        b"MMOR" | b"MM\0*" => false,
+        _ => return None,
+    };
+    let t = Tiff { b: &header, le };
+    // entry of an IFD: position of its 4-byte value field (offset or inline value), for any type
+    let field = |t: &Tiff, ifd: usize, tag: u16| -> Option<usize> { (0..t.u16_(ifd)? as usize).map(|i| ifd + 2 + i * 12).find(|&e| t.u16_(e) == Some(tag)).map(|e| e + 8) };
+    let ifd0 = t.u32_(4)? as usize;
+    let exif = t.number(ifd0, 0x8769)? as usize;
+    let note = t.u32_(field(&t, exif, 0x927C)?)? as usize;
+    let head = header.get(note..note + 16)?;
+    let (ifd, base) = if head.starts_with(b"OM SYSTEM") {
+        (note + 16, note)
+    } else if head.starts_with(b"OLYMPUS") {
+        (note + 12, note)
+    } else if head.starts_with(b"OLYMP") {
+        (note + 8, 0)
+    } else {
+        return None;
+    };
+    // byte order of the maker note: its own marker in the new headers, otherwise that of the file
+    let le_note = match head.get(if base == 0 { 0..0 } else { ifd - note - 4..ifd - note - 2 }) {
+        Some(b"II") => true,
+        Some(b"MM") => false,
+        _ => le,
+    };
+    let n = Tiff { b: &header, le: le_note };
+    let settings = base + n.u32_(field(&n, ifd, 0x2020)?)? as usize;
+    if n.number(settings, 0x0100) == Some(0) {
+        return None;
+    }
+    let (start, len) = (base as u64 + n.number(settings, 0x0101)? as u64, n.number(settings, 0x0102)? as usize);
+    if len < 1000 || len > 40 << 20 {
+        return None;
+    }
+    let mut f = std::fs::File::open(path).ok()?;
+    f.seek(SeekFrom::Start(start)).ok()?;
+    let mut jpeg = vec![0u8; len];
+    f.read_exact(&mut jpeg).ok()?;
+    let img = jpeg_downscaled(&jpeg, min)?;
+    Some(tiff_finish(&t, &header, ifd0, img))
+}
+
 /// CR3 without the RAW reader: preview JPEG (PRVW), orientation, camera and capture time are all
 /// in the first scant megabyte (CMT1 = IFD0, CMT2 = EXIF). The RAW reader, in contrast, maps the whole
 /// file (~25 MB) into memory and lets the system read ahead – on a memory card
@@ -1063,30 +1115,33 @@ fn cr3_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
 /// Embedded preview of a RAW via rawler (only the header and preview JPEG are read,
 /// the sensor data is not decoded). `min`: desired minimum size.
 fn raw_preview(path: &Path, min: u32) -> Result<(RgbImage, Meta), String> {
-    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("cr3")) {
-        if let Some(r) = cr3_fast(path, min) {
-            return Ok(r);
-        }
-    }
-    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("dng")) {
-        if let Some(r) = dng_fast(path, min) {
-            return Ok(r);
-        }
-    }
-    if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("nef") || e.eq_ignore_ascii_case("nrw")) {
-        if let Some(r) = nef_fast(path, min) {
-            return Ok(r);
-        }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let fast = match crate::extension_format(ext) {
+        Some("CR3") => cr3_fast(path, min),
+        Some("DNG") => dng_fast(path, min),
+        Some("NEF") => nef_fast(path, min),
+        // ORF and the ORI frame of a high-resolution shot
+        Some("ORF") => orf_fast(path, min),
+        // other TIFF-based RAWs whose JPEG the RAW reader does not offer (Samsung SRW, Hasselblad 3FR, Mamiya/Leaf
+        // MOS, Epson ERF …): the same search for a JPEG in IFD0 and its SubIFDs as for NEF
+        Some("SRW" | "3FR" | "MOS" | "ERF" | "DCR" | "KDC" | "MEF" | "IIQ" | "PEF" | "ARW") => nef_fast(path, min),
+        _ => None,
+    };
+    if let Some(r) = fast {
+        return Ok(r);
     }
     // The embedded preview almost always lies in the first megabyte or the first few (CR2, ARW, NEF,
     // RAF, DNG …). Read only this start first; the whole file only if the preview is not completely
     // there. If a reference points behind the part read, the reader reports an error instead of partial data.
-    for limit in [1usize << 20, 6 << 20] {
+    // CRW (CIFF) keeps its directory at the end of the file: the start alone makes the RAW reader panic (caught, but
+    // logged as a crash each time), so it reads the whole file right away
+    let limits: &[usize] = if crate::extension_format(ext) == Some("CRW") { &[] } else { &[1 << 20, 6 << 20] };
+    for &limit in limits {
         match read_header(path, limit) {
             Some((header, whole)) => {
                 let src = rawler::rawsource::RawSource::new_from_shared_vec(std::sync::Arc::new(header)).with_path(path);
                 if let Ok((img, m)) = from_source(&src, min) {
-                    if whole || img.width().max(img.height()) >= min {
+                    if img.width().max(img.height()) >= min || (whole && img.width().max(img.height()) * 2 >= min) {
                         if std::env::var_os("GRAINEO_PREVIEW_LOG").is_some() {
                             eprintln!("preview from the first {} MB: {}", limit >> 20, path.display());
                         }
@@ -1104,7 +1159,58 @@ fn raw_preview(path: &Path, min: u32) -> Result<(RgbImage, Meta), String> {
         eprintln!("preview from the whole file: {}", path.display());
     }
     let src = rawler::rawsource::RawSource::new(path).map_err(|e| e.to_string())?;
-    from_source(&src, min)
+    // no embedded preview at all (CRW, cinema DNG, some compact cameras) or only a tiny one for a large level (Leica
+    // M8, Hasselblad 3FR: 320 px; PEF: 720 px): develop the sensor data roughly
+    match from_source(&src, min) {
+        Ok((img, m)) if img.width().max(img.height()) * 2 >= min => Ok((img, m)),
+        Ok((img, m)) => Ok(decoded_preview(&src, min).unwrap_or((img, m))),
+        Err(e) => decoded_preview(&src, min).map_err(|d| format!("{e}; {d}")),
+    }
+}
+
+/// Preview from the sensor data for RAWs without an embedded preview: the decoder's own simple development (scaling,
+/// demosaic, white balance, camera matrix, crop) in linear sRGB, +1 EV as graineo's standard development starts, sRGB
+/// curve, downscaled to `min`. Rough, but the tile is not empty; opening the photo develops it properly.
+fn decoded_preview(src: &rawler::rawsource::RawSource, min: u32) -> Result<(RgbImage, Meta), String> {
+    use rawler::decoders::RawDecodeParams;
+    use rawler::imgop::develop::{Intermediate, ProcessingStep, RawDevelop};
+    let run = || -> Result<(RgbImage, Meta), String> {
+        let dec = rawler::get_decoder(src).map_err(|e| e.to_string())?;
+        let p = RawDecodeParams::default();
+        let raw = dec.raw_image(src, &p, false).map_err(|e| e.to_string())?;
+        let meta = dec.raw_metadata(src, &p).ok();
+        let steps = [
+            ProcessingStep::Rescale,
+            ProcessingStep::Demosaic,
+            ProcessingStep::FujiRotate,
+            ProcessingStep::CropActiveArea,
+            ProcessingStep::WhiteBalance,
+            ProcessingStep::Calibrate,
+            ProcessingStep::CropDefault,
+        ];
+        let (w, h, px): (usize, usize, Vec<[f32; 3]>) = match RawDevelop::new_with(&steps).develop_intermediate(&raw).map_err(|e| e.to_string())? {
+            Intermediate::ThreeColor(p) => (p.dim().w, p.dim().h, p.data),
+            Intermediate::Monochrome(p) => (p.dim().w, p.dim().h, p.data.iter().map(|&v| [v; 3]).collect()),
+            Intermediate::FourColor(_) => return Err("vier Farben".into()),
+        };
+        let encode = |v: f32| {
+            let v = (v * 2.0).clamp(0.0, 1.0);
+            let e = if v <= 0.003_130_8 { 12.92 * v } else { 1.055 * v.powf(1.0 / 2.4) - 0.055 };
+            (e * 255.0 + 0.5) as u8
+        };
+        let rgb: Vec<u8> = px.iter().flat_map(|p| [encode(p[0]), encode(p[1]), encode(p[2])]).collect();
+        let img = RgbImage::from_raw(w as u32, h as u32, rgb).ok_or("Bildgröße passt nicht")?;
+        let img = downscale(img, min);
+        let o = meta.as_ref().and_then(|m| m.exif.orientation).unwrap_or(1);
+        let m = Meta {
+            width: None,
+            height: None,
+            capture: meta.as_ref().and_then(|m| m.exif.date_time_original.clone().or(m.exif.create_date.clone())).and_then(|d| crate_exif_date(&d)),
+            camera: exif_model(src).or_else(|| meta.as_ref().map(|m| if m.model.starts_with(&m.make) { m.model.clone() } else { format!("{} {}", m.make, m.model) })).filter(|s| !s.trim().is_empty()),
+        };
+        Ok((orient(img, o), m))
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).map_err(|_| "Leser abgestürzt".to_string())?
 }
 
 /// At most `limit` bytes from the start of the file; `true` if that is already the whole file.
@@ -1159,15 +1265,7 @@ fn from_source(src: &rawler::rawsource::RawSource, min: u32) -> Result<(RgbImage
 }
 
 fn crate_exif_date(s: &str) -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        crate::imageio::exif_date(s)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = s;
-        None
-    }
+    crate::imageio_common::exif_date(s)
 }
 
 /// Get the image from the file with at most `max` pixels edge length (upright, sRGB).
@@ -1212,7 +1310,8 @@ pub fn load(path: &Path, format: &str, max: u32) -> Result<(RgbImage, Meta), Str
             #[cfg(not(target_os = "macos"))]
             {
                 let img = image::open(path).map_err(|e| e.to_string())?.to_rgb8();
-                Ok((downscale(img, max), Meta::default()))
+                let m = crate::imageio::properties(path).map(|e| Meta { width: e.width, height: e.height, capture: e.capture, camera: e.camera }).unwrap_or_default();
+                Ok((downscale(img, max), m))
             }
         }
     }
@@ -2012,5 +2111,72 @@ mod nef_tests {
             n += 1;
         }
         assert!(n > 0, "no NEF/NRW in {}", dir.display());
+    }
+
+    /// A folder of RAW sample files of every kind (`GRAINEO_TEST_FORMATS_DIR`, e.g. the CC0 files of raw.pixls.us used
+    /// for docs/formats, also in subfolders; skipped without it): every file the list knows as RAW gets a thumbnail,
+    /// also those without an embedded preview (CRW, SRW, MRW, IIQ, cinema DNG …), and a large level that is not a
+    /// tiny embedded preview blown up. Files the decoder cannot read at all (GoPro GPR) are not in the list.
+    #[test]
+    fn every_raw_format_gets_a_preview() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_FORMATS_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_FORMATS_DIR not set, skipped");
+            return;
+        };
+        let mut dirs = vec![dir.clone()];
+        let mut n = 0;
+        while let Some(d) = dirs.pop() {
+            for p in std::fs::read_dir(&d).unwrap().filter_map(|e| e.ok().map(|e| e.path())) {
+                if p.is_dir() {
+                    dirs.push(p);
+                    continue;
+                }
+                let Some(f) = crate::format_from_extension(&p.to_string_lossy()) else { continue };
+                if !crate::is_raw(f) || f == "X3F" {
+                    continue;
+                }
+                let (small, _) = raw_preview(&p, 400).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+                assert!(small.width().max(small.height()) >= 200, "{}: {}x{}", p.display(), small.width(), small.height());
+                let (large, _) = raw_preview(&p, 2560).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+                assert!(large.width().max(large.height()) * 2 >= 2560 || large.width().max(large.height()) >= 900, "{}: {}x{}", p.display(), large.width(), large.height());
+                n += 1;
+            }
+        }
+        assert!(n > 0, "no RAW in {}", dir.display());
+    }
+
+    /// ORF sample files (`GRAINEO_TEST_ORF_DIR`, e.g. the CC0 files of raw.pixls.us, also in subfolders; skipped
+    /// without it): the RAW reader offers no preview for ORF, the maker-note reader finds one with the sensor's
+    /// aspect ratio and the camera name (files without one in the maker note get a preview from the sensor data).
+    #[test]
+    fn orf_fast_finds_the_preview() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_ORF_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_ORF_DIR not set, skipped");
+            return;
+        };
+        let mut files = Vec::new();
+        let mut dirs = vec![dir.clone()];
+        while let Some(d) = dirs.pop() {
+            for p in std::fs::read_dir(&d).unwrap().filter_map(|e| e.ok().map(|e| e.path())) {
+                if p.is_dir() {
+                    dirs.push(p);
+                } else if p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("orf")) {
+                    files.push(p);
+                }
+            }
+        }
+        assert!(!files.is_empty(), "no ORF in {}", dir.display());
+        for p in files {
+            // a few early compacts (C-7070) store no preview in the maker note: the tile comes from the sensor data
+            let Some((img, meta)) = orf_fast(&p, 400) else {
+                let (img, _) = raw_preview(&p, 400).unwrap_or_else(|e| panic!("no preview: {}: {e}", p.display()));
+                assert!(img.width().max(img.height()) >= 400, "{}", p.display());
+                continue;
+            };
+            let ratio = img.width().max(img.height()) as f32 / img.width().min(img.height()) as f32;
+            assert!(img.width().max(img.height()) >= 400 && (ratio - 4.0 / 3.0).abs() < 0.02, "{}: {}×{}", p.display(), img.width(), img.height());
+            assert!(meta.camera.is_some(), "{}: no camera", p.display());
+            assert!(raw_preview(&p, 400).is_ok(), "{}", p.display());
+        }
     }
 }

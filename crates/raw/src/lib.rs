@@ -17,6 +17,7 @@ pub mod ai_denoise;
 pub mod picture_style;
 pub mod focus;
 pub mod development;
+pub mod dng_map;
 pub mod color;
 pub mod film_profile;
 pub mod fuji;
@@ -82,6 +83,11 @@ fn rl<E: std::fmt::Display>(e: E) -> Error {
 /// (developer text); the app shows its own translated message for it.
 pub const NIKON_HE: &str = "Nikon High Efficiency (HE/HE*): this NEF compression is not decoded yet";
 
+/// Text of the error for sensor data the decoder returned but that cannot be right: most values far above the white
+/// level (seen with the 3-channel lossless-JPEG DNG of the Galaxy S23 Ultra, which came out as stripes). The app opens
+/// such files with the system engine instead, as for [`NIKON_HE`].
+pub const DECODE_IMPLAUSIBLE: &str = "decoded sensor data is implausible (values far above the white level)";
+
 /// rawler error → our error; known unsupported cases become [`Error::Unsupported`] with a plain text.
 fn classify(s: String) -> Error {
     if is_nikon_he_refusal(&s) {
@@ -98,6 +104,49 @@ fn classify(s: String) -> Error {
 fn is_nikon_he_refusal(s: &str) -> bool {
     let flat: String = s.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_lowercase()).collect();
     flat.contains("nefcompression") && flat.contains("higheffic")
+}
+
+/// More than a quarter of the values (sampled) above twice the white level: the decoder misread the data. Real
+/// files clip at the white level; a few hot values or a linear DNG with headroom stay far below this share.
+fn implausible(data: &[f32], white: &[f32]) -> bool {
+    let w = white.iter().copied().fold(0.0f32, f32::max);
+    if data.is_empty() || w <= 0.0 {
+        return false;
+    }
+    let step = (data.len() / 100_000).max(1);
+    let (n, over) = data.iter().step_by(step).fold((0usize, 0usize), |(n, o), &v| (n + 1, o + usize::from(v > 2.0 * w)));
+    over * 4 > n
+}
+
+/// DNG OpcodeList2 value maps (MapTable, MapPolynomial; e.g. the curve of a lossy DNG), which the decoder does not
+/// run: applied to the raw values with the black and white levels of [`RawFile::linear`], see [`dng_map`].
+fn apply_value_maps(dec: &dyn Decoder, image: &mut RawImage, info: &Info) {
+    let Some(ifd) = dec.ifd(WellKnownIFD::VirtualDngRawTags).ok().flatten() else { return };
+    let Some(entry) = ifd.get_entry(DngTag::OpcodeList2) else { return };
+    let bytes = match &entry.value {
+        rawler::formats::tiff::Value::Undefined(b) | rawler::formats::tiff::Value::Byte(b) => b,
+        _ => return,
+    };
+    let maps = dng_map::parse(bytes);
+    if maps.is_empty() {
+        return;
+    }
+    let (w, h, cpp) = (info.width, info.height, info.channels.max(1));
+    let mut data = image.data.as_f32().into_owned();
+    if data.len() != w * h * cpp {
+        return;
+    }
+    let (bw, bh, bc) = info.black_pattern;
+    let black = |x: usize, y: usize, c: usize| -> f32 {
+        if info.black.is_empty() {
+            return 0.0;
+        }
+        let idx = ((y % bh.max(1)) * bw.max(1) + x % bw.max(1)) * bc.max(1) + c.min(bc.max(1) - 1);
+        info.black.get(idx).copied().unwrap_or(info.black[0])
+    };
+    let white = |c: usize| -> f32 { info.white.get(c).or(info.white.first()).copied().unwrap_or(65535.0) };
+    dng_map::apply(&maps, &mut data, w, h, cpp, &black, &white);
+    image.data = rawler::rawimage::RawImageData::Float(data);
 }
 
 /// Can our decoder read this file? Reads the header only (no pixel data); the error says why not (e.g. [`NIKON_HE`]).
@@ -234,6 +283,12 @@ impl RawFile {
             .map_err(rl)?;
         let meta = decoder.raw_metadata(&source, &params).ok();
         let mut info = make_info(&*decoder, &image, meta.as_ref());
+        // integer data only: floating-point DNGs (HDR merges) may hold values above the white level on purpose
+        if matches!(image.data, rawler::rawimage::RawImageData::Integer(_)) && implausible(&image.data.as_f32(), &info.white) {
+            return Err(Error::Unsupported(DECODE_IMPLAUSIBLE.into()));
+        }
+        let mut image = image;
+        apply_value_maps(&*decoder, &mut image, &info);
         if info.format == "RAF" {
             info.fuji_dr = fuji::dynamic_range(path);
         }
@@ -733,6 +788,24 @@ fn make_info(dec: &dyn Decoder, img: &RawImage, meta: Option<&rawler::decoders::
         .map(|e| e.force_usize(0))
         .unwrap_or(img.bps);
     let analog_balance = dng_tag(DngTag::AnalogBalance).filter(|v| v.len() >= 3).map(|v| [v[0], v[1], v[2]]);
+    // monochrome sensor (Leica Monochrom, Pentax K-3 III Monochrome) without a color matrix: the gray values count as
+    // linear sRGB with a neutral white balance, as finished images do. Without this the development assumed an
+    // as-shot white of 5500 K, adapted it to the output white and gave the gray image a blue cast.
+    let (wb, matrix, calibration) = if sensor == Sensor::Mono && matrix.is_none() {
+        let xyz_srgb = color::inv(&color::srgb_to_xyz_d65()).unwrap_or(color::diag([1.0; 3]));
+        (Some([1.0; 3]), Some(("D65".to_string(), xyz_srgb)), vec![color::Calibration { kelvin: 6504.0, color: xyz_srgb, forward: None }])
+    } else {
+        // no white balance in the file (Kodak DCR, CHDK files of Canon compacts …): the camera's response to D65
+        // from its color matrix, as daylight white balance. Without it the raw neutral 1:1:1 counted as the shot's
+        // white and the image came out strongly green or yellow (white balance far beyond 20000 K).
+        let wb = wb.or_else(|| {
+            let (_, m) = matrix.as_ref()?;
+            let d65 = [0.950_47f32, 1.0, 1.088_83];
+            let cam: [f32; 3] = std::array::from_fn(|r| m[r][0] * d65[0] + m[r][1] * d65[1] + m[r][2] * d65[2]);
+            (cam.iter().all(|&v| v > 1e-4)).then(|| [cam[1] / cam[0], 1.0, cam[1] / cam[2]])
+        });
+        (wb, matrix, calibration)
+    };
     Info {
         format,
         maker: img.clean_make.clone(),

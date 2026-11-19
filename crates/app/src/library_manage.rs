@@ -177,7 +177,8 @@ impl LibraryView {
 
     /// "New collection …" (⌘N, "+" at SAMMLUNGEN, menu): kind 0 collection, 1 set, 2 smart collection; `parent`: in this set.
     pub fn ask_new_collection(&mut self, kind: i64, parent: Option<i64>) {
-        let selected = if self.nothing_selected { Vec::new() } else { self.target() };
+        // photos of a viewed folder cannot go into a collection (no library entry): then it starts empty
+        let selected = if self.nothing_selected || self.needs_library(&self.target()) { Vec::new() } else { self.target() };
         let with_selection = kind == manage::COLLECTION && !selected.is_empty();
         let name = match kind {
             manage::SET => crate::tr("Neuer Sammlungssatz"),
@@ -636,6 +637,11 @@ impl LibraryView {
 
     /// Add dragged photos to a collection (or the quick collection).
     pub(super) fn drop_on_collection(&mut self, id: i64, images: Vec<i64>) {
+        // photos of a viewed folder have no library entry: refused with the reason (before: database error dialog)
+        if let Some(t) = self.refuse_viewed(&images) {
+            self.manage_message = Some(t);
+            return;
+        }
         let name = self.collections.iter().find(|c| c.id == id).map(|c| c.name.clone()).unwrap_or_default();
         self.in_background(
             move |db| manage::add_to_collection(db, id, &images),
@@ -658,6 +664,11 @@ impl LibraryView {
     }
 
     pub(super) fn drop_on_quick(&mut self, images: Vec<i64>) -> String {
+        // photos of a viewed folder have no library entry: refused with the reason
+        let images: Vec<i64> = images.into_iter().filter(|&b| self.quick_possible(b)).collect();
+        if images.is_empty() {
+            return crate::tr(super::QUICK_REFUSED).into();
+        }
         let new: Vec<i64> = images.into_iter().filter(|b| !self.quick.contains(b)).collect();
         if new.is_empty() {
             return crate::tr("Schon in der Schnellsammlung").into();

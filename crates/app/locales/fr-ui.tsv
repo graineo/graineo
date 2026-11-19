@@ -4937,7 +4937,6 @@ Feineinstellung	Réglage fin
 + hellt Schatten auf, Lichter bleiben · − dunkelt Lichter ab, Schatten bleiben	+ éclaircit les ombres, les hautes lumières restent · − assombrit les hautes lumières, les ombres restent
 Der Ordner ist nicht lesbar (keine Berechtigung oder Laufwerk nicht verbunden).	Le dossier est illisible (pas d'autorisation ou disque non connecté).
 Keine Fotos oder Videos. Gefunden: {a} andere Dateien in diesem Ordner und {b} Unterordnern, keine in einem Format, das graineo zeigt.	Aucune photo ni vidéo. {a} autres fichiers trouvés dans ce dossier et ses {b} sous-dossiers, aucun dans un format pris en charge par graineo.
-Keine Fotos oder Videos – auch nicht in den {a} Unterordnern (bis {b} Ebenen tief).	Aucune photo ni vidéo – pas non plus dans les {a} sous-dossiers (jusqu'à {b} niveaux).
 Der Ordner ist leer.	Le dossier est vide.
 Keine Fotos in diesem Ordner	Aucune photo dans ce dossier
 Bibliothek wiederherstellen?	Restaurer la bibliothèque ?
@@ -6399,13 +6398,11 @@ Bearbeitung aus neuerer Version – geschützt	retouche d'une version plus réce
 Bearbeitung aus einer neueren Version	Retouche d'une version plus récente
 Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	Cette retouche provient d'une version plus récente de graineo et ne sera pas écrasée. Cette version ne peut pas la lire et affiche les valeurs initiales ; les modifications de cette photo ne sont pas enregistrées, les étoiles et marques le sont. La version plus récente rouvre la retouche.
 Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	Ce dossier est seulement ouvert, il n’est pas dans la bibliothèque. graineo ne modifie jamais les photos elles-mêmes.
-### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### Ce qui est enregistré\n• **Développer** – chaque modification des curseurs (copies virtuelles comprises) est enregistrée dans un fichier annexe NOM.xmp à côté de la photo\n• **Noter** (étoiles, marquage, étiquette) – verrouillé tant que « Notes en XMP » est désactivé ; activé, les notes sont aussi écrites en XMP à côté des photos\n\n### Ce qui fonctionne ici\n• Afficher, développer, exporter\n• Filtrer par étoiles, marquage et étiquette (valeurs des XMP existants)\n• Rechercher par nom de fichier\n\n### Seulement après l’ajout\nFiltres par colonne (appareil, objectif, date …), recherche par contenu, mots-clés et lieux, collections, personnes, doublons et séries. À l’ajout, la bibliothèque reprend les notes et les développements des XMP.\n\n### Quitter\n**Fermer** dans le bandeau, ou choisir une source à gauche, par ex. « Toutes les photos ». **Ajouter à la bibliothèque…** ouvre l’importation avec ce dossier.
-Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	Vous consultez le dossier « {a} » – il n’est pas dans la bibliothèque
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Ordnerbaum\nLinks unter „Angesehen“ zeigt ein Klick auf einen Ordner seine Fotos; „Unterordner einbeziehen“ aus: nur die Fotos direkt darin. **Aktualisieren** liest den Ordner neu, leise auch, wenn du zu graineo zurückkehrst.\n\n### Verlassen\n**Schließen** im Streifen oder per Rechtsklick auf den Ordner links. Eine andere Quelle zeigt die Bibliothek; der Ordner bleibt unter „Angesehen“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### Ce qui est enregistré\n• **Développer** – chaque modification des curseurs (copies virtuelles comprises) est enregistrée dans un fichier annexe NOM.xmp à côté de la photo\n• **Noter** (étoiles, marquage, étiquette) – verrouillé tant que « Notes en XMP » est désactivé ; activé, les notes sont aussi écrites en XMP à côté des photos\n\n### Ce qui fonctionne ici\n• Afficher, développer, exporter\n• Filtrer par étoiles, marquage et étiquette (valeurs des XMP existants)\n• Rechercher par nom de fichier\n\n### Seulement après l’ajout\nFiltres par colonne (appareil, objectif, date …), recherche par contenu, mots-clés et lieux, collections, personnes, doublons et séries. À l’ajout, la bibliothèque reprend les notes et les développements des XMP.\n\n### Arborescence\nÀ gauche, sous « Consulté », un clic sur un dossier affiche ses photos ; « Inclure les sous-dossiers » désactivé : seulement les photos directement dedans. **Mettre à jour** relit le dossier, et discrètement quand vous revenez dans graineo.\n\n### Quitter\n**Fermer** dans le bandeau ou clic droit sur le dossier à gauche. Une autre source affiche la bibliothèque ; le dossier reste sous « Consulté ». **Ajouter à la bibliothèque…** ouvre l’importation avec ce dossier.
 Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	Ne plus consulter le dossier – retour à « Toutes les photos »
 Öffnet den Import mit diesem Ordner	Ouvre l’importation avec ce dossier
 Bewertungen als XMP	Notes en XMP
 Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	Écrire étoiles, marquages et étiquettes en fichiers annexes (XMP) à côté des photos. Désactivé : la notation est verrouillée ici.
-Deine Bibliothek – der angesehene Ordner gehört nicht dazu	Votre bibliothèque – le dossier consulté n’en fait pas partie
 Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	Pour noter, ajoutez à la bibliothèque ou activez « Notes en XMP » dans le bandeau en haut
 EIGENER LOOK	LOOK PERSONNEL
 Eigener Look	Look personnel
@@ -6494,3 +6491,99 @@ Toleranz (%)	Tolérance (%)
 Wie ähnlich die Farbe sein muss	Similarité de couleur requise
 Erst „Auto-Maske“ einschalten	Activez d’abord « Masque auto »
 Pinsel malt · ⌥ radiert · ⇧-Klick Linie	Le pinceau peint · ⌥ efface · ⇧-clic ligne
+Angesehen	Consulté
+Ordner neu einlesen	Relire le dossier
+angesehenen Ordner neu einlesen	relire le dossier consulté
+Keine Fotos direkt in diesem Ordner. „Unterordner einbeziehen“ zeigt auch die {a} Unterordner.	Aucune photo directement dans ce dossier. « Inclure les sous-dossiers » affiche aussi les {a} sous-dossiers.
+Keine Fotos oder Videos – auch nicht in den {a} Unterordnern.	Aucune photo ni vidéo – ni dans les {a} sous-dossiers.
+Nur die ersten {a} Fotos gezeigt	Seules les {a} premières photos sont affichées
+Nur die ersten {a} Unterordner durchsucht	Seuls les {a} premiers sous-dossiers ont été parcourus
+„{a}“ · nur angesehen, nicht in der Bibliothek	« {a} » · consulté seulement, pas dans la bibliothèque
+Ordner aktualisiert – keine Änderung	Dossier actualisé – aucun changement
+{a} neu	{a} nouvelles
+{a} neu, {b} entfernt	{a} nouvelles, {b} retirées
+Unterordner einbeziehen	Inclure les sous-dossiers
+Aus: nur die Fotos direkt im gewählten Ordner	Désactivé : seulement les photos directement dans le dossier choisi
+nicht lesbar	illisible
+Erst zur Bibliothek hinzufügen	D’abord l’ajouter à la bibliothèque
+Explorer	Explorateur
+Im Explorer-Menü anbieten	Proposer dans le menu de l’Explorateur
+Rechtsklick auf Ordner, Laufwerke und Fotos: „Mit graineo ansehen“. Unter Windows 11 bei „Weitere Optionen anzeigen“.	Clic droit sur les dossiers, lecteurs et photos : « Afficher avec graineo ». Sous Windows 11, dans « Afficher plus d’options ».
+Mit graineo ansehen	Afficher avec graineo
+Die Dateien (mit XMP daneben) kommen in den Papierkorb.	Les fichiers (avec le XMP à côté) sont placés dans la corbeille.
+Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen	Lecteur réseau sans corbeille – d’abord l’ajouter à la bibliothèque
+Video	Vidéo
+Infozeilen	Lignes d’info
+Zeile 1	Ligne 1
+Zeile 2	Ligne 2
+Aufnahmedatum	Date de prise de vue
+Pixelmaße	Taille en pixels
+Dateigröße	Taille du fichier
+Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.	Ici : afficher, développer, exporter et imprimer. Le reste, seulement dans la bibliothèque.
+Ordner schließen	Fermer le dossier
+Keine automatische Installation auf diesem System	Pas d’installation automatique sur ce système
+Apple RAW {a} · Rückfall	Apple RAW {a} · repli
+entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)	développé avec Apple RAW {a} (décodage de graineo inutilisable)
+graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	Le décodage de graineo ne donne pas d'image utilisable pour ce fichier (valeurs bien au-dessus du point blanc). macOS décode cette photo (Apple RAW {a}) ; couleur, tons, looks, film et masques sont calculés par graineo. La version est épinglée pour cette photo ; la changer dans le panneau Capteur sous « Pipeline ».
+Automatik · Rückfall	Automatique · repli
+festgehalten · Rückfall	épinglé · repli
+nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild	impossible : le décodage de graineo ne donne pas d'image utilisable pour ce fichier
+Ordner wählen und exportieren …	Choisir le dossier et exporter …
+Vorhandene Dateien überschreiben?	Écraser les fichiers existants ?
+Dateien gleichen Namens im Zielordner werden durch den Export ersetzt ({n} Bilder). Die alten kommen in den Papierkorb.	Les fichiers du même nom dans le dossier cible sont remplacés ({n} images). Les anciens vont à la corbeille.
+Das Original eines Fotos wird nie ersetzt.	L’original d’une photo n’est jamais remplacé.
+Überschreiben	Écraser
+Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14	Année/jour de prise de vue, p. ex. 2026/2026-07-14
+Name des Ordners, in dem das Original liegt	Nom du dossier de l’original
+Zurück zum Originalnamen	Revenir au nom d’origine
+Originalname	Nom d’origine
+Text	Texte
+Eigener Text: im Feld überschreiben	Texte libre : à remplacer dans le champ
+Nummer	Numéro
+Titel aus der Bibliothek, falls vorhanden	Titre de la bibliothèque, s’il existe
+„_mono“ bei Schwarzweiß	« _mono » en noir et blanc
+Stellen	Chiffres
+Start	Début
+Nummer anhängen	Ajouter un numéro
+Name-2.jpg; nichts wird überschrieben	Nom-2.jpg ; rien n’est écrasé
+Ersetzt Dateien gleichen Namens (alte in den Papierkorb); wird vorher gefragt	Remplace les fichiers du même nom (anciens à la corbeille) ; demande d’abord
+Überspringen	Ignorer
+Fotos, deren Datei es schon gibt, nicht exportieren	Ne pas exporter les photos dont le fichier existe déjà
+→ {f} · {n}	→ {f} · {n}
+→ keine Datei	→ aucun fichier
+{n} gleiche Namen → bekommen eine Nummer	{n} noms identiques → reçoivent un numéro
+{n} gibt es schon → bekommen eine Nummer	{n} existent déjà → reçoivent un numéro
+{n} gibt es schon → werden ersetzt	{n} existent déjà → seront remplacés
+{n} gibt es schon → werden übersprungen	{n} existent déjà → seront ignorés
+„{a}“ gibt es schon.	« {a} » existe déjà.
+Name der Vorlage	Nom du modèle
+– keine –	– aucun –
+Noch keine Vorlagen	Pas encore de modèles
+Sichern …	Enregistrer …
+Name, Ordnerregel, Format und Größe als Vorlage sichern	Enregistrer nom, règle de dossier, format et taille comme modèle
+Vorlage in den Papierkorb legen	Mettre le modèle à la corbeille
+{a} übersprungen: gibt es schon	{a} ignoré : existe déjà
+fertig – {n} gespeichert, {b} übersprungen (gibt es schon) in {a}	terminé – {n} enregistrés, {b} ignorés (existent déjà) dans {a}
+Vorlage	Modèle
+Originalname {name}	Nom d'origine {name}
+Nr.	N°
+Laufende Nummer {n:3}	Numéro séquentiel {n:3}
+GPS	GPS
+Unterordner nach Datum	Sous-dossiers par date
+Unterordner nach Ordner	Sous-dossiers par dossier
+Abzug, Foveon, GPS, Stichwörter, Unterordner, Nummer	Tirage, Foveon, GPS, mots-clés, sous-dossiers, numéro
+Kompression	Compression
+Bit-Tiefe	Profondeur
+Unverändert, geprüft kopiert (SHA-256)	Inchangé, copie vérifiée (SHA-256)
+XMP-Begleitdatei	Fichier XMP annexe
+Papier- und Filmrand mitnehmen	Inclure bord papier et film
+Export anhalten	Arrêter l'export
+Verlustbehaftet; 92 ist kaum vom Original zu unterscheiden	Avec perte ; à 92, presque impossible à distinguer de l'original
+Oberbegriffe	Termes parents
+Hierarchie	Hiérarchie
+Größe und Metadaten	Taille et métadonnées
+Zurück zum Originalnamen ({name})	Revenir au nom d'origine ({name})
+Wenn vorhanden	Si existant
+Gain-Map behalten	Conserver la gain map
+HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Conserver la luminosité HDR des photos iPhone ; sRGB uniquement
+Mehr	Plus

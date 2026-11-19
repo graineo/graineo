@@ -62,6 +62,20 @@ mod library_views;
 // "Ordner ansehen" (⌘O): the band in every view and the note in the left panel
 #[path = "view_folder_band.rs"]
 pub mod view_folder_band;
+// "Ordner ansehen": the section with the folder tree at the top of the left panel, refreshing
+#[path = "view_folder_tree.rs"]
+mod view_folder_tree;
+// "Ordner ansehen": library-only functions refuse photos without a library entry, all in the same way
+#[path = "view_folder_guard.rs"]
+pub mod view_folder_guard;
+pub use view_folder_guard::needs_library;
+#[path = "view_exif.rs"]
+mod view_exif;
+/// Status text after reading a viewed folder again (tests of the app).
+#[cfg(test)]
+pub fn view_folder_tree_text(new: usize, gone: usize) -> String {
+    view_folder_tree::refresh_text(new, gone, true).unwrap_or_default()
+}
 pub use library_manage::PhotoDrag;
 pub use library_load::Loaded;
 pub use library_series::ScopeKind;
@@ -199,6 +213,10 @@ const VIEW_SIDECARS_KEY: &str = "viewFolderSidecars";
 pub fn view_folder_sidecars() -> bool {
     library::settings::value(VIEW_SIDECARS_KEY).as_bool().unwrap_or(false)
 }
+
+/// Why the quick collection refuses photos of a viewed folder (they have no library entry to hold; status line,
+/// tooltips). Nothing is added to the library silently.
+pub const QUICK_REFUSED: &str = "Erst zur Bibliothek hinzufügen";
 
 /// Why rating is refused in a viewed folder (status line, tooltips).
 pub const RATING_REFUSED: &str = "Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten";
@@ -473,6 +491,9 @@ pub struct LibraryView {
     /// start face detection no earlier than this point in time (after program start)
     people_not_before: Option<std::time::Instant>,
     sort_order: SortOrder,
+    /// the sort order was chosen by the user for the viewed folder (only then is the whole folder read for the capture
+    /// times: reading thousands of headers is not done for the default order)
+    view_sort_chosen: bool,
     /// sort direction reversed (arrow next to the sort order)
     sort_reversed: bool,
     /// version of the visible list (incremented on every refilter) – Develop syncs against it
@@ -488,6 +509,10 @@ pub struct LibraryView {
     viewed: Option<(PathBuf, Vec<Row>)>,
     /// what "View folder" found (for the reason of an empty grid)
     viewed_listing: Option<crate::view_folder::Listing>,
+    /// tree of the viewed folder (left panel), shown folder, refreshing
+    view_tree: Option<view_folder_tree::ViewTree>,
+    /// header data of the viewed photos, read on demand (view_exif.rs)
+    view_exif: view_exif::ViewExif,
     /// width of the centre between the sidebars (grid and bars end there)
     centre_width: f32,
     smart_window: bool,
@@ -917,6 +942,7 @@ impl LibraryView {
             pending_checked: None,
             people_not_before: None,
             sort_order: SortOrder::CaptureTime,
+            view_sort_chosen: false,
             sort_reversed: false,
             centre_width: f32::INFINITY,
             list_version: 0,
@@ -926,6 +952,8 @@ impl LibraryView {
             remembered_active: None,
             viewed: None,
             viewed_listing: None,
+            view_tree: None,
+            view_exif: Default::default(),
             smart_window: false,
             smart_name: String::new(),
             smart_parent: None,
@@ -1174,7 +1202,10 @@ impl LibraryView {
                 }
                 "cell" => self.cell_size = v.parse().unwrap_or(self.cell_size),
                 "columns" => self.columns_open = v == "1",
-                "sort" => self.sort_order = match v { "name" => SortOrder::Name, "stars" => SortOrder::Stars, _ => SortOrder::CaptureTime },
+                "sort" => {
+                    self.sort_order = match v { "name" => SortOrder::Name, "stars" => SortOrder::Stars, _ => SortOrder::CaptureTime };
+                    self.view_sort_chosen = true;
+                }
                 "lens" | "camera" => {
                     let k = if k == "lens" { 1 } else { 0 };
                     self.facets_now();
@@ -1223,6 +1254,10 @@ impl LibraryView {
                     }
                 }
                 "loupe" => self.loupe = v == "1",
+                // a viewed folder (⌘O): "subfolders=0" switches "Unterordner einbeziehen" off, "view=A/B" opens the
+                // tree down to that folder and shows it (screenshots)
+                "subfolders" => self.view_set_subfolders(v != "0"),
+                "view" => self.view_test_select(v),
                 // the context menu of the active photo, drawn open next to it (screenshots)
                 "menu" => TEST_PHOTO_MENU.store(v == "1", Ordering::Relaxed),
                 // like ⌫ in a collection on the active photo
@@ -3008,6 +3043,8 @@ impl LibraryView {
             finished(self, &mut actions);
         }
         self.poll_load(&mut actions);
+        self.view_poll(ctx, &mut actions);
+        self.view_exif_poll(ctx);
         self.poll_facets();
         {
             let _t = crate::frame_watch::section("library: textures");
@@ -3282,6 +3319,10 @@ impl LibraryView {
     /// "Show in library folder": source = the image's folder, expand the tree and scroll
     /// there, activate the image. Images outside the library ("View folder") stay there.
     pub fn show_folder(&mut self, image: i64) {
+        if let Some(t) = self.refuse_viewed(&[image]) {
+            self.manage_message = Some(t);
+            return;
+        }
         let Some(&i) = self.index.get(&image) else { return };
         let folder = self.rows[i].folder;
         if let Some(o) = self.folder.iter().find(|o| o.id == folder).cloned() {
@@ -3305,7 +3346,7 @@ impl LibraryView {
     /// without a selection and for the single views.
     /// Context menu of a photo outside the grid (filmstrip, single image): the same entries as in the grid.
     pub fn photo_menu_for(&self, ui: &mut egui::Ui, image: i64, present: bool) -> Option<Menu> {
-        photo_menu(ui, self.quick.contains(&image), present, self.can_paste, self.removable_collection().as_deref())
+        photo_menu(ui, self.quick_possible(image).then(|| self.quick.contains(&image)), present, self.can_paste, self.removable_collection().as_deref())
     }
 
     /// Carry out a photo command from outside the grid (on the active photo / the selection set before).
@@ -3418,8 +3459,6 @@ impl LibraryView {
     }
 
     fn left_panel(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        // a viewed folder: a quiet line on top, at the height of the band, says the sources below are the library
-        self.view_folder_sources_note(ui);
         // fixed at the bottom: Import (also "Add folder": there "Hinzufügen"). Importing from Lightroom is in the menu
         // (File → Import from Lightroom …), on the tiles of the empty library and in the settings (Library).
         egui::Panel::bottom("bib-links-unten").resizable(false).frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 8))).show(ui, |ui| {
@@ -3467,6 +3506,10 @@ impl LibraryView {
             // with the first photo
             let empty = self.library_is_empty();
             let n_all = self.library_photo_count();
+            // a folder only being viewed (⌘O): its own section with the folder tree, above the library
+            self.view_section(ui);
+            // while the folder is only viewed, the library below stands back (still clickable: it leads out of the view)
+            let dim_top = self.viewed_folder().map(|_| ui.cursor().min.y);
             lr::section(ui, "Bibliothek", true, |ui| {
                 for (q, icon, name, n) in [
                     (Source::All, lr::Icon::SquaresFour, crate::tr("Alle Fotos"), n_all),
@@ -3569,6 +3612,13 @@ impl LibraryView {
                         self.ask_new_collection(library::manage::SET, None);
                     }
                 });
+            }
+            if let Some(top) = dim_top {
+                let view = ui.clip_rect();
+                if top < view.bottom() {
+                    let rect = egui::Rect::from_min_max(egui::pos2(view.left(), top.max(view.top())), view.right_bottom());
+                    ui.painter().rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(0x16, 0x16, 0x18, 135));
+                }
             }
         }));
     }
@@ -3696,6 +3746,7 @@ impl LibraryView {
         self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
         self.viewed = None;
         self.viewed_listing = None;
+        self.view_close();
         self.selection.clear();
         self.active = None;
         self.set_source(Source::All);
@@ -3994,7 +4045,11 @@ impl LibraryView {
             Source::Recent => crate::tr("Zuletzt importiert").into(),
             Source::Missing => crate::tr("Fehlende Fotos").into(),
             Source::Offline => crate::tr("Nicht verbunden").into(),
-            Source::Browse(p) => crate::menu::i18n::fill_names(crate::tr("Ordner ansehen · {a}"), &[("a", &p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())]),
+            // the folder shown: a subfolder chosen in the tree of the viewed folder, otherwise the folder itself
+            Source::Browse(p) => {
+                let shown = self.view_tree.as_ref().filter(|t| &t.root == p).map(|t| t.shown_dir()).unwrap_or_else(|| p.clone());
+                crate::menu::i18n::fill_names(crate::tr("Ordner ansehen · {a}"), &[("a", &shown.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())])
+            }
             Source::NotInCatalog => crate::tr("Nicht in der Bibliothek").into(),
             Source::Date(d) if d.is_empty() => crate::tr("Ohne Datum").into(),
             Source::Date(d) => match d.len() {
@@ -4240,6 +4295,9 @@ impl LibraryView {
         let columns = ((width / self.cell_size).floor() as usize).max(1);
         self.columns = columns;
         let cell = width / columns as f32;
+        // info lines below the photo (cell_info.rs): the cell grows by their fixed height, only when on
+        let info = crate::cell_info::shown();
+        let cell_h = cell + crate::cell_info::extra_height(info.len());
         // rows: full-text hits, then (if any) a separator row and "Similar in meaning"
         let n1 = self.sem_from.unwrap_or(self.visible.len());
         let r1 = n1.div_ceil(columns);
@@ -4297,7 +4355,7 @@ impl LibraryView {
         // back from single image view: the photo opened stays at the same height on screen. Applied for a
         // few frames, because the list or the layout may still settle after the first frame; any scrolling ends it.
         // row pitch of show_rows: cell height plus the spacing between rows
-        let pitch = cell + ui.spacing().item_spacing.y;
+        let pitch = cell_h + ui.spacing().item_spacing.y;
         // The separator row is low (grid_jump::SEP_H), the rows after it move up
         let layout = crate::grid_jump::Rows::new(n1, columns, self.sem_from.is_some(), pitch, ui.spacing().item_spacing.y);
         // grid row of a position in the list (after the hits, the separator row comes first)
@@ -4334,7 +4392,7 @@ impl LibraryView {
             // explicit jump: always to the middle (also when the photo is already in view), the selection stays
             if let Some(pos) = self.active.and_then(|a| self.visible.iter().position(|&i| self.rows[i].image == a)) {
                 let row = row_of(pos);
-                area = area.vertical_scroll_offset(crate::grid_jump::center_offset(layout.top(row), cell, ui.available_height()));
+                area = area.vertical_scroll_offset(crate::grid_jump::center_offset(layout.top(row), cell_h, ui.available_height()));
                 placed = true;
             }
             self.active_settle = 0;
@@ -4354,8 +4412,8 @@ impl LibraryView {
                     let y = layout.top(row_of(pos));
                     let view_h = ui.available_height();
                     let old = self.grid_y;
-                    if y < old || y + cell > old + view_h {
-                        area = area.vertical_scroll_offset((y - view_h / 2.0 + cell / 2.0).max(0.0));
+                    if y < old || y + cell_h > old + view_h {
+                        area = area.vertical_scroll_offset((y - view_h / 2.0 + cell_h / 2.0).max(0.0));
                         placed = true;
                     }
                 }
@@ -4418,7 +4476,7 @@ impl LibraryView {
                         }
                         let Some(&i) = self.visible.get(pos) else { break };
                         shown.push(i);
-                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(cell, cell), egui::Sense::click_and_drag());
+                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(cell, cell_h), egui::Sense::click_and_drag());
                         let z = self.rows[i].clone();
                         #[cfg(test)]
                         self.test_cells.push((z.image, rect));
@@ -4427,13 +4485,13 @@ impl LibraryView {
                             _ => self.texture(z.file, level),
                         };
                         self.paint_series_ground(ui.painter(), rect, z.image);
-                        let badge = self.paint_cell(ui, rect, &resp, &z, tex.as_ref(), pos + 1);
+                        let badge = self.paint_cell(ui, rect, &resp, &z, tex.as_ref(), pos + 1, &info);
                         if let Some(c) = self.paint_series_mark(ui, rect, &z, tex.as_ref()) {
                             stack_cmd = Some((c, z.image));
                         }
                         cell_hovered |= resp.hovered() || resp.context_menu_opened();
                         resp.context_menu(|ui| {
-                            if let Some(m) = photo_menu(ui, self.quick.contains(&z.image), z.status == 0, self.can_paste, self.removable_collection().as_deref()) {
+                            if let Some(m) = photo_menu(ui, (z.folder != VIEW_FOLDER).then(|| self.quick.contains(&z.image)), z.status == 0, self.can_paste, self.removable_collection().as_deref()) {
                                 menu = Some((m, z.image));
                             }
                             if let Some(c) = self.series_menu(ui, z.image) {
@@ -4481,7 +4539,7 @@ impl LibraryView {
             }
         }
         if self.grid_bench.is_some() || crate::import_bench::active() {
-            self.grid_bench_frame(ui.ctx(), &shown, layout, &row_of, cell, out.inner_rect.height(), t0, level);
+            self.grid_bench_frame(ui.ctx(), &shown, layout, &row_of, cell_h, out.inner_rect.height(), t0, level);
         }
         self.grid_cell = pitch;
         self.on_screen = shown.iter().map(|&i| self.rows[i].image).collect();
@@ -4489,7 +4547,7 @@ impl LibraryView {
             self.test_photo_menu(ui);
         }
         self.grid_view_h = out.inner_rect.height();
-        let geometry = crate::library_select::GridGeometry { columns, first: n1, total: self.visible.len(), separated: self.sem_from.is_some(), cell, pitch, sep_pitch: layout.sep_pitch };
+        let geometry = crate::library_select::GridGeometry { columns, first: n1, total: self.visible.len(), separated: self.sem_from.is_some(), cell, cell_h, pitch, sep_pitch: layout.sep_pitch };
         let band_busy = self.band_update(ui, out.inner_rect, geometry);
         // request thumbnails: visible ones first, then one row before and two after
         if let (Some(&first), Some(&last)) = (shown.first(), shown.last()) {
@@ -4667,7 +4725,8 @@ impl LibraryView {
     }
 
     /// Returns: quick collection badge (circle above the image) clicked.
-    fn paint_cell(&self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, z: &Row, tex: Option<&TextureHandle>, number: usize) -> bool {
+    #[allow(clippy::too_many_arguments)]
+    fn paint_cell(&self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, z: &Row, tex: Option<&TextureHandle>, number: usize, info: &[crate::cell_info::Field]) -> bool {
         let p = ui.painter();
         let inner = rect.shrink(3.0);
         let active = !self.nothing_selected && self.active == Some(z.image);
@@ -4743,7 +4802,9 @@ impl LibraryView {
                 lr::hover_tip(ui, &tip, "RAW+JPEG zusammen (ein Foto)");
             }
         }
-        let image = egui::Rect::from_min_max(inner.min + egui::vec2(8.0, 25.0), inner.max - egui::vec2(8.0, 22.0));
+        let info_h = crate::cell_info::extra_height(info.len());
+        let image = egui::Rect::from_min_max(inner.min + egui::vec2(8.0, 25.0), inner.max - egui::vec2(8.0, 22.0 + info_h));
+        self.paint_info_lines(ui, egui::Rect::from_min_max(egui::pos2(image.left(), image.bottom() + 2.0), egui::pos2(image.right(), image.bottom() + info_h)), z, info);
         match tex {
             Some(t) => {
                 // a photo just turned shows the turn at once, until its re-rendered preview arrives
@@ -4807,15 +4868,23 @@ impl LibraryView {
         }
         // quick collection: circle on the right of the fixed header row (filled = in, empty = not in)
         let inside = self.quick.contains(&z.image);
+        let possible = z.folder != VIEW_FOLDER;
         let click;
         {
             let middle = egui::pos2(header.right() - 9.0, header.center().y);
             let matches = ui.interact(egui::Rect::from_center_size(middle, egui::vec2(20.0, 20.0)), egui::Id::unique(("schnell-plakette", z.image)), egui::Sense::click());
             click = matches.clicked();
-            lr::tip_key(ui, &matches, if inside { "Aus der Schnellsammlung entfernen" } else { "Zur Schnellsammlung hinzufügen" }, "quick");
-            let hovered = matches.hovered();
+            if possible {
+                lr::tip_key(ui, &matches, if inside { "Aus der Schnellsammlung entfernen" } else { "Zur Schnellsammlung hinzufügen" }, "quick");
+            } else {
+                lr::hover_tip(ui, &matches, crate::tr(QUICK_REFUSED));
+            }
+            let hovered = matches.hovered() && possible;
             let p = ui.painter();
-            if inside {
+            if !possible {
+                // a viewed folder: a faint dashed-looking ring, never white on hover
+                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
+            } else if inside {
                 p.circle_filled(middle, 6.0, if hovered { Color32::WHITE } else { Color32::from_gray(0xe4) });
                 p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, Color32::from_gray(0x20)));
             } else {
@@ -4823,6 +4892,32 @@ impl LibraryView {
             }
         }
         click
+    }
+
+    /// The info lines of a cell in `area` (one [`crate::cell_info::LINE_H`] each): small dim text, cut with "…",
+    /// the full text as a tooltip; a missing value leaves its line empty (the cell keeps its height).
+    fn paint_info_lines(&self, ui: &egui::Ui, area: egui::Rect, z: &Row, info: &[crate::cell_info::Field]) {
+        if info.is_empty() {
+            return;
+        }
+        let lang = crate::menu::i18n::language();
+        let name = display_name(z);
+        let p = ui.painter();
+        for (k, f) in info.iter().enumerate() {
+            let Some(t) = crate::cell_info::text(*f, z, &name, lang) else { continue };
+            let mut job = egui::text::LayoutJob::simple_singleline(t.clone(), egui::FontId::proportional(crate::cell_info::SIZE), Color32::from_gray(0x8c));
+            job.wrap = egui::text::TextWrapping { max_width: area.width().max(10.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+            let g = p.layout_job(job);
+            let line = egui::Rect::from_min_size(egui::pos2(area.left(), area.top() + k as f32 * crate::cell_info::LINE_H), egui::vec2(area.width(), crate::cell_info::LINE_H));
+            let at = egui::pos2(line.left(), line.center().y - g.size().y / 2.0);
+            let shown = egui::Rect::from_min_size(at, g.size());
+            let elided = g.elided;
+            p.galley(at, g, Color32::from_gray(0x8c));
+            if elided {
+                let tip = ui.interact(shown, egui::Id::unique(("zellinfo", z.image, k)), egui::Sense::hover());
+                lr::hover_tip(ui, &tip, &t);
+            }
+        }
     }
 
     fn right(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
@@ -4974,7 +5069,12 @@ impl LibraryView {
                 ui.add_space(2.0);
                 let state = self.similar_state.as_ref().map(|(_, s)| s.clone());
                 let waiting = matches!(state, Some(SimilarState::Load | SimilarState::Computing));
-                if ui.add_enabled(!waiting, egui::Button::new(crate::tr("Ähnliche Fotos"))).clicked() {
+                let viewed = view_folder_guard::viewed(z.image);
+                let r = ui.add_enabled(!waiting && !viewed, egui::Button::new(crate::tr("Ähnliche Fotos")));
+                if viewed {
+                    view_folder_guard::why_tip(ui, &r);
+                }
+                if r.clicked() {
                     self.show_similar(ui.ctx());
                 }
                 // status right here, not down in the status bar
@@ -5052,7 +5152,13 @@ impl LibraryView {
             let mut content_answer: Option<content_keywords_ui::Answer> = None;
             // chosen keyword (id) or typed text (resolved in the background)
             let mut kw_add: Option<(Option<i64>, String)> = None;
+            // a viewed folder: keywords live in the library only, the section is greyed with the reason
+            let kw_refused = self.needs_library(&self.target()) || view_folder_guard::viewed(z.image);
             lr::section(ui, "Stichwörter", true, |ui| {
+                if kw_refused {
+                    ui.label(egui::RichText::new(crate::tr(view_folder_guard::NEEDS_LIBRARY)).small().color(lr::TEXT_DIM));
+                    ui.disable();
+                }
                 let n = self.target().len();
                 if n > 1 {
                     ui.label(egui::RichText::new(crate::trf!("Änderungen gelten für {n} Fotos", n = n)).small().color(lr::TEXT_DIM));
@@ -5162,6 +5268,9 @@ impl LibraryView {
                     self.kw_set_dialog = Some((n, keywords.iter().map(|(_, s)| s.replace(" › ", "|")).collect()));
                 }
             });
+            if kw_refused {
+                (kw_add, kw_remove, content_answer) = (None, None, None);
+            }
             if let Some(a) = content_answer {
                 self.content_ideas_answer(z.image, a);
             }
@@ -5338,10 +5447,27 @@ impl LibraryView {
         self.quick.contains(&image)
     }
 
+    /// Can the quick collection hold this photo? Not one of a folder only being viewed (no library entry).
+    pub fn quick_possible(&self, image: i64) -> bool {
+        !view_folder_guard::viewed(image)
+    }
+
+    /// Do any of these photos lack a library entry (photos of a viewed folder)? Then library-only functions refuse
+    /// them ([`view_folder_guard`]).
+    pub fn needs_library(&self, images: &[i64]) -> bool {
+        needs_library(images)
+    }
+
     pub fn quick_toggle(&mut self, target: &[i64]) -> Option<String> {
         if target.is_empty() {
             return None;
         }
+        // photos of a viewed folder: refused with the reason (before, the write failed and the mark vanished again)
+        let target: Vec<i64> = target.iter().copied().filter(|&b| self.quick_possible(b)).collect();
+        if target.is_empty() {
+            return Some(crate::tr(QUICK_REFUSED).to_string());
+        }
+        let target = target.as_slice();
         let add = !target.iter().all(|b| self.quick.contains(b));
         // ⌘Z takes back exactly what changed (photos already in stay in)
         let changed: Vec<i64> = target.iter().copied().filter(|b| self.quick.contains(b) != add).collect();
@@ -6214,7 +6340,7 @@ impl LibraryView {
         egui::Area::new(egui::Id::new("test-photo-menu")).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
             egui::Frame::menu(ui.style()).show(ui, |ui| {
                 ui.set_width(300.0);
-                let _ = photo_menu(ui, self.quick.contains(&a), present, self.can_paste, self.removable_collection().as_deref());
+                let _ = photo_menu(ui, self.quick_possible(a).then(|| self.quick.contains(&a)), present, self.can_paste, self.removable_collection().as_deref());
             });
         });
     }
@@ -6249,18 +6375,22 @@ pub enum Menu {
 /// Context menu of a photo (grid; the filmstrip and the single image use the same order): frequent at the top,
 /// file commands together, destructive last; shortcuts right-aligned. Returns the chosen command.
 /// `collection`: name of the collection shown, if photos can be taken out of it (then ⌫ does that, ⌘⌫ the trash).
-fn photo_menu(ui: &mut egui::Ui, in_quick: bool, present: bool, can_paste: bool, collection: Option<&str>) -> Option<Menu> {
+fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_paste: bool, collection: Option<&str>) -> Option<Menu> {
     use crate::shortcuts::display;
     let mut chosen = None;
+    // `in_quick == None`: a photo of a viewed folder, entries that need the library are greyed with the reason
+    let library = in_quick.is_some();
     let mut item = |ui: &mut egui::Ui, m: Menu, text: &str, key: String, enabled: bool| {
-        if lr::menu_item(ui, text, &key, enabled) {
+        let refused = !library && m.needs_library();
+        if lr::menu_item_why(ui, text, &key, enabled && !refused, if refused { crate::tr(view_folder_guard::NEEDS_LIBRARY) } else { "" }) {
             chosen = Some(m);
         }
     };
     item(ui, Menu::Export, crate::tr("Exportieren …"), display("export"), true);
     item(ui, Menu::Print, crate::tr("Drucken …"), display("print"), true);
     ui.separator();
-    let quick = if in_quick { crate::tr("Aus der Schnellsammlung entfernen") } else { crate::tr("Zur Schnellsammlung hinzufügen") };
+    // `None`: a photo of a viewed folder, the quick collection cannot hold it (greyed)
+    let quick = if in_quick == Some(true) { crate::tr("Aus der Schnellsammlung entfernen") } else { crate::tr("Zur Schnellsammlung hinzufügen") };
     item(ui, Menu::Quick, quick, display("quick"), true);
     item(ui, Menu::VirtualCopy, crate::tr("Virtuelle Kopie anlegen"), display("virtual_copy"), true);
     item(ui, Menu::CopySettings, crate::tr("Einstellungen kopieren …"), display("copy_settings"), true);
@@ -6356,6 +6486,14 @@ impl LibraryView {
     fn menu(&mut self, m: Menu, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let Some(&i) = self.active.and_then(|a| self.index.get(&a)) else { return };
         let z = self.rows[i].clone();
+        if m.needs_library() {
+            let mut target = self.target();
+            target.push(z.image);
+            if let Some(t) = self.refuse_viewed(&target) {
+                actions.push(Action::Status(t));
+                return;
+            }
+        }
         match m {
             Menu::Export => actions.push(Action::Export),
             Menu::Print => actions.push(Action::Print),
@@ -6993,9 +7131,9 @@ impl LibraryView {
     /// After deleting: re-read the library (or take the list the job loaded right after deleting); "View folder"
     /// re-reads its folder.
     pub fn after_delete(&mut self, loaded: Option<Loaded>) {
-        if let (Source::Browse(_), Some((dir, _))) = (&self.source, self.viewed.clone()) {
-            self.source = Source::All;
-            self.browse_folder(&dir, None);
+        if matches!(self.source, Source::Browse(_)) && self.view_tree.is_some() {
+            self.view_list();
+            self.refilter = true;
         } else {
             self.adopt_or_reload(loaded);
         }
@@ -7531,6 +7669,11 @@ impl LibraryView {
         Some((e.cache().clone(), keys))
     }
 
+    /// Title of an image (library), if any.
+    pub fn title_of(&self, image: i64) -> Option<String> {
+        self.db.as_ref().and_then(|d| d.title_of(image))
+    }
+
     /// The library row of an image (print captions: date, camera, exposure).
     pub fn row_of_image(&self, image: i64) -> Option<&Row> {
         match self.index.get(&image).and_then(|&i| self.rows.get(i)) {
@@ -7829,81 +7972,7 @@ impl LibraryView {
             Some((s, p)) => {
                 self.set_source(Source::Folder(s, p));
             }
-            None => {
-                // with subfolders: names are paths relative to the folder
-                let listing = crate::view_folder::list(dir);
-                let names = listing.names.clone();
-                self.viewed_listing = Some(listing);
-                // rating and virtual copies from the sidecar (the truth), read only
-                let raw_stems: HashSet<String> = names
-                    .iter()
-                    .filter(|n| library::format_from_extension(n).is_some_and(library::is_raw))
-                    .filter_map(|n| n.rsplit_once('.').map(|(s, _)| s.to_lowercase()))
-                    .collect();
-                let mut rows: Vec<Row> = Vec::new();
-                for n in names {
-                    let Some(f) = library::format_from_extension(&n) else { continue };
-                    let path = dir.join(&n);
-                    let raw_beside = !library::is_raw(f) && n.rsplit_once('.').is_some_and(|(s, _)| raw_stems.contains(&s.to_lowercase()));
-                    let values = match library::sidecar::read(&path, f, raw_beside).0 {
-                        library::xmp::ReadResult::Ok(w) => w,
-                        _ => library::xmp::Values::default(),
-                    };
-                    let m = std::fs::metadata(&path).ok();
-                    let basis = Row {
-                        image: 0,
-                        file: 0,
-                        folder: VIEW_FOLDER,
-                        name: n.clone(),
-                        format: f.to_string(),
-                        copy: None,
-                        stars: values.stars,
-                        flag: values.flag,
-                        label: values.label,
-                        status: 0,
-                        camera: None,
-                        capture: None,
-                        run: None,
-                        size: m.as_ref().map(|m| m.len() as i64),
-                        mtime: m.and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64),
-                        width: None,
-                        height: None,
-                        orientation: None,
-                        lens: None,
-                        aperture: None,
-                        focal: None,
-                        iso: None,
-                        time: None,
-                        ai_quality: None,
-                        changed: None,
-                        imported: None,
-                        from_lightroom: false,
-                        sidecar_jpeg: None,
-                        jpeg_for: None,
-                        place: None,
-                    };
-                    let file = view_id();
-                    rows.push(Row { image: file, file: file, ..basis.clone() });
-                    for k in library::sidecar::read_copies(values.copies_json.as_deref()) {
-                        let id = view_id();
-                        rows.push(Row { image: id, file: file, copy: Some(k.name), stars: k.stars, flag: k.flag, label: k.label, ..basis.clone() });
-                    }
-                }
-                library::db::mark_pairs(&mut rows);
-                self.insert_viewed(dir, rows);
-                self.source = Source::All; // forces the switch below
-                self.set_source(Source::Browse(dir.to_path_buf()));
-                // search and column filters apply to the library: in a foreign folder they would
-                // silently hide everything (no keywords, no capture dates in the database)
-                if self.filter != Filter::default() || self.facets.as_ref().is_some_and(|f| f.active()) {
-                    crate::log("view folder: filter reset");
-                    self.filter = Filter::default();
-                    if let Some(f) = &mut self.facets {
-                        f.reset();
-                    }
-                }
-                self.refilter = true;
-            }
+            None => self.view_open(dir),
         }
         self.apply_filter();
         if let Some(a) = active {
@@ -7934,6 +8003,8 @@ impl LibraryView {
         Arc::make_mut(&mut self.folder_paths).insert(VIEW_FOLDER, format!("{}/", dir.display()));
         self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
         self.viewed = Some((dir.to_path_buf(), rows));
+        // values read before (another folder of the tree and back, a refresh)
+        self.view_exif_fill(dir);
         // column filters compute per row → rebuild (selection is kept via the names)
         if let Some(g) = self.take_facets_state() {
             if let Some(path) = self.db.as_ref().map(|d| d.path.clone()) {
@@ -8073,7 +8144,7 @@ mod media_library_tests {
         library.active = Some(ids[2]);
         library.nothing_selected = false;
         library.selection.clear();
-        let geometry = crate::library_select::GridGeometry { columns: 4, first: 3, total: 3, separated: false, cell: 100.0, pitch: 100.0, sep_pitch: 100.0 };
+        let geometry = crate::library_select::GridGeometry { columns: 4, first: 3, total: 3, separated: false, cell: 100.0, cell_h: 100.0, pitch: 100.0, sep_pitch: 100.0 };
         let view = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 300.0));
         let shift = egui::Modifiers { shift: true, ..Default::default() };
         let mut frame = |time, mut events: Vec<egui::Event>, modifiers| {

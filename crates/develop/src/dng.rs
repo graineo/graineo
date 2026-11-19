@@ -5,6 +5,7 @@
 //! sensor saturation are kept by scaling the data down and raising `BaselineExposure` by the same
 //! amount, values below black (noise) are kept above a matching `BlackLevel`. As an option the samples
 //! are written as 32-bit floating point (DNG 1.4), unscaled and compressed losslessly.
+//! This product includes DNG technology under license by Adobe Systems Incorporated.
 //! The colour description follows the DNG specification (freely usable): two calibration
 //! illuminants with ColorMatrix/ForwardMatrix from the camera calibration, AsShotNeutral, EXIF data
 //! of the shot and a small preview.

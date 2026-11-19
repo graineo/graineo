@@ -1,41 +1,30 @@
-//! Image I/O without macOS (Windows): JPEG, PNG and TIFF via the `image` crate, EXIF from the
-//! JPEG header. Not available: HEIC, HDR gain maps – those
+//! Image I/O without macOS (Windows): JPEG, PNG and TIFF via the `image` crate, metadata (EXIF, GPS) from the
+//! own header reader for all formats. Not available: decoding HEIC, HDR gain maps – those
 //! calls then report "nothing" (None, empty list) or an error.
 
 use std::path::Path;
 
 pub use crate::imageio_common::*;
 
-/// Head of the file (for JPEG, EXIF is at the beginning).
-fn header(path: &Path, n: usize) -> Option<Vec<u8>> {
-    use std::io::Read;
-    let mut f = std::fs::File::open(path).ok()?;
-    let mut buf = Vec::with_capacity(n);
-    f.by_ref().take(n as u64).read_to_end(&mut buf).ok()?;
-    Some(buf)
-}
-
-fn is_jpeg(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| matches!(e.to_ascii_lowercase().as_str(), "jpg" | "jpeg"))
-}
-
-/// Properties (dimensions, orientation, capture date, camera) without decoding the image.
+/// Properties (dimensions, orientation, capture date, camera, shooting data) without decoding the image: the
+/// metadata from the own header reader ([`crate::exif_header`], all containers it knows, RAWs included), the
+/// size from the decoder's header where it can read the format (as ImageIO reports it), else from the header reader.
 pub fn properties(path: &Path) -> Option<Properties> {
-    let (width, height) = image::image_dimensions(path).ok()?;
-    let mut e = Properties { width: Some(width), height: Some(height), ..Default::default() };
-    if is_jpeg(path) {
-        if let Some(x) = header(path, 256 * 1024).and_then(|k| x3f::exif::parse_jpeg_exif(&k)) {
-            e.orientation = x.orientation.map(u32::from);
-            e.capture = x.date_time.as_deref().and_then(exif_date);
-            e.camera = x.model;
-            e.maker = x.make;
-            e.aperture = x.f_number;
-            e.focal = x.focal_length;
-            e.iso = x.iso.map(i64::from);
-            e.time = x.exposure_time;
-        }
+    let header = crate::exif_header::properties(path);
+    let size = image::image_dimensions(path).ok();
+    if header.is_none() && size.is_none() {
+        return None;
+    }
+    let mut e = header.unwrap_or_default();
+    if let Some((w, h)) = size {
+        (e.width, e.height) = (Some(w), Some(h));
     }
     Some(e)
+}
+
+/// GPS position from the EXIF GPS block (north and east positive); `None` without a usable position.
+pub fn gps_position(path: &Path) -> Option<(f64, f64)> {
+    crate::exif_header::gps_position(path)
 }
 
 /// Apply EXIF orientation (1–8).

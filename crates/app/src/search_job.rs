@@ -125,6 +125,11 @@ impl SearchJob {
         out
     }
 
+    /// Capture times of rows changed in place (a viewed folder's header data arrived): rank again.
+    pub fn forget_capture_rank(&mut self) {
+        self.capture_rank = None;
+    }
+
     /// Rank of each row in the order "newest first" (see `LibraryView::apply_filter`), cached per rows.
     pub fn capture_rank(&mut self, rows: &Arc<Vec<Row>>) -> &[u32] {
         let id = (Arc::as_ptr(rows) as usize, rows.len());

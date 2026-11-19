@@ -4937,7 +4937,6 @@ Feineinstellung	詳細設定
 + hellt Schatten auf, Lichter bleiben · − dunkelt Lichter ab, Schatten bleiben	+ シャドウを明るく、ハイライトはそのまま · − ハイライトを暗く、シャドウはそのまま
 Der Ordner ist nicht lesbar (keine Berechtigung oder Laufwerk nicht verbunden).	フォルダを読み込めません（権限がないか、ドライブが接続されていません）。
 Keine Fotos oder Videos. Gefunden: {a} andere Dateien in diesem Ordner und {b} Unterordnern, keine in einem Format, das graineo zeigt.	写真や動画はありません。このフォルダと {b} 個のサブフォルダに {a} 個の他のファイルがありますが、graineo で表示できる形式ではありません。
-Keine Fotos oder Videos – auch nicht in den {a} Unterordnern (bis {b} Ebenen tief).	写真や動画はありません。{a} 個のサブフォルダ（{b} 階層まで）にもありません。
 Der Ordner ist leer.	フォルダは空です。
 Keine Fotos in diesem Ordner	このフォルダに写真はありません
 Bibliothek wiederherstellen?	ライブラリを復元しますか？
@@ -6399,13 +6398,11 @@ Bearbeitung aus neuerer Version – geschützt	新しいバージョンの編集
 Bearbeitung aus einer neueren Version	新しいバージョンで作成された編集
 Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	この編集は graineo の新しいバージョンで作成されたため、上書きされません。このバージョンでは読み込めないため初期値を表示しています。この写真への変更は保存されませんが、星とフラグは保存されます。新しいバージョンで開くと編集が戻ります。
 Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	このフォルダは開いているだけで、ライブラリには入っていません。graineo が写真そのものを変更することはありません。
-### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### 保存されるもの\n• **現像** – スライダーの変更（仮想コピーも含む）はすべて、写真の横のサイドカー NAME.xmp に保存されます\n• **評価**（星、フラグ、ラベル）– 「評価を XMP に」がオフの間はロックされます。オンにすると評価も XMP として写真の横に書き込まれます\n\n### ここでできること\n• 表示、現像、書き出し\n• 星、フラグ、ラベルでの絞り込み（既存の XMP の値）\n• ファイル名での検索\n\n### 追加した後でのみ\n列フィルタ（カメラ、レンズ、日付 …）、内容・キーワード・場所での検索、コレクション、人物、重複、シリーズ。追加すると、ライブラリが XMP から評価と現像設定を引き継ぎます。\n\n### 終了するには\n帯の **閉じる**、または左でソースを選びます（例：「すべての写真」）。**ライブラリに追加…** はこのフォルダで読み込みを開きます。
-Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	フォルダ「{a}」を表示中 – ライブラリには入っていません
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Ordnerbaum\nLinks unter „Angesehen“ zeigt ein Klick auf einen Ordner seine Fotos; „Unterordner einbeziehen“ aus: nur die Fotos direkt darin. **Aktualisieren** liest den Ordner neu, leise auch, wenn du zu graineo zurückkehrst.\n\n### Verlassen\n**Schließen** im Streifen oder per Rechtsklick auf den Ordner links. Eine andere Quelle zeigt die Bibliothek; der Ordner bleibt unter „Angesehen“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### 保存されるもの\n• **現像** – スライダーの変更（仮想コピーも含む）はすべて、写真の横のサイドカー NAME.xmp に保存されます\n• **評価**（星、フラグ、ラベル）– 「評価を XMP に」がオフの間はロックされます。オンにすると評価も XMP として写真の横に書き込まれます\n\n### ここでできること\n• 表示、現像、書き出し\n• 星、フラグ、ラベルでの絞り込み（既存の XMP の値）\n• ファイル名での検索\n\n### 追加した後でのみ\n列フィルタ（カメラ、レンズ、日付 …）、内容・キーワード・場所での検索、コレクション、人物、重複、シリーズ。追加すると、ライブラリが XMP から評価と現像設定を引き継ぎます。\n\n### フォルダツリー\n左の「表示中」でフォルダをクリックすると、その写真を表示します。「サブフォルダを含める」をオフにすると直下の写真のみ。**更新** はフォルダを再読み込みします（graineo に戻ったときも静かに確認）。\n\n### 終了するには\n帯の **閉じる**、または左のフォルダを右クリック。ほかのソースを選ぶとライブラリを表示し、フォルダは「表示中」に残ります。**ライブラリに追加…** はこのフォルダで読み込みを開きます。
 Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	フォルダの表示をやめて「すべての写真」に戻る
 Öffnet den Import mit diesem Ordner	このフォルダで読み込みを開きます
 Bewertungen als XMP	評価を XMP に
 Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	星、フラグ、ラベルをサイドカーファイル（XMP）として写真の横に書き込みます。オフ：ここでは評価できません。
-Deine Bibliothek – der angesehene Ordner gehört nicht dazu	あなたのライブラリ – 表示中のフォルダは含まれません
 Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	評価するには、ライブラリに追加するか、上部の帯で「評価を XMP に」をオンにしてください
 EIGENER LOOK	独自ルック
 Eigener Look	独自ルック
@@ -6494,3 +6491,99 @@ Toleranz (%)	許容範囲 (%)
 Wie ähnlich die Farbe sein muss	どれだけ近い色まで許すか
 Erst „Auto-Maske“ einschalten	先に「自動マスク」をオンにしてください
 Pinsel malt · ⌥ radiert · ⇧-Klick Linie	ブラシで描画 · ⌥で消去 · ⇧クリックで直線
+Angesehen	表示中
+Ordner neu einlesen	フォルダを再読み込み
+angesehenen Ordner neu einlesen	表示中のフォルダを再読み込み
+Keine Fotos direkt in diesem Ordner. „Unterordner einbeziehen“ zeigt auch die {a} Unterordner.	このフォルダ直下に写真はありません。「サブフォルダを含める」で {a} 個のサブフォルダも表示します。
+Keine Fotos oder Videos – auch nicht in den {a} Unterordnern.	写真や動画はありません（{a} 個のサブフォルダにもありません）。
+Nur die ersten {a} Fotos gezeigt	最初の {a} 枚のみ表示
+Nur die ersten {a} Unterordner durchsucht	最初の {a} 個のサブフォルダのみ検索
+„{a}“ · nur angesehen, nicht in der Bibliothek	「{a}」· 表示のみ、ライブラリには含まれません
+Ordner aktualisiert – keine Änderung	フォルダを更新しました – 変更なし
+{a} neu	{a} 件追加
+{a} neu, {b} entfernt	{a} 件追加、{b} 件削除
+Unterordner einbeziehen	サブフォルダを含める
+Aus: nur die Fotos direkt im gewählten Ordner	オフ：選んだフォルダ直下の写真のみ
+nicht lesbar	読み取れません
+Erst zur Bibliothek hinzufügen	先にライブラリに追加してください
+Explorer	エクスプローラー
+Im Explorer-Menü anbieten	エクスプローラーのメニューに表示
+Rechtsklick auf Ordner, Laufwerke und Fotos: „Mit graineo ansehen“. Unter Windows 11 bei „Weitere Optionen anzeigen“.	フォルダ、ドライブ、写真を右クリック：「graineo で表示」。Windows 11 では「その他のオプションを確認」の中にあります。
+Mit graineo ansehen	graineo で表示
+Die Dateien (mit XMP daneben) kommen in den Papierkorb.	ファイル（隣のXMPも）はゴミ箱に移動されます。
+Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen	ゴミ箱のないネットワークドライブです – 先にライブラリに追加してください
+Video	ビデオ
+Infozeilen	情報行
+Zeile 1	1行目
+Zeile 2	2行目
+Aufnahmedatum	撮影日
+Pixelmaße	ピクセルサイズ
+Dateigröße	ファイルサイズ
+Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.	ここでは表示・現像・書き出し・印刷が使えます。それ以外はライブラリで。
+Ordner schließen	フォルダーを閉じる
+Keine automatische Installation auf diesem System	このシステムでは自動インストールは使えません
+Apple RAW {a} · Rückfall	Apple RAW {a} · フォールバック
+entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)	Apple RAW {a} で現像（graineo のデコードが使えないため）
+graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	このファイルでは graineo のデコードから使える画像が得られません（値が白色点を大きく超えています）。macOS がこの写真をデコードします（Apple RAW {a}）。色、トーン、ルック、フィルム、マスクは graineo が計算します。この写真ではバージョンが固定されます。センサーパネルの「パイプライン」で変更できます。
+Automatik · Rückfall	自動 · フォールバック
+festgehalten · Rückfall	固定 · フォールバック
+nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild	不可：このファイルでは graineo のデコードから使える画像が得られません
+Ordner wählen und exportieren …	フォルダを選んで書き出す …
+Vorhandene Dateien überschreiben?	既存のファイルを上書きしますか？
+Dateien gleichen Namens im Zielordner werden durch den Export ersetzt ({n} Bilder). Die alten kommen in den Papierkorb.	書き出し先の同名ファイルを置き換えます（{n} 枚）。古いファイルはゴミ箱に入ります。
+Das Original eines Fotos wird nie ersetzt.	写真の元ファイルは置き換えません。
+Überschreiben	上書き
+Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14	撮影年/日（例: 2026/2026-07-14）
+Name des Ordners, in dem das Original liegt	元ファイルのフォルダ名
+Zurück zum Originalnamen	元の名前に戻す
+Originalname	元の名前
+Text	テキスト
+Eigener Text: im Feld überschreiben	任意のテキスト: 欄内で書き換え
+Nummer	番号
+Titel aus der Bibliothek, falls vorhanden	ライブラリのタイトル（ある場合）
+„_mono“ bei Schwarzweiß	白黒では「_mono」
+Stellen	桁数
+Start	開始
+Nummer anhängen	番号を付ける
+Name-2.jpg; nichts wird überschrieben	Name-2.jpg（上書きしない）
+Ersetzt Dateien gleichen Namens (alte in den Papierkorb); wird vorher gefragt	同名ファイルを置き換え（古いものはゴミ箱へ）。事前に確認
+Überspringen	スキップ
+Fotos, deren Datei es schon gibt, nicht exportieren	ファイルが既にある写真は書き出さない
+→ {f} · {n}	→ {f} · {n}
+→ keine Datei	→ ファイルなし
+{n} gleiche Namen → bekommen eine Nummer	同名 {n} 件 → 番号を付加
+{n} gibt es schon → bekommen eine Nummer	既存 {n} 件 → 番号を付加
+{n} gibt es schon → werden ersetzt	既存 {n} 件 → 置き換え
+{n} gibt es schon → werden übersprungen	既存 {n} 件 → スキップ
+„{a}“ gibt es schon.	「{a}」は既にあります。
+Name der Vorlage	テンプレート名
+– keine –	– なし –
+Noch keine Vorlagen	テンプレートはまだありません
+Sichern …	保存 …
+Name, Ordnerregel, Format und Größe als Vorlage sichern	名前・フォルダ規則・形式・サイズをテンプレートとして保存
+Vorlage in den Papierkorb legen	テンプレートをゴミ箱に入れる
+{a} übersprungen: gibt es schon	{a} をスキップ: 既にあります
+fertig – {n} gespeichert, {b} übersprungen (gibt es schon) in {a}	完了 – {n} 件保存、{b} 件スキップ（既存）: {a}
+Vorlage	テンプレート
+Originalname {name}	元のファイル名 {name}
+Nr.	番号
+Laufende Nummer {n:3}	連番 {n:3}
+GPS	GPS
+Unterordner nach Datum	日付別サブフォルダ
+Unterordner nach Ordner	フォルダ別サブフォルダ
+Abzug, Foveon, GPS, Stichwörter, Unterordner, Nummer	プリント、Foveon、GPS、キーワード、サブフォルダ、番号
+Kompression	圧縮
+Bit-Tiefe	ビット深度
+Unverändert, geprüft kopiert (SHA-256)	無変更・検証付きコピー（SHA-256）
+XMP-Begleitdatei	XMPサイドカー
+Papier- und Filmrand mitnehmen	用紙とフィルムの縁を含める
+Export anhalten	書き出しを停止
+Verlustbehaftet; 92 ist kaum vom Original zu unterscheiden	非可逆。92 なら元画像とほぼ見分けがつきません
+Oberbegriffe	上位語
+Hierarchie	階層
+Größe und Metadaten	サイズとメタデータ
+Zurück zum Originalnamen ({name})	元のファイル名に戻す（{name}）
+Wenn vorhanden	既存の場合
+Gain-Map behalten	ゲインマップを保持
+HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	iPhone写真のHDR輝度を保持（sRGBのみ）
+Mehr	その他

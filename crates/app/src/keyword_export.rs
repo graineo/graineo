@@ -11,12 +11,12 @@ use library::keywords::{export_choices, EXPORT_HIERARCHY_KEY, EXPORT_PARENTS_KEY
 pub fn controls(ui: &mut egui::Ui, personal: bool) {
     let (mut parents, mut hierarchy) = export_choices();
     ui.add_enabled_ui(personal, |ui| {
-        let r = ui.checkbox(&mut parents, crate::tr("Oberbegriffe mitschreiben"));
+        let r = ui.checkbox(&mut parents, crate::tr("Oberbegriffe"));
         crate::lr::hover_tip(ui, &r, crate::tr("Zu „Labrador“ auch „Hunde“ und „Tiere“ in die Stichwörter der Datei"));
         if r.changed() {
             library::settings::set(EXPORT_PARENTS_KEY, serde_json::json!(parents));
         }
-        let r = ui.checkbox(&mut hierarchy, crate::tr("Hierarchie mitschreiben"));
+        let r = ui.checkbox(&mut hierarchy, crate::tr("Hierarchie"));
         crate::lr::hover_tip(ui, &r, crate::tr("Zusätzlich die vollen Pfade („Tiere|Hunde|Labrador“, lr:hierarchicalSubject) für Programme, die Stichwort-Hierarchien lesen"));
         if r.changed() {
             library::settings::set(EXPORT_HIERARCHY_KEY, serde_json::json!(hierarchy));

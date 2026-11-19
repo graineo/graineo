@@ -66,9 +66,49 @@ pub fn acquire(db: &Path, patience: Duration) -> Result<Outcome, String> {
     }
 }
 
+/// File in which a second start leaves the folder or photo it was given (Explorer menu "Mit graineo ansehen", a
+/// photo opened with graineo) for the graineo already running with this library.
+pub fn request_path(db: &Path) -> PathBuf {
+    db.parent().map(Path::to_path_buf).unwrap_or_default().join("open-request.txt")
+}
+
+/// Second start: hand `path` over to the running graineo (written to a temporary file and renamed, so the running
+/// one never reads half a path). A newer request replaces an older one not taken yet.
+pub fn hand_over(db: &Path, path: &Path) -> Result<(), String> {
+    let target = request_path(db);
+    let tmp = target.with_extension(format!("{}.tmp", std::process::id()));
+    std::fs::write(&tmp, path.to_string_lossy().as_bytes()).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &target).map_err(|e| format!("{}: {e}", target.display()))
+}
+
+/// Running graineo: a path handed over by a second start, if any (taken once; the file goes).
+pub fn take_request(db: &Path) -> Option<PathBuf> {
+    let target = request_path(db);
+    if !target.exists() {
+        return None;
+    }
+    let text = std::fs::read_to_string(&target).ok();
+    let _ = std::fs::remove_file(&target);
+    text.map(|t| PathBuf::from(t.trim_end_matches(['\r', '\n'])))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_second_start_hands_its_path_over() {
+        let dir = std::env::temp_dir().join(format!("graineo-instance-request-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("library.sqlite");
+        assert_eq!(take_request(&db), None);
+        let p = PathBuf::from("/Volumes/Karte/DCIM/100 Ölbilder/写真.JPG");
+        hand_over(&db, Path::new("/older")).unwrap();
+        hand_over(&db, &p).unwrap();
+        assert_eq!(take_request(&db), Some(p), "the newest request, path unchanged");
+        assert_eq!(take_request(&db), None, "taken once");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn second_handle_sees_lock_and_release_frees_it() {

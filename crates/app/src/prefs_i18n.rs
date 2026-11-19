@@ -87,6 +87,7 @@ pub(super) fn general(ui: &mut egui::Ui) {
         });
     });
     default_apps(ui);
+    explorer_menu(ui);
     group(ui, crate::tr("Updates"), |ui| {
         row(ui, crate::tr("Automatisch nach Updates suchen"), Some(crate::tr("Einmal am Tag eine Anfrage an GitHub; es werden keine Daten gesendet.")), |ui| {
             crate::help::info(ui, "prefs-updates", "Updates", &crate::help::UPDATES);
@@ -164,6 +165,38 @@ fn default_apps(ui: &mut egui::Ui) {
             }
         });
         if let Some(m) = MESSAGE.lock().unwrap().clone() {
+            ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM));
+        }
+    });
+}
+
+/// Windows: "Mit graineo ansehen" in the Explorer menu (folders, folder background, drives, photos). The state is read
+/// from the registry when the page opens (cached for a few seconds, never per frame). Other systems: not shown.
+fn explorer_menu(ui: &mut egui::Ui) {
+    use library::platform::explorer_menu as menu;
+    if !menu::AVAILABLE {
+        return;
+    }
+    static CACHE: Mutex<Option<(f64, Option<bool>)>> = Mutex::new(None);
+    static MESSAGE: Mutex<Option<String>> = Mutex::new(None);
+    let now = ui.input(|i| i.time);
+    let state = {
+        let mut c = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if c.as_ref().is_none_or(|(t, _)| now - *t > 5.0 || now < *t) {
+            *c = Some((now, menu::state()));
+        }
+        c.as_ref().and_then(|(_, s)| *s)
+    };
+    group(ui, crate::tr("Explorer"), |ui| {
+        row(ui, crate::tr("Im Explorer-Menü anbieten"), Some(crate::tr("Rechtsklick auf Ordner, Laufwerke und Fotos: „Mit graineo ansehen“. Unter Windows 11 bei „Weitere Optionen anzeigen“.")), |ui| {
+            let mut on = state.is_some();
+            if toggle(ui, &mut on) {
+                let r = menu::set(on.then(|| crate::tr(EXPLORER_MENU_LABEL)));
+                *MESSAGE.lock().unwrap_or_else(|e| e.into_inner()) = r.err();
+                *CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            }
+        });
+        if let Some(m) = MESSAGE.lock().unwrap_or_else(|e| e.into_inner()).clone() {
             ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM));
         }
     });

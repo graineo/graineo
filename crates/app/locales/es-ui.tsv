@@ -4937,7 +4937,6 @@ Feineinstellung	Ajuste fino
 + hellt Schatten auf, Lichter bleiben · − dunkelt Lichter ab, Schatten bleiben	+ aclara las sombras, las iluminaciones se mantienen · − oscurece las iluminaciones, las sombras se mantienen
 Der Ordner ist nicht lesbar (keine Berechtigung oder Laufwerk nicht verbunden).	La carpeta no se puede leer (sin permiso o unidad no conectada).
 Keine Fotos oder Videos. Gefunden: {a} andere Dateien in diesem Ordner und {b} Unterordnern, keine in einem Format, das graineo zeigt.	Ninguna foto ni vídeo. Se han encontrado {a} archivos de otro tipo en esta carpeta y sus {b} subcarpetas; ninguno tiene un formato que graineo pueda mostrar.
-Keine Fotos oder Videos – auch nicht in den {a} Unterordnern (bis {b} Ebenen tief).	Ninguna foto ni vídeo, tampoco en las {a} subcarpetas (hasta {b} niveles).
 Der Ordner ist leer.	La carpeta está vacía.
 Keine Fotos in diesem Ordner	No hay fotos en esta carpeta
 Bibliothek wiederherstellen?	¿Restaurar la biblioteca?
@@ -6399,13 +6398,11 @@ Bearbeitung aus neuerer Version – geschützt	edición de una versión más rec
 Bearbeitung aus einer neueren Version	Edición de una versión más reciente
 Diese Bearbeitung stammt aus einer neueren Version von graineo und wird nicht überschrieben. Diese Version kann sie nicht lesen und zeigt die Startwerte; Änderungen an diesem Foto werden nicht gespeichert, Sterne und Markierungen schon. Mit der neueren Version lässt sich die Bearbeitung wieder öffnen.	Esta edición procede de una versión más reciente de graineo y no se sobrescribe. Esta versión no puede leerla y muestra los valores iniciales; los cambios en esta foto no se guardan, las estrellas y marcas sí. La versión más reciente vuelve a abrir la edición.
 Der Ordner ist nur geöffnet, nicht in der Bibliothek. Die Fotos selbst verändert graineo nie.	La carpeta solo está abierta, no está en la biblioteca. graineo nunca modifica las fotos en sí.
-### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Verlassen\n**Schließen** im Streifen oder links eine Quelle wählen, z. B. „Alle Fotos“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### Qué se guarda\n• **Revelar** – cada cambio en los reguladores (también copias virtuales) se guarda como archivo adjunto NOMBRE.xmp junto a la foto\n• **Valorar** (estrellas, marca, etiqueta) – bloqueado mientras «Valoraciones como XMP» esté desactivado; activado, las valoraciones también se escriben como XMP junto a las fotos\n\n### Qué funciona aquí\n• Ver, revelar, exportar\n• Filtrar por estrellas, marca y etiqueta (valores de los XMP existentes)\n• Buscar por nombre de archivo\n\n### Solo después de añadir\nFiltros de columna (cámara, objetivo, fecha …), búsqueda por contenido, palabras clave y lugares, colecciones, personas, duplicados y series. Al añadir, la biblioteca adopta las valoraciones y los revelados de los XMP.\n\n### Salir\n**Cerrar** en la franja, o elegir una fuente a la izquierda, p. ej. «Todas las fotos». **Añadir a la biblioteca…** abre la importación con esta carpeta.
-Du siehst den Ordner „{a}“ an – er ist nicht in der Bibliothek	Estás viendo la carpeta «{a}» – no está en la biblioteca
+### Was gespeichert wird\n• **Entwickeln** – jede Änderung an den Reglern (auch virtuelle Kopien) wird als Begleitdatei NAME.xmp neben dem Foto gespeichert\n• **Bewerten** (Sterne, Markierung, Etikett) – gesperrt, solange „Bewertungen als XMP“ aus ist; eingeschaltet landen sie ebenfalls als XMP neben den Fotos\n\n### Was hier geht\n• Ansehen, Entwickeln, Exportieren\n• Filtern nach Sternen, Markierung und Etikett (Werte aus vorhandenen XMP)\n• Suchen nach Dateinamen\n\n### Erst nach dem Hinzufügen\nSpaltenfilter (Kamera, Objektiv, Datum …), Suche nach Inhalt, Stichwörtern und Orten, Sammlungen, Personen, Duplikate und Serien. Beim Hinzufügen übernimmt die Bibliothek Bewertungen und Entwicklungen aus den XMP.\n\n### Ordnerbaum\nLinks unter „Angesehen“ zeigt ein Klick auf einen Ordner seine Fotos; „Unterordner einbeziehen“ aus: nur die Fotos direkt darin. **Aktualisieren** liest den Ordner neu, leise auch, wenn du zu graineo zurückkehrst.\n\n### Verlassen\n**Schließen** im Streifen oder per Rechtsklick auf den Ordner links. Eine andere Quelle zeigt die Bibliothek; der Ordner bleibt unter „Angesehen“. **Zur Bibliothek hinzufügen …** öffnet den Import mit diesem Ordner.	### Qué se guarda\n• **Revelar** – cada cambio en los reguladores (también copias virtuales) se guarda como archivo adjunto NOMBRE.xmp junto a la foto\n• **Valorar** (estrellas, marca, etiqueta) – bloqueado mientras «Valoraciones como XMP» esté desactivado; activado, las valoraciones también se escriben como XMP junto a las fotos\n\n### Qué funciona aquí\n• Ver, revelar, exportar\n• Filtrar por estrellas, marca y etiqueta (valores de los XMP existentes)\n• Buscar por nombre de archivo\n\n### Solo después de añadir\nFiltros de columna (cámara, objetivo, fecha …), búsqueda por contenido, palabras clave y lugares, colecciones, personas, duplicados y series. Al añadir, la biblioteca adopta las valoraciones y los revelados de los XMP.\n\n### Árbol de carpetas\nA la izquierda, en «Vista», un clic en una carpeta muestra sus fotos; con «Incluir subcarpetas» desactivado, solo las fotos directamente en ella. **Actualizar** vuelve a leer la carpeta, y también en silencio al volver a graineo.\n\n### Salir\n**Cerrar** en la franja o clic derecho en la carpeta de la izquierda. Otra fuente muestra la biblioteca; la carpeta sigue en «Vista». **Añadir a la biblioteca…** abre la importación con esta carpeta.
 Ordner nicht mehr ansehen – zurück zu „Alle Fotos“	Dejar de ver la carpeta – volver a «Todas las fotos»
 Öffnet den Import mit diesem Ordner	Abre la importación con esta carpeta
 Bewertungen als XMP	Valoraciones como XMP
 Sterne, Markierungen und Etiketten als Begleitdatei (XMP) neben die Fotos schreiben. Aus: Bewerten ist hier gesperrt.	Escribir estrellas, marcas y etiquetas como archivos adjuntos (XMP) junto a las fotos. Desactivado: aquí no se puede valorar.
-Deine Bibliothek – der angesehene Ordner gehört nicht dazu	Tu biblioteca – la carpeta que ves no forma parte de ella
 Zum Bewerten zur Bibliothek hinzufügen oder oben im Streifen „Bewertungen als XMP“ einschalten	Para valorar, añade a la biblioteca o activa «Valoraciones como XMP» en la franja superior
 EIGENER LOOK	LOOK PROPIO
 Eigener Look	Look propio
@@ -6494,3 +6491,99 @@ Toleranz (%)	Tolerancia (%)
 Wie ähnlich die Farbe sein muss	Qué tan parecido debe ser el color
 Erst „Auto-Maske“ einschalten	Activa primero «Máscara automática»
 Pinsel malt · ⌥ radiert · ⇧-Klick Linie	El pincel pinta · ⌥ borra · ⇧-clic línea
+Angesehen	Vista
+Ordner neu einlesen	Volver a leer la carpeta
+angesehenen Ordner neu einlesen	volver a leer la carpeta vista
+Keine Fotos direkt in diesem Ordner. „Unterordner einbeziehen“ zeigt auch die {a} Unterordner.	No hay fotos directamente en esta carpeta. «Incluir subcarpetas» muestra también las {a} subcarpetas.
+Keine Fotos oder Videos – auch nicht in den {a} Unterordnern.	Sin fotos ni vídeos, tampoco en las {a} subcarpetas.
+Nur die ersten {a} Fotos gezeigt	Solo se muestran las primeras {a} fotos
+Nur die ersten {a} Unterordner durchsucht	Solo se han revisado las primeras {a} subcarpetas
+„{a}“ · nur angesehen, nicht in der Bibliothek	«{a}» · solo vista, no está en la biblioteca
+Ordner aktualisiert – keine Änderung	Carpeta actualizada: sin cambios
+{a} neu	{a} nuevas
+{a} neu, {b} entfernt	{a} nuevas, {b} eliminadas
+Unterordner einbeziehen	Incluir subcarpetas
+Aus: nur die Fotos direkt im gewählten Ordner	Desactivado: solo las fotos directamente en la carpeta elegida
+nicht lesbar	no legible
+Erst zur Bibliothek hinzufügen	Primero añádela a la biblioteca
+Explorer	Explorador
+Im Explorer-Menü anbieten	Ofrecer en el menú del Explorador
+Rechtsklick auf Ordner, Laufwerke und Fotos: „Mit graineo ansehen“. Unter Windows 11 bei „Weitere Optionen anzeigen“.	Clic derecho en carpetas, unidades y fotos: «Ver con graineo». En Windows 11, en «Mostrar más opciones».
+Mit graineo ansehen	Ver con graineo
+Die Dateien (mit XMP daneben) kommen in den Papierkorb.	Los archivos (con el XMP a su lado) van a la papelera.
+Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen	Unidad de red sin papelera: primero añádela a la biblioteca
+Video	Vídeo
+Infozeilen	Líneas de info
+Zeile 1	Línea 1
+Zeile 2	Línea 2
+Aufnahmedatum	Fecha de captura
+Pixelmaße	Tamaño en píxeles
+Dateigröße	Tamaño del archivo
+Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.	Aquí funcionan ver, revelar, exportar e imprimir. Todo lo demás, solo en la biblioteca.
+Ordner schließen	Cerrar carpeta
+Keine automatische Installation auf diesem System	Sin instalación automática en este sistema
+Apple RAW {a} · Rückfall	Apple RAW {a} · alternativa
+entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)	revelado con Apple RAW {a} (decodificación de graineo inutilizable)
+graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	La decodificación de graineo no da una imagen utilizable para este archivo (valores muy por encima del punto blanco). macOS decodifica esta foto (Apple RAW {a}); color, tono, looks, película y máscaras los calcula graineo. La versión queda fijada para esta foto; cámbiala en el panel Sensor en «Pipeline».
+Automatik · Rückfall	Automático · alternativa
+festgehalten · Rückfall	fijado · alternativa
+nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild	no es posible: la decodificación de graineo no da una imagen utilizable para este archivo
+Ordner wählen und exportieren …	Elegir carpeta y exportar …
+Vorhandene Dateien überschreiben?	¿Sobrescribir archivos existentes?
+Dateien gleichen Namens im Zielordner werden durch den Export ersetzt ({n} Bilder). Die alten kommen in den Papierkorb.	Los archivos con el mismo nombre en la carpeta de destino se sustituyen ({n} imágenes). Los antiguos van a la papelera.
+Das Original eines Fotos wird nie ersetzt.	El original de una foto nunca se sustituye.
+Überschreiben	Sobrescribir
+Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14	Año/día de la toma, p. ej. 2026/2026-07-14
+Name des Ordners, in dem das Original liegt	Nombre de la carpeta del original
+Zurück zum Originalnamen	Volver al nombre original
+Originalname	Nombre original
+Text	Texto
+Eigener Text: im Feld überschreiben	Texto propio: sobrescríbelo en el campo
+Nummer	Número
+Titel aus der Bibliothek, falls vorhanden	Título de la biblioteca, si existe
+„_mono“ bei Schwarzweiß	«_mono» en blanco y negro
+Stellen	Dígitos
+Start	Inicio
+Nummer anhängen	Añadir número
+Name-2.jpg; nichts wird überschrieben	Nombre-2.jpg; no se sobrescribe nada
+Ersetzt Dateien gleichen Namens (alte in den Papierkorb); wird vorher gefragt	Sustituye archivos con el mismo nombre (los antiguos a la papelera); pregunta antes
+Überspringen	Omitir
+Fotos, deren Datei es schon gibt, nicht exportieren	No exportar fotos cuyo archivo ya existe
+→ {f} · {n}	→ {f} · {n}
+→ keine Datei	→ ningún archivo
+{n} gleiche Namen → bekommen eine Nummer	{n} nombres iguales → reciben un número
+{n} gibt es schon → bekommen eine Nummer	{n} ya existen → reciben un número
+{n} gibt es schon → werden ersetzt	{n} ya existen → se sustituirán
+{n} gibt es schon → werden übersprungen	{n} ya existen → se omitirán
+„{a}“ gibt es schon.	«{a}» ya existe.
+Name der Vorlage	Nombre de la plantilla
+– keine –	– ninguna –
+Noch keine Vorlagen	Aún no hay plantillas
+Sichern …	Guardar …
+Name, Ordnerregel, Format und Größe als Vorlage sichern	Guardar nombre, regla de carpetas, formato y tamaño como plantilla
+Vorlage in den Papierkorb legen	Mover la plantilla a la papelera
+{a} übersprungen: gibt es schon	{a} omitido: ya existe
+fertig – {n} gespeichert, {b} übersprungen (gibt es schon) in {a}	listo – {n} guardados, {b} omitidos (ya existen) en {a}
+Vorlage	Plantilla
+Originalname {name}	Nombre original {name}
+Nr.	N.º
+Laufende Nummer {n:3}	Número correlativo {n:3}
+GPS	GPS
+Unterordner nach Datum	Subcarpetas por fecha
+Unterordner nach Ordner	Subcarpetas por carpeta
+Abzug, Foveon, GPS, Stichwörter, Unterordner, Nummer	Copia, Foveon, GPS, palabras clave, subcarpetas, número
+Kompression	Compresión
+Bit-Tiefe	Profundidad
+Unverändert, geprüft kopiert (SHA-256)	Sin cambios, copia verificada (SHA-256)
+XMP-Begleitdatei	Archivo XMP adjunto
+Papier- und Filmrand mitnehmen	Incluir borde de papel y película
+Export anhalten	Detener exportación
+Verlustbehaftet; 92 ist kaum vom Original zu unterscheiden	Con pérdida; a 92 apenas se distingue del original
+Oberbegriffe	Términos superiores
+Hierarchie	Jerarquía
+Größe und Metadaten	Tamaño y metadatos
+Zurück zum Originalnamen ({name})	Volver al nombre original ({name})
+Wenn vorhanden	Si ya existe
+Gain-Map behalten	Conservar gain map
+HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Conservar el brillo HDR de las fotos de iPhone; solo sRGB
+Mehr	Más

@@ -557,6 +557,7 @@ mod missing_tests {
             as_print: false,
             color_space: graineo_color::Space::Srgb,
             options: Default::default(),
+            names: Default::default(),
         };
         let mut export = ExportCheck {
             job: Some(job),

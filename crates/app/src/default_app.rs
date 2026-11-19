@@ -1,10 +1,10 @@
-//! Default app per RAW format (settings → General): shows which program opens X3F (and on request CR3, RAF,
-//! DNG, ARW, NEF, NRW) in the Finder and makes graineo the default with one click (Launch Services,
+//! Default app per RAW format (settings → General): shows which program opens X3F (and on request CR3, CR2, RAF,
+//! DNG, ARW, NEF, NRW, ORF, RW2, PEF) in the Finder and makes graineo the default with one click (Launch Services,
 //! `LSSetDefaultRoleHandlerForContentType`). Only reads and sets the system's assignment, nothing else.
 //! Other systems: no function (the row is not shown).
 
 /// Formats the settings offer: X3F always, the others behind "More formats".
-pub const FORMATS: [&str; 7] = ["x3f", "cr3", "raf", "dng", "arw", "nef", "nrw"];
+pub const FORMATS: [&str; 11] = ["x3f", "cr3", "cr2", "raf", "dng", "arw", "nef", "nrw", "orf", "rw2", "pef"];
 
 /// Default handler of a file extension: (bundle identifier, app name). `None`: none known.
 pub fn handler(ext: &str) -> Option<(String, String)> {

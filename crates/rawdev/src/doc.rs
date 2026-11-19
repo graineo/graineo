@@ -300,14 +300,12 @@ pub(crate) fn quarters(o: u16) -> u8 {
 
 /// Non-Sigma RAW (extension)?
 pub fn is_raw(p: &Path) -> bool {
-    let e = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    matches!(e.as_str(), "cr2" | "cr3" | "raf" | "dng" | "arw" | "nef" | "nrw" | "orf" | "rw2" | "pef" | "srw")
+    library::is_raw_extension(p.extension().and_then(|e| e.to_str()).unwrap_or(""))
 }
 
 /// Finished image (JPEG, HEIC, TIFF, PNG) that can be edited here?
 pub fn is_image(p: &Path) -> bool {
-    let e = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    matches!(e.as_str(), "jpg" | "jpeg" | "heic" | "heif" | "hif" | "tif" | "tiff" | "png")
+    library::is_finished_image_extension(p.extension().and_then(|e| e.to_str()).unwrap_or(""))
 }
 
 /// lensfun for finished images: found profile and why it applies (or not) automatically.
@@ -460,8 +458,9 @@ impl RawDoc {
         let t = std::time::Instant::now();
         let f = match raw::RawFile::open(path) {
             Ok(f) => f,
-            // a file graineo cannot decode (Nikon High Efficiency): the system engine, if it knows the file
-            Err(raw::Error::Unsupported(why)) if why == raw::NIKON_HE && apple::available() => {
+            // a file graineo cannot decode (Nikon High Efficiency, implausible decoder result): the system engine, if it
+            // knows the file
+            Err(raw::Error::Unsupported(why)) if (why == raw::NIKON_HE || why == raw::DECODE_IMPLAUSIBLE) && apple::available() => {
                 return match apple::open(path, s, None, apple::Reason::Fallback, Some(why.clone())) {
                     Ok(d) => Ok(Some(d)),
                     Err(e) => {

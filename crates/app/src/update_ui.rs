@@ -380,8 +380,14 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
     match phase {
         Phase::Available { m, .. } => {
             title(ui, &crate::trf!("graineo {v} ist verfügbar", v = m.version));
-            let size = update::asset_key().and_then(|k| m.asset(k)).map(|a| a.size).unwrap_or(0);
-            small(ui, &format!("{} · {}", crate::trf!("Installiert: {a}", a = update::current_version()), crate::dialog::size(size)));
+            // a system without an update package (Linux): only a pointer to the release page
+            let manual = update::asset_key().is_none();
+            if manual {
+                small(ui, &format!("{} · {}", crate::trf!("Installiert: {a}", a = update::current_version()), crate::tr("Keine automatische Installation auf diesem System")));
+            } else {
+                let size = update::asset_key().and_then(|k| m.asset(k)).map(|a| a.size).unwrap_or(0);
+                small(ui, &format!("{} · {}", crate::trf!("Installiert: {a}", a = update::current_version()), crate::dialog::size(size)));
+            }
             let notes = m.notes_for(german).trim();
             if !notes.is_empty() {
                 egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Neuigkeiten")).small().color(lr::TEXT_DIM)).id_salt("update-notes").default_open(false).show(ui, |ui| {
@@ -391,7 +397,12 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
             ui.add_space(4.0);
             ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
-                if lr::main_button_min(ui, crate::tr("Installieren"), true, 100.0).clicked() {
+                if manual {
+                    if lr::main_button_min(ui, crate::tr("Release-Seite öffnen"), true, 100.0).clicked() {
+                        crate::system::open(update::RELEASES_PAGE);
+                        STATE.lock().unwrap_or_else(|e| e.into_inner()).hidden = true;
+                    }
+                } else if lr::main_button_min(ui, crate::tr("Installieren"), true, 100.0).clicked() {
                     install(ui.ctx(), m.clone());
                 }
                 if ui.add(egui::Button::new(crate::tr("Später")).min_size(egui::vec2(70.0, 24.0)).corner_radius(0.0)).clicked() {

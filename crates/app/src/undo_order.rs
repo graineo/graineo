@@ -202,6 +202,12 @@ mod tests {
         let ctx = eframe::egui::Context::default();
         let cc = eframe::CreationContext::_new_kittest(ctx.clone());
         let _app_lock = crate::ui_test::app_lock();
+        // the quick collection holds library photos only (a photo of a folder only being viewed has no entry, B is
+        // refused there): the folder goes into the test library
+        {
+            let db = library::db::Db::open(&library::db_path()).unwrap();
+            library::reconcile::add_root(&db, &folder, &|_| {}).unwrap();
+        }
         let mut a = crate::App::new(&cc);
         assert!(a.undo_candidates().iter().all(|c| c.0 != Stack::Library), "journals of earlier sessions do not count");
         a.open_folder_inner(folder.clone());

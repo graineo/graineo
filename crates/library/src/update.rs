@@ -398,15 +398,22 @@ pub enum Check {
 
 /// Verify the downloaded manifest bytes and its signature and compare with `current`.
 pub fn evaluate(json: &[u8], sig: &str, keys: &[String], current: &str, allow_local: bool) -> Result<Check, String> {
+    evaluate_for(asset_key(), json, sig, keys, current, allow_local)
+}
+
+/// [`evaluate`] for a given platform key. A system without an update package (`None`, e.g. Linux) still learns that a
+/// newer version exists (it is then pointed to the release page; there is no automatic installation).
+pub fn evaluate_for(key: Option<&str>, json: &[u8], sig: &str, keys: &[String], current: &str, allow_local: bool) -> Result<Check, String> {
     if is_prerelease(current) {
         return Ok(Check::UpToDate { current: current.to_string(), latest: current.to_string() });
     }
     verify_any(json, sig, keys)?;
     let m = parse_manifest(json, allow_local)?;
-    let key = asset_key().ok_or("no update package for this system")?;
     if is_newer(&m.version, current) {
-        if m.asset(key).is_none() {
-            return Err(format!("latest.json: no package {key}"));
+        if let Some(key) = key {
+            if m.asset(key).is_none() {
+                return Err(format!("latest.json: no package {key}"));
+            }
         }
         Ok(Check::Available(m))
     } else {
@@ -1156,6 +1163,21 @@ mod tests {
         assert!(verify_any(data.as_bytes(), &foreign, &keys).is_err());
         let builtin: Vec<String> = built_in_keys().into_iter().map(str::to_string).collect();
         assert!(verify_any(data.as_bytes(), &foreign, &builtin).is_err());
+    }
+
+    /// A system without an update package (Linux) still hears of a newer version, with the signature checked; a wrong
+    /// package key on a system that has one stays an error.
+    #[test]
+    fn system_without_package_is_told_about_the_new_version() {
+        let (seed, public) = keypair();
+        let data = manifest_json(&sample("https://example.org"));
+        let sig = sign(data.as_bytes(), &seed).unwrap();
+        let keys = [public.clone()];
+        assert!(matches!(evaluate_for(None, data.as_bytes(), &sig, &keys, "0.62.5", false), Ok(Check::Available(m)) if m.version == "0.63.0"));
+        assert!(matches!(evaluate_for(None, data.as_bytes(), &sig, &keys, "0.63.0", false), Ok(Check::UpToDate { .. })));
+        let tampered = data.replace("abab", "abac");
+        assert!(evaluate_for(None, tampered.as_bytes(), &sig, &keys, "0.62.5", false).is_err(), "signature first");
+        assert!(evaluate_for(Some("linux-x64"), data.as_bytes(), &sig, &keys, "0.62.5", false).is_err(), "a system with a package key needs its package");
     }
 
     #[test]

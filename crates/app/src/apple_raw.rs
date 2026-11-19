@@ -660,8 +660,8 @@ impl crate::App {
         let choice = rawdev::apple::Choice::parse(self.entries[i].settings.raw.engine.as_deref());
         let mut v = Vec::new();
         if let Some(a) = doc.apple.as_ref() {
-            if a.graineo_blocked.is_some() {
-                v.push(crate::photo_state::engine_fallback(&apple::version_label(&a.used)));
+            if let Some(why) = &a.graineo_blocked {
+                v.push(crate::photo_state::engine_fallback(&apple::version_label(&a.used), why));
             }
         }
         let blocked = if doc.apple.is_none() && choice.is_apple() { self.apple_blocked() } else { None };
@@ -747,6 +747,7 @@ impl crate::App {
                 crate::lr::field_label(ui, "Entwicklung");
                 let current = if dev.is_some() { EngineSel::Apple } else { EngineSel::Graineo };
                 let graineo_tip = match &graineo_blocked {
+                    Some(why) if why == raw::DECODE_IMPLAUSIBLE => crate::tr("nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild").to_string(),
                     Some(_) => crate::tr("nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren").to_string(),
                     None => crate::tr("Dieses Foto mit graineos eigener Pipeline entwickeln").to_string(),
                 };
@@ -960,11 +961,12 @@ fn engine_status(dev: Option<&rawdev::apple::AppleDev>, choice: &rawdev::apple::
         if let Some(m) = &a.pinned_missing {
             return (crate::trf!("Apple RAW {a} fehlt – mit {b} gerechnet", a = apple::version_label(m), b = apple::version_label(&a.used)), true);
         }
+        let implausible = a.graineo_blocked.as_deref() == Some(raw::DECODE_IMPLAUSIBLE);
         if a.graineo_blocked.is_some() && matches!(choice, Choice::Auto) {
-            return (crate::tr("Automatik · HE-Rückfall").to_string(), false);
+            return (if implausible { crate::tr("Automatik · Rückfall") } else { crate::tr("Automatik · HE-Rückfall") }.to_string(), false);
         }
         if a.graineo_blocked.is_some() {
-            return (crate::tr("festgehalten · HE").to_string(), false);
+            return (if implausible { crate::tr("festgehalten · Rückfall") } else { crate::tr("festgehalten · HE") }.to_string(), false);
         }
         return (crate::tr("festgehalten").to_string(), false);
     }

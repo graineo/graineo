@@ -84,10 +84,10 @@ pub enum Job {
     PrepareFull { index: usize, doc: Arc<rawdev::RawDoc>, settings: Settings, generation: usize, current: Arc<AtomicUsize> },
     /// per image: file, settings, library image ID (keywords), rating
     /// `gain_map`: pass the HDR gain map of the originals (iPhone etc.) on to JPEGs where the geometry fits
-    Export { items: Vec<(PathBuf, Settings, i64, crate::sidecar::Meta)>, format: Format, engine: Engine, dir: PathBuf, gain_map: bool, allow_missing_profiles: bool, as_print: bool, color_space: graineo_color::Space, options: develop::export::Options },
+    Export { items: Vec<(PathBuf, Settings, i64, crate::sidecar::Meta)>, format: Format, engine: Engine, dir: PathBuf, gain_map: bool, allow_missing_profiles: bool, as_print: bool, color_space: graineo_color::Space, options: develop::export::Options, names: crate::export_names::JobNames },
     /// Export "Original": the files unchanged, verified copies (path, image ID, image ID of the stacked camera JPEG
     /// to take along); `sidecars`: an XMP next to each copy
-    ExportOriginal { items: Vec<(PathBuf, i64, Option<i64>)>, dir: PathBuf, sidecars: bool },
+    ExportOriginal { items: Vec<(PathBuf, i64, Option<i64>)>, dir: PathBuf, sidecars: bool, names: crate::export_names::JobNames },
     /// Metering area statistics on the raw data (rectangle in the active image area)
     Stats { index: usize, session: Arc<Mutex<Session>>, rect: [usize; 4] },
     /// Write the three layers as linear 16-bit TIFFs
@@ -1736,10 +1736,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
             let camf = x3f::X3fFile::open(&path).and_then(|f| f.camf()).map(Arc::new).map_err(|e| e.to_string());
             send(JobResult::Camf { index, camf });
         }
-        Job::ExportOriginal { items, dir, sidecars } => {
+        Job::ExportOriginal { items, dir, sidecars, names } => {
             let total = items.len();
             let db = library::db::Db::standard().ok();
             let mut errors = 0;
+            let mut skipped = 0;
             for (i, (path, image, pair)) in items.into_iter().enumerate() {
                 if EXPORT_CANCEL.load(Ordering::SeqCst) {
                     send(JobResult::ExportProgress { done: total, total, message: crate::trf!("abgebrochen nach {i} von {total}", i = i, total = total), failed: None });
@@ -1766,7 +1767,27 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     let f = d.file_of(j)?;
                     Some(library::original_export::Source::of(&d.file_path(f)?, Some(f)))
                 });
-                let result = photo.and_then(|p| library::original_export::export(db.as_ref(), &p, pair.as_ref(), &dir, sidecars));
+                // the planned name (pattern, subfolder) with the original's extension
+                let (target_dir, photo) = match names.get(i) {
+                    Some(rel) => (dir.join(rel.parent().unwrap_or(std::path::Path::new(""))), photo.map(|mut p| {
+                        let ext = std::path::Path::new(&p.name).extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+                        p.name = format!("{}{ext}", rel.file_name().unwrap_or_default().to_string_lossy());
+                        p
+                    })),
+                    None => (dir.clone(), photo),
+                };
+                if names.collision == crate::export_names::Collision::Skip {
+                    if let Ok(p) = &photo {
+                        if std::fs::symlink_metadata(target_dir.join(&p.name)).is_ok() {
+                            skipped += 1;
+                            let done = i + 1;
+                            let message = if done == total { finished_message(total, skipped, &dir) } else { crate::trf!("{a} übersprungen: gibt es schon", a = p.name) };
+                            send(JobResult::ExportProgress { done, total, message, failed: None });
+                            continue;
+                        }
+                    }
+                }
+                let result = photo.and_then(|p| library::original_export::export(db.as_ref(), &p, pair.as_ref(), &target_dir, sidecars));
                 let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                 let (message, failed) = match result {
                     Ok(w) => (crate::trf!("{a} gespeichert", a = w.first().and_then(|p| p.file_name()).unwrap_or_default().to_string_lossy()), None),
@@ -1776,14 +1797,14 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     }
                 };
                 let done = i + 1;
-                let message = if done == total && errors == 0 { crate::trf!("fertig – {total} Bild(er) in {a}", total = total, a = dir.display()) } else { message };
+                let message = if done == total && errors == 0 { finished_message(total, skipped, &dir) } else { message };
                 send(JobResult::ExportProgress { done, total, message, failed });
             }
             if total == 0 {
                 send(JobResult::ExportProgress { done: 0, total: 0, message: String::new(), failed: None });
             }
         }
-        Job::Export { items, format, engine, dir, gain_map, allow_missing_profiles, as_print, color_space, options } => {
+        Job::Export { items, format, engine, dir, gain_map, allow_missing_profiles, as_print, color_space, options, names } => {
             let total = items.len();
             // never into an Apple Photos library or another program's package
             if let Err(e) = library::write_target::check(&dir) {
@@ -1795,6 +1816,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 return;
             }
             let mut errors = 0;
+            let mut skipped = 0;
             let db = library::db::Db::standard().ok();
             for (i, (path, settings, image, meta)) in items.into_iter().enumerate() {
                 if EXPORT_CANCEL.load(Ordering::SeqCst) {
@@ -1810,12 +1832,38 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                         continue;
                     }
                 };
-                let suffix = if s.monochrome { "_mono" } else { "" };
-                let out = dir.join(format!("{stem}{suffix}{}.{}", format.name_suffix(), format.extension()));
+                let ending = format!("{}.{}", format.name_suffix(), format.extension());
+                let out = match names.get(i) {
+                    // the planned name (pattern, subfolder)
+                    Some(rel) => {
+                        let mut p = dir.join(rel).into_os_string();
+                        p.push(&ending);
+                        PathBuf::from(p)
+                    }
+                    None => dir.join(format!("{stem}{}{ending}", if s.monochrome { "_mono" } else { "" })),
+                };
+                if let Some(parent) = out.parent().filter(|p| *p != dir.as_path()) {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        errors += 1;
+                        send(JobResult::ExportProgress { done: i + 1, total, message: crate::trf!("Zielordner: {e}", e = e), failed: Some(source.clone()) });
+                        continue;
+                    }
+                }
+                let taken = std::fs::symlink_metadata(&out).is_ok();
+                if taken && names.collision == crate::export_names::Collision::Skip {
+                    skipped += 1;
+                    let done = i + 1;
+                    let message = if done == total && errors == 0 { finished_message(total, skipped, &dir) } else { crate::trf!("{a} übersprungen: gibt es schon", a = out.file_name().unwrap_or_default().to_string_lossy()) };
+                    send(JobResult::ExportProgress { done, total, message, failed: None });
+                    continue;
+                }
+                // "Overwrite" (asked before the export): the existing file is replaced once the new one is finished –
+                // never the original of this photo itself (JPEG/TIFF exported into its own folder).
+                let replace = taken && names.collision == crate::export_names::Collision::Overwrite && !same_file(&out, &path) && !same_file(&out, &source);
                 // Existing files do not belong to the export job: in particular, for JPEG/TIFF in the original folder
                 // the destination can be the original itself. Instead of overwriting, the new file
                 // gets a free name ("Name-2.jpg").
-                let out = match free_target_name(&out) {
+                let out = match if replace { Ok(out) } else { free_target_name(&out) } {
                     Ok(p) => p,
                     Err(reason) => {
                         errors += 1;
@@ -1881,7 +1929,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 };
                 // Move the finished side file to the destination name. If the name has been taken in the meantime,
                 // the next free one is used.
-                let result = result.and_then(|spp| publish_side_file(&out, &target_name).map(|p| (spp, p)));
+                let result = result.and_then(|spp| if replace { replace_with_side_file(&out, &target_name, &trash_one) } else { publish_side_file(&out, &target_name) }.map(|p| (spp, p)));
                 // Quattro sensor layers: the full-resolution top layer is a second file next to the first
                 let companion = |p: &std::path::Path| p.with_file_name(format!("{}_top.tif", p.file_stem().unwrap_or_default().to_string_lossy()));
                 let side_top = companion(&out);
@@ -1913,11 +1961,47 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     }
                 };
                 let done = i + 1;
-                let message = if done == total && errors == 0 { crate::trf!("fertig – {total} Bild(er) in {a}", total = total, a = dir.display()) } else { message };
+                let message = if done == total && errors == 0 { finished_message(total, skipped, &dir) } else { message };
                 send(JobResult::ExportProgress { done, total, message, failed });
             }
         }
     }
+}
+
+/// Closing message of an export without errors.
+fn finished_message(total: usize, skipped: usize, dir: &std::path::Path) -> String {
+    if skipped == 0 {
+        crate::trf!("fertig – {total} Bild(er) in {a}", total = total, a = dir.display())
+    } else {
+        crate::trf!("fertig – {n} gespeichert, {b} übersprungen (gibt es schon) in {a}", n = total - skipped, b = skipped, a = dir.display())
+    }
+}
+
+/// Do two paths name the same file (also through links or a different spelling)?
+fn same_file(a: &std::path::Path, b: &std::path::Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// The existing file `target` goes to the trash (system trash, on network drives the drive's own trash folder).
+fn trash_one(target: &std::path::Path) -> Result<(), String> {
+    let local = |files: &[PathBuf]| trash::delete_all(files).map_err(|e| e.to_string());
+    let db = library::db::Db::standard().ok();
+    let root_of = |p: &std::path::Path| db.as_ref().and_then(|d| library::pairs::root_of(d, p));
+    let targets = library::trash_batch::Targets { local: &local, is_network: &library::network_trash::is_network, root_of: &root_of, day: library::card_import::today() };
+    library::trash_batch::dispose_all(&[target.to_path_buf()], &targets).map(|_| ())
+}
+
+/// "Overwrite": the finished side file `finished` takes the name `target`; an existing file there is handed to
+/// `discard` first (the trash) – never deleted. If that fails, the old file stays and the export gets a free name.
+fn replace_with_side_file(finished: &std::path::Path, target: &std::path::Path, discard: &dyn Fn(&std::path::Path) -> Result<(), String>) -> Result<PathBuf, String> {
+    if std::fs::symlink_metadata(target).is_ok() {
+        // failed: the old file stays, `publish_side_file` takes the next free name
+        let _ = discard(target);
+    }
+    publish_side_file(finished, target)
 }
 
 /// A photo ready for output (export, print): the local original, its file stem and the settings for the full development.
@@ -2346,6 +2430,27 @@ mod export_safety_tests {
     }
 
     #[test]
+    fn overwrite_hands_the_old_file_away_first() {
+        let root = tmp("ersetzen");
+        let bin = root.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let target = root.join("A.jpg");
+        std::fs::write(&target, b"old").unwrap();
+        let side = root.join(".A.part");
+        std::fs::write(&side, b"new").unwrap();
+        let away = |p: &std::path::Path| std::fs::rename(p, bin.join(p.file_name().unwrap())).map_err(|e| e.to_string());
+        assert_eq!(replace_with_side_file(&side, &target, &away).unwrap(), target);
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        assert_eq!(std::fs::read(bin.join("A.jpg")).unwrap(), b"old");
+        // the old file cannot be handed away: it stays, the new one gets a free name
+        std::fs::write(&side, b"newer").unwrap();
+        let refuse = |_: &std::path::Path| Err("no trash".to_string());
+        assert_eq!(replace_with_side_file(&side, &target, &refuse).unwrap(), root.join("A-2.jpg"));
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn free_target_name_overwrites_nothing() {
         let root = tmp("zielname");
         let target = root.join("Übung 日本.jpg");
@@ -2388,7 +2493,7 @@ mod export_safety_tests {
             std::thread::spawn(move || run_inner(Job::Export {
                 items: vec![(raw, Settings::default(), 0, crate::sidecar::Meta::default())],
                 format: Format::Jpeg { quality: 90 }, engine: Engine::Own, dir,
-                gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(),
+                gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(), names: Default::default(),
             }, &|_| {}))
         }).collect();
         for h in hs { h.join().unwrap(); }
@@ -2430,7 +2535,7 @@ mod export_safety_tests {
             run_inner(Job::Export {
                 items: vec![(original.clone(), Settings::default(), 0, crate::sidecar::Meta::default())],
                 format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir,
-                gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(),
+                gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(), names: Default::default(),
             }, &|_| {});
             assert_eq!(std::fs::read(&original).unwrap(), b"original-camera-file");
             assert_eq!(std::fs::read(&target).unwrap(), b"existing-export");
@@ -2443,7 +2548,7 @@ mod export_safety_tests {
         // A broken link also stays as it is.
         std::fs::remove_file(&target).unwrap();
         std::os::unix::fs::symlink(root.join("missing"), &target).unwrap();
-        run_inner(Job::Export { items: vec![(original.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: separate, gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default() }, &|_| {});
+        run_inner(Job::Export { items: vec![(original.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: separate, gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(), names: Default::default() }, &|_| {});
         assert!(std::fs::symlink_metadata(&target).unwrap().file_type().is_symlink());
         assert!(!root.join("missing").exists());
         std::fs::remove_dir_all(root).unwrap();
@@ -2462,7 +2567,7 @@ mod export_safety_tests {
         let export = |dir: &str| {
             let target = root.join(dir);
             for space in [graineo_color::Space::Srgb, graineo_color::Space::DisplayP3] {
-                run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: target.join(format!("{space:?}")), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: space, options: Default::default() }, &|_| {});
+                run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: target.join(format!("{space:?}")), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: space, options: Default::default(), names: Default::default() }, &|_| {});
             }
             ["Srgb", "DisplayP3"].map(|d| std::fs::read(target.join(d).join("bild.jpg")).unwrap())
         };
@@ -2508,7 +2613,7 @@ mod export_safety_tests {
         for (level, name) in [(Metadata::None, "none"), (Metadata::Shooting, "shooting"), (Metadata::All, "all")] {
             let options = develop::export::Options { metadata: level, ..Default::default() };
             let dir = root.join(name);
-            run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, meta.clone())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: dir.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options }, &|_| {});
+            run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, meta.clone())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: dir.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options, names: Default::default() }, &|_| {});
             let out = dir.join("camera.jpg");
             assert!(out.exists(), "{name}");
             let r = |p: &str| library::imageio::read_metadata(&out, p);
@@ -2557,7 +2662,7 @@ mod export_safety_tests {
         for (name, format, color_space, metadata) in cases {
             let dir = root.join(name);
             let options = develop::export::Options { metadata, ..Default::default() };
-            run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, meta.clone())], format, engine: Engine::Own, dir: dir.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space, options }, &|_| {});
+            run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, meta.clone())], format, engine: Engine::Own, dir: dir.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space, options, names: Default::default() }, &|_| {});
             let out = dir.join("camera.jxl");
             let bytes = std::fs::read(&out).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(library::export_meta::is_jxl(&bytes), "{name}");
@@ -2585,7 +2690,7 @@ mod export_safety_tests {
         develop::export::write_jpeg(&develop::Rgb16 { width: 32, height: 24, data }, &source, 95).unwrap();
         let before = std::fs::read(&source).unwrap();
         let target = root.join("ziel");
-        run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: target.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default() }, &|_| {});
+        run_inner(Job::Export { items: vec![(source.clone(), Settings::default(), 0, crate::sidecar::Meta::default())], format: Format::Jpeg { quality: 92 }, engine: Engine::Own, dir: target.clone(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(), names: Default::default() }, &|_| {});
         assert!(target.join("ABC-123.jpg").is_file());
         assert_eq!(std::fs::read(&source).unwrap(), before);
         let in_library: Vec<_> = std::fs::read_dir(source.parent().unwrap()).unwrap().flatten().map(|e| e.file_name()).collect();
@@ -2636,7 +2741,7 @@ mod color_space_tests {
                 allow_missing_profiles: false,
                 as_print: false,
                 color_space,
-                options: Default::default(),
+                options: Default::default(), names: Default::default(),
             },
             &|_| {},
         );
@@ -2700,11 +2805,11 @@ mod gate_tests {
             (Job::ExportLut { settings: Default::default(), name: String::new(), path: PathBuf::new() }, |r| matches!(r, JobResult::LutExported { result: Err(_) })),
             (Job::Camf { index: 0, path: PathBuf::new() }, |r| matches!(r, JobResult::Camf { camf: Err(_), .. })),
             (
-                Job::Export { items: vec![item(), item()], format: Format::Jpeg { quality: 90 }, engine: Engine::Own, dir: PathBuf::new(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default() },
+                Job::Export { items: vec![item(), item()], format: Format::Jpeg { quality: 90 }, engine: Engine::Own, dir: PathBuf::new(), gain_map: false, allow_missing_profiles: false, as_print: false, color_space: graineo_color::Space::Srgb, options: Default::default(), names: Default::default() },
                 // done == total ends the export in the app
                 |r| matches!(r, JobResult::ExportProgress { done: 2, total: 2, failed: Some(_), .. }),
             ),
-            (Job::ExportOriginal { items: vec![(PathBuf::new(), 0, None)], dir: PathBuf::new(), sidecars: false }, |r| matches!(r, JobResult::ExportProgress { done: 1, total: 1, failed: Some(_), .. })),
+            (Job::ExportOriginal { items: vec![(PathBuf::new(), 0, None)], dir: PathBuf::new(), sidecars: false, names: Default::default() }, |r| matches!(r, JobResult::ExportProgress { done: 1, total: 1, failed: Some(_), .. })),
         ];
         for (j, fits) in &cases {
             let r = terminal_result(j).unwrap_or_else(|| panic!("{} has no terminal result", job_kind(j)));

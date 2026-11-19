@@ -44,6 +44,8 @@ pub struct Plan {
     pub copies: Vec<i64>,
     /// (image, identifier) photos from Apple Photos: deleted via Apple Photos ("Recently Deleted")
     pub apple: Vec<(i64, String)>,
+    /// of `disk`: photos of a viewed folder (no library entry, only the files go to the Trash)
+    pub viewed: usize,
 }
 
 /// Which switches the dialog offers: only those that can be chosen.
@@ -185,8 +187,16 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
             p.skipped.push((name, crate::tr("Original nicht erreichbar – Löschen geht erst nach dem Verbinden").into()));
             continue;
         }
+        let viewed = crate::library_ui::view_folder_guard::viewed(c.image);
+        // a viewed folder on a network drive: no macOS Trash there and no library root for its trash folder – never
+        // delete for good, skip with the reason
+        if viewed && c.path.parent().is_some_and(library::network_trash::is_network) {
+            p.skipped.push((name, crate::tr("Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen").into()));
+            continue;
+        }
         match c.state {
             0 if c.path.exists() => {
+                p.viewed += usize::from(viewed);
                 p.bytes += std::fs::metadata(&c.path).map(|m| m.len()).unwrap_or(0);
                 if let Some(j) = camera_jpeg(&c.path).filter(|j| !selected.contains(j)) {
                     p.bytes += std::fs::metadata(&j).map(|m| m.len()).unwrap_or(0);
@@ -512,7 +522,10 @@ impl App {
                     return;
                 }
                 // the "permanently deleted" sentence only where something really leaves the library
-                if !p.disk.is_empty() {
+                if !p.disk.is_empty() && p.viewed == p.disk.len() {
+                    // only photos of a viewed folder: nothing of them is in the library
+                    dialog::text(ui, crate::tr("Die Dateien (mit XMP daneben) kommen in den Papierkorb."));
+                } else if !p.disk.is_empty() {
                     dialog::text(ui, crate::tr("Die Dateien (mit XMP daneben) kommen in den Papierkorb. Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht."));
                 } else if !p.copies.is_empty() || !p.apple.is_empty() || (missing && !p.missing.is_empty()) {
                     dialog::text(ui, crate::tr("Bearbeitungen, Bewertungen, Stichwörter und Sammlungen werden endgültig gelöscht."));
@@ -669,6 +682,20 @@ mod tests {
         let p = plan(vec![Candidate { image: 7, file: 1, path: file.clone(), state: 0, copy: false }]);
         assert_eq!(p.apple, vec![(7, "ABC-123".to_string())]);
         assert!(p.disk.is_empty() && p.missing.is_empty() && p.skipped.is_empty());
+        assert!(file.exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    /// A photo of a viewed folder (negative ID) on a local disk goes to the Trash like any other file; the plan counts
+    /// it as viewed (the dialog then leaves out the sentence about library data). Planning touches no file.
+    #[test]
+    fn viewed_photo_planned_for_the_trash_only() {
+        let dir = std::env::temp_dir().join(format!("graineo-delete-viewed-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("v.png");
+        std::fs::write(&file, b"png").unwrap();
+        let p = plan(vec![Candidate { image: -7, file: -7, path: file.clone(), state: 0, copy: false }]);
+        assert_eq!((p.disk.len(), p.viewed, p.skipped.len()), (1, 1, 0));
         assert!(file.exists());
         std::fs::remove_dir_all(dir).unwrap();
     }

@@ -30,6 +30,7 @@ pub mod settings;
 pub mod label;
 pub mod lens_use;
 pub mod exif;
+pub mod exif_header;
 pub mod textmeta;
 pub mod people;
 pub mod face_index;
@@ -271,32 +272,85 @@ pub fn nfc(s: &str) -> String {
 
 /// Format identifier from the file extension (upper case, normalized). `None` = not an image/video.
 pub fn format_from_extension(name: &str) -> Option<&'static str> {
-    let ext = Path::new(name).extension()?.to_str()?.to_ascii_lowercase();
-    Some(match ext.as_str() {
-        "x3f" => "X3F",
-        "cr3" => "CR3",
-        "cr2" => "CR2",
-        "crw" => "CRW",
-        "raf" => "RAF",
-        "dng" => "DNG",
-        "arw" | "srf" | "sr2" => "ARW",
-        "nef" | "nrw" => "NEF",
-        "orf" => "ORF",
-        "rw2" => "RW2",
-        "pef" => "PEF",
-        "jpg" | "jpeg" | "jpe" => "JPG",
-        "heic" | "heif" | "hif" => "HEIC",
-        "tif" | "tiff" => "TIFF",
-        "png" => "PNG",
-        "psd" => "PSD",
-        "mov" | "mp4" | "m4v" | "avi" | "mts" => "VIDEO",
-        _ => return None,
-    })
+    let ext = Path::new(name).extension()?.to_str()?;
+    extension_format(ext)
 }
+
+/// Format identifier of a bare extension ("orf", "ORI", "jpeg" …, any case). `None` = not an image/video.
+pub fn extension_format(ext: &str) -> Option<&'static str> {
+    EXTENSIONS.iter().find(|(e, _)| e.eq_ignore_ascii_case(ext)).map(|(_, f)| *f)
+}
+
+/// Every file extension graineo reads (lower case) with its format: the one list behind [`format_from_extension`]
+/// and everything derived from it (import, folder view, sync, editability in the app, the Explorer menu on Windows,
+/// the document types of the Mac bundle). RAW formats are those of [`is_raw`]; each of them is read by the RAW
+/// decoder (preview, metadata, development). Check a new entry with `scripts/format-check.sh` (docs: formats).
+pub const EXTENSIONS: &[(&str, &str)] = &[
+    ("x3f", "X3F"),
+    ("cr3", "CR3"),
+    ("cr2", "CR2"),
+    ("crw", "CRW"),
+    ("raf", "RAF"),
+    ("dng", "DNG"),
+    ("arw", "ARW"),
+    ("srf", "ARW"),
+    ("sr2", "ARW"),
+    ("nef", "NEF"),
+    ("nrw", "NEF"),
+    ("orf", "ORF"),
+    // OM System / Olympus high-resolution shot: the single frame next to the composite, an ORF by content
+    ("ori", "ORF"),
+    ("rw2", "RW2"),
+    // Leica compacts built by Panasonic: RW2 by content
+    ("rwl", "RW2"),
+    // older Panasonic and Leica cameras (FZ50, LX1, Digilux 3 …): RW2 by content
+    ("raw", "RW2"),
+    ("pef", "PEF"),
+    ("srw", "SRW"),
+    ("mrw", "MRW"),
+    ("erf", "ERF"),
+    ("3fr", "3FR"),
+    ("fff", "3FR"),
+    ("iiq", "IIQ"),
+    ("mos", "MOS"),
+    ("dcr", "DCR"),
+    ("kdc", "KDC"),
+    ("mef", "MEF"),
+    ("jpg", "JPG"),
+    ("jpeg", "JPG"),
+    ("jpe", "JPG"),
+    ("heic", "HEIC"),
+    ("heif", "HEIC"),
+    ("hif", "HEIC"),
+    ("tif", "TIFF"),
+    ("tiff", "TIFF"),
+    ("png", "PNG"),
+    ("psd", "PSD"),
+    ("mov", "VIDEO"),
+    ("mp4", "VIDEO"),
+    ("m4v", "VIDEO"),
+    ("avi", "VIDEO"),
+    ("mts", "VIDEO"),
+];
 
 /// RAW formats (embedded preview via rawler or x3f).
 pub fn is_raw(format: &str) -> bool {
-    matches!(format, "X3F" | "CR3" | "CR2" | "CRW" | "RAF" | "DNG" | "ARW" | "NEF" | "ORF" | "RW2" | "PEF")
+    matches!(format, "X3F" | "CR3" | "CR2" | "CRW" | "RAF" | "DNG" | "ARW" | "NEF" | "ORF" | "RW2" | "PEF" | "SRW" | "MRW" | "ERF" | "3FR" | "IIQ" | "MOS" | "DCR" | "KDC" | "MEF")
+}
+
+/// Finished image formats the general path edits (JPEG, HEIC, TIFF, PNG).
+pub fn is_finished_image(format: &str) -> bool {
+    matches!(format, "JPG" | "HEIC" | "TIFF" | "PNG")
+}
+
+/// RAW of the general RAW path (every RAW except Sigma X3F), by extension (any case).
+pub fn is_raw_extension(ext: &str) -> bool {
+    extension_format(ext).is_some_and(|f| f != "X3F" && is_raw(f))
+}
+
+/// Finished image the general path edits, by extension (any case).
+pub fn is_finished_image_extension(ext: &str) -> bool {
+    extension_format(ext).is_some_and(is_finished_image)
 }
 
 /// Unix seconds now.
@@ -339,5 +393,23 @@ mod format_tests {
             assert!(is_raw(f.unwrap()), "{name}");
         }
         assert_eq!(format_from_extension("DSC_0001.NEF.xmp"), None);
+    }
+
+    /// Every RAW extension the decoder reads is in the list and counts as RAW of the general path (X3F excepted),
+    /// the finished formats are not RAW, and the list has no duplicates.
+    #[test]
+    fn one_list_for_all_formats() {
+        use super::{extension_format, is_finished_image_extension, is_raw_extension, EXTENSIONS};
+        for e in ["CR2", "cr3", "CRW", "raf", "DNG", "arw", "SRF", "sr2", "NEF", "nrw", "ORF", "ori", "RW2", "rwl", "raw", "PEF", "srw", "MRW", "erf", "3FR", "fff", "IIQ", "mos", "DCR", "kdc", "MEF"] {
+            assert!(is_raw_extension(e), "{e}");
+            assert!(!is_finished_image_extension(e), "{e}");
+        }
+        assert!(!is_raw_extension("x3f") && is_raw(extension_format("X3F").unwrap()));
+        for e in ["jpg", "JPEG", "jpe", "heic", "HIF", "tif", "TIFF", "png"] {
+            assert!(is_finished_image_extension(e) && !is_raw_extension(e), "{e}");
+        }
+        assert!(!is_raw_extension("psd") && !is_finished_image_extension("mov") && extension_format("xmp").is_none());
+        let mut seen = std::collections::HashSet::new();
+        assert!(EXTENSIONS.iter().all(|(e, _)| e.chars().all(|c| !c.is_ascii_uppercase()) && seen.insert(*e)));
     }
 }

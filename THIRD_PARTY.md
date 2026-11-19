@@ -92,4 +92,6 @@ The macOS app bundle contains these texts in `graineo.app/Contents/Resources/lic
 
 ## Trademarks
 
+This product includes DNG technology under license by Adobe Systems Incorporated. (graineo writes DNG files from the public DNG specification and its patent licence; no code of Adobe's DNG SDK is used.)
+
 Sigma, Foveon, Fujifilm, X-Trans, Canon, Sony, Nikon, Panasonic, Kodak, Ilford, Agfa, Adobe, Lightroom and other names are trademarks of their respective owners. They are used only to describe the file formats the app reads, the films it simulates and the catalogs it can import. graineo is not affiliated with or endorsed by any of them.

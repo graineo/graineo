@@ -80,6 +80,7 @@ pub(crate) fn dev_catalog() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| sysdirs::home().unwrap_or_default().join("Pictures/Lightroom/Lightroom Catalog.lrcat"))
 }
+mod formats_cmd;
 mod rawapp;
 mod ai_denoise_cmd;
 mod apple_raw_cmd;
@@ -271,6 +272,10 @@ fn main() -> Result<()> {
     // neural denoising: one tile for the comparison with a reference runtime, time per tile (ai_denoise_cmd.rs)
     if cmd == "ai-denoise" {
         return ai_denoise_cmd::run(&args[1..]);
+    }
+    // format check over a folder of sample files (grid, previews, info, develop, export, import), see formats_cmd.rs
+    if cmd == "formats" {
+        return formats_cmd::run(&args[1..]);
     }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);

@@ -25,6 +25,9 @@ use serde_json::json;
 
 use crate::lr;
 
+/// Text of graineo's entry in the Windows Explorer menu (German key; written translated into the registry).
+pub const EXPLORER_MENU_LABEL: &str = "Mit graineo ansehen";
+
 static OPEN: AtomicBool = AtomicBool::new(false);
 static SECTION: AtomicUsize = AtomicUsize::new(0);
 /// Last measured usage (SPP cache: bytes, images, paused); `None` = measure again
@@ -860,6 +863,24 @@ fn interface_section(ui: &mut egui::Ui, ctx: &egui::Context) {
                 ctx.set_zoom_factor(z);
                 if let Some(p) = scale_file() {
                     let _ = std::fs::write(p, format!("{z}"));
+                }
+            }
+        });
+        separator(ui);
+        // info lines below the photos of the grid (cell_info.rs), default off
+        row(ui, crate::tr("Infozeilen"), None, |ui| {
+            let lines = crate::cell_info::lines();
+            for i in [1usize, 0] {
+                egui::ComboBox::from_id_salt(("prefs-infozeile", i)).selected_text(lines[i].label()).width(150.0).height(300.0).show_ui(ui, |ui| {
+                    for f in crate::cell_info::Field::ALL {
+                        if ui.selectable_label(lines[i] == f, f.label()).clicked() && lines[i] != f {
+                            crate::cell_info::set(i, f);
+                        }
+                    }
+                });
+                ui.label(egui::RichText::new(if i == 0 { crate::tr("Zeile 1") } else { crate::tr("Zeile 2") }).color(lr::TEXT_DIM));
+                if i == 1 {
+                    ui.add_space(12.0);
                 }
             }
         });

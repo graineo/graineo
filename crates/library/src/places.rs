@@ -473,13 +473,11 @@ pub fn backfill_known(db: &Db, max: usize, cancel: &AtomicBool, progress: &dyn F
     Ok(out)
 }
 
-/// Step 2 of [`backfill`]: read the GPS block of files never looked at (macOS; elsewhere nothing). Files that could
-/// not be opened before are offered again only through [`retry_unreadable`].
+/// Step 2 of [`backfill`]: read the GPS block of files never looked at (ImageIO on macOS, the own header reader
+/// elsewhere). Files that could not be opened before are offered again only through [`retry_unreadable`].
 pub fn backfill_files(db: &Db, max: usize, cancel: &AtomicBool, progress: &dyn Fn(usize)) -> Result<Backfill, String> {
-    #[allow(unused_mut)]
     let mut out = Backfill::default();
     let _ = retry_unreadable(db, crate::now() as u64);
-    #[cfg(target_os = "macos")]
     {
         let f = |e: rusqlite::Error| e.to_string();
         let open_set: Vec<(i64, String)> = {
@@ -516,8 +514,6 @@ pub fn backfill_files(db: &Db, max: usize, cancel: &AtomicBool, progress: &dyn F
             }
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    let _ = (max, cancel, progress);
     Ok(out)
 }
 

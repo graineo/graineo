@@ -71,6 +71,8 @@ pub struct GridGeometry {
     /// separator row between full-text hits and similar photos
     pub separated: bool,
     pub cell: f32,
+    /// cell height (taller than wide with info lines below the photo)
+    pub cell_h: f32,
     /// row pitch (cell height plus the gap between rows)
     pub pitch: f32,
     /// pitch of the (low) separator row
@@ -105,7 +107,7 @@ impl GridGeometry {
     }
 
     fn tile(&self, row: usize, col: usize) -> Rect {
-        Rect::from_min_size(Pos2::new(col as f32 * self.cell, self.layout().top(row)), egui::vec2(self.cell, self.cell))
+        Rect::from_min_size(Pos2::new(col as f32 * self.cell, self.layout().top(row)), egui::vec2(self.cell, self.cell_h))
     }
 
     /// Position of the photo at a point (`None`: free space, gap between rows, separator row, behind the last photo).
@@ -215,7 +217,7 @@ mod tests {
     use super::*;
 
     fn geo(total: usize) -> GridGeometry {
-        GridGeometry { columns: 4, first: total, total, separated: false, cell: 100.0, pitch: 108.0, sep_pitch: 108.0 }
+        GridGeometry { columns: 4, first: total, total, separated: false, cell: 100.0, cell_h: 100.0, pitch: 108.0, sep_pitch: 108.0 }
     }
 
     #[test]
@@ -297,7 +299,7 @@ mod tests {
     #[test]
     fn band_with_separator_row() {
         // 6 hits (rows 0 and 1), separator (row 2), then 5 similar ones from row 3
-        let g = GridGeometry { columns: 4, first: 6, total: 11, separated: true, cell: 100.0, pitch: 108.0, sep_pitch: 108.0 };
+        let g = GridGeometry { columns: 4, first: 6, total: 11, separated: true, cell: 100.0, cell_h: 100.0, pitch: 108.0, sep_pitch: 108.0 };
         assert_eq!(g.rows(), 2 + 1 + 2);
         assert_eq!(g.start_of(1), Some(4));
         assert_eq!(g.start_of(2), None);

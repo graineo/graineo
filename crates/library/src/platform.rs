@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+pub mod explorer_menu;
 pub mod info;
 
 /// Free space (bytes available to the user) on the volume of the existing path `p`.

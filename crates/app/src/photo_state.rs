@@ -182,8 +182,18 @@ pub fn newer_develop() -> Notice {
     }
 }
 
-/// Developed by the system RAW engine of macOS because graineo cannot decode the file (Nikon High Efficiency).
-pub fn engine_fallback(version: &str) -> Notice {
+/// Developed by the system RAW engine of macOS because graineo cannot decode the file: Nikon High Efficiency, or
+/// `blocked` = [`raw::DECODE_IMPLAUSIBLE`] (the decoder's result is unusable, e.g. Galaxy S23 Ultra DNG).
+pub fn engine_fallback(version: &str, blocked: &str) -> Notice {
+    if blocked == raw::DECODE_IMPLAUSIBLE {
+        return Notice::new(
+            Kind::Engine,
+            crate::trf!("Apple RAW {a} · Rückfall", a = version),
+            crate::trf!("entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)", a = version),
+            crate::trf!("Entwickelt mit Apple RAW {a}", a = version),
+            crate::trf!("graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.", a = version),
+        );
+    }
     Notice::new(
         Kind::Engine,
         crate::trf!("Apple RAW {a} · HE", a = version),

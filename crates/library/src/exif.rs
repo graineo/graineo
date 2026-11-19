@@ -43,40 +43,127 @@ pub fn read(path: &Path, format: &str) -> Option<Capture> {
             capture: e.date_time.as_deref().and_then(date),
         });
     }
+    // macOS: ImageIO; elsewhere the own header reader (same fields, see `exif_header`)
     #[cfg(target_os = "macos")]
-    {
-        let e = crate::imageio::properties(path)?;
-        let lens = e.lens.or_else(|| if format == "NEF" { nikon_lens(path) } else { None });
-        Some(Capture { camera: e.camera, lens, aperture: e.aperture, focal: e.focal, iso: e.iso, time: e.time, capture: e.capture, width: None, height: None })
-    }
+    let e = complete_from_header(crate::imageio::properties(path), path, format)?;
     #[cfg(not(target_os = "macos"))]
+    let e = crate::exif_header::properties(path).or_else(|| crate::is_raw(format).then(|| rawler_properties(path)).flatten())?;
+    Some(capture_of(e, path, format))
+}
+
+/// ImageIO leaves fields empty for some RAWs (CR3: no ISO; Kodak KDC of the P880: nothing at all). Only then the
+/// own header reader (and for RAWs the decoder's metadata) fills the gaps; what ImageIO found stays.
+#[cfg(target_os = "macos")]
+fn complete_from_header(e: Option<crate::imageio::Properties>, path: &Path, format: &str) -> Option<crate::imageio::Properties> {
+    if e.as_ref().is_some_and(|e| e.camera.is_some() && e.capture.is_some() && e.iso.is_some()) {
+        return e;
+    }
+    let Some(h) = crate::exif_header::properties(path).or_else(|| crate::is_raw(format).then(|| rawler_properties(path)).flatten()) else { return e };
+    let Some(mut e) = e else { return Some(h) };
+    macro_rules! fill {
+        ($($f:ident),*) => { $( if e.$f.is_none() { e.$f = h.$f; } )* };
+    }
+    fill!(width, height, orientation, capture, camera, maker, lens, aperture, focal, iso, time);
+    Some(e)
+}
+
+fn capture_of(e: crate::imageio::Properties, path: &Path, format: &str) -> Capture {
+    let lens = e.lens.or_else(|| if format == "NEF" { nikon_lens(path) } else { None });
+    Capture { camera: e.camera, lens, aperture: e.aperture, focal: e.focal, iso: e.iso, time: e.time, capture: e.capture, width: None, height: None }
+}
+
+/// [`read`] with the platform-independent header reader also on the Mac (comparison with ImageIO, tests).
+pub fn read_portable(path: &Path, format: &str) -> Option<Capture> {
+    if format == "X3F" {
+        return read(path, format);
+    }
+    let e = crate::exif_header::properties(path).or_else(|| crate::is_raw(format).then(|| rawler_properties(path)).flatten())?;
+    Some(capture_of(e, path, format))
+}
+
+/// [`read_portable`] with the image size from the header (pixel dimensions as stored, unrotated), for photos that
+/// are not in the library (a viewed folder). Reads only the file header (64–192 KiB for most formats).
+pub fn read_header(path: &Path, format: &str) -> Option<Capture> {
+    if format == "X3F" {
+        return read(path, format);
+    }
+    let e = crate::exif_header::properties(path).or_else(|| crate::is_raw(format).then(|| rawler_properties(path)).flatten())?;
+    let (width, height) = (e.width, e.height);
+    Some(Capture { width, height, ..capture_of(e, path, format) })
+}
+
+/// RAW decoder on the start of the file (formats the header reader does not know, e.g. CRW): metadata only, no
+/// sensor data, at most the first 6 MB (CRW: the whole file, its directory is at the end; a truncated CRW makes the
+/// decoder panic).
+fn rawler_metadata(path: &Path) -> Option<rawler::decoders::RawMetadata> {
+    use std::io::Read;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let crw = path.extension().and_then(|e| e.to_str()).and_then(crate::extension_format) == Some("CRW");
+    let limits: &[u64] = if crw { &[u64::MAX] } else { &[1 << 20, 6 << 20] };
+    for &limit in limits {
+        let mut b = Vec::new();
+        std::fs::File::open(path).ok()?.take(limit).read_to_end(&mut b).ok()?;
+        let whole = (b.len() as u64) < limit;
+        let src = rawler::rawsource::RawSource::new_from_shared_vec(std::sync::Arc::new(b)).with_path(path);
+        let meta = catch_unwind(AssertUnwindSafe(|| {
+            let dec = rawler::get_decoder(&src).ok()?;
+            dec.raw_metadata(&src, &rawler::decoders::RawDecodeParams::default()).ok()
+        }))
+        .ok()
+        .flatten();
+        if meta.is_some() || whole {
+            return meta;
+        }
+    }
     None
+}
+
+fn ratio(r: rawler::formats::tiff::Rational) -> f64 {
+    if r.d == 0 { 0.0 } else { r.n as f64 / r.d as f64 }
+}
+
+fn rawler_properties(path: &Path) -> Option<crate::imageio::Properties> {
+    let m = rawler_metadata(path)?;
+    let x = &m.exif;
+    let pos = |v: Option<f64>| v.filter(|v| v.is_finite() && *v > 0.0);
+    let text = |s: &str| Some(s.trim().to_string()).filter(|s| !s.is_empty());
+    Some(crate::imageio::Properties {
+        width: None,
+        height: None,
+        orientation: x.orientation.map(u32::from).filter(|o| (1..=8).contains(o)),
+        capture: x.date_time_original.as_deref().or(x.create_date.as_deref()).and_then(crate::imageio_common::exif_date),
+        // cleaned-up names of the decoder: the model without the maker, as ImageIO's TIFF Model mostly has it
+        camera: text(&m.model),
+        maker: text(&m.make),
+        lens: x.lens_model.as_deref().and_then(text),
+        aperture: pos(x.fnumber.map(ratio)),
+        focal: pos(x.focal_length.map(ratio)),
+        iso: x.iso_speed_ratings.map(i64::from).or(x.iso_speed.map(i64::from)).filter(|v| *v > 0),
+        time: pos(x.exposure_time.map(ratio)),
+    })
 }
 
 /// Nikon DSLRs (F mount) and some Coolpix write no EXIF lens name; the lens is only coded in the makernote
 /// (lens data with the lens ID). The RAW reader resolves it with its lens database, e.g. "Nikon AF-S Nikkor 50mm
 /// f/1.4G". Only the metadata is read, not the sensor data.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn nikon_lens(path: &Path) -> Option<String> {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
-    let src = rawler::rawsource::RawSource::new(path).ok()?;
-    let dec = catch_unwind(AssertUnwindSafe(|| rawler::get_decoder(&src))).ok()?.ok()?;
-    let meta = catch_unwind(AssertUnwindSafe(|| dec.raw_metadata(&src, &rawler::decoders::RawDecodeParams::default()))).ok()?.ok()?;
+    #[cfg(target_os = "macos")]
+    let meta = {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        let src = rawler::rawsource::RawSource::new(path).ok()?;
+        let dec = catch_unwind(AssertUnwindSafe(|| rawler::get_decoder(&src))).ok()?.ok()?;
+        catch_unwind(AssertUnwindSafe(|| dec.raw_metadata(&src, &rawler::decoders::RawDecodeParams::default()))).ok()?.ok()?
+    };
+    // elsewhere only the start of the file (network drives); the makernote lies in the first megabyte
+    #[cfg(not(target_os = "macos"))]
+    let meta = rawler_metadata(path)?;
     let l = meta.lens?;
     let name = if l.lens_model.to_ascii_lowercase().starts_with(&l.lens_make.to_ascii_lowercase()) { l.lens_model } else { format!("{} {}", l.lens_make, l.lens_model) };
     Some(name.trim().to_string()).filter(|s| !s.is_empty())
 }
 
 fn date(s: &str) -> Option<String> {
-    #[cfg(target_os = "macos")]
-    {
-        crate::imageio::exif_date(s)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = s;
-        None
-    }
+    crate::imageio_common::exif_date(s)
 }
 
 /// Cameras with a fixed lens: camera name (case-insensitive) → lens name. Added only where the file
@@ -214,6 +301,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    /// The RAW decoder on the first megabytes (path outside macOS) finds the same Nikon lens as on the whole file
+    /// (`GRAINEO_TEST_EXIF_DIR`, all NEF there; skipped without it).
+    #[test]
+    fn nikon_lens_from_the_file_start() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_EXIF_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_EXIF_DIR not set, skipped");
+            return;
+        };
+        for p in std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("nef"))) {
+            let whole = {
+                let src = rawler::rawsource::RawSource::new(&p).unwrap();
+                rawler::get_decoder(&src).unwrap().raw_metadata(&src, &rawler::decoders::RawDecodeParams::default()).unwrap().lens.map(|l| l.lens_model)
+            };
+            let start = rawler_metadata(&p).and_then(|m| m.lens).map(|l| l.lens_model);
+            assert_eq!(start, whole, "{}", p.display());
+        }
+    }
+
     /// NEF samples (`GRAINEO_TEST_NEF_DIR`, skipped without it): F-mount lenses of Nikon DSLRs have no EXIF lens
     /// name; the library gets them from the makernote. Checked on the CC0 sample of a D810 (AF-S 50mm f/1.4G).
     #[cfg(target_os = "macos")]
@@ -229,5 +334,43 @@ mod tests {
         };
         let c = read(&p, "NEF").expect("readable");
         assert_eq!(c.lens.as_deref(), Some("Nikon AF-S Nikkor 50mm f/1.4G"), "{}", p.display());
+    }
+
+    /// The header reader for viewed folders: the shooting data and the pixel size from the file header.
+    #[test]
+    fn read_header_with_size() {
+        let dir = std::env::temp_dir().join(format!("graineo-read-header-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("a.jpg");
+        std::fs::write(&p, crate::exif_header::tests::jpeg_with(Some(&crate::exif_header::tests::sample(true)))).unwrap();
+        let c = read_header(&p, "JPG").expect("readable");
+        assert_eq!(c.camera.as_deref(), Some("Canon EOS R5"));
+        assert_eq!(c.capture.as_deref(), Some("2024-05-11T14:03:22"));
+        assert_eq!((c.aperture, c.focal, c.iso), (Some(5.6), Some(35.0), Some(400)));
+        assert_eq!(c.lens.as_deref(), Some("RF24-105mm F4 L IS USM"));
+        assert_eq!((c.width, c.height), (Some(8), Some(8)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Measurement (`GRAINEO_HEADER_DIR=<folder>`, ignored by default): time of `read_header` per file.
+    #[test]
+    #[ignore]
+    fn measure_read_header() {
+        let Ok(dir) = std::env::var("GRAINEO_HEADER_DIR") else { return };
+        let mut entries: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).collect();
+        entries.sort();
+        let t0 = std::time::Instant::now();
+        let mut n = 0;
+        for p in &entries {
+            let name = p.file_name().unwrap().to_string_lossy().to_string();
+            let Some(f) = crate::format_from_extension(&name) else { continue };
+            let t = std::time::Instant::now();
+            let c = read_header(p, f);
+            n += 1;
+            if n <= 12 {
+                eprintln!("{name}: {:.2} ms, camera {:?}, {:?}x{:?}", t.elapsed().as_secs_f64() * 1000.0, c.as_ref().and_then(|c| c.camera.clone()), c.as_ref().and_then(|c| c.width), c.as_ref().and_then(|c| c.height));
+            }
+        }
+        eprintln!("{n} files in {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0);
     }
 }

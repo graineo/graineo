@@ -152,24 +152,26 @@ impl Shot {
         }
     }
 
-    /// From the EXIF of a JPEG (for platforms without ImageIO).
-    pub fn from_jpeg(path: &Path) -> Option<Shot> {
-        use std::io::Read;
-        let mut head = Vec::new();
-        std::fs::File::open(path).ok()?.take(256 * 1024).read_to_end(&mut head).ok()?;
-        let e = x3f::exif::parse_jpeg_exif(&head)?;
-        Some(Shot {
-            make: text(e.make.as_deref()),
-            model: text(e.model.as_deref()),
-            date: e.date_time.as_deref().and_then(normalize_date),
-            exposure_time: e.exposure_time,
-            f_number: e.f_number,
-            iso: e.iso,
-            focal_length: e.focal_length,
-            focal_length_35mm: e.focal_length_35mm,
-            exposure_bias: e.exposure_bias,
+    /// From the file header of any format the own reader knows (for platforms without ImageIO; see
+    /// [`crate::exif_header`]).
+    pub fn from_header(path: &Path) -> Option<Shot> {
+        let h = crate::exif_header::read(path)?;
+        let p = h.props;
+        let s = Shot {
+            make: text(p.maker.as_deref()),
+            model: text(p.camera.as_deref()),
+            lens_make: text(h.lens_make.as_deref()),
+            lens: text(p.lens.as_deref()),
+            date: p.capture.as_deref().and_then(normalize_date),
+            exposure_time: p.time,
+            f_number: p.aperture,
+            iso: p.iso.and_then(|v| u32::try_from(v).ok()),
+            focal_length: p.focal,
+            focal_length_35mm: h.focal_length_35mm,
+            exposure_bias: h.exposure_bias,
             ..Default::default()
-        })
+        };
+        (!s.is_empty()).then_some(s)
     }
 
     /// Fields of `self`, missing ones from `other`.
@@ -262,8 +264,8 @@ pub fn write(target: &Path, original: &Path, fields: &ExportFields) -> Result<St
     let mut f = fields.clone();
     if has_extension(original, &["x3f"]) {
         f.shot = Shot::from_x3f(original).or(f.shot);
-    } else if f.shot.is_none() && cfg!(not(target_os = "macos")) && has_extension(original, &["jpg", "jpeg"]) {
-        f.shot = Shot::from_jpeg(original);
+    } else if f.shot.is_none() && cfg!(not(target_os = "macos")) {
+        f.shot = Shot::from_header(original);
     }
     if has_extension(target, &["jxl"]) {
         return write_jxl(target, original, &f);
