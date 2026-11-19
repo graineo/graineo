@@ -1355,6 +1355,20 @@ mod tests {
         assert_eq!(g.changes(&k), 0);
     }
 
+    /// A Sigma colour mode clicked on a photo set to black and white is one step; ⌘Z brings black and white back.
+    #[test]
+    fn colour_mode_from_black_and_white_is_undone() {
+        let (mut h, k) = memory("mono-to-colour");
+        let mono = Settings { monochrome: true, ..Settings::default() };
+        hint(102, Hint::film("Neutral", true));
+        let colour = crate::film_look::Choice::Sigma("Neutral".into()).apply(&mono);
+        assert!(!colour.monochrome);
+        h.record(&k, 102, &mono, &colour);
+        assert_eq!(h.changes(&k), 1);
+        assert_eq!(h.undo(&k, 102, &colour, false), Some(mono.clone()));
+        assert_eq!(h.undo(&k, 102, &mono, true), Some(colour));
+    }
+
     /// A reset by double-click right after dragging the same slider stays a step of its own (before, the reset merged
     /// into the drag and the dragged value was lost); a drag after the reset does not merge into it either.
     #[test]
@@ -1511,7 +1525,7 @@ mod tests {
         let mut more = spots.clone();
         more.spots.push(develop::spots::Spot { center: [0.7, 0.2], ..spot });
         let retouch = size(&spots, &more);
-        let stroke = |i: usize| masks::Mask::Brush { points: (0..60).map(|j| [0.1 + i as f32 * 0.003 + j as f32 * 0.001, 0.3 + j as f32 * 0.002]).collect(), radius: 0.05, hardness: 0.5, flow: 1.0 };
+        let stroke = |i: usize| masks::Mask::Brush { points: (0..60).map(|j| [0.1 + i as f32 * 0.003 + j as f32 * 0.001, 0.3 + j as f32 * 0.002]).collect(), radius: 0.05, hardness: 0.5, flow: 1.0, density: 1.0, auto: None };
         fn tree(v: &[masks::Mask]) -> masks::Mask {
             if v.len() == 1 {
                 return v[0].clone();

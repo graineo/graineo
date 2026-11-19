@@ -87,6 +87,12 @@ pub fn ensure(ctx: &egui::Context, index: usize, path: &Path, s: &Settings) {
     });
 }
 
+/// Tests: the image of photo `index` as if developed (`None`: none).
+#[cfg(test)]
+pub fn set_for_test(index: usize, image: Option<Captured>) {
+    *CURRENT.lock().unwrap_or_else(|e| e.into_inner()) = image.map(|c| Entry { index, path: PathBuf::from("/test"), key: 0, image: Some(Arc::new(c)), busy: false });
+}
+
 /// The image of photo `index`, if developed.
 pub fn image(index: usize) -> Option<Arc<Captured>> {
     CURRENT.lock().unwrap_or_else(|e| e.into_inner()).as_ref().filter(|e| e.index == index).and_then(|e| e.image.clone())
@@ -129,10 +135,10 @@ pub fn resized(c: &Captured, w: usize, h: usize) -> Vec<f32> {
     out
 }
 
-/// Does the mask compare against image content (colour or brightness range)?
+/// Does the mask compare against image content (colour or brightness range, brush stroke with auto mask)?
 pub fn needs_image(m: &masks::Mask) -> bool {
     let mut found = false;
-    m.visit(&mut |n| found |= matches!(n, masks::Mask::Color { .. } | masks::Mask::ColorRange { .. } | masks::Mask::Luminance { .. }));
+    m.visit(&mut |n| found |= matches!(n, masks::Mask::Color { .. } | masks::Mask::ColorRange { .. } | masks::Mask::Luminance { .. } | masks::Mask::Brush { auto: Some(_), .. }));
     found
 }
 

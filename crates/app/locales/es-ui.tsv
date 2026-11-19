@@ -6475,3 +6475,22 @@ KI-Entrauschen {p} % · {r}	Reducción de ruido IA {p} % · {r}
 KI-Entrauschen {p} %	Reducción de ruido IA {p} %
 KI-Entrauschen fertig · {s} s	Reducción de ruido IA lista · {s} s
 Fertig nach {s} s	Listo tras {s} s
+Wirkung der Maske im Bild zeigen: {kind}	Mostrar el efecto de la máscara: {kind}
+Dichte (%)	Densidad (%)
+Höchste Wirkung, auch beim Übermalen	Efecto máximo, incluso al repintar
+Pinsel kleiner	Pincel más pequeño
+Pinsel größer	Pincel más grande
+Pinsel weicher	Pincel más suave
+Pinsel härter	Pincel más duro
+⌥ beim Malen	⌥ al pintar
+Radiert aus der Maske	Borra de la máscara
+⇧-Klick beim Malen	⇧-clic al pintar
+Gerade Linie vom letzten Punkt	Línea recta desde el último punto
+Größe ({a} kleiner, {b} größer)	Tamaño ({a} menor, {b} mayor)
+Härte ({a} weicher, {b} härter)	Dureza ({a} más suave, {b} más duro)
+Auto-Maske	Máscara automática
+Wirkt nur auf ähnliche Farben wie am Strichanfang	Actúa solo sobre colores similares a los del inicio del trazo
+Toleranz (%)	Tolerancia (%)
+Wie ähnlich die Farbe sein muss	Qué tan parecido debe ser el color
+Erst „Auto-Maske“ einschalten	Activa primero «Máscara automática»
+Pinsel malt · ⌥ radiert · ⇧-Klick Linie	El pincel pinta · ⌥ borra · ⇧-clic línea

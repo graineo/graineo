@@ -146,7 +146,10 @@ struct Entry {
 pub(crate) enum Choice {
     Film(String),
     Look(String),
+    /// Sigma colour mode (empty: the camera's mode); switches black and white off
     Sigma(String),
+    /// Sigma black and white (Foveon layers)
+    SigmaMono,
     /// film look (recipe): the whole film part
     Recipe(develop::film::FilmSettings),
 }
@@ -166,6 +169,11 @@ impl Choice {
             Self::Sigma(m) => {
                 t.film.active = false;
                 t.color_mode = if m.is_empty() { None } else { Some(m.clone()) };
+                t.monochrome = false;
+            }
+            Self::SigmaMono => {
+                t.film.active = false;
+                t.monochrome = true;
             }
             Self::Recipe(f) => t.film = f.clone(),
         }
@@ -216,6 +224,8 @@ fn film_groups() -> Vec<Group> {
     }
     groups
 }
+/// Tile key of Sigma's black and white (apart from `sigma:<mode>`, the colour modes).
+pub(crate) const SIGMA_MONO_KEY: &str = "sigma-mono";
 fn look_groups(
     s: &Settings,
     doc: Option<&rawdev::RawDoc>,
@@ -271,21 +281,18 @@ fn look_groups(
                 package: true,
             });
         }
-    } else if s.monochrome {
-        groups.push(Group {
-            name: crate::tr("Kamera").into(),
-            entries: vec![Entry {
-                key: "sigma:".into(),
-                name: crate::tr("Schwarzweiß").into(),
-                choice: Choice::Sigma(String::new()),
-                available: true,
-            }],
-            package: false,
-        });
     } else {
-        let entries = std::iter::once("")
-            .chain(modes.iter().map(String::as_str))
-            .map(|m| Entry {
+        // Sigma: the camera's colour modes; a photo set to black and white shows that entry first (selected) and the
+        // colour modes in colour (a click switches black and white off)
+        let mono = s.monochrome.then(|| Entry {
+            key: SIGMA_MONO_KEY.into(),
+            name: crate::tr("Schwarzweiß").into(),
+            choice: Choice::SigmaMono,
+            available: true,
+        });
+        let entries = mono
+            .into_iter()
+            .chain(std::iter::once("").chain(modes.iter().map(String::as_str)).map(|m| Entry {
                 key: format!("sigma:{m}"),
                 name: if m.is_empty() {
                     crate::trf!("{a} (Kamera)", a = mode_label(camera_mode))
@@ -294,7 +301,7 @@ fn look_groups(
                 },
                 choice: Choice::Sigma(m.into()),
                 available: true,
-            })
+            }))
             .collect();
         groups.push(Group {
             name: crate::tr("Kamera").into(),
@@ -336,7 +343,7 @@ fn look_card(
     }
     if s.monochrome {
         return (
-            "sigma:".into(),
+            SIGMA_MONO_KEY.into(),
             crate::tr("Schwarzweiß").into(),
             crate::tr("Foveon · Sensorschichten").into(),
         );
@@ -834,7 +841,9 @@ impl App {
             }
             // test hook: GRAINEO_LOOK_APPLY=<tile key or film look name> puts this look on the photo
             if let Some(k) = crate::env::var("GRAINEO_LOOK_APPLY").ok().filter(|_| crate::env::var_os("GRAINEO_DATA_DIR").is_some()) {
-                let choice = groups.iter().flat_map(|g| g.entries.iter()).find(|e| e.key == k).map(|e| e.choice.clone()).or_else(|| {
+                // `sigma-mono` also on a photo in colour (where the tile is not offered): sets it to black and white
+                let mono = (k == SIGMA_MONO_KEY && foreign.is_none()).then_some(Choice::SigmaMono);
+                let choice = mono.or_else(|| groups.iter().flat_map(|g| g.entries.iter()).find(|e| e.key == k).map(|e| e.choice.clone())).or_else(|| {
                     self.darkroom.recipes.images.entries.iter().find(|e| recipe_key(e.source) == k || e.name == k).map(|e| Choice::Recipe(e.film.clone()))
                 });
                 if let Some(c) = choice {

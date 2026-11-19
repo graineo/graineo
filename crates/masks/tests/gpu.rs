@@ -144,3 +144,24 @@ fn gpu_strength_and_switch() {
     println!("GPU/CPU with strength 40 % and a switched-off layer: max={max:.9}");
     assert!(max < 0.00005);
 }
+
+/// Brush strokes with density and auto mask act the same on the graphics card as on the processor (the weights are
+/// computed on the processor for both).
+#[test]
+#[ignore = "Explicit GPU check"]
+fn gpu_brush_density_and_auto_mask() {
+    let (w, h) = (160, 100);
+    let data: Vec<f32> = (0..w * h).flat_map(|i| if (i / w) < h / 2 { [0.4, 0.5, 0.8] } else { [0.05, 0.08, 0.03] }).collect();
+    let im = Image::new(w, h, &data).unwrap();
+    let points: Vec<[f32; 2]> = (0..40).map(|i| [0.1 + 0.02 * i as f32, 0.5 + 0.1 * (i as f32 * 0.4).sin()]).collect();
+    let stroke = |density: f32, auto: Option<AutoMask>| Mask::Brush { points: points.clone(), radius: 0.12, hardness: 0.5, flow: 0.4, density, auto };
+    let mut d = document();
+    d.layers[0].mask = Mask::Combine { operation: Operation::Add, left: Box::new(stroke(0.6, None)), right: Box::new(stroke(1.0, Some(AutoMask { reference: [0.4, 0.5, 0.8], tolerance: 0.15 }))) };
+    d.settle_version();
+    assert_eq!(d.version, 4);
+    let cpu = apply(im, &d).unwrap();
+    let gpu = gpu::apply(im, &d).unwrap().expect("GPU must be available for this explicit check");
+    let max = cpu.iter().zip(&gpu).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+    println!("GPU/CPU brush with density and auto mask: max={max:.9}");
+    assert!(max < 0.00005);
+}

@@ -2249,6 +2249,17 @@ impl LibraryView {
         None
     }
 
+    /// The grid's preview (small level) of an image if it is loaded, never the large one: it follows every edit, also
+    /// one made to many photos at once, while the large level is developed again only later.
+    pub fn small_view(&mut self, image: i64) -> Option<TextureHandle> {
+        let file = self.rows.get(*self.index.get(&image)?)?.file;
+        self.clock += 1;
+        let clock = self.clock;
+        let t = self.textures.get_mut(&(file, preview::small()))?;
+        t.1 = clock;
+        Some(t.0.clone())
+    }
+
     /// Background generation: everything present without a thumbnail, visible order first.
     fn background(&mut self) {
         let Some(e) = &self.generator else { return };

@@ -144,6 +144,13 @@ impl Look {
         BUILT_IN.iter().find(|(n, _)| *n == name).and_then(|(_, b)| Self::from_bytes(b))
     }
 
+    /// Is the look named `camera/style` a black & white look (Fujifilm Monochrome/Acros, Ricoh Monotone/B&W)?
+    /// Those give R = G = B for every input (checked by a test for every bundled look).
+    pub fn is_monochrome_name(name: &str) -> bool {
+        let style = name.split('/').nth(1).unwrap_or("");
+        ["monochrome", "acros", "monotone", "bw"].iter().any(|k| style.starts_with(k))
+    }
+
     /// Names of all bundled looks (without the user's own looks, see `rawdev::looks::names`).
     pub fn names() -> Vec<&'static str> {
         BUILT_IN.iter().map(|(n, _)| *n).collect()
@@ -370,8 +377,7 @@ mod tests {
                 let o = [i[0] + d[k][0], i[1] + d[k][1], i[2] + d[k][2]].map(|v| v.clamp(0.0, 1.0));
                 (o[0] - o[1]).abs() < 1e-3 && (o[1] - o[2]).abs() < 1e-3
             });
-            let style = name.split('/').nth(1).unwrap();
-            let is_bw = ["monochrome", "acros", "monotone", "bw"].iter().any(|k| style.starts_with(k));
+            let is_bw = Look::is_monochrome_name(name);
             assert_eq!(gray, is_bw, "{name}: table gray = {gray}, name says black & white = {is_bw}");
             if gray {
                 mono += 1;

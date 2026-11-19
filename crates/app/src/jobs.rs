@@ -805,11 +805,13 @@ fn render_detail_wide(index: usize, session: Option<Arc<Mutex<Session>>>, foreig
             }
             let rgba = crate::photo_display::rgba_from_encoded(&rgb);
             drop(rgb);
-            let Some(tiles) = crate::photo_display::tiles(w, h, &rgba, max_side, true, false) else {
+            // the half level (bilinear) for views below 100 % – without it the crop would be reduced without prefilter
+            let (hw, hh, half) = crate::photo_display::half_rgba(w, h, &rgba);
+            let (Some(tiles), Some(half_tiles)) = (crate::photo_display::tiles(w, h, &rgba, max_side, true, false), crate::photo_display::tiles(hw, hh, &half, max_side, false, false)) else {
                 send(JobResult::RegionFailed { index, superseded: false });
                 return;
             };
-            send(JobResult::DetailWide { index, settings, region: [r[0], r[1], w, h], full: false, size: [w, h], tiles, half: None, seconds: t.elapsed().as_secs_f32() });
+            send(JobResult::DetailWide { index, settings, region: [r[0], r[1], w, h], full: false, size: [w, h], tiles, half: Some((hw, hh, half_tiles)), seconds: t.elapsed().as_secs_f32() });
         }
         None => {
             // as `RenderFull`: one at a time, dropped once outdated (`edit`, image change) before or after computing
@@ -848,7 +850,7 @@ fn render_detail_wide(index: usize, session: Option<Arc<Mutex<Session>>>, foreig
             let rgba = crate::photo_display::rgba_from_encoded(&rgb);
             drop(rgb);
             let (hw, hh, half) = crate::photo_display::half_rgba(w, h, &rgba);
-            let (Some(tiles), Some(half_tiles)) = (crate::photo_display::tiles(w, h, &rgba, max_side, true, false), crate::photo_display::tiles(hw, hh, &half, max_side, true, false)) else {
+            let (Some(tiles), Some(half_tiles)) = (crate::photo_display::tiles(w, h, &rgba, max_side, true, false), crate::photo_display::tiles(hw, hh, &half, max_side, false, false)) else {
                 send(JobResult::FullFailed { index, settings, outdated: false, sent: edit.sent(generation) });
                 return;
             };
@@ -956,9 +958,18 @@ pub fn wide_job(index: usize, loaded: &Loaded, settings: &Settings) -> Option<Jo
 /// The Sigma preview a render of these settings starts from: sensor view, Sigma's exact base (once there and used),
 /// else the own pipeline.
 fn sigma_preview<'a>(previews: &'a Previews, settings: &Settings) -> &'a Arc<Preview> {
-    match (&previews.spp, settings.view) {
-        (_, v) if v != View::Developed => &previews.sensor,
-        (Some(spp), _) if Session::uses_spp(settings) => spp,
+    match settings.view {
+        v if v != View::Developed => &previews.sensor,
+        _ => developed_preview(previews, settings),
+    }
+}
+
+/// The developed Sigma preview for these settings: Sigma's exact base when it is used and can stand in for them, else
+/// the own pipeline. A grey base never stands in for colour settings (and a colour base not for black and white): the
+/// colour tiles and hover previews of a photo set to black and white come from the own pipeline, in colour.
+pub(crate) fn developed_preview<'a>(previews: &'a Previews, settings: &Settings) -> &'a Arc<Preview> {
+    match &previews.spp {
+        Some(spp) if Session::uses_spp(settings) && spp.spp.as_ref().is_none_or(|(k, _)| crate::spp_accept::stands_in(k, &settings.spp_key_class(k.prepared))) => spp,
         _ => &previews.developed,
     }
 }
@@ -1595,11 +1606,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 send(JobResult::HoverRendered { index, settings, width: img.width, height: img.height, rgb: img.to_rgb8() });
                 return;
             }
-            let preview = match &previews.spp {
-                Some(spp) if Session::uses_spp(&settings) => spp,
-                _ => &previews.developed,
-            };
-            let img = preview.render(&cal, &settings);
+            let img = developed_preview(&previews, &settings).render(&cal, &settings);
             send(JobResult::HoverRendered { index, settings, width: img.width, height: img.height, rgb: img.to_rgb8() });
         }
         Job::FilmThumbs { index, previews, cal, settings, key, modes, valid, background } => {
@@ -3085,6 +3092,40 @@ mod session_lock_tests {
         assert_eq!(old.lin.data, new.lin.data);
         assert_eq!(old.fill_map, new.fill_map);
         assert!(session.lock().unwrap().has_spp_for(&settings));
+    }
+
+    /// Merrill set to black and white with its grey base on screen: the tiles of Sigma's colour modes are in colour
+    /// (own pipeline), the black-and-white tile and the hover preview of black and white stay grey (grey base).
+    #[test]
+    fn colour_tiles_of_black_and_white_are_in_colour() {
+        let Some(path) = test_file() else { return };
+        let mono = Settings { monochrome: true, ..Settings::default() };
+        let loaded = load(&path, &mono, || true).expect("open").expect("loaded");
+        let session = loaded.session.clone().unwrap();
+        let key = mono.spp_key(&path);
+        assert!(key.mono, "Merrill: grey base");
+        let counts = develop::diskcache::working_key(&path, &key, false, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+        let mut previews = loaded.previews.clone();
+        previews.spp = Some(Arc::new(install_spp_with_preview(&session, key, counts)));
+        let colour = Settings { monochrome: false, ..mono.clone() };
+        assert!(Arc::ptr_eq(developed_preview(&previews, &mono), previews.spp.as_ref().unwrap()));
+        assert!(Arc::ptr_eq(developed_preview(&previews, &colour), &previews.developed), "a grey base never stands in for colour");
+        let tiles = Mutex::new(std::collections::HashMap::new());
+        let modes = vec!["sigma:".to_string(), crate::film_look::SIGMA_MONO_KEY.to_string()];
+        crate::film_previews::compute(0, &previews, &loaded.cal, &mono, 1, &modes, &AtomicU64::new(1), false, &|r| {
+            if let JobResult::FilmThumbs { thumbs, .. } = r {
+                for (id, img) in thumbs {
+                    tiles.lock().unwrap().insert(id, img.expect("tile").2);
+                }
+            }
+        });
+        // mean spread between the channels (8 bit)
+        let chroma = |rgb: &[u8]| rgb.chunks_exact(3).map(|p| (p.iter().max().unwrap() - p.iter().min().unwrap()) as f64).sum::<f64>() / (rgb.len() / 3) as f64;
+        let tiles = tiles.into_inner().unwrap();
+        let (c, m) = (chroma(&tiles["sigma:"]), chroma(&tiles[crate::film_look::SIGMA_MONO_KEY]));
+        println!("colour tile: mean channel spread {c:.2}, black-and-white tile {m:.2}");
+        assert!(c > 5.0, "colour tile is grey ({c:.2})");
+        assert!(m < 0.5, "black-and-white tile has colour ({m:.2})");
     }
 }
 

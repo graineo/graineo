@@ -145,6 +145,34 @@ pub fn expected(settings: &Settings, stored: bool, path: &Path, copy: Option<&st
     settings_fp(settings)
 }
 
+/// Does a development with these settings come out grey (black & white treatment, a black & white film, a black &
+/// white camera look, saturation all the way down)? Toned results (sepia, colour paper) count as grey here too; the
+/// stored view they left behind is not neutral, so [`may_stand_in`] rejects it – rather no stand-in than a wrong one.
+pub fn grey_expected(s: &Settings) -> bool {
+    let film_grey = s.film.is_active() && develop::film::stock(&s.film.stock).is_some_and(|f| f.monochrome);
+    s.monochrome || film_grey || raw::looks::Look::is_monochrome_name(&s.raw.look) || s.saturation <= -0.999
+}
+
+/// Is a stored view grey: no colour beyond the noise of its JPEG coding? `pixels`: `channels` bytes per pixel, red,
+/// green and blue first (RGB or RGBA). Looks at every 7th pixel.
+pub fn looks_grey(pixels: &[u8], channels: usize) -> bool {
+    let (mut sum, mut n) = (0u64, 0u64);
+    for p in pixels.chunks_exact(channels.max(3)).step_by(7) {
+        let (lo, hi) = (p[0].min(p[1]).min(p[2]), p[0].max(p[1]).max(p[2]));
+        sum += u64::from(hi - lo);
+        n += 1;
+    }
+    n > 0 && sum <= 3 * n
+}
+
+/// May a stored view stand in while the photo loads? One made with exactly the current settings (`fresh`) always;
+/// an outdated one only when it is of the same kind – grey for a grey development, coloured for a coloured one. A
+/// photo switched to black & white elsewhere (several photos at once, a preset, pasted settings) otherwise flashed up
+/// in its old colours until the development arrived.
+pub fn may_stand_in(fresh: bool, view_grey: bool, wanted_grey: bool) -> bool {
+    fresh || view_grey == wanted_grey
+}
+
 /// Fingerprint of the standard development (offline copy of an unedited photo).
 pub fn standard() -> u64 {
     start_fp()
@@ -223,4 +251,56 @@ pub fn large(path: &Path, level: u32) -> Option<u64> {
 
 pub fn set_large(path: &Path, level: u32, fp: u64) {
     write(large_name(path, level), fp);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The case reported: a colour shot switched to black & white elsewhere, its last developed view still in colour.
+    #[test]
+    fn outdated_colour_view_does_not_stand_in_for_black_and_white() {
+        let s = Settings { monochrome: true, ..Settings::default() };
+        let colour = [200u8, 120, 60].repeat(100);
+        assert!(grey_expected(&s));
+        assert!(!looks_grey(&colour, 3));
+        assert!(!may_stand_in(false, looks_grey(&colour, 3), grey_expected(&s)));
+        // the other way round as well: a grey view never stands in for colour
+        let grey = [90u8, 90, 90].repeat(100);
+        assert!(!may_stand_in(false, looks_grey(&grey, 3), grey_expected(&Settings::default())));
+    }
+
+    #[test]
+    fn same_kind_or_current_stands_in() {
+        let grey = [90u8, 91, 89].repeat(100);
+        assert!(looks_grey(&grey, 3), "JPEG noise of one or two levels stays grey");
+        assert!(may_stand_in(false, true, true));
+        assert!(may_stand_in(false, false, false));
+        // made with exactly these settings: always
+        assert!(may_stand_in(true, false, true));
+        assert!(!looks_grey(&[], 3), "an empty view is no grey one");
+        // RGBA (texture pixels): the alpha byte does not count
+        assert!(looks_grey(&[90u8, 90, 90, 255].repeat(50), 4));
+        assert!(!looks_grey(&[200u8, 120, 60, 255].repeat(50), 4));
+    }
+
+    #[test]
+    fn black_and_white_settings() {
+        assert!(!grey_expected(&Settings::default()));
+        let mut s = Settings::default();
+        s.raw.look = "x100/acros-r".into();
+        assert!(grey_expected(&s));
+        s.raw.look = "x100/provia".into();
+        assert!(!grey_expected(&s));
+        assert!(grey_expected(&Settings { saturation: -1.0, ..Settings::default() }));
+        if let Some(f) = develop::film::films().iter().find(|f| f.monochrome) {
+            let mut s = Settings::default();
+            s.film.active = true;
+            s.film.stock = f.id.clone();
+            assert!(grey_expected(&s));
+            // switched off, the film does not count
+            s.film.active = false;
+            assert!(!grey_expected(&s));
+        }
+    }
 }

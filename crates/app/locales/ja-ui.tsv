@@ -6475,3 +6475,22 @@ KI-Entrauschen {p} % · {r}	AI ノイズ除去 {p} % · {r}
 KI-Entrauschen {p} %	AI ノイズ除去 {p} %
 KI-Entrauschen fertig · {s} s	AI ノイズ除去 完了 · {s} 秒
 Fertig nach {s} s	{s} 秒で完了
+Wirkung der Maske im Bild zeigen: {kind}	マスクの効果を表示：{kind}
+Dichte (%)	密度 (%)
+Höchste Wirkung, auch beim Übermalen	重ね塗りしても超えない最大効果
+Pinsel kleiner	ブラシを小さく
+Pinsel größer	ブラシを大きく
+Pinsel weicher	ブラシを柔らかく
+Pinsel härter	ブラシを硬く
+⌥ beim Malen	描画中に⌥
+Radiert aus der Maske	マスクから消去
+⇧-Klick beim Malen	描画中に⇧クリック
+Gerade Linie vom letzten Punkt	最後の点から直線
+Größe ({a} kleiner, {b} größer)	サイズ（{a} 小さく、{b} 大きく）
+Härte ({a} weicher, {b} härter)	硬さ（{a} 柔らかく、{b} 硬く）
+Auto-Maske	自動マスク
+Wirkt nur auf ähnliche Farben wie am Strichanfang	ストローク開始点に近い色にのみ作用
+Toleranz (%)	許容範囲 (%)
+Wie ähnlich die Farbe sein muss	どれだけ近い色まで許すか
+Erst „Auto-Maske“ einschalten	先に「自動マスク」をオンにしてください
+Pinsel malt · ⌥ radiert · ⇧-Klick Linie	ブラシで描画 · ⌥で消去 · ⇧クリックで直線

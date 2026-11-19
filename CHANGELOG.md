@@ -398,6 +398,18 @@ A small update after the first reports from users.
 
 ---
 
+## 1.4.1 · Brush Masks, Sharper 100 % View
+
+- **Brush masks, reworked:** brush strokes no longer draw their centre lines; while you paint, the overlay shows by itself (switch it off with the button or ⇧O) and a ring at the pointer shows the size and where the soft edge starts. New **Density** slider caps the effect however often you paint over it. **Auto Mask** limits a stroke to colours similar to the one where it began (with a Tolerance slider). ⇧-click draws a straight line, ⌥ erases, `[` `]` change the size, ⇧`[` ⇧`]` the hardness.
+- **Long brush strokes are fast:** painted strokes are now computed as one weight map instead of summing every dab. A wild 20,000-point stroke on a 24 MP photo takes about 0.6 s instead of 6 to 40 s, with identical results, and the "more than 100000 dabs" limit is gone. Using Density or Auto Mask saves masks in a newer format that older versions cannot read.
+- **No jagged diagonals at 100 % (portrait and cropped photos):** once the full-resolution view arrived, portrait or cropped photos could show stair-stepped diagonals on screen (reported on Windows; exports were never affected). The view now uses the right scale and smoother filtering below 100 % and up to 200 %.
+- **Camera colour modes for Sigma photos set to black & white:** Film & Look now also offers Standard, Vivid and the other camera modes (with colour thumbnails); one click switches back to colour and sets the mode.
+- **Mask overlay steps aside while you hold a slider** and returns when you let go, so you can judge the effect.
+- **No colour flash for photos switched to black & white:** a photo that had been set to black & white together with others briefly showed its old colour version in Develop before the black & white one appeared. Only matching views stand in now.
+- **Smaller:** the selection frame of look tiles is no longer cut off on the left.
+
+---
+
 ## Thanks
 
 - **spektrafilm** by Andrea Volpato (GPL-3.0), film profiles CC BY-SA 4.0

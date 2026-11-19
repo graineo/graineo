@@ -174,7 +174,7 @@ pub fn part(mask: &Mask, i: usize) -> Option<&Mask> {
 /// The mask tree of a list of parts: folded from the left, inverted as a whole when switched so.
 pub fn join(p: &Parts) -> Mask {
     let mut it = p.parts.iter();
-    let mut tree = it.next().map(|(_, m)| m.clone()).unwrap_or(Mask::Brush { points: vec![[-2.0, -2.0]], radius: 0.04, hardness: 0.6, flow: 0.2 });
+    let mut tree = it.next().map(|(_, m)| m.clone()).unwrap_or(Mask::Brush { points: vec![[-2.0, -2.0]], radius: 0.04, hardness: 0.6, flow: 0.2, density: 1.0, auto: None });
     for (op, m) in it {
         tree = Mask::Combine { operation: op.unwrap_or(Operation::Add), left: Box::new(tree), right: Box::new(m.clone()) };
     }
@@ -235,10 +235,10 @@ impl Parts {
     }
 }
 
-/// A new stroke with the brush settings `brush` (radius, hardness, flow) at the end of the brush part `part`: a part
-/// that is still a placeholder is drawn into directly, otherwise the strokes are kept in a balanced add-tree (an
-/// inverted part stays inverted). The stroke to draw into is the last leaf of the result ([`last_leaf`]).
-pub fn add_stroke(part: &Mask, brush: [f32; 3]) -> Mask {
+/// A new stroke `new` (a brush not drawn yet) at the end of the brush part `part`: a part that is still a placeholder
+/// is replaced by it, otherwise the strokes are kept in a balanced add-tree (an inverted part stays inverted). The
+/// stroke to draw into is the last leaf of the result ([`last_leaf`]).
+pub fn add_stroke(part: &Mask, new: Mask) -> Mask {
     fn collect(m: &Mask, out: &mut Vec<Mask>) {
         match m {
             Mask::Combine { operation: Operation::Add, left, right } => {
@@ -255,10 +255,8 @@ pub fn add_stroke(part: &Mask, brush: [f32; 3]) -> Mask {
         let n = v.len() / 2;
         Mask::Combine { operation: Operation::Add, left: Box::new(balance(&v[..n])), right: Box::new(balance(&v[n..])) }
     }
-    let [radius, hardness, flow] = brush;
-    let new = Mask::Brush { points: vec![[-2.0, -2.0]], radius, hardness, flow };
     match part {
-        Mask::Invert { mask } => Mask::Invert { mask: Box::new(add_stroke(mask, brush)) },
+        Mask::Invert { mask } => Mask::Invert { mask: Box::new(add_stroke(mask, new)) },
         Mask::Brush { points, .. } if fresh(points) => new,
         m => {
             let mut strokes = Vec::new();
@@ -285,7 +283,7 @@ mod tests {
     use masks::{Instances, RasterSource};
 
     fn brush(x: f32) -> Mask {
-        Mask::Brush { points: vec![[x, 0.5], [x + 0.1, 0.55]], radius: 0.05, hardness: 0.5, flow: 0.8 }
+        Mask::Brush { points: vec![[x, 0.5], [x + 0.1, 0.55]], radius: 0.05, hardness: 0.5, flow: 0.8, density: 1.0, auto: None }
     }
     fn subject() -> Mask {
         Mask::Raster { raster: String::new(), source: RasterSource::Subject { instances: Instances::All }, feather: 0.0, range: None, edge: 0.0 }
@@ -350,7 +348,7 @@ mod tests {
         let tree = c(Operation::Subtract, c(Operation::Add, subject(), brush(0.1)), brush(0.6));
         let mut p = split(&tree);
         assert_eq!(p.parts.len(), 3);
-        p.parts[2].1 = add_stroke(&p.parts[2].1, [0.05, 0.5, 0.8]);
+        p.parts[2].1 = add_stroke(&p.parts[2].1, Mask::Brush { points: vec![[-2.0, -2.0]], radius: 0.05, hardness: 0.5, flow: 0.8, density: 1.0, auto: None });
         if let Mask::Brush { points, .. } = last_leaf(&mut p.parts[2].1) {
             assert!(fresh(points));
             *points = vec![[0.7, 0.7]];
@@ -362,8 +360,8 @@ mod tests {
         // the first two parts are untouched
         assert_eq!(split(&t).parts[..2], split(&tree).parts[..2]);
         // a placeholder is drawn into, not doubled
-        let placeholder = Mask::Brush { points: vec![[-2.0, -2.0]], radius: 0.05, hardness: 0.5, flow: 0.8 };
-        assert_eq!(add_stroke(&placeholder, [0.05, 0.5, 0.8]), placeholder);
+        let placeholder = Mask::Brush { points: vec![[-2.0, -2.0]], radius: 0.05, hardness: 0.5, flow: 0.8, density: 1.0, auto: None };
+        assert_eq!(add_stroke(&placeholder, placeholder.clone()), placeholder);
     }
 
     #[test]

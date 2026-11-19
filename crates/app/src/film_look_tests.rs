@@ -114,6 +114,41 @@ fn selection_keeps_saved_look_and_darkroom_values() {
     assert_eq!(sigma.raw, s.raw);
     assert_eq!(sigma.color_mode.as_deref(), Some("Neutral"));
 }
+/// A Sigma colour mode switches black and white off; the black-and-white entry switches it on and keeps the mode.
+#[test]
+fn sigma_colour_mode_switches_black_and_white_off() {
+    let mono = Settings { monochrome: true, color_mode: Some("Vivid".into()), ..Settings::default() };
+    let colour = Choice::Sigma("Neutral".into()).apply(&mono);
+    assert!(!colour.monochrome);
+    assert_eq!(colour.color_mode.as_deref(), Some("Neutral"));
+    let camera = Choice::Sigma(String::new()).apply(&mono);
+    assert!(!camera.monochrome && camera.color_mode.is_none());
+    let mut film = colour.clone();
+    film.film.active = true;
+    let back = Choice::SigmaMono.apply(&film);
+    assert!(back.monochrome && !back.film.active);
+    assert_eq!(back.color_mode.as_deref(), Some("Neutral"));
+    // other choices leave black and white as it is
+    assert!(Choice::Film("x".into()).apply(&mono).monochrome);
+    assert!(Choice::Look("y".into()).apply(&mono).monochrome);
+}
+/// Sigma photo set to black and white: the camera group offers black and white (selected, own key) and all colour modes.
+#[test]
+fn sigma_black_and_white_offers_the_colour_modes() {
+    let modes = vec!["Neutral".to_string(), "Vivid".to_string()];
+    let mono = Settings { monochrome: true, ..Settings::default() };
+    let groups = look_groups(&mono, None, "Standard", &modes);
+    let keys: Vec<_> = groups[0].entries.iter().map(|e| e.key.as_str()).collect();
+    assert_eq!(keys, [SIGMA_MONO_KEY, "sigma:", "sigma:Neutral", "sigma:Vivid"]);
+    assert!(matches!(groups[0].entries[0].choice, Choice::SigmaMono));
+    assert!(groups[0].entries[1..].iter().all(|e| matches!(e.choice, Choice::Sigma(_))));
+    assert_eq!(look_card(&mono, None, "Standard").0, SIGMA_MONO_KEY, "black and white is the selected tile");
+    // in colour: only the colour modes, as before
+    let colour = look_groups(&Settings::default(), None, "Standard", &modes);
+    let keys: Vec<_> = colour[0].entries.iter().map(|e| e.key.as_str()).collect();
+    assert_eq!(keys, ["sigma:", "sigma:Neutral", "sigma:Vivid"]);
+    assert_eq!(look_card(&Settings::default(), None, "Standard").0, "sigma:");
+}
 #[test]
 fn fold_state_persisted_in_english_and_foreign_version_kept() {
     let root = std::path::PathBuf::from(crate::env::var_os("GRAINEO_DATA_DIR").unwrap())

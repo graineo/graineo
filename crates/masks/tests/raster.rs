@@ -93,7 +93,7 @@ fn brush_subtracts_from_raster() {
     let m = Mask::Combine {
         operation: Operation::Subtract,
         left: Box::new(leaf(&id)),
-        right: Box::new(Mask::Brush { points: vec![[0.5, 0.5]], radius: 0.05, hardness: 1.0, flow: 1.0 }),
+        right: Box::new(Mask::Brush { points: vec![[0.5, 0.5]], radius: 0.05, hardness: 1.0, flow: 1.0, density: 1.0, auto: None }),
     };
     m.validate().unwrap();
     let data = vec![0.18f32; 400 * 300 * 3];
@@ -114,7 +114,7 @@ fn foreign_aspect_ratio_is_not_used() {
 fn other_photo_gets_rules_not_rasters() {
     let id = raster::remember(disc(5));
     let click = Mask::Raster { raster: id.clone(), source: RasterSource::Click { points: vec![[0.5, 0.5, 1.0]], rect: None }, feather: 0.0, range: None, edge: 0.0 };
-    let brush = Mask::Brush { points: vec![[0.5, 0.5]], radius: 0.05, hardness: 1.0, flow: 1.0 };
+    let brush = Mask::Brush { points: vec![[0.5, 0.5]], radius: 0.05, hardness: 1.0, flow: 1.0, density: 1.0, auto: None };
     let doc = Document {
         version: 3,
         layers: vec![

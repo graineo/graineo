@@ -2294,9 +2294,9 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         }
         let hot = resp.hovered() || star_hovered;
         if on {
-            painter.rect_stroke(img, 0.0, Stroke::new(2.0, Color32::from_gray(0xf0)), egui::StrokeKind::Outside);
+            painter.rect_stroke(img, 0.0, Stroke::new(2.0, Color32::from_gray(0xf0)), egui::StrokeKind::Inside);
         } else if hot {
-            painter.rect_stroke(img, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), egui::StrokeKind::Outside);
+            painter.rect_stroke(img, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), egui::StrokeKind::Inside);
         }
         if let Some(fav) = t.star.filter(|&f| f || hot) {
             painter.circle_filled(star_rect.center(), 9.0, Color32::from_black_alpha(150));

@@ -6477,3 +6477,22 @@ KI-Entrauschen {p} % · {r}	AI Denoise {p} % · {r}
 KI-Entrauschen {p} %	AI Denoise {p} %
 KI-Entrauschen fertig · {s} s	AI Denoise done · {s} s
 Fertig nach {s} s	Done after {s} s
+Wirkung der Maske im Bild zeigen: {kind}	Show the effect of the mask: {kind}
+Dichte (%)	Density (%)
+Höchste Wirkung, auch beim Übermalen	Maximum effect, even when painted over
+Pinsel kleiner	Smaller brush
+Pinsel größer	Larger brush
+Pinsel weicher	Softer brush
+Pinsel härter	Harder brush
+⌥ beim Malen	⌥ while painting
+Radiert aus der Maske	Erases from the mask
+⇧-Klick beim Malen	⇧-click while painting
+Gerade Linie vom letzten Punkt	Straight line from the last point
+Größe ({a} kleiner, {b} größer)	Size ({a} smaller, {b} larger)
+Härte ({a} weicher, {b} härter)	Hardness ({a} softer, {b} harder)
+Auto-Maske	Auto mask
+Wirkt nur auf ähnliche Farben wie am Strichanfang	Acts only on colours similar to the stroke start
+Toleranz (%)	Tolerance (%)
+Wie ähnlich die Farbe sein muss	How similar the colour must be
+Erst „Auto-Maske“ einschalten	Switch on “Auto mask” first
+Pinsel malt · ⌥ radiert · ⇧-Klick Linie	Brush paints · ⌥ erases · ⇧-click line

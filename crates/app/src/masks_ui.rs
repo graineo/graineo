@@ -18,10 +18,18 @@ struct State {
     fresh: bool,
     /// what the selected part is (set by the panel, read by `painting`)
     tool: PartTool,
-    /// brush for new strokes: radius (short side), hardness, flow; `None` = start values
-    brush: Option<[f32; 3]>,
+    /// brush for new strokes: radius (short side), hardness, flow, density; `None` = start values
+    brush: Option<[f32; 4]>,
     /// dragged handle of a gradient or ellipse
     grab: Option<Handle>,
+    /// part the stroke being painted goes into (the selected one, or the erasing part with ⌥)
+    stroke_part: Option<usize>,
+    /// "Auto-Maske" for the next strokes: they act only on colours like the one under their start
+    auto: bool,
+    /// tolerance of the auto mask (Oklab distance; `None` = start value)
+    auto_tolerance: Option<f32>,
+    /// a stroke with auto mask started before the image for the colour was there: its part and start point
+    auto_pending: Option<(usize, [f32; 2])>,
     /// the pointer was over a handle in the last frame
     over_handle: bool,
     start: Option<[f32; 2]>,
@@ -81,8 +89,16 @@ const COLOR_FEATHER: f32 = 0.06;
 /// Oklab units of 100 on the sliders "Toleranz" and "Weichheit".
 const COLOR_SCALE: f32 = 0.3;
 
-/// Start values of the brush for new strokes: radius, hardness, flow.
-const BRUSH: [f32; 3] = [0.04, 0.6, 0.2];
+/// Start values of the brush for new strokes: radius, hardness, flow, density.
+const BRUSH: [f32; 4] = [0.04, 0.6, 0.2, 1.0];
+
+/// Start value of the tolerance of the auto mask (Oklab distance where a stroke stops acting).
+const AUTO_TOLERANCE: f32 = 0.15;
+
+/// A stroke not drawn yet (placeholder point outside the photo) with the brush settings `b`.
+fn new_stroke(b: [f32; 4]) -> Mask {
+    Mask::Brush { points: vec![[-2.0, -2.0]], radius: b[0], hardness: b[1], flow: b[2], density: b[3], auto: None }
+}
 
 fn key() -> egui::Id {
     egui::Id::unique("local_mask_editor")
@@ -126,12 +142,7 @@ pub fn finish(ctx: &Context) -> bool {
 }
 fn shape(kind: usize) -> Mask {
     match kind {
-        0 => Mask::Brush {
-            points: vec![[-2.0, -2.0]],
-            radius: 0.04,
-            hardness: 0.6,
-            flow: 0.2,
-        },
+        0 => new_stroke(BRUSH),
         1 => Mask::Linear {
             start: [0.25, 0.5],
             end: [0.75, 0.5],
@@ -182,17 +193,43 @@ fn part_settings(ui: &mut Ui, s: &mut State, part: &mut Mask, path: &std::path::
         let mut size = b[0] * 100.0;
         let mut hard = b[1] * 100.0;
         let mut flow = b[2] * 100.0;
-        let mut changed = slider_pct(ui, "Größe (%)", &mut size, 0.1..=50.0, BRUSH[0] * 100.0, 0.1);
-        changed |= slider_pct(ui, "Härte (%)", &mut hard, 0.0..=100.0, BRUSH[1] * 100.0, 1.0);
+        let mut density = b[3] * 100.0;
+        let keys = |a: &str, b: &str| (crate::shortcuts::display(a), crate::shortcuts::display(b));
+        let r = ui.scope(|ui| slider_pct(ui, "Größe (%)", &mut size, 0.1..=50.0, BRUSH[0] * 100.0, 0.1));
+        let probe = ui.interact(r.response.rect, ui.scope_id().with("size_tip"), egui::Sense::hover());
+        let (a, z) = keys("brush_smaller", "brush_larger");
+        lr::hover_tip(ui, &probe, &crate::trf!("Größe ({a} kleiner, {b} größer)", a = a, b = z));
+        let mut changed = r.inner;
+        let r = ui.scope(|ui| slider_pct(ui, "Härte (%)", &mut hard, 0.0..=100.0, BRUSH[1] * 100.0, 1.0));
+        let probe = ui.interact(r.response.rect, ui.scope_id().with("hardness_tip"), egui::Sense::hover());
+        let (a, z) = keys("brush_softer", "brush_harder");
+        lr::hover_tip(ui, &probe, &crate::trf!("Härte ({a} weicher, {b} härter)", a = a, b = z));
+        changed |= r.inner;
         changed |= slider_pct(ui, "Fluss (%)", &mut flow, 1.0..=100.0, BRUSH[2] * 100.0, 1.0);
+        let r = ui.scope(|ui| slider_pct(ui, "Dichte (%)", &mut density, 1.0..=100.0, BRUSH[3] * 100.0, 1.0));
+        let probe = ui.interact(r.response.rect, ui.scope_id().with("density_tip"), egui::Sense::hover());
+        lr::hover_tip(ui, &probe, crate::tr("Höchste Wirkung, auch beim Übermalen"));
+        changed |= r.inner;
+        // auto mask: a switch and its tolerance (always shown, locked while off: no jump in the tray)
+        ui.horizontal(|ui| {
+            ui.add_space(lr::TEXT_INSET);
+            let r = lr::toggle(ui, &mut s.auto, "Auto-Maske");
+            lr::hover_tip(ui, &r, crate::tr("Wirkt nur auf ähnliche Farben wie am Strichanfang"));
+        });
+        let mut tolerance = s.auto_tolerance.unwrap_or(AUTO_TOLERANCE) / COLOR_SCALE * 100.0;
+        let t = ui.add_enabled_ui(s.auto, |ui| slider_pct(ui, "Toleranz (%)", &mut tolerance, 1.0..=100.0, AUTO_TOLERANCE / COLOR_SCALE * 100.0, 1.0));
+        let probe = ui.interact(t.response.rect, ui.scope_id().with("auto_tolerance_tip"), egui::Sense::hover());
+        lr::hover_tip(ui, &probe, crate::tr(if s.auto { "Wie ähnlich die Farbe sein muss" } else { "Erst „Auto-Maske“ einschalten" }));
+        if t.inner {
+            s.auto_tolerance = Some((tolerance / 100.0 * COLOR_SCALE).clamp(0.003, 0.3));
+        }
         if changed {
-            b = [(size / 100.0).clamp(0.001, 0.5), (hard / 100.0).clamp(0.0, 1.0), (flow / 100.0).clamp(0.01, 1.0)];
+            b = [(size / 100.0).clamp(0.001, 0.5), (hard / 100.0).clamp(0.0, 1.0), (flow / 100.0).clamp(0.01, 1.0), (density / 100.0).clamp(0.01, 1.0)];
             s.brush = Some(b);
             // a brush not drawn yet takes the settings at once
-            if let Mask::Brush { points, radius, hardness, flow } = mask_parts::last_leaf(part) {
-                if mask_parts::fresh(points) {
-                    (*radius, *hardness, *flow) = (b[0], b[1], b[2]);
-                }
+            let leaf = mask_parts::last_leaf(part);
+            if matches!(leaf, Mask::Brush { points, .. } if mask_parts::fresh(points)) {
+                *leaf = new_stroke(b);
             }
         }
         dim(ui, crate::tr("Gilt für die nächsten Striche · ⌘Z nimmt einen Strich zurück"));
@@ -639,10 +676,7 @@ fn add_part(s: &mut State, layer: &mut Layer, op: Operation, kind: crate::mask_l
         K::Sky => {
             (crate::depth_ui::sky_leaf(), Some(crate::subject_ui::Request::Scene(crate::depth_ui::What::Sky, crate::depth_ui::STANDARD.into())))
         }
-        K::Brush => {
-            let [radius, hardness, flow] = s.brush.unwrap_or(BRUSH);
-            (Mask::Brush { points: vec![[-2.0, -2.0]], radius, hardness, flow }, None)
-        }
+        K::Brush => (new_stroke(s.brush.unwrap_or(BRUSH)), None),
         K::Linear => (shape(1), None),
         K::Radial => (shape(2), None),
         K::Luminance => (shape(3), None),
@@ -769,10 +803,10 @@ fn create(s: &mut State, local: &mut Option<Document>, kind: crate::mask_list_ui
             };
             let d = local.get_or_insert(Document { version: 2, layers: vec![] });
             if d.layers.len() < 64 {
-                let mut m = shape(n);
-                if let (Mask::Brush { radius, hardness, flow, .. }, Some(b)) = (&mut m, s.brush) {
-                    (*radius, *hardness, *flow) = (b[0], b[1], b[2]);
-                }
+                let m = match (n, s.brush) {
+                    (0, Some(b)) => new_stroke(b),
+                    _ => shape(n),
+                };
                 d.layers.push(Layer::new(m, Adjustments::default()));
                 d.settle_version();
                 s.selected = d.layers.len() - 1;
@@ -879,7 +913,7 @@ fn tool_line(ui: &mut Ui, s: &State, layer: Option<&Layer>) {
     } else if s.armed && s.tool == PartTool::Pipette {
         crate::tr("Pipette: Farbe anklicken · ⇧ dazu · ⌥ weg")
     } else if s.armed && s.tool == PartTool::Brush {
-        crate::tr("Pinsel: im Bild malen · Esc beendet")
+        crate::tr("Pinsel malt · ⌥ radiert · ⇧-Klick Linie")
     } else if s.armed && s.tool == PartTool::Segments {
         crate::tr("Tiefe: Klick nimmt ein Segment dazu oder weg · Esc beendet")
     } else if s.armed && s.tool == PartTool::Shape && s.fresh {
@@ -928,10 +962,13 @@ pub fn stamp(m: &Mask) -> u64 {
         let f = |v: &[f32], h: &mut std::collections::hash_map::DefaultHasher| v.iter().for_each(|x| x.to_bits().hash(h));
         std::mem::discriminant(m).hash(h);
         match m {
-            Mask::Brush { points, radius, hardness, flow } => {
+            Mask::Brush { points, radius, hardness, flow, density, auto } => {
                 points.len().hash(h);
                 points.iter().for_each(|p| f(p, h));
-                f(&[*radius, *hardness, *flow], h);
+                f(&[*radius, *hardness, *flow, *density], h);
+                if let Some(a) = auto {
+                    f(&[a.reference[0], a.reference[1], a.reference[2], a.tolerance], h);
+                }
             }
             Mask::Linear { start, end } => f(&[start[0], start[1], end[0], end[1]], h),
             Mask::Radial { center, radii, angle, feather } => f(&[center[0], center[1], radii[0], radii[1], *angle, *feather], h),
@@ -1062,6 +1099,22 @@ pub fn panel(ui: &mut Ui, local: &mut Option<Document>, index: usize, path: &std
             s.test_done = true;
         }
     }
+    // test hook GRAINEO_MASKS_TEST="brush;ring=x,y" (screenshots): a brush mask of a few strokes and an erasing part,
+    // the brush ready to paint (overlay by itself), its ring at x, y (0..1 of the photo) while the pointer is elsewhere
+    if masks_test().as_deref() == Ok("brush") && local.is_none() && !s.test_asked {
+        s.test_asked = true;
+        let wave = |y: f32, phase: f32| (0..60).map(|i| [0.12 + 0.76 * i as f32 / 59.0, y + 0.05 * (i as f32 * 0.25 + phase).sin()]).collect::<Vec<_>>();
+        let stroke = |points, density| Mask::Brush { points, radius: 0.05, hardness: 0.6, flow: 0.35, density, auto: None };
+        let painted = Mask::Combine { operation: Operation::Add, left: Box::new(stroke(wave(0.35, 0.0), 1.0)), right: Box::new(stroke(wave(0.5, 1.5), 0.5)) };
+        let erased = stroke(vec![[0.5, 0.2], [0.5, 0.65]], 1.0);
+        let mut d = Document { version: 2, layers: vec![Layer::new(Mask::Combine { operation: Operation::Subtract, left: Box::new(painted), right: Box::new(erased) }, Adjustments { exposure: 0.6, ..Default::default() })] };
+        d.settle_version();
+        let mask = d.layers[0].mask.clone();
+        *local = Some(d);
+        s.selected = 0;
+        select_part(&mut s, &mask, 0);
+        s.brush = Some([0.05, 0.6, 0.35, 1.0]);
+    }
     // test hook GRAINEO_MASKS_TEST=demo|menu-demo: three masks (named, strength 80 %, one switched off) for screenshots
     if masks_test().is_ok_and(|v| v.ends_with("demo")) && local.is_none() && !s.test_asked {
         *local = Some(demo());
@@ -1070,8 +1123,8 @@ pub fn panel(ui: &mut Ui, local: &mut Option<Document>, index: usize, path: &std
     }
     // ⇧O: overlay on, then through the kinds of showing it, then off
     if crate::shortcuts::pressed(ui.ctx(), "mask_overlay") {
-        let (on, mode) = next_overlay(s.weights, overlay_mode(ui.ctx()));
-        s.weights = on;
+        let (on, mode) = next_overlay(overlay_shown(ui.ctx(), &s, brush_ready(&s)), overlay_mode(ui.ctx()));
+        set_overlay(ui.ctx(), &mut s, on);
         set_overlay_mode(ui.ctx(), mode);
     }
     if let Some(m) = masks_test_opt("overlay").and_then(|v| v.parse::<usize>().ok()).and_then(|i| Overlay::ALL.get(i).copied()) {
@@ -1087,14 +1140,15 @@ pub fn panel(ui: &mut Ui, local: &mut Option<Document>, index: usize, path: &std
             for m in Overlay::ALL {
                 if lr::menu_item(ui, &format!("{} {}", if m == mode { "●" } else { "  " }, crate::tr(m.label())), "", true) {
                     set_overlay_mode(ui.ctx(), m);
-                    s.weights = true;
+                    set_overlay(ui.ctx(), &mut s, true);
                 }
             }
         });
-        let r = ui.add(egui::Button::new(crate::tr("Überlagerung")).selected(s.weights));
-        lr::tip_key(ui, &r, &crate::trf!("Wirkung der gewählten Maske im Bild zeigen: {kind}", kind = crate::tr(mode.label())), "mask_overlay");
+        let shown = overlay_shown(ui.ctx(), &s, brush_ready(&s));
+        let r = ui.add(egui::Button::new(crate::tr("Überlagerung")).selected(shown));
+        lr::tip_key(ui, &r, &crate::trf!("Wirkung der Maske im Bild zeigen: {kind}", kind = crate::tr(mode.label())), "mask_overlay");
         if r.clicked() {
-            s.weights = !s.weights;
+            set_overlay(ui.ctx(), &mut s, !shown);
         }
     });
     let count = local.as_ref().map_or(0, |d| d.layers.len());
@@ -1192,7 +1246,8 @@ pub fn panel(ui: &mut Ui, local: &mut Option<Document>, index: usize, path: &std
     }
     test_options(d, s.selected, &mut s.test_done);
     // colour and brightness ranges: the image they compare against (pipette, overlay)
-    if request.is_none() && d.layers.get(s.selected).is_some_and(|l| crate::mask_sample::needs_image(&l.mask) || l.refines()) {
+    let auto_brush = s.auto && s.tool == PartTool::Brush;
+    if request.is_none() && (auto_brush || d.layers.get(s.selected).is_some_and(|l| crate::mask_sample::needs_image(&l.mask) || l.refines())) {
         request = Some(crate::subject_ui::Request::Sample);
     }
     // also after a slider of a part (edge of a selection, colour samples …): the lowest sufficient version
@@ -1474,29 +1529,79 @@ pub fn overlay(
     let pointer = resp.interact_pointer_pos().filter(|p| rect.contains(*p) && ui.clip_rect().contains(*p));
     if acting && tool == PartTool::Brush {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
+        // [ ] size, ⇧[ ⇧] hardness of the next strokes
+        if let Some(b) = brush_keys(ui.ctx(), s.brush.unwrap_or(BRUSH)) {
+            s.brush = Some(b);
+            if let Some(leaf) = mask_parts::part_mut(&mut layer.mask, s.part).map(mask_parts::last_leaf) {
+                if matches!(leaf, Mask::Brush { points, .. } if mask_parts::fresh(points)) {
+                    *leaf = new_stroke(b);
+                }
+            }
+        }
         if let Some(pos) = pointer {
             let q = to_image(pos);
+            let mods = ui.input(|i| i.modifiers);
             if resp.drag_started() || resp.clicked() {
                 let before = layer.mask.clone();
                 let brush = s.brush.unwrap_or(BRUSH);
-                if let Some(part) = mask_parts::part_mut(&mut layer.mask, s.part) {
-                    *part = mask_parts::add_stroke(part, brush);
-                    if let Mask::Brush { points, .. } = mask_parts::last_leaf(part) {
-                        *points = vec![q];
+                // ⌥: the stroke erases (goes into the erasing part at the end of the mask)
+                s.stroke_part = if mods.alt { eraser_part(&mut layer.mask, brush) } else { Some(s.part) };
+                if let Some(part) = s.stroke_part.and_then(|t| mask_parts::part_mut(&mut layer.mask, t)) {
+                    // ⇧-click: a straight line from the last point painted
+                    let line = (mods.shift && resp.clicked()).then(|| last_point(part)).flatten();
+                    match line {
+                        Some((_, same, auto)) if same == new_stroke(brush) && auto == s.auto => {
+                            // the same brush: the last stroke goes on (no doubled dab at the joint)
+                            if let Mask::Brush { points, .. } = mask_parts::last_leaf(part) {
+                                points.push(q);
+                            }
+                        }
+                        _ => {
+                            *part = mask_parts::add_stroke(part, new_stroke(brush));
+                            let start = line.as_ref().map_or(q, |l| l.0);
+                            // the colour under the start of the stroke (waits for the image the masks see if needed)
+                            let auto = s.auto.then(|| crate::mask_sample::pick(index, start)).map(|c| match c {
+                                Some(c) => Some(masks::AutoMask { reference: c, tolerance: s.auto_tolerance.unwrap_or(AUTO_TOLERANCE) }),
+                                None => {
+                                    s.auto_pending = s.stroke_part.map(|t| (t, start));
+                                    None
+                                }
+                            });
+                            if let Mask::Brush { points, auto: a, .. } = mask_parts::last_leaf(part) {
+                                *points = line.map_or(vec![q], |(from, _, _)| vec![from, q]);
+                                *a = auto.flatten();
+                            }
+                        }
                     }
                 }
                 if layer.mask.validate().is_err() {
                     layer.mask = before;
+                    s.stroke_part = None;
                 }
             }
-            if resp.dragged() || resp.clicked() {
-                if let Some(Mask::Brush { points, .. }) = mask_parts::part_mut(&mut layer.mask, s.part).map(mask_parts::last_leaf) {
+            if resp.dragged() {
+                if let Some(Mask::Brush { points, .. }) = s.stroke_part.and_then(|t| mask_parts::part_mut(&mut layer.mask, t)).map(mask_parts::last_leaf) {
                     if !mask_parts::fresh(points) && points.len() < 100_000 && points.last().is_none_or(|p| (p[0] - q[0]).hypot(p[1] - q[1]) > 0.001) {
                         points.push(q);
                     }
                 }
                 ui.ctx().request_repaint();
             }
+        }
+        if resp.clicked() || resp.drag_stopped() {
+            s.stroke_part = None;
+        }
+    }
+    // an auto-mask stroke waiting for the colour under its start: set once the image the masks see is there
+    if let Some((t, start)) = s.auto_pending {
+        match crate::mask_sample::pick(index, start) {
+            Some(c) => {
+                if let Some(Mask::Brush { auto, .. }) = mask_parts::part_mut(&mut layer.mask, t).map(mask_parts::last_leaf) {
+                    auto.get_or_insert(masks::AutoMask { reference: c, tolerance: s.auto_tolerance.unwrap_or(AUTO_TOLERANCE) });
+                }
+                s.auto_pending = None;
+            }
+            None => ui.ctx().request_repaint_after(std::time::Duration::from_millis(100)),
         }
     }
     if acting && tool == PartTool::Shape {
@@ -1564,7 +1669,10 @@ pub fn overlay(
             painter.add(egui::Shape::dashed_line(&corners, egui::Stroke::new(1.0, Color32::from_rgb(230, 180, 70)), 6.0, 4.0));
         }
     }
-    if s.weights && s.hover.is_none_or(|h| h == s.selected) {
+    // while a control outside the photo is held down (a slider, also when held still), the overlay steps aside so the
+    // effect is visible; it comes back on release
+    let slider_drag = ui.input(|i| i.pointer.primary_down() && i.pointer.press_origin().is_some_and(|p| !rect.contains(p)));
+    if overlay_shown(ui.ctx(), &s, acting && tool == PartTool::Brush) && !slider_drag && s.hover.is_none_or(|h| h == s.selected) {
         weights_overlay(ui, painter, rect, frame, full, layer, index);
     }
     // the segment borders of the selected depth part
@@ -1573,23 +1681,19 @@ pub fn overlay(
             segments_overlay(ui, painter, rect, frame, full, raster);
         }
     }
-    // outlines of the selected part: while drawing, in the open "Masks" tool (H hides them) or in the darkroom
+    // outlines of the selected part: while drawing, in the open "Masks" tool (H hides them) or in the darkroom; brush
+    // strokes have none (the overlay shows what was painted, the ring where the brush is)
     if s.show || s.draw || crate::retouch_ui::mask_outlines_visible(ui.ctx()) {
         let stroke = egui::Stroke::new(1.0, Color32::from_rgb(230, 180, 70));
         if let Some(part) = mask_parts::part(&layer.mask, s.part) {
             let mut leaves = Vec::new();
             part.visit(&mut |m| {
-                if matches!(m, Mask::Brush { .. } | Mask::Linear { .. } | Mask::Radial { .. }) {
+                if matches!(m, Mask::Linear { .. } | Mask::Radial { .. }) {
                     leaves.push(m.clone());
                 }
             });
             for m in leaves.iter().rev().take(200) {
                 match m {
-                    Mask::Brush { points, .. } => {
-                        for w in points.windows(2) {
-                            painter.line_segment([to_screen(w[0]), to_screen(w[1])], stroke);
-                        }
-                    }
                     Mask::Linear { start, end } => {
                         painter.line_segment([to_screen(*start), to_screen(*end)], stroke);
                     }
@@ -1618,7 +1722,121 @@ pub fn overlay(
             }
         }
     }
+    // the brush ring at the pointer: outer ring = size, inner ring = where the soft edge begins
+    if acting && tool == PartTool::Brush {
+        let test_ring = || masks_test_opt("ring").map(|v| v.split(',').filter_map(|x| x.trim().parse::<f32>().ok()).collect::<Vec<_>>()).filter(|v| v.len() == 2).map(|v| to_screen([v[0], v[1]]));
+        if let Some(pos) = ui.input(|i| i.pointer.hover_pos()).filter(|p| rect.contains(*p) && ui.clip_rect().contains(*p)).or_else(test_ring) {
+            let b = s.brush.unwrap_or(BRUSH);
+            let q = to_image(pos);
+            let short = full[0].min(full[1]);
+            let rx = (to_screen([q[0] + b[0] * short / full[0], q[1]]) - to_screen(q)).length();
+            let ry = (to_screen([q[0], q[1] + b[0] * short / full[1]]) - to_screen(q)).length();
+            let erase = s.stroke_part.map_or(ui.input(|i| i.modifiers.alt), |t| t != s.part);
+            brush_ring(&painter.with_clip_rect(rect), pos, 0.5 * (rx + ry), b[1], erase);
+        }
+    }
     ui.ctx().data_mut(|d| d.insert_temp(key(), s));
+}
+
+/// The brush ring at `pos`: the outer ring at `radius` (screen points) is the size, the inner ring at `radius ×
+/// hardness` the start of the soft edge (left out when it would lie on the outer one); light rings with a dark rim, so
+/// that they show on light and dark parts of the photo. `erase`: a "−" in the middle (⌥ erases).
+fn brush_ring(painter: &egui::Painter, pos: egui::Pos2, radius: f32, hardness: f32, erase: bool) {
+    let ring = |r: f32, alpha: u8| {
+        painter.circle_stroke(pos, r, egui::Stroke::new(2.5, Color32::from_black_alpha(alpha / 2)));
+        painter.circle_stroke(pos, r, egui::Stroke::new(1.0, Color32::from_white_alpha(alpha)));
+    };
+    let radius = radius.max(1.5);
+    ring(radius, 230);
+    let inner = radius * hardness.clamp(0.0, 1.0);
+    if inner >= 1.5 && radius - inner >= 2.0 {
+        ring(inner, 150);
+    }
+    if erase {
+        for (w, c) in [(4.0, Color32::from_black_alpha(150)), (1.5, Color32::WHITE)] {
+            painter.line_segment([pos - egui::vec2(5.0, 0.0), pos + egui::vec2(5.0, 0.0)], egui::Stroke::new(w, c));
+        }
+    }
+}
+
+/// `[` / `]`: brush smaller / larger (by a quarter), ⇧[ / ⇧]: softer / harder (by 10 %). Returns the new settings when a
+/// key was pressed.
+fn brush_keys(ctx: &Context, b: [f32; 4]) -> Option<[f32; 4]> {
+    use crate::shortcuts::pressed;
+    let mut n = b;
+    if pressed(ctx, "brush_smaller") {
+        n[0] /= 1.25;
+    }
+    if pressed(ctx, "brush_larger") {
+        n[0] *= 1.25;
+    }
+    if pressed(ctx, "brush_softer") {
+        n[1] -= 0.1;
+    }
+    if pressed(ctx, "brush_harder") {
+        n[1] += 0.1;
+    }
+    n[0] = n[0].clamp(0.001, 0.5);
+    n[1] = ((n[1] * 100.0).round() / 100.0).clamp(0.0, 1.0);
+    (n != b).then_some(n)
+}
+
+/// The erasing part of a mask: brush strokes that take away from what the mask shows. The last part when it already is
+/// one (a brush part subtracted, or added to a mask inverted as a whole), otherwise a new one at the end. Returns its
+/// index (`None`: the mask tree would get too large).
+fn eraser_part(mask: &mut Mask, brush: [f32; 4]) -> Option<usize> {
+    use crate::mask_parts;
+    let mut parts = mask_parts::split(mask);
+    // in a mask inverted as a whole, adding takes away from what it shows
+    let op = if parts.inverted { Operation::Add } else { Operation::Subtract };
+    let n = parts.parts.len();
+    if n > 1 && parts.parts[n - 1].0 == Some(op) && matches!(parts.parts[n - 1].1, Mask::Brush { .. } | Mask::Combine { .. }) && mask_parts::is_brush(&parts.parts[n - 1].1) {
+        return Some(n - 1);
+    }
+    if !parts.push(op, new_stroke(brush)) {
+        return None;
+    }
+    *mask = mask_parts::join(&parts);
+    Some(n)
+}
+
+/// The last point painted in brush part `part`, the settings of its stroke (as a stroke not drawn yet, to compare
+/// with [`new_stroke`]) and whether it has an auto mask; `None` before the first stroke.
+fn last_point(part: &mut Mask) -> Option<([f32; 2], Mask, bool)> {
+    match crate::mask_parts::last_leaf(part) {
+        Mask::Brush { points, radius, hardness, flow, density, auto } if !crate::mask_parts::fresh(points) => {
+            Some((*points.last()?, new_stroke([*radius, *hardness, *flow, *density]), auto.is_some()))
+        }
+        _ => None,
+    }
+}
+
+fn auto_off_id() -> egui::Id {
+    egui::Id::unique("mask_overlay_auto_off")
+}
+
+/// The overlay was switched off on purpose (button, ⇧O): it no longer comes on by itself while painting, until it is
+/// switched on again (for all photos of the session).
+fn auto_off(ctx: &Context) -> bool {
+    ctx.data_mut(|d| d.get_temp::<bool>(auto_off_id()).unwrap_or(false))
+}
+
+/// Is the brush of the selected part ready to paint in the image (from the panel's point of view: the "Masks" tool is
+/// open there)? Then the overlay comes on by itself.
+fn brush_ready(s: &State) -> bool {
+    (s.draw || s.armed) && s.tool == PartTool::Brush
+}
+
+/// Is the overlay shown: switched on, or the brush is ready (`painting`) and the overlay was not switched off on
+/// purpose ("auto")?
+fn overlay_shown(ctx: &Context, s: &State, painting: bool) -> bool {
+    s.weights || (painting && !auto_off(ctx))
+}
+
+/// Switch the overlay on or off on purpose: off stays off while painting, on stays on.
+fn set_overlay(ctx: &Context, s: &mut State, on: bool) {
+    s.weights = on;
+    ctx.data_mut(|d| d.insert_temp(auto_off_id(), !on));
 }
 
 #[cfg(test)]
@@ -1867,6 +2085,354 @@ mod drawing_tests {
     }
 }
 
+#[cfg(test)]
+mod brush_view_tests {
+    use super::*;
+
+    /// What a frame drew: golden line segments (outlines), circles of the brush ring, textured meshes (overlay).
+    #[derive(Default, Debug)]
+    struct Drawn {
+        gold_lines: usize,
+        rings: Vec<f32>,
+        meshes: usize,
+    }
+    fn drawn(out: &egui::FullOutput) -> Drawn {
+        fn walk(s: &egui::Shape, d: &mut Drawn) {
+            match s {
+                egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, d)),
+                egui::Shape::LineSegment { stroke, .. } if stroke.color == Color32::from_rgb(230, 180, 70) => d.gold_lines += 1,
+                egui::Shape::Circle(c) if c.stroke.color == Color32::from_white_alpha(230) => d.rings.push(c.radius),
+                egui::Shape::Circle(c) if c.stroke.color == Color32::from_white_alpha(150) => d.rings.push(-c.radius),
+                egui::Shape::Mesh(_) => d.meshes += 1,
+                _ => {}
+            }
+        }
+        let mut d = Drawn::default();
+        out.shapes.iter().for_each(|c| walk(&c.shape, &mut d));
+        d
+    }
+    fn frame_of(ctx: &Context, local: &mut Option<Document>, events: Vec<egui::Event>) -> egui::FullOutput {
+        let frame = crate::Frame::from_settings(&develop::Settings::default(), 200, 100, 0);
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(300.0, 200.0))), events, ..Default::default() };
+        crate::ui_test::run(ctx, raw, |ui| {
+            let rect = egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(200.0, 100.0));
+            let resp = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+            overlay(ui, &resp, ui.painter(), rect, &frame, [200.0, 100.0], local, 0);
+        })
+    }
+    fn button(p: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }
+    }
+    fn paint(ctx: &Context, local: &mut Option<Document>, a: egui::Pos2, b: egui::Pos2) {
+        frame_of(ctx, local, vec![egui::Event::PointerMoved(a), button(a, true)]);
+        for k in 1..=6 {
+            let p = a + (b - a) * (k as f32 / 6.0);
+            frame_of(ctx, local, vec![egui::Event::PointerMoved(p)]);
+        }
+        frame_of(ctx, local, vec![button(b, false)]);
+    }
+
+    /// While painting: no golden centre lines of the strokes, the ring at the pointer (outer = size, inner = start of
+    /// the soft edge), the overlay by itself; switched off on purpose it stays off while painting, until switched on.
+    #[test]
+    fn painting_shows_overlay_and_ring_but_no_centre_lines() {
+        let ctx = Context::default();
+        let mut s = State::default();
+        let mut local = None;
+        create(&mut s, &mut local, crate::mask_list_ui::NewKind::Brush);
+        // drawing switched on as by the darkroom (the "Masks" tool needs the rail), brush 10 % hard 50 %
+        s.draw = true;
+        s.brush = Some([0.1, 0.5, 0.2, 1.0]);
+        ctx.data_mut(|d| d.insert_temp(key(), s));
+        frame_of(&ctx, &mut local, Vec::new());
+        paint(&ctx, &mut local, egui::pos2(40.0, 40.0), egui::pos2(150.0, 80.0));
+        paint(&ctx, &mut local, egui::pos2(60.0, 80.0), egui::pos2(170.0, 30.0));
+        assert_eq!(crate::mask_parts::strokes(&local.as_ref().unwrap().layers[0].mask), 2);
+        let d = drawn(&frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))]));
+        assert_eq!(d.gold_lines, 0, "no centre lines of brush strokes");
+        assert!(d.meshes >= 1, "the overlay comes on by itself while painting: {d:?}");
+        // photo 200 × 100 shown at 200 × 100 points: radius 10 % of the short side = 10 points, soft edge from 5
+        assert!(d.rings.iter().any(|r| (r - 10.0).abs() < 0.5) && d.rings.iter().any(|r| (r + 5.0).abs() < 0.5), "{:?}", d.rings);
+        // switched off on purpose: no overlay while painting, the ring stays
+        let mut st = state(&ctx, 0);
+        set_overlay(&ctx, &mut st, false);
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        paint(&ctx, &mut local, egui::pos2(30.0, 90.0), egui::pos2(180.0, 90.0));
+        let d = drawn(&frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))]));
+        assert_eq!(d.meshes, 0, "off stays off while painting");
+        assert!(!d.rings.is_empty(), "the ring shows without the overlay");
+        // switched on again: shown (also later while painting)
+        let mut st = state(&ctx, 0);
+        set_overlay(&ctx, &mut st, true);
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        assert!(drawn(&frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))])).meshes >= 1);
+        // not painting (drawing off, overlay not switched on): no overlay, no ring
+        let mut st = state(&ctx, 0);
+        st.weights = false;
+        st.draw = false;
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        ctx.data_mut(|d| d.insert_temp(auto_off_id(), false));
+        let d = drawn(&frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))]));
+        assert_eq!((d.meshes, d.rings.len()), (0, 0));
+        // gradients keep their line
+        local.as_mut().unwrap().layers.push(Layer::new(shape(1), Adjustments::default()));
+        let mut st = state(&ctx, 0);
+        st.selected = 1;
+        st.show = true;
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        assert_eq!(drawn(&frame_of(&ctx, &mut local, Vec::new())).gold_lines, 1);
+    }
+
+    /// The brush settings of the panel (here: density 40 %) go into the next stroke, not into the strokes before.
+    #[test]
+    fn next_stroke_takes_the_density() {
+        let ctx = Context::default();
+        let mut s = State::default();
+        let mut local = None;
+        create(&mut s, &mut local, crate::mask_list_ui::NewKind::Brush);
+        s.draw = true;
+        ctx.data_mut(|d| d.insert_temp(key(), s));
+        frame_of(&ctx, &mut local, Vec::new());
+        paint(&ctx, &mut local, egui::pos2(40.0, 40.0), egui::pos2(150.0, 80.0));
+        let mut st = state(&ctx, 0);
+        st.brush = Some([0.05, 0.6, 0.5, 0.4]);
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        paint(&ctx, &mut local, egui::pos2(40.0, 80.0), egui::pos2(150.0, 40.0));
+        let mut densities = Vec::new();
+        local.as_ref().unwrap().layers[0].mask.visit(&mut |m| {
+            if let Mask::Brush { density, .. } = m {
+                densities.push(*density);
+            }
+        });
+        assert_eq!(densities, vec![1.0, 0.4]);
+        let mut d = local.unwrap();
+        d.settle_version();
+        assert_eq!(d.version, 4);
+        d.validate().unwrap();
+    }
+
+    fn frame_with(ctx: &Context, local: &mut Option<Document>, events: Vec<egui::Event>, modifiers: egui::Modifiers) -> egui::FullOutput {
+        let frame = crate::Frame::from_settings(&develop::Settings::default(), 200, 100, 0);
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(300.0, 200.0))), events: [vec![egui::Event::ModifiersChanged(modifiers)], events].concat(), ..Default::default() };
+        crate::ui_test::run(ctx, raw, |ui| {
+            let rect = egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(200.0, 100.0));
+            let resp = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+            overlay(ui, &resp, ui.painter(), rect, &frame, [200.0, 100.0], local, 0);
+        })
+    }
+    fn brush_mask(ctx: &Context) -> Option<Document> {
+        let mut s = State::default();
+        let mut local = None;
+        create(&mut s, &mut local, crate::mask_list_ui::NewKind::Brush);
+        s.draw = true;
+        ctx.data_mut(|d| d.insert_temp(key(), s));
+        frame_of(ctx, &mut local, Vec::new());
+        local
+    }
+    fn points_of(m: &Mask) -> Vec<Vec<[f32; 2]>> {
+        let mut v = Vec::new();
+        m.visit(&mut |n| {
+            if let Mask::Brush { points, .. } = n {
+                v.push(points.clone());
+            }
+        });
+        v
+    }
+    /// A key pressed and let go in one frame.
+    fn key_event(key: egui::Key, shift: bool) -> Vec<egui::Event> {
+        let m = egui::Modifiers { shift, ..Default::default() };
+        [true, false].map(|pressed| egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: m }).to_vec()
+    }
+
+    /// ⌥ while painting erases: the stroke goes into an erasing part "− Brush" at the end (made once, then reused);
+    /// the selected part stays selected; the ring shows a "−"; the weights fall where it erased.
+    #[test]
+    fn alt_erases_into_a_subtracted_part() {
+        let ctx = Context::default();
+        let mut local = brush_mask(&ctx);
+        paint(&ctx, &mut local, egui::pos2(20.0, 60.0), egui::pos2(200.0, 60.0));
+        let alt = egui::Modifiers { alt: true, ..Default::default() };
+        let out = frame_with(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))], alt);
+        let minus = out.shapes.iter().any(|c| matches!(&c.shape, egui::Shape::LineSegment { points, stroke } if stroke.color == Color32::WHITE && (points[1].x - points[0].x - 10.0).abs() < 0.01));
+        assert!(minus, "the ring shows a minus while ⌥ is held");
+        for (a, b) in [(egui::pos2(100.0, 20.0), egui::pos2(100.0, 100.0)), (egui::pos2(140.0, 20.0), egui::pos2(140.0, 100.0))] {
+            frame_with(&ctx, &mut local, vec![egui::Event::PointerMoved(a), egui::Event::PointerButton { pos: a, button: egui::PointerButton::Primary, pressed: true, modifiers: alt }], alt);
+            for k in 1..=6 {
+                frame_with(&ctx, &mut local, vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / 6.0))], alt);
+            }
+            frame_with(&ctx, &mut local, vec![egui::Event::PointerButton { pos: b, button: egui::PointerButton::Primary, pressed: false, modifiers: alt }], alt);
+        }
+        let m = local.as_ref().unwrap().layers[0].mask.clone();
+        assert_eq!(crate::mask_parts::operations(&m), vec![None, Some(Operation::Subtract)], "one erasing part, reused");
+        assert_eq!(crate::mask_parts::strokes(crate::mask_parts::part(&m, 1).unwrap()), 2, "{:?}", points_of(&m).iter().map(|p| (p.len(), p[0])).collect::<Vec<_>>());
+        assert_eq!(state(&ctx, 0).part, 0, "the painting part stays selected");
+        // ⌥ let go: a normal stroke goes on into the selected part
+        frame_with(&ctx, &mut local, Vec::new(), egui::Modifiers::default());
+        paint(&ctx, &mut local, egui::pos2(20.0, 30.0), egui::pos2(60.0, 30.0));
+        let m = local.as_ref().unwrap().layers[0].mask.clone();
+        assert_eq!(crate::mask_parts::strokes(crate::mask_parts::part(&m, 0).unwrap()), 2);
+        // weights: painted at the left, erased at x = 100 (mask x 0.45)
+        let data = vec![0.5f32; 200 * 100 * 3];
+        let w = masks::rasterize(masks::Image::new(200, 100, &data).unwrap(), &m).unwrap();
+        assert!(w[50 * 200 + 40] > 0.1 && w[50 * 200 + 90] < 0.02, "painted {}, erased {}", w[50 * 200 + 40], w[50 * 200 + 90]);
+        // in a mask inverted as a whole the erasing part adds (takes away from what the inverted mask shows)
+        let mut inv = Mask::Invert { mask: Box::new(Mask::Combine { operation: Operation::Add, left: Box::new(shape(2)), right: Box::new(shape(1)) }) };
+        assert_eq!(eraser_part(&mut inv, BRUSH), Some(2));
+        assert_eq!(crate::mask_parts::operations(&inv), vec![None, Some(Operation::Add), Some(Operation::Add)]);
+        assert!(crate::mask_parts::inverted(&inv));
+    }
+
+    /// ⇧-click: a straight line from the last point painted (the same brush goes on in the last stroke, another brush
+    /// starts a stroke at that point); a plain click is one dab.
+    #[test]
+    fn shift_click_draws_a_straight_line() {
+        let ctx = Context::default();
+        let mut local = brush_mask(&ctx);
+        paint(&ctx, &mut local, egui::pos2(20.0, 30.0), egui::pos2(60.0, 30.0));
+        let last = *points_of(&local.as_ref().unwrap().layers[0].mask)[0].last().unwrap();
+        let shift = egui::Modifiers { shift: true, ..Default::default() };
+        let click = |ctx: &Context, local: &mut Option<Document>, p: egui::Pos2, m: egui::Modifiers| {
+            frame_with(ctx, local, vec![egui::Event::PointerMoved(p), egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: true, modifiers: m }], m);
+            frame_with(ctx, local, vec![egui::Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed: false, modifiers: m }], m);
+        };
+        click(&ctx, &mut local, egui::pos2(160.0, 90.0), shift);
+        let pts = points_of(&local.as_ref().unwrap().layers[0].mask);
+        assert_eq!(pts.len(), 1, "same brush: the stroke goes on");
+        assert_eq!(pts[0][pts[0].len() - 2], last);
+        let end = pts[0][pts[0].len() - 1];
+        assert!((end[0] - 0.75).abs() < 0.01 && (end[1] - 0.8).abs() < 0.01, "{end:?}");
+        // another brush: a new stroke from the last point
+        let mut st = state(&ctx, 0);
+        st.brush = Some([0.02, 0.6, 0.5, 1.0]);
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        click(&ctx, &mut local, egui::pos2(160.0, 20.0), shift);
+        let pts = points_of(&local.as_ref().unwrap().layers[0].mask);
+        assert_eq!(pts.len(), 2);
+        assert_eq!(pts[1][0], end);
+        // a plain click: one dab
+        click(&ctx, &mut local, egui::pos2(30.0, 90.0), egui::Modifiers::default());
+        let pts = points_of(&local.as_ref().unwrap().layers[0].mask);
+        assert_eq!((pts.len(), pts[2].len()), (3, 1));
+    }
+
+    /// [ ] change the size by a quarter, ⇧[ ⇧] the hardness by 10 %; a brush not drawn yet takes it at once.
+    #[test]
+    fn bracket_keys_change_size_and_hardness() {
+        let ctx = Context::default();
+        let mut local = brush_mask(&ctx);
+        let b0 = state(&ctx, 0).brush.unwrap_or(BRUSH);
+        frame_of(&ctx, &mut local, key_event(egui::Key::CloseBracket, false));
+        let b = state(&ctx, 0).brush.unwrap();
+        assert!((b[0] - b0[0] * 1.25).abs() < 1e-6 && b[1] == b0[1]);
+        frame_of(&ctx, &mut local, key_event(egui::Key::OpenBracket, false));
+        frame_of(&ctx, &mut local, key_event(egui::Key::OpenBracket, false));
+        let b = state(&ctx, 0).brush.unwrap();
+        assert!((b[0] - b0[0] / 1.25).abs() < 1e-6);
+        frame_of(&ctx, &mut local, key_event(egui::Key::OpenBracket, true));
+        let b = state(&ctx, 0).brush.unwrap();
+        assert!((b[1] - (b0[1] - 0.1)).abs() < 1e-6, "{b:?}");
+        for _ in 0..12 {
+            frame_of(&ctx, &mut local, key_event(egui::Key::CloseBracket, true));
+        }
+        assert_eq!(state(&ctx, 0).brush.unwrap()[1], 1.0);
+        // the placeholder of the brush mask took the settings
+        let Mask::Brush { radius, hardness, .. } = local.as_ref().unwrap().layers[0].mask else { panic!() };
+        assert_eq!([radius, hardness], [state(&ctx, 0).brush.unwrap()[0], 1.0]);
+    }
+
+    /// "Auto-Maske": a stroke takes the colour under its start from the image the masks see (also when that image comes
+    /// only after the stroke began); strokes without the switch have none; the overlay is computed on that image.
+    #[test]
+    fn auto_mask_strokes_take_the_colour_under_their_start() {
+        let ctx = Context::default();
+        let idx = 7;
+        let mut s = State::default();
+        let mut local = None;
+        create(&mut s, &mut local, crate::mask_list_ui::NewKind::Brush);
+        s.draw = true;
+        s.auto = true;
+        s.image = idx;
+        ctx.data_mut(|d| d.insert_temp(key(), s));
+        let run = |ctx: &Context, local: &mut Option<Document>, events: Vec<egui::Event>| {
+            let frame = crate::Frame::from_settings(&develop::Settings::default(), 200, 100, 0);
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(300.0, 200.0))), events, ..Default::default() };
+            crate::ui_test::run(ctx, raw, |ui| {
+                let rect = egui::Rect::from_min_size(egui::pos2(10.0, 10.0), egui::vec2(200.0, 100.0));
+                let resp = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+                overlay(ui, &resp, ui.painter(), rect, &frame, [200.0, 100.0], local, idx);
+            })
+        };
+        let stroke = |ctx: &Context, local: &mut Option<Document>, a: egui::Pos2, b: egui::Pos2| {
+            run(ctx, local, vec![egui::Event::PointerMoved(a), button(a, true)]);
+            for k in 1..=5 {
+                run(ctx, local, vec![egui::Event::PointerMoved(a + (b - a) * (k as f32 / 5.0))]);
+            }
+            run(ctx, local, vec![button(b, false)]);
+        };
+        // no image yet: the stroke waits for its colour
+        crate::mask_sample::set_for_test(idx, None);
+        run(&ctx, &mut local, Vec::new());
+        stroke(&ctx, &mut local, egui::pos2(30.0, 25.0), egui::pos2(180.0, 30.0));
+        assert!(state(&ctx, idx).auto_pending.is_some());
+        // the image: sky (top half) over dark ground
+        let (w, h) = (64usize, 32usize);
+        let data = (0..w * h).flat_map(|i| if i / w < h / 2 { [0.4f32, 0.5, 0.8] } else { [0.05, 0.08, 0.03] }).collect();
+        crate::mask_sample::set_for_test(idx, Some(develop::local::Captured { width: w, height: h, data }));
+        run(&ctx, &mut local, Vec::new());
+        assert!(state(&ctx, idx).auto_pending.is_none());
+        // a second stroke starting on the ground takes the ground's colour; one without the switch none
+        stroke(&ctx, &mut local, egui::pos2(30.0, 95.0), egui::pos2(180.0, 90.0));
+        let mut st = state(&ctx, idx);
+        st.auto = false;
+        ctx.data_mut(|d| d.insert_temp(key(), st));
+        stroke(&ctx, &mut local, egui::pos2(30.0, 60.0), egui::pos2(180.0, 60.0));
+        let mut autos = Vec::new();
+        local.as_ref().unwrap().layers[0].mask.visit(&mut |m| {
+            if let Mask::Brush { auto, .. } = m {
+                autos.push(auto.map(|a| (a.reference, a.tolerance)));
+            }
+        });
+        let near = |a: Option<([f32; 3], f32)>, c: [f32; 3]| a.is_some_and(|(r, t)| t == AUTO_TOLERANCE && r.iter().zip(c).all(|(x, y)| (x - y).abs() < 1e-5));
+        assert!(autos.len() == 3 && near(autos[0], [0.4, 0.5, 0.8]) && near(autos[1], [0.05, 0.08, 0.03]) && autos[2].is_none(), "{autos:?}");
+        assert!(crate::mask_sample::needs_image(&local.as_ref().unwrap().layers[0].mask));
+        crate::mask_sample::set_for_test(idx, None);
+    }
+
+    /// The overlay while painting a mask of 200 strokes: time of one frame (overlay computed again for the new point).
+    #[test]
+    fn painting_over_many_strokes_stays_quick() {
+        let ctx = Context::default();
+        let strokes: Vec<Mask> = (0..200)
+            .map(|i| Mask::Brush { points: (0..500).map(|j| { let t = j as f32 * 0.02 + i as f32; [0.5 + 0.4 * (t * 0.37).sin() * (t * 0.011).cos(), 0.5 + 0.4 * (t * 0.23).cos()] }).collect(), radius: 0.04, hardness: 0.6, flow: 0.2, density: 1.0, auto: None })
+            .collect();
+        fn tree(v: &[Mask]) -> Mask {
+            if v.len() == 1 {
+                return v[0].clone();
+            }
+            let n = v.len() / 2;
+            Mask::Combine { operation: Operation::Add, left: Box::new(tree(&v[..n])), right: Box::new(tree(&v[n..])) }
+        }
+        let mut local = Some(Document { version: 2, layers: vec![Layer::new(tree(&strokes), Adjustments { exposure: 0.5, ..Default::default() })] });
+        ctx.data_mut(|d| d.insert_temp(key(), State { draw: true, ..Default::default() }));
+        frame_of(&ctx, &mut local, Vec::new());
+        let a = egui::pos2(40.0, 40.0);
+        frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(a), button(a, true)]);
+        let mut times = Vec::new();
+        for k in 1..=30 {
+            let p = a + egui::vec2(k as f32 * 4.0, (k as f32 * 0.5).sin() * 20.0);
+            let t = std::time::Instant::now();
+            let out = frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(p)]);
+            times.push(t.elapsed().as_secs_f64() * 1000.0);
+            assert!(drawn(&out).meshes >= 1);
+        }
+        let first = times[0];
+        times.sort_by(f64::total_cmp);
+        println!("painting over 200 strokes (overlay 512 px): first frame {first:.1} ms, median {:.2} ms, max {:.2} ms", times[15], times[29]);
+        assert_eq!(crate::mask_parts::strokes(&local.as_ref().unwrap().layers[0].mask), 201);
+        assert!(times[15] < 16.0, "median frame {:.1} ms", times[15]);
+    }
+}
+
 /// The import report stays visible even when the tool group is collapsed.
 pub fn import_hint(ui: &mut Ui, report: Option<&develop::settings::MaskImportReport>) {
     let Some(r) = report else { return };
@@ -2072,7 +2638,7 @@ fn next_overlay(on: bool, mode: Overlay) -> (bool, Overlay) {
 /// from an ellipse, a switched-off colour range.
 fn demo() -> Document {
     let c = |op, l: Mask, r: Mask| Mask::Combine { operation: op, left: Box::new(l), right: Box::new(r) };
-    let stroke = |y: f32| Mask::Brush { points: (0..20).map(|i| [0.3 + i as f32 * 0.02, y + (i as f32 * 0.4).sin() * 0.02]).collect(), radius: 0.03, hardness: 0.6, flow: 0.6 };
+    let stroke = |y: f32| Mask::Brush { points: (0..20).map(|i| [0.3 + i as f32 * 0.02, y + (i as f32 * 0.4).sin() * 0.02]).collect(), radius: 0.03, hardness: 0.6, flow: 0.6, density: 1.0, auto: None };
     let sky = Layer {
         name: Some(crate::tr("Himmel").to_string()),
         amount: 0.8,

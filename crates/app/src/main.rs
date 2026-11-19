@@ -12,6 +12,7 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod detail_filter;
 mod print_job;
 mod print_dialog;
 mod print_room;
@@ -587,8 +588,8 @@ struct App {
     show_faces: bool,
     /// Focus area of the camera in single view (⇧F)
     show_focus: bool,
-    /// Placeholder from the last developed view (image, texture) and the last stored state
-    developed_tex: Option<(i64, egui::TextureHandle)>,
+    /// Placeholder from the last developed view (image, texture, grey) and the last stored state
+    developed_tex: Option<(i64, egui::TextureHandle, bool)>,
     developed_stored: Option<(i64, Settings)>,
     /// thumbnails reduced in a helper thread, the newest request per image and a counter (see `thumb_from_render`)
     thumbs_done: Arc<Mutex<Vec<ThumbDone>>>,
@@ -2305,11 +2306,11 @@ impl App {
                         self.panes.accept_detail(ctx, settings, region, factor, ColorImage::from_rgb([width, height], &rgb));
                     } else if let Some(c) = self.current.as_mut().filter(|c| c.index == index && is_hover && !is_left) {
                         let img = ColorImage::from_rgb([width, height], &rgb);
-                        c.detail_hover = Some((ctx.load_texture("detail-hover", img, TextureOptions::NEAREST), region, settings));
+                        c.detail_hover = Some((ctx.load_texture("detail-hover", img, DETAIL_OPTIONS), region, settings));
                     } else if let Some(c) = self.current.as_mut().filter(|c| c.index == index && is_left) {
                         let img = ColorImage::from_rgb([width, height], &rgb);
                         c.detail_left_scale = factor;
-                        c.detail_left = Some((ctx.load_texture("detail-links", img, TextureOptions::NEAREST), region, settings));
+                        c.detail_left = Some((ctx.load_texture("detail-links", img, DETAIL_OPTIONS), region, settings));
                     } else if self.entries.get(index).is_some_and(|e| e.settings != settings) {
                         // outdated crop (settings changed while it was computed): never shown, nothing uploaded
                         log(&format!("detail {index}: crop of old settings dropped"));
@@ -2318,7 +2319,13 @@ impl App {
                         if factor == 1 && c.detail.as_ref().is_some_and(|(_, r, ds)| *ds == settings && contains(*r, region)) {
                             continue;
                         }
-                        let tex = DetailTex::new(ctx, "detail", width, height, &rgb, region, factor, ctx.input(|i| i.max_texture_side));
+                        let max_side = ctx.input(|i| i.max_texture_side);
+                        let mut tex = DetailTex::new(ctx, "detail", width, height, &rgb, region, factor, max_side);
+                        if factor == 1 {
+                            // half level for views below 100 % (`detail_filter`)
+                            let (hw, hh, half) = photo_display::half_rgb8(width, height, &rgb);
+                            tex = tex.with_coarse(ctx, hw, hh, &half, region, max_side);
+                        }
                         // HDR version of the crop (gain map) as photo textures, if the image has one
                         if let Some(k) = c.loaded.previews.foreign.as_ref().filter(|_| factor == 1).and_then(|d| d.hdr.clone()) {
                             self.display.new_hdr_detail(ctx, index, settings.clone(), region, width, height, rgb, k, c.loaded.full_size);
@@ -5315,15 +5322,18 @@ impl App {
     }
 
     /// Placeholder from the last developed view of this image (see [`developed_cache`]).
-    fn developed_placeholder(&mut self, ctx: &egui::Context, image: i64) -> Option<egui::TextureHandle> {
-        if let Some((b, t)) = &self.developed_tex {
+    /// Last developed view of an image as a texture, with whether it is grey ([`browse::looks_grey`]).
+    fn developed_placeholder(&mut self, ctx: &egui::Context, image: i64) -> Option<(egui::TextureHandle, bool)> {
+        if let Some((b, t, grey)) = &self.developed_tex {
             if *b == image {
-                return Some(t.clone());
+                return Some((t.clone(), *grey));
             }
         }
-        let t = ctx.load_texture(format!("entwickelt-{image}"), developed_cache::load(image)?, TextureOptions::LINEAR);
-        self.developed_tex = Some((image, t.clone()));
-        Some(t)
+        let view = developed_cache::load(image)?;
+        let grey = browse::looks_grey(view.as_raw(), 4);
+        let t = ctx.load_texture(format!("entwickelt-{image}"), view, TextureOptions::LINEAR);
+        self.developed_tex = Some((image, t.clone(), grey));
+        Some((t, grey))
     }
 
     /// Zoom of the preview of a photo whose original is not reachable: a click switches between fitted and the
@@ -5428,25 +5438,42 @@ impl App {
                     }
                     return Some((t, "large (current)"));
                 }
+                // An outdated view stands in only when it is of the same kind as the development that follows: a photo
+                // switched to black & white elsewhere (several at once, a preset, pasted settings) must not flash up in
+                // its old colours (nor the other way round)
+                let loading = self.loading == Some(i);
+                let wanted_grey = browse::grey_expected(&settings);
+                let developed_fresh = browse::developed(image) == Some(expected);
                 // while an image is loading: the view graineo last developed of it – it looks like the image that
                 // follows (same development and crop); before an outdated large preview
-                if self.loading == Some(i) && (large.is_none() || browse::developed(image) == Some(expected)) {
+                if loading && (large.is_none() || developed_fresh) {
                     if crate::env::var_os("GRAINEO_LOG").is_some() && self.browse.expected_logged != Some(i) {
                         self.browse.expected_logged = Some(i);
-                        log(&format!("fingerprint {i}: large texture {}, expected {expected:016x}, large {:?}, developed {:?}, stored {stored}", large.is_some(), browse::large(&path, library::preview::large()).map(|v| format!("{v:016x}")), browse::developed(image).map(|v| format!("{v:016x}"))));
+                        log(&format!("fingerprint {i}: large texture {}, expected {expected:016x}, large {:?}, developed {:?}, stored {stored}, grey wanted {wanted_grey}", large.is_some(), browse::large(&path, library::preview::large()).map(|v| format!("{v:016x}")), browse::developed(image).map(|v| format!("{v:016x}"))));
                     }
-                    if let Some(t) = self.developed_placeholder(ui.ctx(), image) {
-                        return Some((t, "developed"));
+                    if let Some((t, grey)) = self.developed_placeholder(ui.ctx(), image) {
+                        if browse::may_stand_in(developed_fresh, grey, wanted_grey) {
+                            return Some((t, "developed"));
+                        }
                     }
                 }
-                if let Some(t) = large {
+                // an outdated large preview (developed again only a while after an edit) may show the other kind: while
+                // the photo loads, the grid's preview stands in instead (it follows every edit at once)
+                if let Some(t) = large.filter(|_| !loading) {
                     if crate::env::var_os("GRAINEO_LOG").is_some() && self.browse.expected_logged != Some(i) {
                         self.browse.expected_logged = Some(i);
                         log(&format!("fingerprint {i}: expected {expected:016x}, large {:?}, developed {:?}, stored {stored}", browse::large(&path, library::preview::large()).map(|v| format!("{v:016x}")), browse::developed(image).map(|v| format!("{v:016x}"))));
                     }
                     return Some((t, "large"));
                 }
-                thumb.map(|t| (t, "thumbnail")).or_else(|| self.developed_placeholder(ui.ctx(), image).map(|t| (t, "developed"))).or_else(|| self.lib.large_view(image).map(|t| (t, "small")))
+                if let Some(t) = thumb {
+                    return Some((t, "thumbnail"));
+                }
+                if let Some((t, _)) = self.developed_placeholder(ui.ctx(), image).filter(|&(_, grey)| browse::may_stand_in(developed_fresh, grey, wanted_grey)) {
+                    return Some((t, "developed"));
+                }
+                let small = if loading { self.lib.small_view(image) } else { self.lib.large_view(image) };
+                small.map(|t| (t, "small"))
             });
             if let (Some(i), Some((t, kind))) = (shown, fallback_kind.as_ref()) {
                 let since = self.selected_at.filter(|(s, _)| *s == i).map(|(_, t)| now - t);
@@ -5828,7 +5855,11 @@ impl App {
         let settings = &self.entries[c.index].settings;
         let photo_path = &self.entries[c.index].path;
         let preview_res = c.loaded.previews.developed.lin.width as f32 / full_w;
-        let screen_px_per_image_px = rect.width() * ui.ctx().pixels_per_point() / full_w;
+        // screen pixels per image pixel: `rect` is the crop frame (its width `frame.w` in image pixels, upright), not the whole
+        // sensor width – with a crop or an upright portrait photo `rect.width() / full_w` would be too small. Used for the
+        // moment the full resolution is needed, the grain loupe factor and drawing.
+        let display_scale = rect.width() * ui.ctx().pixels_per_point() / frame.w.max(1.0);
+        let screen_px_per_image_px = display_scale;
         // Pipeline inspection stays with the preview (rather blurry than extra load)
         let needs_detail = !self.show_camera_jpeg && self.crop_mode.is_none() && !settings.view.is_stage() && self.zoom > 1.05 && screen_px_per_image_px > preview_res * 1.1;
         let mut detail_loading = false;
@@ -5893,13 +5924,13 @@ impl App {
             } else {
                 if let Some((dtex, _, ds)) = &c.detail {
                     if ds == settings {
-                        dtex.paint(&clipped, &frame, rect, image_tint, screen_px_per_image_px);
+                        dtex.paint(&clipped, &frame, rect, image_tint, display_scale);
                     }
                 }
                 if factor > 1 {
                     if let Some((dtex, _, ds)) = c.detail_for(factor) {
                         if ds == settings {
-                            dtex.paint(&clipped, &frame, rect, image_tint, screen_px_per_image_px);
+                            dtex.paint(&clipped, &frame, rect, image_tint, display_scale);
                         }
                     }
                 }
@@ -9080,16 +9111,22 @@ fn detail_job(c: &Current, settings: &Settings, region: Option<[usize; 4]>, fact
     }
 }
 
-/// Texture of a detail tile: 8 bit (egui) or a photo texture with preserved gamut / HDR (`photo_display.rs`).
+/// Crops shown zoomed in: pixels stay pixels when magnified, bilinear when reduced (nearest would skip texels).
+const DETAIL_OPTIONS: TextureOptions = TextureOptions { magnification: egui::TextureFilter::Nearest, minification: egui::TextureFilter::Linear, ..TextureOptions::NEAREST };
+
+/// Texture of a detail tile: 8 bit (egui, fallback without wgpu render state) or a photo texture (8 bit or with
+/// preserved gamut / HDR, `photo_display.rs`) that also has a bilinear binding.
 enum TileTex {
     Egui(TextureHandle),
     Photo(Arc<photo_display::PhotoTex>),
 }
 
 impl TileTex {
-    fn id(&self) -> egui::TextureId {
+    /// `smooth`: bilinear magnification (photo textures; egui textures stay nearest)
+    fn id(&self, smooth: bool) -> egui::TextureId {
         match self {
             TileTex::Egui(t) => t.id(),
+            TileTex::Photo(t) if smooth => t.id_smooth(),
             TileTex::Photo(t) => t.id(),
         }
     }
@@ -9100,6 +9137,8 @@ struct DetailTex {
     tiles: Vec<(TileTex, [f32; 4])>,
     /// texture pixels (width, height) of this level
     size: [usize; 2],
+    /// texture pixels per image pixel of this level (crops of the grain loupe: > 1, half level: about 0.5)
+    texel: f32,
     /// bytes of all levels
     bytes: usize,
     coarse: Option<Box<DetailTex>>,
@@ -9112,8 +9151,15 @@ struct DetailTex {
 impl DetailTex {
     /// `rgb` (`width`×`height`, 8 bit) shows `region` of the source image, `factor` texture pixels per image pixel.
     fn new(ctx: &egui::Context, name: &str, width: usize, height: usize, rgb: &[u8], region: [usize; 4], factor: usize, max_side: usize) -> Self {
-        let edge = max_side.max(256);
         let f = factor.max(1) as f32;
+        let to_src = |r: [usize; 4]| [region[0] as f32 + r[0] as f32 / f, region[1] as f32 + r[1] as f32 / f, r[2] as f32 / f, r[3] as f32 / f];
+        // as photo textures with a nearest and a bilinear binding (`detail_filter`), else as egui textures
+        if let Some(t) = photo_display::tiles_rgb8(width, height, rgb, max_side.min(photo_display::max_texture_side())) {
+            let bytes = t.iter().map(|(t, _)| t.bytes()).sum();
+            let tiles = t.into_iter().map(|(t, r)| (TileTex::Photo(t), to_src(r))).collect();
+            return DetailTex { tiles, size: [width, height], texel: f, bytes, coarse: None, hdr: None, wide: false };
+        }
+        let edge = max_side.max(256);
         let mut tiles = Vec::new();
         for ty in (0..height).step_by(edge) {
             for tx in (0..width).step_by(edge) {
@@ -9127,12 +9173,10 @@ impl DetailTex {
                     }
                     ColorImage::from_rgb([tw, th], &part)
                 };
-                let src = [region[0] as f32 + tx as f32 / f, region[1] as f32 + ty as f32 / f, tw as f32 / f, th as f32 / f];
-                let opts = TextureOptions { magnification: egui::TextureFilter::Nearest, minification: egui::TextureFilter::Linear, ..TextureOptions::NEAREST };
-                tiles.push((TileTex::Egui(ctx.load_texture(name, img, opts)), src));
+                tiles.push((TileTex::Egui(ctx.load_texture(name, img, DETAIL_OPTIONS)), to_src([tx, ty, tw, th])));
             }
         }
-        DetailTex { tiles, size: [width, height], bytes: width * height * 4, coarse: None, hdr: None, wide: false }
+        DetailTex { tiles, size: [width, height], texel: f, bytes: width * height * 4, coarse: None, hdr: None, wide: false }
     }
 
     /// From photo textures (`photo_display::tiles`) of `region` (image pixels, at full resolution), optionally with the
@@ -9141,12 +9185,13 @@ impl DetailTex {
         let map = |tiles: photo_display::Tiles, (fx, fy): (f32, f32)| -> Vec<(TileTex, [f32; 4])> {
             tiles.into_iter().map(|(t, r)| (TileTex::Photo(t), [region[0] as f32 + r[0] as f32 * fx, region[1] as f32 + r[1] as f32 * fy, r[2] as f32 * fx, r[3] as f32 * fy])).collect()
         };
+        let texel = |w: usize| w as f32 / region[2].max(1) as f32;
         let coarse = half.map(|(hw, hh, t)| {
             let bytes = t.iter().map(|(t, _)| t.bytes()).sum();
-            Box::new(DetailTex { tiles: map(t, (region[2] as f32 / hw as f32, region[3] as f32 / hh as f32)), size: [hw, hh], bytes, coarse: None, hdr: None, wide: true })
+            Box::new(DetailTex { tiles: map(t, (region[2] as f32 / hw as f32, region[3] as f32 / hh as f32)), size: [hw, hh], texel: texel(hw), bytes, coarse: None, hdr: None, wide: true })
         });
         let bytes = tiles.iter().map(|(t, _)| t.bytes()).sum::<usize>() + coarse.as_ref().map_or(0, |c| c.bytes);
-        DetailTex { tiles: map(tiles, (region[2] as f32 / size[0].max(1) as f32, region[3] as f32 / size[1].max(1) as f32)), size, bytes, coarse, hdr: None, wide: true }
+        DetailTex { tiles: map(tiles, (region[2] as f32 / size[0].max(1) as f32, region[3] as f32 / size[1].max(1) as f32)), size, texel: texel(size[0]), bytes, coarse, hdr: None, wide: true }
     }
 
     /// Add the level at half resolution (`rgb`: `width`×`height`) for the same region.
@@ -9157,6 +9202,7 @@ impl DetailTex {
         for (_, src) in &mut c.tiles {
             *src = [region[0] as f32 + src[0] * fx, region[1] as f32 + src[1] * fy, src[2] * fx, src[3] * fy];
         }
+        c.texel = width as f32 / region[2].max(1) as f32;
         self.bytes += c.bytes;
         self.coarse = Some(Box::new(c));
         self
@@ -9166,16 +9212,25 @@ impl DetailTex {
         self.size
     }
 
-    /// `scale`: screen pixels per image pixel (below 0.75 the half level is drawn, if there is one)
+    /// `scale`: screen pixels per image pixel. Full and half level are chosen, blended and filtered by
+    /// `detail_filter::plan` (no aliasing in reduced views, exact pixels at 100 %).
     fn paint(&self, painter: &egui::Painter, frame: &Frame, rect: egui::Rect, tint: Color32, scale: f32) {
         if let Some(h) = self.hdr.as_ref().filter(|_| photo_display::hdr_frame()) {
             return h.paint(painter, frame, rect, tint, scale);
         }
-        if let Some(c) = self.coarse.as_ref().filter(|_| scale < 0.75) {
-            return c.paint(painter, frame, rect, tint, scale);
+        let transformed = frame.angle.abs() > 1e-4 || frame.has_perspective();
+        let plan = detail_filter::plan(scale / self.texel.max(1e-6), self.coarse.is_some(), transformed);
+        if plan.full {
+            for (t, src) in &self.tiles {
+                paint_src_quad(painter, t.id(plan.smooth), *src, frame, rect, tint);
+            }
         }
-        for (t, src) in &self.tiles {
-            paint_src_quad(painter, t.id(), *src, frame, rect, tint);
+        if let Some(c) = self.coarse.as_ref().filter(|_| plan.half > 0.0) {
+            // the half level is always bilinear (it is a prefiltered reduction, never shown as pixels)
+            let tint = if plan.full { tint.gamma_multiply(plan.half) } else { tint };
+            for (t, src) in &c.tiles {
+                paint_src_quad(painter, t.id(true), *src, frame, rect, tint);
+            }
         }
     }
 }

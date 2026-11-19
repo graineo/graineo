@@ -279,6 +279,9 @@ type Slot<V> = Mutex<Option<(Origin, V)>>;
 
 /// Identity of the preview and the small image derived from it.
 static SOURCE: Slot<Arc<Small>> = Mutex::new(None);
+/// The same for the own pipeline's preview while the tiles also use Sigma's exact base (colour modes of a photo set to
+/// black and white), so that the two do not push each other out.
+static SOURCE_OWN: Slot<Arc<Small>> = Mutex::new(None);
 
 /// The value cached in `slot` for exactly this `origin` (same allocation, still alive), or a new one from `make`.
 fn cached<T: std::any::Any + Send + Sync, V: Clone>(slot: &Slot<V>, origin: &Arc<T>, make: impl FnOnce() -> V) -> V {
@@ -298,7 +301,7 @@ fn small_of<T: std::any::Any + Send + Sync>(origin: &Arc<T>, make: impl FnOnce()
     cached(&SOURCE, origin, || Arc::new(make()))
 }
 
-/// Compute the tiles `modes` (film IDs, `sigma:<mode>`, `look:<name>`) one after the other and send each at once;
+/// Compute the tiles `modes` (film IDs, `sigma:<mode>`, `sigma-mono`, `look:<name>`) one after the other and send each at once;
 /// stop at the next tile once `valid` != `key`. The last answer has `end` set.
 #[allow(clippy::too_many_arguments)]
 pub fn compute(index: usize, previews: &Previews, cal: &develop::Calibration, settings: &Settings, key: u64, modes: &[String], valid: &AtomicU64, background: bool, send: &dyn Fn(JobResult)) {
@@ -339,24 +342,41 @@ pub fn compute(index: usize, previews: &Previews, cal: &develop::Calibration, se
             n += 1;
         }
     } else {
-        let preview = match &previews.spp {
-            Some(spp) if develop::Session::uses_spp(settings) => spp,
-            _ => &previews.developed,
+        // Sigma's colour modes of a photo set to black and white are shown in colour: they start from a colour preview
+        // (the own pipeline while the base on screen is a grey one, see `developed_preview`); everything else from the
+        // preview of the settings. The small image is derived once per preview.
+        let colour = |mode: &str| {
+            let mut s = tiles.clone();
+            s.film.active = false;
+            s.profile_amount = 1.0;
+            s.monochrome = false;
+            s.color_mode = if mode.is_empty() { None } else { Some(mode.to_string()) };
+            s
         };
-        let small = small_of(preview, || Small::Sigma(preview.scaled(cal, EDGE).map(Arc::new)));
-        let Small::Sigma(small) = &*small else { unreachable!() };
-        let p: &develop::session::Preview = small.as_deref().unwrap_or(preview);
+        let mono = || {
+            let mut s = tiles.clone();
+            s.film.active = false;
+            s.profile_amount = 1.0;
+            s.monochrome = true;
+            s
+        };
         for m in modes {
             if !live() {
                 break;
             }
-            let img = if let Some(mode) = m.strip_prefix("sigma:") {
-                // Sigma's colour modes: the small preview with the mode
-                let mut s = tiles.clone();
-                s.film.active = false;
-                s.profile_amount = 1.0;
-                s.color_mode = if mode.is_empty() { None } else { Some(mode.to_string()) };
-                let img = p.render(cal, &s);
+            let tile = match m.strip_prefix("sigma:") {
+                Some(mode) => Some(colour(mode)),
+                None if m == crate::film_look::SIGMA_MONO_KEY => Some(mono()),
+                None => None,
+            };
+            let preview = crate::jobs::developed_preview(previews, tile.as_ref().unwrap_or(settings));
+            let slot = if previews.spp.is_some() && Arc::ptr_eq(preview, &previews.developed) { &SOURCE_OWN } else { &SOURCE };
+            let small = cached(slot, preview, || Arc::new(Small::Sigma(preview.scaled(cal, EDGE).map(Arc::new))));
+            let Small::Sigma(small) = &*small else { unreachable!() };
+            let p: &develop::session::Preview = small.as_deref().unwrap_or(preview);
+            let img = if let Some(s) = &tile {
+                // Sigma's colour modes and black and white: the small preview with these settings
+                let img = p.render(cal, s);
                 Some((img.width, img.height, img.to_rgb8()))
             } else {
                 // as the main image with this film: layer exposure and grain balance per film (Sigma-Analog)

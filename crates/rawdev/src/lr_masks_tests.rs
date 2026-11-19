@@ -106,6 +106,26 @@ fn brushes_aggregate_invert_and_legacy_lists() {
     assert_eq!(d.layers[0].adjustments.saturation, -0.5);
     d.validate().unwrap();
 }
+/// The value of a brush stroke (`MaskValue`) is taken over as its density; an erasing stroke (0) is not.
+#[test]
+fn brush_value_becomes_density_erasing_is_left_out() {
+    let src = |v: &str| format!("s={{PaintBasedCorrections={{{{LocalExposure2012=.2,CorrectionMasks={{{{What='Mask/Paint',MaskValue={v},Radius=.1,CenterWeight=.5,Flow=.3,Dabs={{'d .25 .4','d .3 .5'}}}}}}}}}}}}");
+    let (d, _) = document(&src(".5"));
+    let Mask::Brush { density, flow, .. } = d.layers[0].mask else { panic!() };
+    assert_eq!((density, flow), (0.5, 0.3));
+    let mut d = d;
+    d.settle_version();
+    assert_eq!(d.version, 4, "a density below 100 % needs version 4");
+    // the weight stops at the density
+    let pixels = vec![0.5; 300 * 200 * 3];
+    let w = masks::rasterize(masks::Image::new(300, 200, &pixels).unwrap(), &d.layers[0].mask).unwrap();
+    assert_eq!(w.iter().cloned().fold(0.0f32, f32::max), 0.5);
+    let (d, r) = import(&values(&src("0")), [30, 20]);
+    assert!(d.is_none());
+    assert_eq!(r.unwrap().unsupported["MaskValue"], 1);
+    let (d, _) = document(&src("1"));
+    assert!(matches!(d.layers[0].mask, Mask::Brush { density, .. } if density == 1.0));
+}
 #[test]
 fn radial_uses_pixel_aspect_and_two_independent_inversion_flags() {
     let src = r#"s={CircularGradientBasedCorrections={{LocalContrast2012=.2,CorrectionMasks={{
@@ -227,7 +247,7 @@ fn nested_xmp_masks_are_reported_as_unsupported() {
 
 #[test]
 fn stroke_that_would_exceed_raster_budget_is_reported_before_render() {
-    let w = values("s={PaintBasedCorrections={{CorrectionMasks={{What='Mask/Paint',Radius=.000001,Dabs={'d .1 .1','d .9 .9'}}}}}}");
+    let w = values("s={PaintBasedCorrections={{CorrectionMasks={{What='Mask/Paint',Radius=.000001,Dabs={'d .1 .1','d .9 .9','d .1 .1','d .9 .9','d .1 .1'}}}}}}");
     let (d, r) = import(&w, [300, 200]);
     assert!(d.is_none());
     assert_eq!(r.unwrap().unsupported["Dabs limits"], 1);

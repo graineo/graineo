@@ -6475,3 +6475,22 @@ KI-Entrauschen {p} % · {r}	Débruitage IA {p} % · {r}
 KI-Entrauschen {p} %	Débruitage IA {p} %
 KI-Entrauschen fertig · {s} s	Débruitage IA terminé · {s} s
 Fertig nach {s} s	Terminé après {s} s
+Wirkung der Maske im Bild zeigen: {kind}	Montrer l’effet du masque : {kind}
+Dichte (%)	Densité (%)
+Höchste Wirkung, auch beim Übermalen	Effet maximal, même en repeignant
+Pinsel kleiner	Pinceau plus petit
+Pinsel größer	Pinceau plus grand
+Pinsel weicher	Pinceau plus doux
+Pinsel härter	Pinceau plus dur
+⌥ beim Malen	⌥ en peignant
+Radiert aus der Maske	Efface du masque
+⇧-Klick beim Malen	⇧-clic en peignant
+Gerade Linie vom letzten Punkt	Ligne droite depuis le dernier point
+Größe ({a} kleiner, {b} größer)	Taille ({a} plus petit, {b} plus grand)
+Härte ({a} weicher, {b} härter)	Dureté ({a} plus doux, {b} plus dur)
+Auto-Maske	Masque auto
+Wirkt nur auf ähnliche Farben wie am Strichanfang	N’agit que sur les couleurs proches du début du trait
+Toleranz (%)	Tolérance (%)
+Wie ähnlich die Farbe sein muss	Similarité de couleur requise
+Erst „Auto-Maske“ einschalten	Activez d’abord « Masque auto »
+Pinsel malt · ⌥ radiert · ⇧-Klick Linie	Le pinceau peint · ⌥ efface · ⇧-clic ligne

@@ -80,6 +80,8 @@ fn brush_flow_and_resolution() {
         radius: 0.2,
         hardness: 0.5,
         flow: 0.25,
+        density: 1.0,
+        auto: None,
     };
     assert_eq!(eval(&brush, [0.5, 0.5]), 0.25);
     assert_eq!(eval(&brush, [0., 0.]), 0.);
@@ -89,12 +91,16 @@ fn brush_flow_and_resolution() {
         radius: 0.1,
         hardness: 1.,
         flow: 0.25,
+        density: 1.0,
+        auto: None,
     };
     let split = Mask::Brush {
         points: vec![[0.2, 0.5], [0.5, 0.5], [0.8, 0.5]],
         radius: 0.1,
         hardness: 1.,
         flow: 0.25,
+        density: 1.0,
+        auto: None,
     };
     assert!((eval(&once, [0.5, 0.5]) - eval(&split, [0.5, 0.5])).abs() < 1e-6);
     assert!(eval(&once, [0.5, 0.5]) > 0.25);
@@ -151,7 +157,9 @@ fn json_version_and_validation() {
         points: vec![],
         radius: 1.,
         hardness: 1.,
-        flow: 1.
+        flow: 1.,
+        density: 1.,
+        auto: None
     }
     .validate()
     .is_err());

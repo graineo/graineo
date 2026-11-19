@@ -112,6 +112,8 @@ pub fn screen_headroom() -> (f32, f32) {
 /// [`Self::id`] like any texture). Freed when dropped.
 pub struct PhotoTex {
     id: egui::TextureId,
+    /// The same texture with bilinear magnification (registered only for `nearest` textures, see [`Self::id_smooth`])
+    smooth: Option<egui::TextureId>,
     size: [usize; 2],
     bytes: usize,
     _texture: wgpu::Texture,
@@ -153,14 +155,67 @@ impl PhotoTex {
             size,
         );
         let view = texture.create_view(&Default::default());
-        let id = rs.renderer.write().register_photo_texture(&rs.device, &view, nearest, hdr);
+        let (id, smooth) = {
+            let mut r = rs.renderer.write();
+            let id = r.register_photo_texture(&rs.device, &view, nearest, hdr);
+            // a second binding of the same texture with bilinear magnification (no extra GPU memory)
+            (id, nearest.then(|| r.register_photo_texture(&rs.device, &view, false, hdr)))
+        };
         let bytes = w * h * 8;
         GPU_BYTES.fetch_add(bytes, Ordering::Relaxed);
-        Some(PhotoTex { id, size: [w, h], bytes, _texture: texture })
+        Some(PhotoTex { id, smooth, size: [w, h], bytes, _texture: texture })
+    }
+
+    /// Upload `rgb` (`w`×`h`, 8 bit sRGB) as an ordinary 8-bit texture (drawn exactly like an egui texture), with
+    /// a nearest and a bilinear binding (see [`Self::id_smooth`]) – from any thread. Works on every surface (also
+    /// without float surface); `None` without a wgpu render state or for a texture too large for the device.
+    pub fn upload_rgb8(w: usize, h: usize, rgb: &[u8]) -> Option<PhotoTex> {
+        let rs = RENDER_STATE.get()?;
+        if w == 0 || h == 0 || rgb.len() < w * h * 3 {
+            return None;
+        }
+        let max = rs.device.limits().max_texture_dimension_2d as usize;
+        if w > max || h > max {
+            return None;
+        }
+        let rgba: Vec<u8> = rgb[..w * h * 3].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect();
+        let size = wgpu::Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 };
+        // same format as egui's own textures (sRGB-encoded values, blended like the rest of the UI)
+        let texture = rs.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("photo-8bit"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        rs.queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            &rgba,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w as u32 * 4), rows_per_image: Some(h as u32) },
+            size,
+        );
+        let view = texture.create_view(&Default::default());
+        let sampler = |mag: wgpu::FilterMode| wgpu::SamplerDescriptor { label: Some("photo-8bit"), mag_filter: mag, min_filter: wgpu::FilterMode::Linear, ..Default::default() };
+        let (id, smooth) = {
+            let mut r = rs.renderer.write();
+            let id = r.register_native_texture_with_sampler_options(&rs.device, &view, sampler(wgpu::FilterMode::Nearest));
+            (id, Some(r.register_native_texture_with_sampler_options(&rs.device, &view, sampler(wgpu::FilterMode::Linear))))
+        };
+        let bytes = w * h * 4;
+        GPU_BYTES.fetch_add(bytes, Ordering::Relaxed);
+        Some(PhotoTex { id, smooth, size: [w, h], bytes, _texture: texture })
     }
 
     pub fn id(&self) -> egui::TextureId {
         self.id
+    }
+
+    /// The texture with bilinear magnification (the same as [`Self::id`] if that one is bilinear already).
+    pub fn id_smooth(&self) -> egui::TextureId {
+        self.smooth.unwrap_or(self.id)
     }
 
     pub fn bytes(&self) -> usize {
@@ -173,6 +228,7 @@ impl Drop for PhotoTex {
         GPU_BYTES.fetch_sub(self.bytes, Ordering::Relaxed);
         if let Ok(mut l) = TO_FREE.lock() {
             l.push(self.id);
+            l.extend(self.smooth);
         }
     }
 }
@@ -301,6 +357,47 @@ pub fn tiles(w: usize, h: usize, rgba: &[f16], max_side: usize, nearest: bool, h
         }
     }
     Some(out)
+}
+
+/// An 8-bit sRGB image (`w`×`h` RGB) split into textures of at most `max_side` per edge, uploaded with
+/// [`PhotoTex::upload_rgb8`]. `None` without a wgpu render state or when an upload fails.
+pub fn tiles_rgb8(w: usize, h: usize, rgb: &[u8], max_side: usize) -> Option<Tiles> {
+    let edge = max_side.max(256);
+    let mut out = Vec::new();
+    for ty in (0..h).step_by(edge) {
+        for tx in (0..w).step_by(edge) {
+            let (tw, th) = ((w - tx).min(edge), (h - ty).min(edge));
+            let tex = if (tw, th) == (w, h) {
+                PhotoTex::upload_rgb8(w, h, rgb)?
+            } else {
+                let mut part = Vec::with_capacity(tw * th * 3);
+                for y in ty..ty + th {
+                    part.extend_from_slice(&rgb[(y * w + tx) * 3..(y * w + tx + tw) * 3]);
+                }
+                PhotoTex::upload_rgb8(tw, th, &part)?
+            };
+            out.push((Arc::new(tex), [tx, ty, tw, th]));
+        }
+    }
+    Some(out)
+}
+
+/// Half resolution (2×2 mean) of an 8-bit RGB image: the level for reduced views of crops.
+pub fn half_rgb8(w: usize, h: usize, rgb: &[u8]) -> (usize, usize, Vec<u8>) {
+    use rayon::prelude::*;
+    let (hw, hh) = (w.div_ceil(2).max(1), h.div_ceil(2).max(1));
+    let mut out = vec![0u8; hw * hh * 3];
+    out.par_chunks_mut(hw * 3).enumerate().for_each(|(y, row)| {
+        let (y0, y1) = ((y * 2).min(h - 1), (y * 2 + 1).min(h - 1));
+        for x in 0..hw {
+            let (x0, x1) = ((x * 2).min(w - 1), (x * 2 + 1).min(w - 1));
+            for c in 0..3 {
+                let v = |xx: usize, yy: usize| rgb[(yy * w + xx) * 3 + c] as u32;
+                row[x * 3 + c] = ((v(x0, y0) + v(x1, y0) + v(x0, y1) + v(x1, y1) + 2) / 4) as u8;
+            }
+        }
+    });
+    (hw, hh, out)
 }
 
 /// Largest edge of a texture of the device (for the tiles), 8192 without a render state.

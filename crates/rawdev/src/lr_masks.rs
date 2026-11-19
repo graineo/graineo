@@ -91,10 +91,13 @@ impl Reader {
         if number(w, "MaskBlendMode", 0.0)? != 0.0 {
             return Err("MaskBlendMode".into());
         }
-        if number(w, "MaskValue", 1.0)? != 1.0 {
+        // the value a mask part paints with: for a brush stroke the density (its highest weight, read as such: an own
+        // interpretation, not checked against Lightroom's rendering); 0 is an erasing stroke, which is not taken over
+        let value = number(w, "MaskValue", 1.0)?;
+        let kind = w.get("What").and_then(Value::text).ok_or("Mask type")?;
+        if value != 1.0 && !(kind == "Mask/Paint" && value > 0.0 && value < 1.0) {
             return Err("MaskValue".into());
         }
-        let kind = w.get("What").and_then(Value::text).ok_or("Mask type")?;
         let mut m = match kind {
             "Mask/Aggregate" => {
                 let masks = self.masks(list(w, "Masks")?, depth + 1)?;
@@ -177,7 +180,7 @@ impl Reader {
                     length += ((pair[1][0] - pair[0][0]) * self.scale[0])
                         .hypot((pair[1][1] - pair[0][1]) * self.scale[1]);
                 }
-                if radius <= 0.0 || !length.is_finite() || length / (radius * 0.25) > 99_999.0 {
+                if radius <= 0.0 || !length.is_finite() || length / (radius * 0.25) > (masks::DABS_MAX - 1) as f32 {
                     return Err("Dabs limits".into());
                 }
                 Mask::Brush {
@@ -185,6 +188,8 @@ impl Reader {
                     radius,
                     hardness: number(w, "CenterWeight", 0.0)?,
                     flow: number(w, "Flow", 1.0)?,
+                    density: value,
+                    auto: None,
                 }
             }
             // Never replace AI, range masks and new formats with a full mask.

@@ -237,10 +237,9 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
     document.validate()?;
     let mut current: std::borrow::Cow<'_, [f32]> = std::borrow::Cow::Borrowed(image.data);
     for layer in &document.layers {
-        let mask = Prepared::new(&layer.mask, view.full[0], view.full[1])?;
         let a = &layer.adjustments;
         let extra = Extra::new(a);
-        // switched off, strength 0 or neutral: nothing to do (the mask is still prepared and so checked)
+        // switched off, strength 0 or neutral: nothing to do (the document was checked above)
         if !layer.active() {
             continue;
         }
@@ -273,13 +272,14 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
         let scale = (view.short() as f32 / 1000.0).max(0.001);
         // a refined edge needs the weights of the whole crop first; otherwise each pixel samples the mask itself
         let refined = if layer.refines() { Some(layer.weights(Image::new(image.width, image.height, &current)?, view)?) } else { None };
+        let mask = if refined.is_none() { Some(Prepared::for_view(&layer.mask, view, Image { width: image.width, height: image.height, data: &current })?) } else { None };
         output.par_chunks_mut(3).enumerate().for_each(|(i, out)| {
             let x = i % image.width;
             let y = i / image.width;
             let p = &current[i * 3..i * 3 + 3];
             let weight = match &refined {
                 Some(w) => w[i],
-                None => mask.sample(view.point(x, y), p),
+                None => mask.as_ref().map_or(0.0, |m| m.sample(view.point(x, y), p)),
             };
             // strength of the mask: the weight scaled (at 1 exactly the former value)
             let weight = if amount == 1.0 { weight } else { weight * amount };
