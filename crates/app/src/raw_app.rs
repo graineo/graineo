@@ -40,6 +40,7 @@ fn placeholder_cal(doc: &RawDoc) -> develop::Calibration {
         iso_gain: 1.0,
         sigma_wb_ev: Vec::new(),
         pending_sharpen: 0.0,
+        exposure_gain: 1.0,
         sensor_iso: 0.0,
         camera_mode: String::new(),
         modes: Vec::new(),
@@ -87,20 +88,31 @@ pub fn load(path: &Path, settings: &Settings, keep_going: &dyn Fn() -> bool) -> 
     }
     // engine of the raw stage from the settings (graineo, Apple, automatic fallback, see `rawdev::apple`)
     let Some(mut doc) = RawDoc::open_for(path, settings, keep_going)? else { return Ok(None) };
-    let t_open = t0.elapsed();
     // from a working copy: initial values, XMP and list path belong to the photo
     let raw_entry = RAW_OPENING.lock().unwrap().iter().find(|(c, _)| c == path).cloned();
     if let Some((_, photo)) = &raw_entry {
         doc.logical_path = photo.clone();
     }
     // Orientation as in common photo apps (also rotated by hand), before initial values and crop are computed
+    let t_open = t0.elapsed();
     rawdev::lightroom::apply_orientation(&mut doc);
+    let path = raw_entry.map_or_else(|| path.to_path_buf(), |(_, photo)| photo);
+    Ok(Some(loaded_from_doc(doc, &path, settings, keep_going, t0, t_open)))
+}
+
+/// The opened document as the app holds it (histograms, placeholder previews, the preview stage computed ahead).
+/// Also for a merged photo whose pixels changed (`hdr_live.rs`): the same photo with a new document.
+pub fn loaded_from_doc(doc: RawDoc, path: &Path, settings: &Settings, keep_going: &dyn Fn() -> bool, t0: std::time::Instant, t_open: std::time::Duration) -> Loaded {
     let t_orient = t0.elapsed();
     let v = &doc.preview;
     let data: Vec<f32> = v.px.iter().flat_map(|p| *p).collect();
     let lin = develop::Linear { mono: false, haze: None, toneq: None, width: v.w, height: v.h, data, detail: None };
     let factor = (doc.full_size[0] as f32 / v.w as f32).round().max(1.0) as usize;
-    let histograms = develop::layer_histograms(&lin, 256);
+    // a merged photo reaches `headroom` times the reference white: the histogram spans 0 … headroom, not 0 … 1
+    let histograms = match doc.merged.as_ref().map(|m| m.meta.headroom).filter(|h| *h > 1.0) {
+        Some(hr) => develop::layer_histograms(&develop::Linear { mono: false, haze: None, toneq: None, width: lin.width, height: lin.height, data: lin.data.iter().map(|v| v / hr).collect(), detail: None }, 256),
+        None => develop::layer_histograms(&lin, 256),
+    };
     let plain = Arc::new(Preview::plain(lin, factor));
     let t_hist = t0.elapsed();
     let lr_start = lightroom_start(&doc);
@@ -138,7 +150,7 @@ pub fn load(path: &Path, settings: &Settings, keep_going: &dyn Fn() -> bool) -> 
         foreign: Some(doc.clone()),
     };
     let summary = doc.summary.clone();
-    Ok(Some(Loaded {
+    Loaded {
         session: None,
         cal,
         previews,
@@ -151,10 +163,10 @@ pub fn load(path: &Path, settings: &Settings, keep_going: &dyn Fn() -> bool) -> 
         start_values_from_spp: false,
         lr_start,
         prerendered: None,
-        path: raw_entry.map_or_else(|| path.to_path_buf(), |(_, photo)| photo),
+        path: path.to_path_buf(),
         kind: crate::image_kind::of(path),
         damage: None,
-    }))
+    }
 }
 
 /// Initial values from Lightroom: the settings taken over into the sidecar, otherwise its `crs:` fields (never the catalog).
@@ -662,6 +674,8 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         ui.horizontal(|ui| {
             reset_tone = lr::group_label(ui, "Tonwert");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // keep clear of the overlaid scroll bar at the right edge
+                ui.add_space(8.0);
                 let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
                 if ui.add(b).clicked() {
                     doc.auto_tone(s);

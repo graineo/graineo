@@ -40,7 +40,7 @@ impl ImageKind {
 /// the one list `library::EXTENSIONS` (every format name is also one of its extensions).
 pub fn from_extension(extension: &str) -> ImageKind {
     match library::extension_format(extension) {
-        Some("X3F") => ImageKind::Foveon,
+        Some("X3F" | "X3I") => ImageKind::Foveon,
         Some(f) if library::is_raw(f) => ImageKind::Raw,
         Some(f) if library::is_finished_image(f) => ImageKind::Done,
         _ => ImageKind::Other,
@@ -62,7 +62,7 @@ pub fn of(path: &Path) -> ImageKind {
     use std::io::Read;
     let mut header = [0u8; 4];
     let a = match std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut header)) {
-        Ok(()) if &header == b"FOVb" => ImageKind::Foveon,
+        Ok(()) if &header == b"FOVb" || &header == b"FOVi" => ImageKind::Foveon,
         Ok(()) => ImageKind::Other,
         Err(_) => return ImageKind::Foveon,
     };

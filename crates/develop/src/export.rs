@@ -41,6 +41,10 @@ pub struct Options {
     pub tiff_compression: tiffw::Compression,
     /// Working space of the scene-linear formats (TIFF 32 bit, OpenEXR)
     pub linear_space: graineo_color::LinearSpace,
+    /// Scene-linear formats of Sigma photos: calibrated camera colour only, without the colour mode's compensation
+    /// matrix (the reference "Standard" mode of the camera calibration instead of the shot's mode). Other RAWs: no
+    /// effect, their scene-linear export carries no look anyway.
+    pub camera_matrix_only: bool,
     /// Which metadata go into exported JPEG/TIFF/PNG files
     pub metadata: Metadata,
     /// Take over the location (GPS) of the original, if it has one
@@ -239,6 +243,13 @@ pub fn write_finished(img: &Rgb16, path: &Path, format: Format, space: graineo_c
 /// limit, no look stage, unclipped, in the linear working space of `opts`.
 pub fn export_scene(session: &mut Session, s: &Settings, format: Format, spp: bool, path: &Path, opts: &Options) -> std::io::Result<()> {
     use rayon::prelude::*;
+    let plain;
+    let s = if opts.camera_matrix_only {
+        plain = Settings { color_mode: Some("Standard".into()), ..s.clone() };
+        &plain
+    } else {
+        s
+    };
     let scene = session.render_full_scene(s, spp).map_err(std::io::Error::other)?;
     let mut scene = crate::geometry::apply_f32(scene, s, session.cal.orientation);
     scene.data.par_iter_mut().for_each(|v| if !v.is_finite() { *v = 0.0 });
@@ -305,9 +316,9 @@ impl OutputSize {
     }
 }
 
-/// Downscale the image to the output size (Lanczos3, 16 bit, on the GPU when allowed – see [`crate::resize`]);
+/// Downscale the image to the output size (chosen filter, default Lanczos3, 16 bit, on the GPU when allowed – see [`crate::resize`]);
 /// unchanged without a limit or if already small enough.
-pub fn apply_output_size(img: Rgb16, g: Option<OutputSize>) -> Rgb16 {
+pub fn apply_output_size(img: Rgb16, g: Option<OutputSize>, filter: crate::resize::ResizeFilter) -> Rgb16 {
     let Some(g) = g else { return img };
     let (w, h) = g.target_size(img.width, img.height);
     if (w, h) == (img.width, img.height) {
@@ -316,7 +327,7 @@ pub fn apply_output_size(img: Rgb16, g: Option<OutputSize>) -> Rgb16 {
     if img.data.len() != img.width * img.height * 3 {
         return Rgb16 { width: 0, height: 0, data: Vec::new() };
     }
-    crate::resize::lanczos3(&img, w, h)
+    crate::resize::resize(&img, w, h, filter)
 }
 
 /// Exports the image of the session. DNG contains the linear data (noise reduction
@@ -334,7 +345,7 @@ pub fn export_with_opts(session: &mut Session, s: &Settings, format: Format, eng
             // TIFF/PNG: true 16-bit gradations (tone curve interpolated, exact gamma)
             let img = if matches!(format, Format::Jpeg { .. }) { session.render_full_own(s) } else { session.render_full_own_fine(s) };
             let img = crate::geometry::apply(img, s, session.cal.orientation);
-            let img = apply_output_size(crate::film::apply_border(img, &s.film), s.output_size);
+            let img = apply_output_size(crate::film::apply_border(img, &s.film), s.output_size, s.output_filter);
             match format {
                 Format::Tiff16 if opts.tiff_compression == tiffw::Compression::None => write_tiff16(&img, path)?,
                 Format::Jpeg { quality } => write_jpeg(&img, path, quality)?,
@@ -387,6 +398,8 @@ pub fn export_opts(session: &mut Session, s: &Settings, format: Format, path: &P
         // Classic: x3fuse-core's DNG normalises the highlights too high (magenta skies) →
         // linear DNG from our preprocessing
         Format::DngProfiles if session.cal.is_classic() => export_opts(session, s, Format::Dng, path, opts),
+        // X3I (merged bracket): the merge lives in our preparation only → linear DNG of the merged values
+        Format::DngProfiles if x3f::x3i::is_x3i(&session.path) => export_opts(session, s, Format::Dng, path, opts),
         Format::DngProfiles => {
             let profile = s.color_mode.clone().unwrap_or_else(|| session.cal.camera_mode.clone());
             let xmp = crate::xmp::lightroom_xmp(s, &session.cal, Some(&profile), false);
@@ -402,13 +415,13 @@ pub fn export_opts(session: &mut Session, s: &Settings, format: Format, path: &P
         }
         // Crop/straighten only after development (DNGs stay uncropped)
         Format::Png16 | Format::Jxl { .. } | Format::Tiff16 if format != Format::Tiff16 || opts.tiff_compression != tiffw::Compression::None => {
-            let img = apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size);
+            let img = apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter);
             write_finished(&img, path, format, graineo_color::Space::Srgb, opts)
         }
         Format::TiffFloat | Format::Exr { .. } => export_scene(session, s, format, Session::uses_spp(s), path, opts),
         Format::RawLayers => crate::rawlayers::write(&session.path, &session.cal, path, opts.tiff_compression).map(|_| ()),
-        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 => write_tiff16(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size), path),
-        Format::Jpeg { quality } => write_jpeg(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size), path, quality),
+        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 => write_tiff16(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter), path),
+        Format::Jpeg { quality } => write_jpeg(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter), path, quality),
     }
 }
 
@@ -430,10 +443,10 @@ mod output_size_tests {
     #[test]
     fn downscale_yields_target_size() {
         let img = Rgb16 { width: 400, height: 200, data: vec![30000; 400 * 200 * 3] };
-        let k = apply_output_size(img, Some(OutputSize::LongEdge(100)));
+        let k = apply_output_size(img, Some(OutputSize::LongEdge(100)), Default::default());
         assert_eq!((k.width, k.height, k.data.len()), (100, 50, 100 * 50 * 3));
         assert!(k.data.iter().all(|&v| (29000..=31000).contains(&v)));
-        let unchanged = apply_output_size(Rgb16 { width: 40, height: 20, data: vec![1; 2400] }, Some(OutputSize::LongEdge(100)));
+        let unchanged = apply_output_size(Rgb16 { width: 40, height: 20, data: vec![1; 2400] }, Some(OutputSize::LongEdge(100)), Default::default());
         assert_eq!((unchanged.width, unchanged.height), (40, 20));
     }
 }

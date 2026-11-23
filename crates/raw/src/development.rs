@@ -568,6 +568,18 @@ impl RawFile {
         Ok((norm, pat))
     }
 
+    /// 6×6 colour pattern of a mosaic sensor (`pattern[y % 6][x % 6]` = colour 0/1/2), without touching the pixels.
+    pub fn cfa_pattern(&self) -> Option<[[u8; 6]; 6]> {
+        let rawler::rawimage::RawPhotometricInterpretation::Cfa(cfg) = &self.image.photometric else { return None };
+        let mut pat = [[0u8; 6]; 6];
+        for (y, row) in pat.iter_mut().enumerate() {
+            for (x, v) in row.iter_mut().enumerate() {
+                *v = cfg.cfa.color_at(y, x) as u8;
+            }
+        }
+        Some(pat)
+    }
+
     /// Calibration (illuminants) and AnalogBalance → color according to the DNG specification.
     pub fn color_dng(&self, wb: [f32; 3]) -> Option<color::Color> {
         let neutral = [1.0 / wb[0], 1.0 / wb[1], 1.0 / wb[2]];

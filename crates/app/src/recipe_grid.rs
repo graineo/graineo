@@ -252,6 +252,8 @@ impl App {
         };
         let now = ctx.input(|i| i.time);
         let s = self.entries[index].settings.clone();
+        // no tile from a fast preview too rough to be shown: asked again once the exact base is there
+        let waits = self.derived_waits(&s);
         let c = self.current.as_ref().unwrap();
         let frame = develop::geometry::Frame::from_settings(
             &s,
@@ -276,7 +278,7 @@ impl App {
         if done == total || v.task.is_some() {
             return;
         }
-        if v.wish.is_none_or(|w| now - w.1 < 0.35) {
+        if waits || v.wish.is_none_or(|w| now - w.1 < 0.35) {
             ctx.request_repaint_after(std::time::Duration::from_millis(120));
             return;
         }

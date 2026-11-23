@@ -1047,6 +1047,25 @@ fn library(ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(crate::tr("Hinweise zu Gesichtern und Augen gibt es nur unter macOS.")).small().color(lr::TEXT_DIM));
         }
     });
+    // HDR merge (hdr_ui.rs): where the result goes and its keyword – "HDR zusammenfügen" asks nothing beforehand
+    group(ui, crate::tr("HDR zusammenfügen"), |ui| {
+        row(ui, crate::tr("Ergebnis in den Stapel legen"), Some(crate::tr("Oben im Stapel der Quellen; aus: eigenes Foto neben den Quellen.")), |ui| {
+            let mut on = crate::hdr_ui::stack_setting();
+            if toggle(ui, &mut on) {
+                library::settings::set(crate::hdr_ui::KEY_STACK, serde_json::json!(on));
+            }
+        });
+        separator(ui);
+        row(ui, crate::tr("Stichwort für das Ergebnis"), None, |ui| {
+            let id = egui::Id::new("prefs-hdr-keyword");
+            let mut text = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(crate::hdr_ui::keyword_setting);
+            let r = lr::edit_field(ui, egui::TextEdit::singleline(&mut text).desired_width(170.0).hint_text(crate::tr("leer = keins")));
+            if r.changed() {
+                library::settings::set(crate::hdr_ui::KEY_KEYWORD, serde_json::json!(text.trim()));
+            }
+            ui.data_mut(|d| d.insert_temp(id, text));
+        });
+    });
     group(ui, crate::tr("Sicherung"), |ui| {
         row(ui, crate::tr("Ziel"), None, |ui| match &z {
             Some(z) => {
@@ -1402,6 +1421,15 @@ fn develop_section(ui: &mut egui::Ui) {
     group(ui, crate::tr("Foveon: Quattro"), |ui| {
         row(ui, crate::tr("Binning bei hoher ISO"), Some(crate::tr("Für neue Fotos von sd Quattro und sd Quattro H; Auto mittelt nach Sigmas Stufen ab ISO 800 benachbarte Pixel (kleineres Bild, weniger Rauschen). Je Foto änderbar unter „Details“")), |ui| {
             crate::binning_ui::prefs_switch(ui);
+        });
+    });
+    group(ui, crate::tr("Foveon: Lichter"), |ui| {
+        row(ui, crate::tr("Merrill: Lichter rekonstruieren"), Some(crate::tr("Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung und Farbe); farbige Lichter bleiben farbig statt weiß. Wirkt automatisch, ohne Regler. Aus: bisheriger Weg")), |ui| {
+            crate::highlight_ui::prefs_switch_merrill(ui, toggle);
+        });
+        separator(ui);
+        row(ui, crate::tr("Quattro: Lichter rekonstruieren"), Some(crate::tr("Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg")), |ui| {
+            crate::highlight_ui::prefs_switch_quattro(ui, toggle);
         });
     });
     group(ui, crate::tr("Andere Formate"), |ui| {

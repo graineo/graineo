@@ -447,6 +447,22 @@ mod tests {
     }
 
     #[test]
+    fn four_per_sheet_landscape_photos_need_no_turning_on_a_landscape_sheet() {
+        let mut t = named("4 Fotos, A4");
+        let photos = vec![photo(6000, 4000), photo(6000, 4000), photo(6000, 4000)];
+        let portrait = layout(&t, &photos, None, "");
+        // portrait sheet: cells 92 × 135.5, the landscape photos are turned
+        assert!((portrait.cell_w - 92.0).abs() < 1e-9 && (portrait.cell_h - 135.5).abs() < 1e-9);
+        assert!(portrait.pages[0].photos.iter().all(|p| p.turned));
+        t.set_orientation(Orientation::Landscape);
+        let wide = layout(&t, &photos, None, "");
+        assert!((wide.width_mm - 297.0).abs() < 1e-9 && (wide.cell_w - 135.5).abs() < 1e-9 && (wide.cell_h - 92.0).abs() < 1e-9);
+        assert!(wide.pages[0].photos.iter().all(|p| !p.turned));
+        // the same cells as before, only the other way round: no photo got smaller
+        assert!(wide.pages[0].photos[0].image.w > portrait.pages[0].photos[0].image.w);
+    }
+
+    #[test]
     fn fill_crops_around_the_centre_and_follows_the_offset() {
         let mut t = named("Randlos 10 × 15");
         t.image.rotate_to_fit = false;

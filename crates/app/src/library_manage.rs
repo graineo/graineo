@@ -34,6 +34,8 @@ pub(super) enum Target {
 pub(super) enum Ask {
     RemoveFolder { root: i64, rel: String, name: String, loss: Option<Result<Loss, String>> },
     RemovePhotos { images: Vec<i64>, loss: Option<Result<Loss, String>> },
+    /// remove merged photos (HDR) that carry work of their own; `undo`: asked by ⌘Z of the step that made them
+    RemoveMerge { files: Vec<i64>, name: String, lines: Vec<String>, undo: bool },
     NewCollection { kind: i64, name: String, parent: Option<i64>, with_selection: bool, selected: Vec<i64>, rule: String },
     Rename { target: Target, name: String },
     /// renaming a keyword onto a name that exists at the same place: merge `from` into `into`
@@ -64,6 +66,14 @@ pub(super) enum Undo {
     Stack { label: String, change: library::series::Change },
     /// a face named outside the people view (frame in the single image, Info): its state before
     Faces { label: String, snap: library::face_index::Snapshot },
+    /// a merged photo (HDR) created: ⌘Z stops its computation, removes it and restores the stacks
+    Merge { label: String, file: i64, key: String, change: Option<library::series::Change> },
+    /// a batch of merged photos (HDR, all brackets): ⌘Z stops the batch, removes the merges and restores the stacks
+    MergeBatch { label: String, items: Vec<(i64, String, Option<library::series::Change>)> },
+    /// merged photos taken out of the library (⌘Z puts them back; their cached results go when the step expires)
+    MergeRemoved { label: String, snap: Snapshot, files: Vec<i64> },
+    /// "Metadaten neu einlesen": the library's values before (metadata_reread_ui.rs)
+    Reread { label: String, undo: library::metadata_reread::Undo },
 }
 
 #[derive(Default)]
@@ -72,6 +82,19 @@ pub(super) struct Manage {
     pub undo: Vec<Undo>,
     /// when each step was made (parallel to `undo`, [`crate::undo_order::tick`])
     pub undo_at: Vec<u64>,
+    /// a rating step and a step of this stack that belong together (tournament "Übernehmen": ratings and cover):
+    /// (time of the rating step, time of the step here) – ⌘Z of one takes the other back as well
+    pub with_rating: Option<(u64, u64)>,
+    /// ⌘Z of creating merged photos was confirmed for these files (they carry work of their own)
+    pub merge_undo_confirmed: Vec<i64>,
+    /// merged photos to take out of the library (`LibraryView::remove_merge_now`), carried out by the app
+    pub merge_removals: Vec<Vec<i64>>,
+    /// merged photos whose creation ⌘Z asked to take back while their first computation ran: the step is carried out
+    /// (or dropped) when that job says what became of the photo
+    pub merge_undo_waiting: Vec<i64>,
+    /// ⌘Z of a batch of merges was asked for while the batch ran: it was told to stop, the step is carried out when
+    /// its thread has ended (then every photo of the batch that is still there goes)
+    pub batch_undo_waiting: bool,
     /// the open dialog "Stichwörter ordnen …"
     pub(super) arrange: Option<keyword_arrange::Arrange>,
 }
@@ -95,9 +118,11 @@ impl Undo {
     /// Rows the step holds (limit of the stack).
     fn size(&self) -> usize {
         match self {
-            Undo::Snap { snap, .. } | Undo::Order { snap, .. } | Undo::Added { snap, .. } => snap.size(),
+            Undo::Snap { snap, .. } | Undo::Order { snap, .. } | Undo::Added { snap, .. } | Undo::MergeRemoved { snap, .. } => snap.size(),
             Undo::Quick { images, .. } | Undo::QuickRemoved { images, .. } => images.len(),
-            Undo::Stack { .. } | Undo::Faces { .. } => 1,
+            Undo::Stack { .. } | Undo::Faces { .. } | Undo::Merge { .. } => 1,
+            Undo::MergeBatch { items, .. } => items.len(),
+            Undo::Reread { undo, .. } => undo.size(),
         }
     }
 }
@@ -459,6 +484,80 @@ impl LibraryView {
         self.place_collection(id, parent, None);
     }
 
+    /// The job that computed the merged photo `file` for the first time ended; `removed`: it took the photo out of the
+    /// library again. The step "HDR zusammenfügen" of a photo that is gone goes with it (it could never be carried
+    /// out, and would block the steps below it); a ⌘Z that waited for the job is carried out now.
+    pub fn merge_job_ended(&mut self, file: i64, removed: bool) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let waiting = self.manage.merge_undo_waiting.contains(&file);
+        self.manage.merge_undo_waiting.retain(|f| *f != file);
+        let Some(k) = self.manage.undo.iter().position(|u| matches!(u, Undo::Merge { file: f, .. } if *f == file)) else { return actions };
+        if removed {
+            let Undo::Merge { label, .. } = self.manage.undo.remove(k) else { return actions };
+            if k < self.manage.undo_at.len() {
+                self.manage.undo_at.remove(k);
+            }
+            if waiting {
+                actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+            }
+        } else if waiting && !crate::hdr_ui::creating(file) {
+            // as the newest step (it was, when ⌘Z was pressed)
+            let u = self.manage.undo.remove(k);
+            let at = if k < self.manage.undo_at.len() { self.manage.undo_at.remove(k) } else { crate::undo_order::tick() };
+            self.manage.undo.push(u);
+            self.manage.undo_at.push(at);
+            self.manage_undo();
+        }
+        actions
+    }
+
+    /// The step that created the merged photos `files` ("HDR zusammenfügen" of one of them, or the batch that holds
+    /// them): its place in the ⌘Z steps.
+    fn merge_step_of(&self, files: &[i64]) -> Option<usize> {
+        self.manage.undo.iter().rposition(|u| match u {
+            Undo::Merge { file, .. } => files.contains(file),
+            Undo::MergeBatch { items, .. } => items.iter().any(|i| files.contains(&i.0)),
+            _ => false,
+        })
+    }
+
+    /// "HDR entfernen" in the question about the work of merged photos, asked by a ⌘Z of the step that made them:
+    /// exactly that step is undone now, also when other steps were made since the question was asked (it may open
+    /// long after the ⌘Z: when the first computation ends). Nothing happens when the step is gone by now.
+    pub(super) fn confirm_merge_undo(&mut self, files: Vec<i64>) {
+        let Some(k) = self.merge_step_of(&files) else { return };
+        let u = self.manage.undo.remove(k);
+        let at = if k < self.manage.undo_at.len() { self.manage.undo_at.remove(k) } else { crate::undo_order::tick() };
+        self.manage.undo.push(u);
+        self.manage.undo_at.push(at);
+        self.manage.merge_undo_confirmed = files;
+        self.manage_undo();
+    }
+
+    /// ⌘Z steps "HDR zusammenfügen" that wait for the first computation of their photo although no job of it is
+    /// alive any more (it ended overtaken by a change, which sends no event): carried out now.
+    pub fn merge_undo_overdue(&mut self) -> Vec<Action> {
+        let overdue: Vec<i64> = self.manage.merge_undo_waiting.iter().copied().filter(|f| !crate::hdr_ui::creating(*f)).collect();
+        let mut actions = Vec::new();
+        for f in overdue {
+            actions.extend(self.merge_job_ended(f, false));
+        }
+        actions
+    }
+
+    /// The batch of merges ended: a ⌘Z that waited for it is carried out (as the newest step, which it was).
+    pub fn merge_batch_ended(&mut self) {
+        if !std::mem::take(&mut self.manage.batch_undo_waiting) {
+            return;
+        }
+        let Some(k) = self.manage.undo.iter().rposition(|u| matches!(u, Undo::MergeBatch { .. })) else { return };
+        let u = self.manage.undo.remove(k);
+        let at = if k < self.manage.undo_at.len() { self.manage.undo_at.remove(k) } else { crate::undo_order::tick() };
+        self.manage.undo.push(u);
+        self.manage.undo_at.push(at);
+        self.manage_undo();
+    }
+
     /// ⌘Z of the management: the newest step. Returns: something was undone.
     pub(super) fn manage_undo(&mut self) -> bool {
         let Some(u) = self.manage.undo.pop() else { return false };
@@ -466,10 +565,21 @@ impl LibraryView {
         match u {
             Undo::Stack { label, change } => {
                 let kept = change.clone();
+                // the rating step made together with it (taken back with it, unless ⌘Z came from there)
+                let rating = self.manage.with_rating.filter(|l| l.1 == at).map(|l| l.0);
+                if rating.is_some() {
+                    self.manage.with_rating = None;
+                }
                 self.in_background(
                     move |db| library::series::restore(db, &change),
                     move |b, actions, r| match r {
                         Ok(()) => {
+                            if rating.is_some() && b.rating_stamp() == rating {
+                                b.rating_recent();
+                                if let Some(old) = b.undo_rating_change() {
+                                    actions.push(Action::Rated(old));
+                                }
+                            }
                             crate::series_job::changed();
                             actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
                         }
@@ -477,6 +587,160 @@ impl LibraryView {
                             // nothing was changed (one transaction): the step stays, ⌘Z can try again
                             b.manage.put_back(Undo::Stack { label, change: kept }, at);
                             actions.push(Action::Status(crate::trf!("Stapel nicht geändert: {e}", e = e)));
+                        }
+                    },
+                );
+            }
+            Undo::Merge { label, file, key, change } => {
+                // its first computation still runs: cancelling it takes the photo out again (the job cleans up,
+                // hdr_ui::run) – unless a change is waiting to take over, then the photo is removed here
+                if crate::hdr_ui::creating(file) && crate::hdr_ui::wanted(file).is_none_or(|w| w.key == key) {
+                    crate::hdr_ui::cancel(file);
+                    // The step stays until the job says what became of the photo ([`Self::merge_job_ended`]): cancelled
+                    // early it takes the photo out itself; a job that was past its last check (the result is being
+                    // stored) finishes – then the step is carried out here. Never a step used up with the photo left.
+                    self.manage.put_back(Undo::Merge { label, file, key, change }, at);
+                    if !self.manage.merge_undo_waiting.contains(&file) {
+                        self.manage.merge_undo_waiting.push(file);
+                    }
+                    return true;
+                }
+                // a later change is being computed: it stops, the photo is removed as usual
+                // (also a job that waits for its turn: it would compute and write cache files for a photo that is gone)
+                if crate::hdr_ui::job_alive(file) {
+                    // (while the creating job still winds down it must go on seeing that it was overtaken)
+                    if !crate::hdr_ui::creating(file) {
+                        crate::hdr_ui::unwant(file);
+                    }
+                    crate::hdr_ui::cancel(file);
+                }
+                // worked on since it was made (areas, a development by hand): asked first, the step stays
+                let lines = self.merge_work_lines(file);
+                let confirmed = std::mem::take(&mut self.manage.merge_undo_confirmed).contains(&file);
+                if !lines.is_empty() && !confirmed {
+                    let name = self.rows.iter().find(|r| r.file == file).map(|z| library::merge::shown_name(&z.name, z.status as i64)).unwrap_or_default();
+                    self.manage.put_back(Undo::Merge { label, file, key, change }, at);
+                    self.manage.ask = Some(Ask::RemoveMerge { files: vec![file], name, lines, undo: true });
+                    return true;
+                }
+                let worked = !lines.is_empty();
+                let kept = (key.clone(), change.clone());
+                self.in_background(
+                    // the stack back and the photo out in one transaction
+                    move |db| {
+                        // (develop settings on their way belong to the photo, see `remove_merge_now`)
+                        library::store::flush(std::time::Duration::from_secs(5));
+                        library::merge::undo_create(db, &[(file, change)])
+                    },
+                    move |b, actions, r| match r {
+                        Ok(snap) => {
+                            if worked {
+                                // its work is not lost: one more ⌘Z brings the photo back
+                                b.manage.push(Undo::MergeRemoved { label: crate::tr("HDR entfernen").to_string(), snap, files: vec![file] });
+                            } else {
+                                crate::hdr_ui::forget_file(file);
+                            }
+                            crate::series_job::changed();
+                            b.reload();
+                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                        }
+                        Err(e) => {
+                            b.manage.put_back(Undo::Merge { label, file, key: kept.0, change: kept.1 }, at);
+                            actions.push(Action::Status(crate::trf!("HDR nicht entfernt: {e}", e = e)));
+                        }
+                    },
+                );
+            }
+            Undo::MergeBatch { label, items } => {
+                // the running batch stops: the merge in progress and the ones waiting take themselves out again
+                let files: Vec<i64> = items.iter().map(|i| i.0).collect();
+                // worked on since they were made: asked first, the step stays
+                let worked: Vec<(i64, Vec<String>)> = files.iter().map(|f| (*f, self.merge_work_lines(*f))).filter(|(_, l)| !l.is_empty()).collect();
+                let confirmed = std::mem::take(&mut self.manage.merge_undo_confirmed);
+                if !worked.is_empty() && !worked.iter().all(|(f, _)| confirmed.contains(f)) {
+                    let name = crate::dialog::count(worked.len(), crate::tr("HDR-Foto"), crate::tr("HDR-Fotos"));
+                    let mut lines: Vec<String> = Vec::new();
+                    for l in worked.iter().flat_map(|(_, l)| l.iter()) {
+                        if !lines.contains(l) {
+                            lines.push(l.clone());
+                        }
+                    }
+                    self.manage.put_back(Undo::MergeBatch { label, items }, at);
+                    self.manage.ask = Some(Ask::RemoveMerge { files: worked.into_iter().map(|(f, _)| f).collect(), name, lines, undo: true });
+                    return true;
+                }
+                let worked: Vec<i64> = worked.into_iter().map(|(f, _)| f).collect();
+                // The batch still runs: it is told to stop (the merge in progress and the waiting ones take themselves
+                // out again, unless they show a picture or carry work). The step stays until the batch thread has
+                // ended ([`Self::merge_batch_ended`]) and is carried out then – for every photo of the batch that is
+                // still there: the one that was just being finished, the ones kept at the stop. Never a step used up
+                // with photos of the batch left behind.
+                if crate::hdr_batch::active() && files.iter().any(|f| crate::hdr_batch::pending(*f)) {
+                    crate::hdr_batch::cancel();
+                    for f in &files {
+                        crate::hdr_ui::cancel(*f);
+                    }
+                    self.manage.put_back(Undo::MergeBatch { label, items }, at);
+                    self.manage.batch_undo_waiting = true;
+                    self.manage.merge_undo_confirmed = confirmed;
+                    return true;
+                }
+                // (jobs of single photos of the batch – opened and changed meanwhile – stop and leave the photos alone)
+                for f in &files {
+                    if crate::hdr_ui::job_alive(*f) {
+                        crate::hdr_ui::cancel_and_keep(*f);
+                    }
+                }
+                let kept = items.clone();
+                self.in_background(
+                    move |db| {
+                        library::store::flush(std::time::Duration::from_secs(5));
+                        // every photo of the batch the library still has; last created first: every stack goes back as
+                        // it was; all or nothing (one transaction)
+                        let items: Vec<(i64, Option<library::series::Change>)> = items.iter().rev().filter(|(f, _, _)| library::merge::is_virtual(&db.conn, *f)).map(|(f, _, c)| (*f, c.clone())).collect();
+                        let gone: Vec<i64> = items.iter().map(|i| i.0).collect();
+                        let snap = library::merge::undo_create(db, &items)?;
+                        Ok((snap, gone))
+                    },
+                    move |b, actions, r| match r {
+                        Ok((snap, gone)) => {
+                            if worked.iter().any(|f| gone.contains(f)) {
+                                // their work is not lost: one more ⌘Z brings the photos back
+                                b.manage.push(Undo::MergeRemoved { label: crate::tr("HDR entfernen").to_string(), snap, files: gone });
+                            } else {
+                                for f in &gone {
+                                    crate::hdr_ui::forget_file(*f);
+                                }
+                            }
+                            crate::series_job::changed();
+                            b.reload();
+                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                        }
+                        Err(e) => {
+                            b.manage.put_back(Undo::MergeBatch { label, items: kept }, at);
+                            actions.push(Action::Status(crate::trf!("HDR nicht entfernt: {e}", e = e)));
+                        }
+                    },
+                );
+            }
+            Undo::MergeRemoved { label, snap, files } => {
+                let kept = snap.clone();
+                self.in_background(
+                    move |db| {
+                        library::merge::bring_back(db, &snap)?;
+                        // rows an older version marked missing meanwhile
+                        let _ = library::merge::repair(db);
+                        Ok(())
+                    },
+                    move |b, actions, r| match r {
+                        Ok(()) => {
+                            crate::series_job::changed();
+                            b.reload();
+                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                        }
+                        Err(e) => {
+                            b.manage.put_back(Undo::MergeRemoved { label, snap: kept, files }, at);
+                            actions.push(Action::Status(crate::trf!("HDR nicht zurückgeholt: {e}", e = crate::menu::i18n::tr_msg(&e))));
                         }
                     },
                 );
@@ -491,6 +755,19 @@ impl LibraryView {
                         }
                         b.reload();
                         actions.push(Action::FacesChanged);
+                    },
+                );
+            }
+            Undo::Reread { label, undo } => {
+                self.in_background(
+                    move |db| library::metadata_reread::undo(db, &undo),
+                    move |b, actions, r| match r {
+                        Ok(_) => {
+                            b.reload();
+                            b.reload_keywords();
+                            actions.push(Action::Status(crate::trf!("Rückgängig: {a}", a = label)));
+                        }
+                        Err(e) => b.dialog = Some(Dialog::Error(e)),
                     },
                 );
             }
@@ -752,7 +1029,10 @@ impl LibraryView {
         // the ⌘Z stack keeps the newest steps (large merges hold many rows)
         let mut dropped = 0;
         while self.manage.undo.len() > UNDO_STEPS || self.manage.undo.len() > 1 && self.manage.undo.iter().map(Undo::size).sum::<usize>() > UNDO_ROWS {
-            self.manage.undo.remove(0);
+            // a removed merged photo cannot come back any more: its cached results go now
+            if let Undo::MergeRemoved { files, .. } = self.manage.undo.remove(0) {
+                std::thread::spawn(move || files.iter().for_each(|f| crate::hdr_ui::forget_file(*f)));
+            }
             self.manage.undo_at.remove(0);
             dropped += 1;
         }
@@ -791,6 +1071,36 @@ impl LibraryView {
                     Answer::Primary => {
                         let (root, rel) = (*root, rel.clone());
                         self.photos_job(crate::trf!("„{a}“ aus der Bibliothek entfernt", a = name), move |db| manage::remove_folder(db, root, &rel));
+                        keep = false;
+                    }
+                    Answer::Cancel => keep = false,
+                    Answer::Open => {}
+                }
+            }
+            // (the step this question belongs to was carried out or dropped meanwhile: nothing left to ask)
+            Ask::RemoveMerge { files, undo: true, .. } if self.merge_step_of(files).is_none() => keep = false,
+            Ask::RemoveMerge { files, name, lines, undo } => {
+                let title = if files.len() == 1 { crate::trf!("„{a}“ entfernen?", a = name) } else { crate::trf!("{a} entfernen?", a = name) };
+                let a = dialog::show(
+                    ctx,
+                    "bib-hdr-entfernen",
+                    &title,
+                    dialog::WIDTH,
+                    |ui| {
+                        dialog::text(ui, crate::tr("Die Quellen bleiben. Mit dem HDR verschwinden:"));
+                        lines.iter().for_each(|t| dialog::chip(ui, t));
+                        dialog::hint(ui, crate::tr("⌘Z holt es zurück."));
+                    },
+                    Buttons::confirm(crate::tr("HDR entfernen"), true),
+                );
+                match a {
+                    Answer::Primary => {
+                        if *undo {
+                            // the step that made these photos is undone – that step, whatever was done since
+                            self.confirm_merge_undo(files.clone());
+                        } else {
+                            self.remove_merge_now(files.clone());
+                        }
                         keep = false;
                     }
                     Answer::Cancel => keep = false,

@@ -35,11 +35,14 @@ pub struct Template {
     /// `develop::export::OutputSize` as stored in the settings (read with `OutputSize::from_json`)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<serde_json::Value>,
+    /// resampling filter key (`develop::resize::ResizeFilter::key`); `None`: the template leaves the choice as it is
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resize: Option<String>,
 }
 
 impl Template {
     pub fn new(name: &str, naming: Naming) -> Template {
-        Template { format: FORMAT.into(), version: VERSION, name: name.trim().to_string(), naming, file_format: None, original: false, color_space: None, limit_size: None, size: None }
+        Template { format: FORMAT.into(), version: VERSION, name: name.trim().to_string(), naming, file_format: None, original: false, color_space: None, limit_size: None, size: None, resize: None }
     }
 
     pub fn from_json(text: &str) -> Result<Template, String> {
@@ -58,6 +61,11 @@ impl Template {
 
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("template serialises")
+    }
+
+    /// The resampling filter, if the template has one.
+    pub fn resize_filter(&self) -> Option<develop::resize::ResizeFilter> {
+        self.resize.as_deref().and_then(develop::resize::ResizeFilter::from_key)
     }
 
     /// The output size, if the template has one.

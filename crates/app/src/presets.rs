@@ -47,6 +47,7 @@ impl Preset {
                     denoise: cur.denoise,
                     nr_luma: cur.nr_luma,
                     nr_chroma: cur.nr_chroma,
+                    quattro_detail: cur.quattro_detail,
                     // binning belongs to the noise of the photo, not to a look
                     binning: cur.binning,
                     white_balance: cur.white_balance.clone(),
@@ -190,6 +191,17 @@ mod recipe_tests {
         assert_eq!(applied.removals, vec![own]);
         assert_eq!(applied.exposure, 0.4);
         check(&Settings { removals: Vec::new(), ..applied });
+    }
+
+    /// Own presets live in the app's data folder (`GRAINEO_DATA_DIR` for test apps and test runs), never in the
+    /// real one of the installed app.
+    #[test]
+    fn presets_file_follows_data_dir() {
+        let p = path().unwrap();
+        assert_eq!(p, library::data_dir().join("presets.json"));
+        if let Some(real) = sysdirs::app_data_dir() {
+            assert!(!p.starts_with(real.join(sysdirs::APP)), "{p:?}");
+        }
     }
 
     #[test]

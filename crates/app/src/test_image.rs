@@ -106,13 +106,27 @@ pub fn keys(ctx: &egui::Context) {
     }
 }
 
+/// A file dropped by the test hook (`drop:`).
+#[derive(Debug)]
+struct TestDrop(std::path::PathBuf);
+
+impl egui::DroppedFile for TestDrop {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
 /// Test hook `GRAINEO_INPUT="focus:library-keyword-input@5,text:beach@6,key:Enter@7,click:820:400@8"` (only with
 /// `GRAINEO_DATA_DIR`): real input events in the raw input (like typing and clicking, through every filter of the app):
-/// `focus:<id>` focuses the text field with `egui::Id::unique(<id>)`, `text:` types text, `key:` presses a key (egui name),
-/// `click:x:y` moves the pointer there and clicks (press, release in the next frame), `drag:x1:y1:x2:y2` presses at
+/// `focus:<id>` focuses the text field with `egui::Id::unique(<id>)`, `text:` types text, `key:` presses a key (egui name, `shift+`/`alt+`/`cmd+` in front hold those),
+/// `rclick:x:y` right-clicks there (context menu), `click:x:y` moves the pointer there and clicks (press, release in the next frame), `drag:x1:y1:x2:y2` presses at
 /// (x1, y1), moves the pointer to (x2, y2) in ten steps (one per frame) and releases there, like dragging with the mouse.
 /// `press:x:y`, `move:x:y` and `release:x:y` do single steps of it (for slow drags with pauses).
 /// `mods:cmd`, `mods:shift`, `mods:cmd+shift` and `mods:none` hold or let go modifier keys (for ⌘/⇧-clicks and frames).
+/// `drop:<path>|<path>` drops files or folders on the window.
 /// The window counts as active meanwhile. Called from `raw_input_hook`.
 pub fn input(ctx: &egui::Context, raw: &mut egui::RawInput) {
     /// start, scheduled entries, events still to send (one batch per frame)
@@ -144,6 +158,8 @@ pub fn input(ctx: &egui::Context, raw: &mut egui::RawInput) {
         crate::log(&format!("test input: {what} after {t:.1} s"));
         match what.split_once(':') {
             Some(("focus", id)) => ctx.memory_mut(|m| m.request_focus(egui::Id::unique(id))),
+            // files dropped on the window, separated by "|" (as from the Finder)
+            Some(("drop", paths)) => raw.dropped_files.extend(paths.split('|').map(|p| std::sync::Arc::new(TestDrop(p.into())) as egui::DroppedFileHandle)),
             // "␣" stands for a space (the list is trimmed)
             Some(("text", s)) => raw.events.push(egui::Event::Text(s.replace('␣', " "))),
             Some(("mods", m)) => {
@@ -151,8 +167,24 @@ pub fn input(ctx: &egui::Context, raw: &mut egui::RawInput) {
                 raw.events.push(egui::Event::ModifiersChanged(egui::Modifiers { shift, mac_cmd: command && cfg!(target_os = "macos"), command, ..Default::default() }));
             }
             Some(("key", k)) => {
-                // "shift+Tab": with ⇧ held for this key
-                let (k, modifiers) = k.strip_prefix("shift+").map_or((k, egui::Modifiers::NONE), |k| (k, egui::Modifiers::SHIFT));
+                // "shift+Tab", "cmd+shift+H": with ⌘/⇧ held for this key
+                let mut k = k;
+                let mut modifiers = egui::Modifiers::NONE;
+                loop {
+                    if let Some(rest) = k.strip_prefix("shift+") {
+                        modifiers.shift = true;
+                        k = rest;
+                    } else if let Some(rest) = k.strip_prefix("alt+") {
+                        modifiers.alt = true;
+                        k = rest;
+                    } else if let Some(rest) = k.strip_prefix("cmd+") {
+                        modifiers.command = true;
+                        modifiers.mac_cmd = cfg!(target_os = "macos");
+                        k = rest;
+                    } else {
+                        break;
+                    }
+                }
                 if let Some(key) = egui::Key::from_name(k) {
                     raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers });
                     raw.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers });
@@ -164,6 +196,15 @@ pub fn input(ctx: &egui::Context, raw: &mut egui::RawInput) {
                     raw.events.push(egui::Event::PointerMoved(pos));
                     raw.events.push(egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
                     queued.push_back(vec![release(pos)]);
+                }
+            }
+            Some(("rclick", xy)) => {
+                // right click (context menu): press now, release in the next frame
+                if let Some((x, y)) = xy.split_once(':').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+                    let pos = egui::pos2(x, y);
+                    raw.events.push(egui::Event::PointerMoved(pos));
+                    raw.events.push(egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: true, modifiers: egui::Modifiers::NONE });
+                    queued.push_back(vec![egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed: false, modifiers: egui::Modifiers::NONE }]);
                 }
             }
             Some((kind @ ("press" | "move" | "release"), xy)) => {

@@ -174,7 +174,7 @@ pub fn queue_all(db: &Db) -> R<usize> {
         .conn
         .execute(
             "INSERT OR IGNORE INTO pending_sidecar_write(file, since)
-             SELECT id, ?1 FROM file WHERE format <> 'VIDEO' AND id IN (
+             SELECT id, ?1 FROM file WHERE format <> 'VIDEO' AND status <> 3 AND id IN (
                 SELECT file FROM image WHERE stars > 0 OR flag <> 0 OR label > 0 OR copy IS NOT NULL OR faces_scanned = 1
                 UNION SELECT b.file FROM image_keyword bs JOIN image b ON b.id = bs.image
                 UNION SELECT file FROM develop_state
@@ -189,7 +189,7 @@ pub fn queue_all(db: &Db) -> R<usize> {
 /// Number of photos the library would write a sidecar for when writing is switched on (for the question beforehand).
 pub fn count_all(conn: &Connection) -> usize {
     conn.query_row(
-        "SELECT count(*) FROM file WHERE format <> 'VIDEO' AND id IN (
+        "SELECT count(*) FROM file WHERE format <> 'VIDEO' AND status <> 3 AND id IN (
             SELECT file FROM image WHERE stars > 0 OR flag <> 0 OR label > 0 OR copy IS NOT NULL OR faces_scanned = 1
             UNION SELECT b.file FROM image_keyword bs JOIN image b ON b.id = bs.image
             UNION SELECT file FROM develop_state
@@ -217,7 +217,8 @@ pub fn sidecars_waiting(conn: &Connection) -> usize {
 /// `Ok(true)`: written.
 pub fn write_sidecar_from_library(db: &Db, file: i64, sync: bool) -> R<bool> {
     let (path, format) = crate::sync::file_info(db, file)?;
-    if format == "VIDEO" {
+    // a merged photo has no file of its own: never a sidecar next to it
+    if format == "VIDEO" || crate::merge::is_virtual(&db.conn, file) {
         return Ok(false);
     }
     let raw = crate::sync::raw_beside(&path, &format);
@@ -567,6 +568,70 @@ pub fn develop(file: i64, copy: Option<&str>) -> Option<String> {
         return s;
     }
     with_conn(|c| get(c, file, copy).ok()).and_then(|r| r.settings)
+}
+
+/// Rows per query when scanning the develop settings (the JSON texts of one block are the most held at a time).
+pub const DEVELOP_BLOCK: usize = 2000;
+
+/// Result of one [`develop_scan`].
+#[derive(Default)]
+pub struct DevelopScan {
+    /// `(file, copy)` of every stored own settings, including changes not yet written (without those on their way out)
+    pub keys: std::collections::HashSet<(i64, String)>,
+    /// newest `settings_time` seen (to pass as `since` next time)
+    pub newest: Option<i64>,
+}
+
+/// Scan the own develop settings of the library in blocks of `block` rows (keyset paging, one JSON block in memory
+/// at a time). Every row with `settings_time` at or after `since` (or without a time) goes to `on_row(file, copy,
+/// settings)`; `since = None`: every row. The result lists all keys that have settings, so rows that vanished (settings
+/// reset and the row dropped) are found by the caller. Not yet written changes (`None`: settings on their way out)
+/// are passed after the database rows.
+pub fn develop_scan_in(c: &Connection, since: Option<i64>, block: usize, mut on_row: impl FnMut(i64, &str, Option<&str>)) -> rusqlite::Result<DevelopScan> {
+    let mut out = DevelopScan::default();
+    let mut last: (i64, String) = (i64::MIN, String::new());
+    let mut q = c.prepare(
+        "SELECT file, copy, settings_time, CASE WHEN ?3 IS NULL OR settings_time IS NULL OR settings_time >= ?3 THEN settings END
+         FROM develop_state WHERE settings IS NOT NULL AND (file, copy) > (?1, ?2) ORDER BY file, copy LIMIT ?4",
+    )?;
+    loop {
+        let mut n = 0usize;
+        let mut rows = q.query(params![last.0, last.1, since, block as i64])?;
+        while let Some(r) = rows.next()? {
+            n += 1;
+            let (file, copy): (i64, String) = (r.get(0)?, r.get(1)?);
+            if let Some(t) = r.get::<_, Option<i64>>(2)? {
+                out.newest = Some(out.newest.map_or(t, |x| x.max(t)));
+            }
+            if let Some(json) = r.get::<_, Option<String>>(3)? {
+                on_row(file, &copy, Some(&json));
+            }
+            last = (file, copy.clone());
+            out.keys.insert((file, copy));
+        }
+        if n < block {
+            break;
+        }
+    }
+    overlay(|o| {
+        for ((file, copy), p) in o.iter() {
+            if let Some(s) = &p.settings {
+                on_row(*file, copy, s.as_deref());
+                if s.is_some() {
+                    out.keys.insert((*file, copy.clone()));
+                } else {
+                    out.keys.remove(&(*file, copy.clone()));
+                }
+            }
+        }
+    });
+    Ok(out)
+}
+
+/// [`develop_scan_in`] on this thread's read connection (call it off the UI thread).
+pub fn develop_scan(since: Option<i64>, on_row: impl FnMut(i64, &str, Option<&str>)) -> Option<DevelopScan> {
+    let mut on_row = on_row;
+    with_conn(|c| develop_scan_in(c, since, DEVELOP_BLOCK, &mut on_row).ok())
 }
 
 /// Has the library its own entry for this photo/copy (develop state or a change on its way)?
@@ -1067,4 +1132,81 @@ pub fn reset_commits() {
 /// Are changes still on their way into the library?
 pub fn saving() -> bool {
     OPEN_JOBS.load(Ordering::SeqCst) > 0
+}
+
+#[cfg(test)]
+mod develop_scan_tests {
+    use super::*;
+
+    fn db() -> Connection {
+        let c = Connection::open_in_memory().unwrap();
+        c.execute_batch("CREATE TABLE develop_state (id INTEGER PRIMARY KEY, file INTEGER NOT NULL, copy TEXT NOT NULL DEFAULT '', settings TEXT, settings_time INTEGER, lr_develop TEXT, lr_orientation TEXT, lr_edited INTEGER NOT NULL DEFAULT 0, lr_file TEXT, UNIQUE(file, copy));").unwrap();
+        c
+    }
+
+    fn scan(c: &Connection, since: Option<i64>, block: usize) -> (Vec<(i64, String, String)>, DevelopScan) {
+        let mut rows = vec![];
+        let s = develop_scan_in(c, since, block, |f, cp, j| rows.push((f, cp.to_string(), j.unwrap_or("").to_string()))).unwrap();
+        (rows, s)
+    }
+
+    /// Many rows come in blocks, every row exactly once, lists of keys complete; `since` reads only newer rows,
+    /// a reset (row dropped) leaves the key list, a new edit comes with its time.
+    #[test]
+    fn blocks_and_incremental() {
+        let c = db();
+        for f in 0..5001i64 {
+            put_settings(&c, f, None, Some("{\"a\":1}"), 100 + f / 1000).unwrap();
+        }
+        put_settings(&c, 7, Some("V"), Some("{\"v\":1}"), 100).unwrap();
+        let (rows, s) = scan(&c, None, 2000);
+        assert_eq!(rows.len(), 5002);
+        assert_eq!(s.keys.len(), 5002);
+        assert_eq!(s.newest, Some(105));
+        // nothing changed: only rows of the newest second are read again (boundary), not all
+        let (rows, s2) = scan(&c, s.newest, 2000);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(s2.keys.len(), 5002);
+        // new edit, reset of another photo (row dropped)
+        put_settings(&c, 3, None, Some("{\"a\":2}"), 200).unwrap();
+        put_settings(&c, 4, None, None, 200).unwrap();
+        let (rows, s3) = scan(&c, s.newest, 2000);
+        assert!(rows.iter().any(|r| r.0 == 3 && r.2.contains('2')));
+        assert!(!s3.keys.contains(&(4, String::new())) && s3.keys.len() == 5001);
+        assert_eq!(s3.newest, Some(200));
+    }
+
+    /// Measurement (`--ignored`, run alone): 65 000 settings of 2.2 KB, full and incremental scan.
+    /// `/usr/bin/time -l` shows the peak memory of the process; the JSON texts are never all held at once.
+    #[test]
+    #[ignore]
+    fn measure_65000_rows() {
+        let path = std::env::temp_dir().join(format!("graineo-scan-measure-{}.sqlite", std::process::id()));
+        let c = Connection::open(&path).unwrap();
+        c.execute_batch("CREATE TABLE develop_state (id INTEGER PRIMARY KEY, file INTEGER NOT NULL, copy TEXT NOT NULL DEFAULT '', settings TEXT, settings_time INTEGER, lr_develop TEXT, lr_orientation TEXT, lr_edited INTEGER NOT NULL DEFAULT 0, lr_file TEXT, UNIQUE(file, copy)); PRAGMA cache_size=-2000;").unwrap();
+        let text = format!("{{\"pad\":\"{}\"}}", "x".repeat(2200));
+        c.execute_batch("BEGIN").unwrap();
+        for f in 0..65000i64 {
+            put_settings(&c, f, None, Some(&text), 100 + f / 10000).unwrap();
+        }
+        c.execute_batch("COMMIT").unwrap();
+        if std::env::var_os("OLD_STYLE").is_some() {
+            // the former read: every text collected first
+            let t = std::time::Instant::now();
+            let mut q = c.prepare("SELECT file, copy, settings FROM develop_state WHERE settings IS NOT NULL").unwrap();
+            let all: Vec<(i64, String, Option<String>)> = q.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))).unwrap().filter_map(Result::ok).collect();
+            println!("old style: {:?}, rows {}", t.elapsed(), all.len());
+            return;
+        }
+        let t = std::time::Instant::now();
+        let mut n = 0usize;
+        let s = develop_scan_in(&c, None, DEVELOP_BLOCK, |_, _, j| n += j.map_or(0, |j| j.len() & 1)).unwrap();
+        println!("full: {:?}, keys {}", t.elapsed(), s.keys.len());
+        let t = std::time::Instant::now();
+        let mut rows = 0usize;
+        develop_scan_in(&c, s.newest, DEVELOP_BLOCK, |_, _, _| rows += 1).unwrap();
+        println!("incremental: {:?}, rows read {rows}", t.elapsed());
+        drop(c);
+        let _ = std::fs::remove_file(&path);
+    }
 }

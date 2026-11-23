@@ -33,8 +33,14 @@ use crate::{Linear, SppKey};
 /// test `reference_values_carry_the_compute_path_version` and `scripts/check.sh`.
 ///
 /// History: 1.0 and earlier keyed on the program file (empty after every update); 9 = 1.0.1 (Quattro highlights
-/// changed, so the bases of 1.0 must not be reused).
-pub const COMPUTE_PATH_VERSION: u32 = 9;
+/// changed, so the bases of 1.0 must not be reused); 10 = Quattro highlights with the saturation level per layer
+/// (sd Quattro H files with a digital gain per layer were yellow in blown areas); 11 = the same treatment on the
+/// colour grid of the first noise reduction stage (version 10 left the full development yellow); 12 = merged SFD
+/// bracket levelled to its base exposure (the stored base of an X3I carries the factor in its calibration); 13 = Quattro
+/// capture ISO 400–3200 on the high-ISO path (outlier repair, first stage on the stored values, own brightness smoothing); 14 = Quattro high-ISO
+/// path with the maker's outlier repair, grid brightness share and from ISO 6400 on as well; 15 = Quattro from capture ISO
+/// 400 on through the full chain of the maker's software; 16 = log-domain residual gain and colour gate, highlight pixels from the same layer only; 17 = Classic highlights (clipping level of small clipped lights, later fade), SD9 coring and white balance exposure time; 18 = dp Quattro highlight pixels: own value corrected by the layer's response and kept within the neighbours' range ; 19 = dp Quattro highlight pixels back to the means of the same layer's neighbours (the calibrated replacement only by switch); 20 = the Quattro high-ISO chain written anew ([`crate::quattro_hi`]: same steps, other rounding; the image border is developed like the rest); 21 = merged SFD bracket (X3I): first stage at the level of the base exposure, layers stored scaled, clipped highlights of the exposures neutral at the measured saturation; sd Quattro H: grid cells with a clipped top pixel neutral; 22 = Quattro binned by 4 has the full binned width (was 4 pixels narrower than the session); 23 = Quattro detail steps away from the middle below ISO 800: the local contrast follows the step (bases stored with a detail step by version 22 differ).
+pub const COMPUTE_PATH_VERSION: u32 = 23;
 /// Upper limit of the cache.
 pub const MAX_BYTES: u64 = 20 << 30;
 /// At least this much must remain free on the volume.
@@ -56,8 +62,19 @@ pub fn dir() -> Option<PathBuf> {
 /// Test variables that change the base without being part of the key also bypass the cache.
 const UNKEYED_TEST_VARS: [&str; 2] = ["GRAINEO_NO_DISK_CACHE", "X3F_SPP_TEST"];
 
+/// Developer switches of the Sigma development (measurements: another merge of an X3I bracket, single steps of the
+/// Quattro chain on or off) change the base as well and are not part of the key: a run with one of them neither reads
+/// nor writes the cache, so a measurement never leaves a deviating base behind for normal runs. Switches that only
+/// log, time or choose the processor (the key names it) do not count.
+const UNKEYED_SWITCH_PREFIXES: [&str; 2] = ["GRAINEO_QUATTRO_", "GRAINEO_X3I_"];
+const HARMLESS_SWITCHES: [&str; 4] = ["GRAINEO_QUATTRO_LOG", "GRAINEO_QUATTRO_TIMING", "GRAINEO_QUATTRO_GPU", "GRAINEO_QUATTRO_GPU_PROFILE"];
+
+fn changes_the_base(name: &str) -> bool {
+    UNKEYED_TEST_VARS.contains(&name) || (UNKEYED_SWITCH_PREFIXES.iter().any(|p| name.starts_with(p)) && !HARMLESS_SWITCHES.contains(&name))
+}
+
 fn disabled() -> bool {
-    UNKEYED_TEST_VARS.iter().any(|v| std::env::var_os(v).is_some())
+    std::env::vars_os().any(|(k, _)| k.to_str().is_some_and(changes_the_base))
 }
 
 fn min_free() -> u64 {
@@ -95,6 +112,20 @@ fn key_text_for(path: &Path, key: &SppKey, gpu: bool, version: u32) -> Option<St
     let ca = if new.is_empty() { ca } else { ca + &format!("merrill_new={}\n", new.join(",")) };
     // neural denoising after Sigma's noise reduction (only when on, so existing entries stay valid)
     let ca = if key.ai == 0 { ca } else { ca + &format!("ai={}\n", key.ai) };
+    // full chain of the maker's software for Quattro high ISO other than the default (only when set, so existing
+    // entries stay valid)
+    let full = crate::quattro::full_chain_enabled();
+    let ca = if full == crate::quattro::FULL_CHAIN_DEFAULT { ca } else { ca + &format!("quattro_full={}\n", u8::from(full)) };
+    // switches of the high-ISO chain other than the default (highlight-pixel replacement)
+    let ca = ca + &crate::quattro_hi::cache_tag();
+    // Quattro detail step away from the camera's setting (only then, so existing entries stay valid)
+    let ca = if key.detail == 0 { ca } else { ca + &format!("detail={}\n", key.detail) };
+    // own highlight rebuild of Foveon layers (only when switched on, so existing entries stay valid)
+    let ca = if crate::highlight_rebuild::enabled_for(key.prepared) {
+        ca + &format!("foveon_hl={},{},{}\n", crate::highlight_rebuild::tag(), key.highlight.colour_milli, key.highlight.structure_milli)
+    } else {
+        ca
+    };
     Some(format!(
         "path={}\nsize={}\nmtime={}\nmode={:?}\nnr={:?}\ngpu={}\n{}",
         path.display(),
@@ -123,6 +154,37 @@ fn file_for(path: &Path, text: &str) -> Option<PathBuf> {
     Some(dir()?.join(format!("{:016x}-{:016x}.{SUFFIX}", hash64(&canon.to_string_lossy()), hash64(text))))
 }
 
+/// Small note next to the cache: whether the highlight rebuild ([`crate::highlight_rebuild`]) found rebuildable
+/// highlights in a file and whether its sliders act there (one byte, `0` none, `1` rebuilt without sliders, `2`
+/// rebuilt with sliders). A base read from the cache carries no preparation, so the sliders learn the state from here
+/// instead of waiting for a preparation that never runs. Keyed by path, size, modification time, computing method and
+/// rebuild variant; the cache limit ignores these few bytes (only `.sppc` counts).
+fn highlight_note_file(path: &Path) -> Option<PathBuf> {
+    let canon = std::fs::canonicalize(path).ok()?;
+    let m = std::fs::metadata(&canon).ok()?;
+    let text = format!("{}\n{}\n{}\n{}\n{}", canon.display(), m.len(), mtime_ns(&m), compute_line(COMPUTE_PATH_VERSION), crate::highlight_rebuild::tag());
+    Some(dir()?.join("highlights").join(format!("{:016x}.hl", hash64(&text))))
+}
+
+/// Remember the highlight-rebuild state of `path` ([`highlight_note_file`]); nothing when the cache is bypassed.
+pub fn store_highlight_note(path: &Path, state: u8) {
+    if disabled() {
+        return;
+    }
+    if let Some(f) = highlight_note_file(path) {
+        if f.parent().is_some_and(|d| std::fs::create_dir_all(d).is_ok()) {
+            let _ = std::fs::write(&f, [b'0' + state.min(2)]);
+        }
+    }
+}
+
+/// The remembered highlight-rebuild state of `path` ([`highlight_note_file`]), if any.
+pub fn highlight_note(path: &Path) -> Option<u8> {
+    let f = highlight_note_file(path)?;
+    let b = std::fs::read(f).ok()?;
+    b.first().and_then(|c| c.checked_sub(b'0')).filter(|v| *v <= 2)
+}
+
 /// SPP base from the cache or newly computed (and then stored).
 /// Bit-exactly the same result as [`crate::spp::working_key`] with the same arguments.
 pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) -> Result<Linear, String> {
@@ -148,7 +210,8 @@ pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) ->
         let detail_bytes = lin.detail.as_ref().map_or(0, |d| d.l.len() * 2);
         // also when cancelled after all: the computation finished (a cancel in time ends it with an error), the base is
         // valid under its key – after a quick change of settings and back it is then read instead of computed again
-        if fits((lin.data.len() * 4 + detail_bytes) as u64) {
+        // a bracket whose merge fell back to another method is not stored: the key would name it as the regular base
+        if fits((lin.data.len() * 4 + detail_bytes) as u64) && !crate::sfd::fell_back(path) {
             // Store in the background: the preview should not wait for the disk. Only a photo the user stays with
             // ([`set_current`], [`DWELL`]): a base is ≈ 100 MB on disk, and storing every photo paged past or
             // computed ahead wrote gigabytes (seen: 8.7 GB in 16 minutes).
@@ -820,6 +883,16 @@ mod tests {
             COMPUTE_PATH_VERSION + 1
         );
         assert_eq!(version, COMPUTE_PATH_VERSION, "header line of sigma.txt and COMPUTE_PATH_VERSION differ");
+    }
+
+    #[test]
+    fn developer_switches_bypass_the_cache() {
+        for v in ["GRAINEO_NO_DISK_CACHE", "X3F_SPP_TEST", "GRAINEO_X3I_MERGE", "GRAINEO_QUATTRO_HIGHPATH", "GRAINEO_QUATTRO_RAWGRID", "GRAINEO_QUATTRO_HIGH6400", "GRAINEO_QUATTRO_FULL_ALL", "GRAINEO_QUATTRO_FULL_DUMP2"] {
+            assert!(changes_the_base(v), "{v}");
+        }
+        for v in ["GRAINEO_QUATTRO_LOG", "GRAINEO_QUATTRO_TIMING", "GRAINEO_QUATTRO_GPU", "GRAINEO_DATA_DIR", "GRAINEO_LOG", "PATH"] {
+            assert!(!changes_the_base(v), "{v}");
+        }
     }
 
     #[test]

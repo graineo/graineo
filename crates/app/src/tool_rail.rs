@@ -23,6 +23,9 @@ impl App {
         } else if self.in_people() {
             // people view: Info (the editing tools open the chosen face's photo in Develop)
             ToolTab::Info
+        } else if self.tool_tab == ToolTab::Merge && self.merge_info().is_none() {
+            // the photo is not a merged one (any more): the tool has nothing to show
+            ToolTab::Edit
         } else {
             self.tool_tab
         }
@@ -103,15 +106,22 @@ impl App {
         let active = self.tool_rail_active();
         let has_image = if self.in_people() { self.has_photo() } else { self.current.is_some() || self.active_entry().is_some() };
         let mut chosen: Option<ToolTab> = None;
+        let compare_blocks = self.compare_in_develop();
+        let blocked_tip = lr::with_shortcut("Erst den Vergleich beenden", "compare_open");
         ui.add_space(6.0);
         ui.vertical_centered(|ui| {
             ui.spacing_mut().item_spacing.y = 2.0;
             let (t_info, t_edit, t_crop) = (lr::with_shortcut("Info: Metadaten, Stichwörter, Bewertung", "tab_info"), lr::with_shortcut("Bearbeiten", "tab_edit"), lr::with_shortcut("Freistellen & Ausrichten", "crop"));
             let t_retouch = lr::with_shortcut("Retusche: Heilen, Klonen, rote Augen, Objekte entfernen", crate::shortcuts::RETOUCH);
+            // the merge tool exists for merged photos only
+            let mut tools: Vec<(ToolTab, lr::Icon, &str)> = vec![(ToolTab::Crop, lr::Icon::Crop, t_crop.as_str()), (ToolTab::Masks, lr::Icon::Mask, crate::tr("Masken: lokale Korrekturen")), (ToolTab::Retouch, lr::Icon::Bandaids, t_retouch.as_str())];
+            if self.merge_info().is_some() {
+                tools.push((ToolTab::Merge, lr::Icon::Images, crate::tr("Zusammenfügen: Quelle malen, Bewegung")));
+            }
             let groups: [&[(ToolTab, lr::Icon, &str)]; 4] = [
                 &[(ToolTab::Info, lr::Icon::Info, t_info.as_str())],
                 &[(ToolTab::Edit, lr::Icon::Sliders, t_edit.as_str()), (ToolTab::FilmLook, lr::Icon::Film, crate::tr("Film & Look"))],
-                &[(ToolTab::Crop, lr::Icon::Crop, t_crop.as_str()), (ToolTab::Masks, lr::Icon::Mask, crate::tr("Masken: lokale Korrekturen")), (ToolTab::Retouch, lr::Icon::Bandaids, t_retouch.as_str())],
+                tools.as_slice(),
                 &[(ToolTab::Presets, lr::Icon::Sparkle, crate::tr("Vorgaben & Verlauf")), (ToolTab::Versions, lr::Icon::Stack, crate::tr("Versionen: virtuelle Kopien"))],
             ];
             for (n, g) in groups.iter().enumerate() {
@@ -122,7 +132,10 @@ impl App {
                     ui.add_space(4.0);
                 }
                 for (w, icon, tip) in g.iter() {
-                    if lr::tool_rail_button(ui, *icon, active == *w, has_image, tip) {
+                    // the comparison draws in the centre: tools that draw into the image wait until it ends
+                    let blocked = compare_blocks && matches!(w, ToolTab::Crop | ToolTab::Masks | ToolTab::Retouch | ToolTab::Merge);
+                    let tip = if blocked { blocked_tip.as_str() } else { *tip };
+                    if lr::tool_rail_button(ui, *icon, active == *w, has_image && !blocked, tip) && !blocked {
                         chosen = Some(*w);
                     }
                 }
@@ -133,8 +146,9 @@ impl App {
             ui.spacing_mut().item_spacing.y = 2.0;
             ui.add_space(6.0);
             let t_sensor = lr::with_shortcut("Sensor-Ansicht", "sensor_field");
-            for (w, icon, tip, enabled) in [(ToolTab::Sensor, lr::Icon::Aperture, t_sensor.as_str(), has_image)] {
-                if lr::tool_rail_button(ui, icon, active == w, enabled, tip) {
+            let tip = if compare_blocks { blocked_tip.as_str() } else { t_sensor.as_str() };
+            for (w, icon, tip, enabled) in [(ToolTab::Sensor, lr::Icon::Aperture, tip, has_image && !compare_blocks)] {
+                if lr::tool_rail_button(ui, icon, active == w, enabled, tip) && enabled {
                     chosen = Some(w);
                 }
             }
@@ -156,6 +170,7 @@ impl App {
             ToolTab::Presets => crate::tr("VORGABEN & VERLAUF"),
             ToolTab::Sensor => crate::tr("SENSOR"),
             ToolTab::Versions => crate::tr("VERSIONEN"),
+            ToolTab::Merge => crate::tr("ZUSAMMENFÜGEN"),
         };
         // The former row "Auto · B&W · Reset" was removed: everything appeared twice –
         // "Auto" under Tone, color/black & white under Treatment, Reset at the bottom (⌥⇧⌘R).
@@ -166,6 +181,14 @@ impl App {
             ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, Color32::WHITE);
             if w == ToolTab::Crop {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| crate::help::info(ui, "freistellen-hilfe", "Freistellen & Ausrichten", &crate::help::CROP_ALIGN));
+            }
+            // comparing in Develop: the panel edits the focused field – its file and place, so no other photo is changed
+            if w != ToolTab::Info {
+                if let Some(t) = self.compare_panel_head() {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate());
+                    });
+                }
             }
             // Bayer/X-Trans: one card for the whole tray (the X3F tray has its "?" in "View")
             if w == ToolTab::Sensor && self.sensor_raw_active() {

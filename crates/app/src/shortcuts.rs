@@ -17,8 +17,9 @@ pub enum Context {
     Raster,
     SingleImage,
     Sensor,
-    /// series review (library_series / series_review): own keys, only while it is open
-    Review,
+    /// the photo comparison (photo_compare_ui.rs) in the library and in Develop: own keys while it is open, before
+    /// those of the grid and the single image (it takes the key events it handles)
+    Compare,
     /// the print room (print_room.rs): it takes the whole window and switches the other shortcuts off
     PrintRoom,
 }
@@ -30,7 +31,7 @@ impl Context {
             Context::Raster => i18n::text(Text::Grid),
             Context::SingleImage => i18n::text(Text::SinglePhoto),
             Context::Sensor => i18n::text(Text::SensorView),
-            Context::Review => i18n::text(Text::SeriesReview),
+            Context::Compare => crate::tr("Vergleich"),
             Context::PrintRoom => crate::tr("Druckraum"),
         }
     }
@@ -92,7 +93,7 @@ const fn g(id: &'static str, context: Context, text: &'static str, effect: &'sta
     Shortcut { id, context, trigger: Trigger::Geste(text), effect }
 }
 
-use Context::{SingleImage as E, Raster as R, Sensor as SE, Everywhere as U, Review as RV, PrintRoom as PR};
+use Context::{SingleImage as E, Raster as R, Sensor as SE, Everywhere as U, Compare as CM, PrintRoom as PR};
 
 /// Opens the "Retouch" tool of the rail.
 pub const RETOUCH: &str = "tool_retouch";
@@ -105,6 +106,7 @@ pub const ALL: &[Shortcut] = &[
     t("tab_edit", U, N, Key::E, "rechte Leiste: Reiter „Bearbeiten“"),
     t("export", U, CS, Key::E, "Exportieren (Dialog)"),
     t("print", U, C, Key::P, "Drucken (Druckraum)"),
+    t("merge_hdr", U, CS, Key::H, "HDR zusammenfügen (Dialog)"),
     t("import", U, CS, Key::I, "Importieren (Speicherkarte oder Ordner)"),
     t("open_folder", U, C, Key::O, "Ordner ansehen, ohne zu importieren"),
     // ⌘R turns the photo and F5 is the top bar: ⌥⌘R (Ctrl+Alt+R on Windows) reads a viewed folder again
@@ -140,7 +142,7 @@ pub const ALL: &[Shortcut] = &[
     t("trash_selected", U, C, Key::Backspace, "ausgewählte Fotos in den Papierkorb (mit Rückfrage), auch in einer Sammlung"),
     ts("delete_selected", U, N, &[Key::Backspace, Key::Delete], "ausgewählte Fotos löschen (Papierkorb, mit Rückfrage); in einer Sammlung nur aus der Sammlung entfernen, die Datei bleibt"),
     // Grid
-    t("single_photo", R, N, Key::Enter, "Einzelbild öffnen (auch Leertaste, D, Doppelklick)"),
+    t("single_photo", R, N, Key::Enter, "Einzelbild öffnen (auch Leertaste, D, Doppelklick); auf einer zugeklappten Serie: aufklappen"),
     t("single_photo_space", R, N, Key::Space, "Einzelbild öffnen"),
     t("single_photo_d", R, N, Key::D, "Einzelbild öffnen"),
     t("select_all", R, C, Key::A, "alle auswählen"),
@@ -160,10 +162,11 @@ pub const ALL: &[Shortcut] = &[
     t("people_frames", R, N, Key::H, "Personen: Gesichtsrahmen im großen Foto ein/aus"),
     g("people_back", R, "Esc", "Personen: zurück aus einem geöffneten Stapel bzw. aus dem großen Foto"),
     t("stack_toggle", R, N, Key::S, "Serie/Stapel des aktiven Fotos auf-/zuklappen"),
-    t("stack_toggle_all", R, S, Key::S, "alle Serien und Stapel auf-/zuklappen"),
+    ts("stack_step", R, A, &[Key::ArrowLeft, Key::ArrowRight], "durch die Fotos der Serien gehen: eine zugeklappte Serie öffnet sich und schließt sich wieder, wenn man sie verlässt"),
+    t("stack_toggle_all", U, S, Key::S, "alle Serien und Stapel auf-/zuklappen"),
     t("stack_group", R, C, Key::G, "Auswahl zu einem Stapel bündeln (Titelfoto = aktives Foto)"),
     t("stack_dissolve", R, CS, Key::G, "Serie/Stapel auflösen (die Fotos werden nie wieder zusammengelegt)"),
-    t("stack_review", R, N, Key::N, "Serie sichten (bzw. die Auswahl von 2–60 Fotos)"),
+    t("stack_review", R, N, Key::N, "Vergleichen: die ausgewählten Fotos bzw. die ganze Serie des aktiven Fotos"),
     t("stack_pick", R, A, Key::P, "ganze Serie als Auswahl markieren"),
     t("stack_reject", R, A, Key::X, "ganze Serie ablehnen"),
     t("stack_unflag", R, A, Key::U, "Markierung der ganzen Serie aufheben"),
@@ -172,26 +175,49 @@ pub const ALL: &[Shortcut] = &[
     g("pairs_switch", R, "← →", "RAW+JPEG doppelt prüfen: voriges / nächstes Paar"),
     g("pairs_check", R, "Leertaste", "RAW+JPEG doppelt prüfen: JPEG anhaken / abhaken"),
     g("pairs_list", R, "Esc", "RAW+JPEG doppelt prüfen: zurück zur Liste"),
-    // Series review
-    t("review_choose", RV, N, Key::Enter, "fokussiertes Foto als bestes wählen (Titelfoto + Markierung „Auswahl“)"),
-    t("review_choose_space", RV, N, Key::Space, "fokussiertes Foto als bestes wählen"),
-    t("review_rest", RV, S, Key::X, "Rest ablehnen: alle Fotos der Serie außer den markierten (ein ⌘Z)"),
-    t("review_zoom", RV, N, Key::Z, "gekoppelter Zoom 1:1 an der schärfsten Stelle ↔ Einpassen"),
-    t("review_faces", RV, N, Key::H, "Gesichterleiste ein/aus"),
-    t("review_finish", RV, C, Key::Enter, "Serie als gesichtet abschließen, weiter zur nächsten ungesichteten"),
-    t("review_next", RV, N, Key::ArrowDown, "nächste Serie (ohne Abschluss)"),
-    t("review_prev", RV, N, Key::ArrowUp, "vorige Serie"),
-    t("review_back", RV, N, Key::Escape, "zurück ins Raster"),
-    ts("review_field", RV, A, &[Key::Num1, Key::Num2, Key::Num3, Key::Num4], "Feld 1–4 fokussieren (auch ← →)"),
-    g("review_duel", RV, "← →", "fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten"),
+    // Photo comparison (photo_compare_ui.rs): in the library and in Develop, before the keys of grid and single image
+    t("cmp_mode_compare", CM, N, Key::V, "Modus Vergleich (Felder nebeneinander)"),
+    t("cmp_mode_tournament", CM, S, Key::T, "Modus Turnier (Duelle bis Platz 1–3)"),
+    t("cmp_arrange", CM, N, Key::G, "Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle"),
+    t("cmp_zoom", CM, N, Key::Z, "Einpassen ↔ 100 % (an Fokuspunkt, Gesicht oder schärfster Stelle)"),
+    t("cmp_zoom_200", CM, S, Key::Z, "200 %"),
+    g("cmp_space", CM, "Leertaste halten", "100 % an der Maus, solange gehalten"),
+    t("cmp_coupled", CM, N, Key::L, "Zoom und Verschieben gekoppelt an/aus"),
+    g("cmp_single", CM, "⇧-Ziehen", "ein Feld einzeln verschieben"),
+    t("cmp_align", CM, N, Key::A, "Ausrichten: Einzel-Versätze zurücksetzen"),
+    t("cmp_fit", CM, S, Key::G, "Füllen ↔ ganz zeigen: Fotos füllen ihr Feld oder stehen ganz darin"),
+    t("cmp_focus_point", CM, S, Key::F, "Fokuspunkt der Kamera in allen Feldern"),
+    t("cmp_peaking", CM, N, Key::K, "Kanten zeigen (Fokus-Peaking, gleiche Schwelle in allen Feldern)"),
+    t("cmp_clipping", CM, N, Key::J, "Clipping in allen Feldern"),
+    t("cmp_exif", CM, N, Key::I, "Aufnahme-Zeile (Abweichungen hervorgehoben)"),
+    t("cmp_measure", CM, N, Key::M, "Messen: Rechteck ziehen, Schärfewert je Feld"),
+    t("cmp_faces", CM, N, Key::H, "Gesichterleiste ein/aus"),
+    t("cmp_reference", CM, N, Key::R, "fokussiertes Foto als Referenz festhalten / aufheben"),
+    t("cmp_blink", CM, N, Key::W, "Blinken: Referenz und Kandidat abwechselnd (nochmal: nebeneinander)"),
+    t("cmp_wipe", CM, S, Key::W, "Wischer zwischen Referenz und Kandidat (nochmal: nebeneinander)"),
+    t("cmp_difference", CM, A, Key::W, "Differenzbild zwischen Referenz und Kandidat (nochmal: nebeneinander)"),
+    ts("cmp_field", CM, A, &[Key::Num1, Key::Num2, Key::Num3, Key::Num4], "Feld 1–4 fokussieren"),
+    g("cmp_arrows", CM, "← →", "fokussiertes Feld bzw. Kandidat wechseln; im Turnier: linkes / rechtes Foto behalten"),
+    t("cmp_tie", CM, N, Key::Equals, "Turnier: gleich gut (beide bleiben)"),
+    t("cmp_both_out", CM, N, Key::Minus, "Turnier: beide raus"),
+    g("cmp_last_duel", CM, "⌘Z", "Turnier: letztes Duell zurücknehmen"),
+    t("cmp_choose", CM, N, Key::Enter, "fokussiertes Foto als bestes wählen (Titelfoto + Markierung „Auswahl“)"),
+    t("cmp_rest", CM, S, Key::X, "Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)"),
+    t("cmp_develop", CM, N, Key::D, "fokussiertes Foto in Entwickeln öffnen"),
+    t("cmp_finish", CM, C, Key::Enter, "Serie als gesichtet abschließen, weiter zur nächsten ungesichteten"),
+    t("cmp_back", CM, N, Key::Escape, "Vergleich beenden (im Turnier: anhalten)"),
     // Single image
     t("grid", E, N, Key::G, "zurück ins Raster (auch Esc)"),
+    t("compare_open", E, N, Key::N, "Vergleichen: die im Filmstreifen ausgewählten Fotos"),
     t("grid_esc", E, N, Key::Escape, "zurück ins Raster (wenn kein Werkzeug offen ist)"),
     t("tab_edit_d", E, N, Key::D, "rechte Leiste: Reiter „Bearbeiten“"),
     t("info_overlay", E, N, Key::I, "Bildinfos im Bild: kurz → ausführlich → aus"),
     t("pin_histogram", U, S, Key::H, "Histogramm oben festhalten (Bearbeiten, Masken) ein/aus"),
     t("spinner_info", U, A, Key::I, "Rechenschritt am Kreisel immer zeigen (an/aus, auch ⌃⌥I)"),
-    g("arrows", E, "← / →", "vorheriges / nächstes Bild (⌥: Zoom behalten)"),
+    g("arrows", E, "← / →", "vorheriges / nächstes Bild"),
+    ts("stack_step_single", E, A, &[Key::ArrowLeft, Key::ArrowRight], "vorheriges / nächstes Bild mit gleichem Zoom, auch in zugeklappte Serien hinein (sie schließen sich wieder, wenn man sie verlässt)"),
+    t("stack_toggle_single", E, N, Key::S, "Serie/Stapel des aktiven Fotos auf-/zuklappen (Filmstreifen)"),
+    t("stack_open_enter", E, N, Key::Enter, "zugeklappte Serie im Filmstreifen aufklappen (wie Doppelklick)"),
     t("zoom", E, N, Key::Z, "Einpassen ↔ 100 % (auch Leertaste)"),
     t("zoom_space", E, N, Key::Space, "Einpassen ↔ 100 %"),
     t("before", E, N, Key::Backslash, "Standardentwicklung ↔ Aktuell (linke Seite wählbar)"),
@@ -389,7 +415,7 @@ pub fn window(ctx: &egui::Context, open: &mut bool) {
     let a = crate::dialog::show(ctx, "tasten", &crate::trf!("{a} Tastenkürzel", a = ALL.len()), 520.0, |ui| {
         crate::dialog::text(ui, crate::tr("Einzelne Buchstaben wirken, solange kein Eingabefeld den Fokus hat. Die Liste entsteht aus derselben Tabelle wie das Menü."));
         egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
-            for kx in [Context::Everywhere, Context::Raster, Context::Review, Context::SingleImage, Context::Sensor, Context::PrintRoom] {
+            for kx in [Context::Everywhere, Context::Raster, Context::Compare, Context::SingleImage, Context::Sensor, Context::PrintRoom] {
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new(kx.title()).strong());
                 egui::Grid::new(("keys", kx.title())).num_columns(2).min_col_width(210.0).spacing([24.0, 3.0]).show(ui, |ui| {

@@ -531,6 +531,10 @@ pub(crate) fn apply_db(db: &Db, a: &[Change], reverse: bool) -> Result<(), Strin
 pub(crate) fn apply_tx(tx: &rusqlite::Transaction, a: &[Change], reverse: bool) -> Result<(), String> {
     // backwards in reverse order (a root folder created first is removed last)
     let order: Vec<&Change> = if reverse { a.iter().rev().collect() } else { a.iter().collect() };
+    // files that got another place or name: recipes of merged photos that name them as sources follow
+    // ([`crate::merge::refresh_sources`]) – otherwise a renamed source whose size or time changes later would not
+    // count as that source any more
+    let moved: Vec<i64> = a.iter().filter_map(|x| if let Change::File(id, ..) = x { Some(*id) } else { None }).collect();
     for x in order {
         match x {
             Change::File(id, ao, old_name, no, nn) => {
@@ -567,6 +571,9 @@ pub(crate) fn apply_tx(tx: &rusqlite::Transaction, a: &[Change], reverse: bool) 
                 }
             }
         }
+    }
+    if !moved.is_empty() {
+        crate::merge::refresh_sources(tx, &moved)?;
     }
     Ok(())
 }

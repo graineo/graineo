@@ -205,7 +205,13 @@ fn render_foveon(path: &Path, settings: &Settings, level: u32) -> Result<image::
     to_rgb(develop::geometry::apply(img, &s, session.cal.orientation), level)
 }
 
+/// Develop `doc` at full resolution and reduce to `level` – for previews and copies that are stored or handed out.
+/// Never from the reference frame standing in for a merged photo that is not computed yet
+/// ([`rawdev::RawDoc::stands_in`]): that is an error (the picture is made when the merge is there).
 pub fn render_doc(doc: &rawdev::RawDoc, settings: &Settings, level: u32) -> Result<image::RgbImage, String> {
+    if doc.stands_in() {
+        return Err(rawdev::doc::MERGE_NOT_READY.into());
+    }
     let s = for_render(settings)?;
     let img = doc.render_full(&s)?;
     to_rgb(develop::geometry::apply(img, &s, doc.orientation), level)

@@ -39,6 +39,9 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/data"
 export GRAINEO_DATA_DIR="$WORK/data" GRAINEO_NO_DISK_CACHE=1 GRAINEO_NO_PHOTOKIT=1 GRAINEO_LIBRARY_NO_SYNC=1 GRAINEO_LIBRARY_SIDECARS=0
+# the Quattro full chain on the processor: deterministic, bit-identical across machines (its GPU path differs by
+# rounding only and has its own comparison, the tests quattro_hi::tests::graphics_card_matches_processor and quattro_hi::upscale::tests::graphics_card_matches_processor)
+export GRAINEO_QUATTRO_GPU=0
 
 find_file() {
   local d

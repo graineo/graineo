@@ -13,7 +13,6 @@ use std::sync::{
 
 pub const MAX_FILE: u64 = 16 * 1024 * 1024;
 pub const MAX_FILES: usize = 5000;
-pub const NOTICE: &str = "graineo enthält keine Filmprofile von Drittanbietern. Es liest Profile, die Sie selbst gekauft und installiert haben. Bitte beachten Sie die Lizenzbedingungen des Anbieters.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -174,13 +173,15 @@ impl Storage {
         }
         Ok(())
     }
-    /// Folder references only; removing never modifies a source file either.
+    /// References only (a folder, or a single look file such as a dropped `.cube`); removing never modifies a
+    /// source file either.
     pub fn add_folder(&self, paths: &[PathBuf]) -> Report {
         let mut o = self.options();
         let mut b = Report::default();
         for p in paths {
             let result = (|| -> Result<bool, String> {
-                if !p.is_absolute() || !p.is_dir() {
+                // a single file only when it is a look (a dropped .cube or profile)
+                if !p.is_absolute() || !(p.is_dir() || (p.is_file() && read_profile(p).is_some())) {
                     return Err("Bitte einen erreichbaren Profilordner wählen".into());
                 }
                 let p = p.canonicalize().map_err(|e| e.to_string())?;
@@ -272,7 +273,9 @@ impl Storage {
             if !roots.insert(basis.clone()) {
                 continue;
             }
-            if fs::read_dir(&basis).is_err() {
+            // a referenced look file counts as reachable when it is there
+            let reachable = if basis.is_file() { fs::metadata(&basis).is_ok() } else { fs::read_dir(&basis).is_ok() };
+            if !reachable {
                 report
                     .messages
                     .push(format!("Ordner nicht verfügbar: {}", basis.display()));

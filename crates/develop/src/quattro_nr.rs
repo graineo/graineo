@@ -21,6 +21,12 @@ pub struct Params {
     pub capture_iso: f32,
     /// The image was binned (factor ≥ 2)
     pub binned: bool,
+    /// Binning factor n (1 = none): an n × n block of the full resolution covers (n/2)² grid cells, so the noise
+    /// variance of a binned value is the grid model's divided by (n/2)² (n = 2: one grid cell, unchanged)
+    pub bin: usize,
+    /// Factor on the noise variance of the model (1 = as measured; the high-ISO path smooths the colour of its
+    /// unprocessed stored values more strongly, see `crate::quattro`)
+    pub var_scale: f32,
     /// Strength step 0 … 4 of the colour noise slider
     pub step: usize,
     /// White of the raw range in the units of the stage
@@ -29,7 +35,8 @@ pub struct Params {
 
 /// Noise reduction of one grid `img` (`w × h`, units see module) in place ([`crate::quattro_noise`]).
 pub fn stage1(img: &mut [Px], w: usize, h: usize, p: &Params) {
-    let image = crate::quattro_noise::Image { gains: p.gains, iso: p.capture_iso, binned: p.binned, white: p.white };
+    let noise_div = if p.binned { (p.bin as f32 / 2.0).powi(2).max(1.0) } else { 1.0 } / p.var_scale.max(1e-3);
+    let image = crate::quattro_noise::Image { gains: p.gains, iso: p.capture_iso, noise_div, white: p.white };
     crate::quattro_noise::denoise(img, w, h, &image, &crate::quattro_noise::MODEL, &crate::quattro_noise::PARAMETER);
 }
 
@@ -134,6 +141,53 @@ pub fn enlarge(src: &[f32], gw: usize, gh: usize, w: usize, h: usize) -> Vec<f32
     out
 }
 
+/// [`enlarge`] without over- and undershoot: every value stays within the range of the 2 × 2 grid cells it lies
+/// between. For grids with peaks far above their surroundings (the highlights of a merged bracket, clipped cells set
+/// to neutral): the negative lobes of the bicubic kernel would otherwise turn the pixels around a peak dark or
+/// coloured.
+pub fn enlarge_limited(src: &[f32], gw: usize, gh: usize, w: usize, h: usize) -> Vec<f32> {
+    let mut out = enlarge(src, gw, gh, w, h);
+    if gw == 0 || gh == 0 {
+        return out;
+    }
+    let cells = |x: usize, n: usize| -> (usize, usize) {
+        let i = ((x as f32 + 0.5) * 0.5 - 0.5).floor() as isize;
+        let c = |j: isize| j.clamp(0, n as isize - 1) as usize;
+        (c(i), c(i + 1))
+    };
+    let cols: Vec<(usize, usize)> = (0..w).map(|x| cells(x, gw)).collect();
+    out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
+        let (y0, y1) = cells(y, gh);
+        for (x, o) in row.iter_mut().enumerate() {
+            let (x0, x1) = cols[x];
+            let v = [src[y0 * gw + x0], src[y0 * gw + x1], src[y1 * gw + x0], src[y1 * gw + x1]];
+            let lo = v[0].min(v[1]).min(v[2]).min(v[3]);
+            let hi = v[0].max(v[1]).max(v[2]).max(v[3]);
+            *o = o.clamp(lo, hi);
+        }
+    });
+    out
+}
+
+/// [`layers_from_grid`] for grids with peaks far above their surroundings (see [`enlarge_limited`]): the same
+/// result written as the layer's grey share of the top layer plus the enlarged difference of the grid to that grey,
+/// the difference enlarged without over- and undershoot. A neutral peak then leaves its surroundings untouched.
+pub fn layers_from_grid_limited(x: &mut [Vec<f32>; 3], w: usize, h: usize, before: &[Px], after: &[Px], gw: usize, gh: usize, neutral: [f32; 3]) {
+    let d: [Vec<f32>; 3] = std::array::from_fn(|c| {
+        let g: Vec<f32> = before.iter().zip(after.iter()).map(|(b, a)| a[c] - neutral[c] * b[2]).collect();
+        enlarge_limited(&g, gw, gh, w, h)
+    });
+    let [p0, p1, p2] = x;
+    p0.par_iter_mut().zip(p1.par_iter_mut()).zip(p2.par_iter_mut()).enumerate().for_each(|(i, ((b, m), t))| {
+        let top = *t;
+        // a pixel much darker than its cell must not take the whole change of the cell's mean: no layer below zero,
+        // the top layer at most one stop darker than measured
+        *b = (top * neutral[0] + d[0][i]).max(0.0);
+        *m = (top * neutral[1] + d[1][i]).max(0.0);
+        *t = (top * neutral[2] + d[2][i]).max(0.5 * top * neutral[2]);
+    });
+}
+
 /// Put the denoised grid back into the full-resolution layers: colour from the denoised grid (enlarged 2× bicubic as
 /// in the preparation), fine detail of the top layer (its difference to its own enlarged grid value) added as a
 /// neutral change, i.e. on all layers in the ratio of the grey of the shot white balance (`neutral`: layer value of
@@ -141,7 +195,7 @@ pub fn enlarge(src: &[f32], gw: usize, gh: usize, w: usize, h: usize) -> Vec<f32
 /// `GRAINEO_QUATTRO_DETAIL=layers`: the previous way (detail on all layers equally).
 pub fn layers_from_grid(x: &mut [Vec<f32>; 3], w: usize, h: usize, before: &[Px], after: &[Px], gw: usize, gh: usize, neutral: [f32; 3]) {
     let ch = |f: &dyn Fn(&Px, &Px) -> f32| -> Vec<f32> { before.iter().zip(after.iter()).map(|(b, a)| f(b, a)).collect() };
-    if std::env::var("GRAINEO_QUATTRO_DETAIL").is_ok_and(|v| v == "layers") {
+    if crate::quattro_hi::developer_switch("GRAINEO_QUATTRO_DETAIL").is_ok_and(|v| v == "layers") {
         let d_top = enlarge(&ch(&|b, a| a[2] - b[2]), gw, gh, w, h);
         let d_b = enlarge(&ch(&|b, a| (a[0] - a[2]) - (b[0] - b[2])), gw, gh, w, h);
         let d_m = enlarge(&ch(&|b, a| (a[1] - a[2]) - (b[1] - b[2])), gw, gh, w, h);
@@ -167,6 +221,48 @@ pub fn layers_from_grid(x: &mut [Vec<f32>; 3], w: usize, h: usize, before: &[Px]
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn limited_enlargement_stays_within_its_cells() {
+        // one cell far above its surroundings: the plain enlargement undershoots around it, the limited one does not
+        let (gw, gh) = (12, 10);
+        let mut g = vec![1.0f32; gw * gh];
+        g[5 * gw + 6] = 100.0;
+        let plain = enlarge(&g, gw, gh, 2 * gw, 2 * gh);
+        let limited = enlarge_limited(&g, gw, gh, 2 * gw, 2 * gh);
+        assert!(plain.iter().any(|v| *v < 0.0), "the plain enlargement undershoots");
+        assert!(limited.iter().all(|v| (1.0..=100.0).contains(v)));
+        // a smooth grid is not touched
+        let smooth: Vec<f32> = (0..gw * gh).map(|i| 1.0 + 0.01 * (i % gw) as f32).collect();
+        let (a, b) = (enlarge(&smooth, gw, gh, 2 * gw, 2 * gh), enlarge_limited(&smooth, gw, gh, 2 * gw, 2 * gh));
+        for y in 4..2 * gh - 4 {
+            for x in 4..2 * gw - 4 {
+                assert!((a[y * 2 * gw + x] - b[y * 2 * gw + x]).abs() < 1e-5);
+            }
+        }
+    }
+
+    #[test]
+    fn neutral_peak_leaves_its_surroundings_neutral() {
+        // grey everywhere (layer values in the ratio `neutral`), one cell 50 × brighter: no pixel turns coloured or dark
+        let (gw, gh) = (12, 10);
+        let (w, h) = (2 * gw, 2 * gh);
+        let neutral = [0.5f32, 0.6, 1.0];
+        let level = |i: usize| if i == 5 * gw + 6 { 50.0f32 } else { 1.0 };
+        let grid: Vec<Px> = (0..gw * gh).map(|i| neutral.map(|n| n * level(i))).collect();
+        let top: Vec<f32> = (0..w * h).map(|i| level((i / w / 2) * gw + (i % w) / 2)).collect();
+        let mut x = [top.clone(), top.clone(), top.clone()];
+        layers_from_grid_limited(&mut x, w, h, &grid, &grid, gw, gh, neutral);
+        for i in 0..w * h {
+            assert!((x[0][i] - neutral[0] * top[i]).abs() < 1e-4 && (x[1][i] - neutral[1] * top[i]).abs() < 1e-4 && (x[2][i] - top[i]).abs() < 1e-4, "pixel {i}");
+        }
+        // a darkened cell does not take a pixel below half its measured top value
+        let mut after = grid.clone();
+        after[2 * gw + 2] = [0.0, 0.0, -5.0];
+        let mut x = [top.clone(), top.clone(), top.clone()];
+        layers_from_grid_limited(&mut x, w, h, &grid, &after, gw, gh, neutral);
+        assert!(x[2].iter().zip(&top).all(|(a, t)| *a >= 0.5 * t) && x[0].iter().all(|v| *v >= 0.0));
+    }
 
     #[test]
     fn grid_round_trip() {

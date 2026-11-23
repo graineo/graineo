@@ -343,6 +343,29 @@ impl Template {
         }
     }
 
+    /// Several photos per sheet, each cell fitted to its photo (not contact sheets with upright frames): the
+    /// templates whose sheet orientation follows the photos.
+    pub fn is_multi_photo_sheet(&self) -> bool {
+        self.grid.rows * self.grid.columns > 1 && self.image.rotate_to_fit
+    }
+
+    /// Switch the sheet orientation and divide the cells anew: rows and columns, gaps and a fixed cell size swap,
+    /// so a 2 × 3 grid on a portrait sheet becomes 3 × 2 on a landscape sheet. No change if already as asked.
+    pub fn set_orientation(&mut self, o: Orientation) {
+        if self.paper.orientation == o {
+            return;
+        }
+        self.paper.orientation = o;
+        self.swap_grid_axes();
+    }
+
+    /// Rows and columns, both gaps and both cell sizes trade places (the orientation was switched).
+    pub fn swap_grid_axes(&mut self) {
+        std::mem::swap(&mut self.grid.rows, &mut self.grid.columns);
+        self.grid.gap_mm.swap(0, 1);
+        self.grid.cell_mm.swap(0, 1);
+    }
+
     /// Read a template file (JSON). Unknown format or newer version: error.
     pub fn from_json(text: &str) -> Result<Template, String> {
         let t: Template = serde_json::from_str(text).map_err(|e| e.to_string())?;
@@ -380,6 +403,24 @@ impl Template {
         self.job.ppi = self.job.ppi.clamp(72, 1440);
         self.job.jpeg_quality = self.job.jpeg_quality.clamp(10, 100);
         self
+    }
+}
+
+/// The sheet orientation the photos ask for, from their aspect ratios (width / height): mostly landscape → landscape,
+/// mostly portrait → portrait. Squares count for neither; a tie or no photo: no suggestion.
+pub fn suggest_orientation(aspects: impl IntoIterator<Item = f64>) -> Option<Orientation> {
+    let (mut land, mut port) = (0usize, 0usize);
+    for a in aspects {
+        if a > 1.02 {
+            land += 1;
+        } else if a > 0.0 && a < 0.98 {
+            port += 1;
+        }
+    }
+    match land.cmp(&port) {
+        std::cmp::Ordering::Greater => Some(Orientation::Landscape),
+        std::cmp::Ordering::Less => Some(Orientation::Portrait),
+        std::cmp::Ordering::Equal => None,
     }
 }
 
@@ -554,6 +595,35 @@ mod tests {
         assert_eq!(ok[0].1, t);
         assert_eq!(bad.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn orientation_swaps_cells() {
+        let mut t = builtin().into_iter().find(|t| t.name == "2 Fotos, A4").unwrap();
+        assert_eq!((t.grid.rows, t.grid.columns), (2, 1));
+        t.set_orientation(Orientation::Landscape);
+        assert_eq!((t.grid.rows, t.grid.columns), (1, 2));
+        t.set_orientation(Orientation::Landscape);
+        assert_eq!((t.grid.rows, t.grid.columns), (1, 2));
+        t.set_orientation(Orientation::Portrait);
+        assert_eq!((t.grid.rows, t.grid.columns), (2, 1));
+        let mut q = builtin().into_iter().find(|t| t.name == "4 Fotos, A4").unwrap();
+        q.set_orientation(Orientation::Landscape);
+        assert_eq!((q.grid.rows, q.grid.columns), (2, 2));
+        assert_eq!(q.paper.size_mm(), (297.0, 210.0));
+        assert!(q.is_multi_photo_sheet());
+        assert!(!builtin().into_iter().find(|t| t.name.starts_with("Kontaktabzug A4")).unwrap().is_multi_photo_sheet());
+        assert!(!builtin()[0].is_multi_photo_sheet());
+    }
+
+    #[test]
+    fn orientation_suggestion() {
+        use Orientation::*;
+        assert_eq!(suggest_orientation([1.5, 1.5, 0.67]), Some(Landscape));
+        assert_eq!(suggest_orientation([0.67, 0.75, 1.5]), Some(Portrait));
+        assert_eq!(suggest_orientation([1.5, 0.67]), None);
+        assert_eq!(suggest_orientation([1.0, 1.0]), None);
+        assert_eq!(suggest_orientation(Vec::<f64>::new()), None);
     }
 
     #[test]

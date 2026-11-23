@@ -291,7 +291,7 @@ fn quattro_tone_row(mode: &str) -> ToneRow {
         "Cinema" => [-1.20, 2.85, 3.50, 0.070, 1.90],
         _ => [-1.17, 2.85, 3.0, 0.1, 1.4],
     };
-    ToneRow { scale: 1.0, f_start, f_end, steep, brk, steep2 }
+    ToneRow { scale: 1.0, f_start, f_end, steep, brk, steep2, bracket: None }
 }
 
 /// Brightness reference of the sd Quattro (H) relative to the dp Quattro (empirical).
@@ -332,7 +332,7 @@ pub const CLASSIC_LAYER_BALANCE: [f64; 3] = [0.98, 1.0, 1.0];
 /// Tone curve shape of the Classic cameras (matched against the camera JPEGs).
 fn classic_tone_row() -> ToneRow {
     if let Some(v) = std::env::var("GRAINEO_CLASSIC_TONE").ok().map(|t| t.split(',').filter_map(|x| x.trim().parse::<f64>().ok()).collect::<Vec<_>>()).filter(|v| v.len() == 5) {
-        return ToneRow { scale: 1.0, f_start: v[0], f_end: v[1], steep: v[2], brk: v[3], steep2: v[4] };
+        return ToneRow { scale: 1.0, f_start: v[0], f_end: v[1], steep: v[2], brk: v[3], steep2: v[4], bracket: None };
     }
     ToneRow { f_start: -1.05, ..quattro_tone_row("Standard") }
 }
@@ -378,6 +378,8 @@ pub struct ToneRow {
     pub steep: f64,
     pub brk: f64,
     pub steep2: f64,
+    /// merged bracket (X3I): its own tone curve instead of this row ([`crate::sfd::BracketTone`])
+    pub bracket: Option<crate::sfd::BracketTone>,
 }
 
 impl ToneRow {
@@ -389,7 +391,7 @@ impl ToneRow {
 impl Default for ToneRow {
     /// Fallback row when the file contains no tone curve values.
     fn default() -> Self {
-        Self { scale: 1.0, f_start: -1.17, f_end: 1.55, steep: 3.0, brk: 0.1, steep2: 1.85 }
+        Self { scale: 1.0, f_start: -1.17, f_end: 1.55, steep: 3.0, brk: 0.1, steep2: 1.85, bracket: None }
     }
 }
 
@@ -556,6 +558,10 @@ pub struct Calibration {
     /// Quattro: strength of our base sharpening still to apply on the counts (the preprocessing applies only part
     /// of it below ISO 800, see `quattro::prepare`); 0 = already applied or none
     pub pending_sharpen: f32,
+    /// Quattro, merged bracket developed like its base exposure: factor already in the white balance gains that
+    /// lifts the merge's units to the base exposure's (`quattro::prepare`); the colour stage takes its light level
+    /// relative to the base exposure. 1 otherwise.
+    pub exposure_gain: f64,
     /// Quattro: `SensorISO` of the shot (analogue sensor ISO, 100 when unknown); 0 = other cameras
     pub sensor_iso: f64,
     /// Colour mode set in the camera
@@ -679,7 +685,7 @@ impl Calibration {
                 }
                 let tone = tone_rows
                     .get(i * 7..i * 7 + 7)
-                    .map(|r| ToneRow { scale: r[0], f_start: r[1], f_end: r[2], steep: r[3], brk: r[5], steep2: r[6] })
+                    .map(|r| ToneRow { scale: r[0], f_start: r[1], f_end: r[2], steep: r[3], brk: r[5], steep2: r[6], bracket: None })
                     .unwrap_or_default();
                 ColorMode { name: name.to_string(), cam_to_srgb: base.mul(&cmcm), cmcm, contrast, tone, axes: None, classic: None, classic_output: None }
             })
@@ -708,6 +714,7 @@ impl Calibration {
             iso_gain,
             sigma_wb_ev: Vec::new(),
             pending_sharpen: 0.0,
+            exposure_gain: 1.0,
             sensor_iso: 0.0,
             camera_mode,
             modes,
@@ -913,6 +920,7 @@ impl Calibration {
             iso_gain,
             sigma_wb_ev,
             pending_sharpen: 0.0,
+            exposure_gain: 1.0,
             sensor_iso: scalar(camf, "SensorISO").filter(|v| *v > 0.0).unwrap_or(100.0),
             camera_mode,
             modes,
@@ -1059,6 +1067,7 @@ impl Calibration {
             iso_gain,
             sigma_wb_ev: Vec::new(),
             pending_sharpen: 0.0,
+            exposure_gain: 1.0,
             sensor_iso: 0.0,
             camera_mode,
             modes,

@@ -7,7 +7,9 @@
 //! (release 2.3, GPL-3).
 //!
 //! Changes from the original: Rust instead of C++, tiles via rayon instead of OpenMP (one band per tile
-//! row, bands write disjoint rows), input is already normalized to 0…1 (instead of /65536),
+//! row, bands write disjoint rows), input is already normalized to 0…1 (instead of /65536), the part of the input
+//! below 0 is added back afterwards with a linear interpolation and the output is not clipped at 0 (keeps the mean
+//! of the shadows),
 //! the border (9 px) is filled by the caller with the simple averaging method instead of `border_interpolate`.
 //! Computation steps 1–4.3 are taken over unchanged.
 
@@ -31,8 +33,8 @@ fn intp(a: f32, b: f32, c: f32) -> f32 {
 }
 
 /// RCD over the whole image. `cfa` are normalized mosaic values (w×h), `pat[y&1][x&1]` the color
-/// (0 = R, 1 = G, 2 = B) relative to the image origin. Result: RGB per pixel; a border of
-/// [`RCD_BORDER`] pixels stays 0 and must be filled by the caller.
+/// (0 = R, 1 = G, 2 = B) relative to the image origin. Result: RGB per pixel, may be negative (noise around black);
+/// a border of [`RCD_BORDER`] pixels is not computed by RCD and must be filled by the caller.
 pub(crate) fn rcd(cfa_in: &[f32], w: usize, h: usize, pat: [[usize; 2]; 2]) -> Vec<[f32; 3]> {
     let mut out = vec![[0f32; 3]; w * h];
     if w < 2 * TS.min(32) || h < 32 {
@@ -70,6 +72,9 @@ pub(crate) fn rcd(cfa_in: &[f32], w: usize, h: usize, pat: [[usize; 2]; 2]) -> V
             t.run(cfa_in, w, h, pat, tr, tc, a, band);
         }
     });
+    // RCD itself sees the mosaic clipped to 0…1; the negative noise around black is added back linearly so the
+    // shadows keep their mean (see `add_negative_part`); the output is not clipped at 0 either
+    crate::add_negative_part(cfa_in, w, h, 2, &|x: usize, y: usize| pat[y & 1][x & 1], &mut out);
     out
 }
 
@@ -111,12 +116,15 @@ impl Tile {
         let tile_cols = col_end - col_start;
         let (w1, w2, w3, w4) = (TS as isize, 2 * TS as isize, 3 * TS as isize, 4 * TS as isize);
         let cfa = &mut self.cfa;
+        // no upper limit: after the white balance red and blue reach up to their gain (and reconstructed highlights
+        // beyond); clipping at 1 here threw away everything above white in those channels
+        let hi = if crate::highlights::legacy() { 1.0 } else { f32::INFINITY };
         for row in row_start..row_end {
             let c0 = fc(row, col_start);
             let c1 = fc(row, col_start + 1);
             let mut indx = (row - row_start) * TS;
             for col in col_start..col_end {
-                let v = raw[row * w + col].clamp(0.0, 1.0);
+                let v = raw[row * w + col].clamp(0.0, hi);
                 cfa[indx] = v;
                 self.rgb[c0][indx] = v;
                 self.rgb[c1][indx] = v;
@@ -303,7 +311,7 @@ impl Tile {
             let orow = &mut band[(row - band_a) * w..(row - band_a + 1) * w];
             for col in first_h..last_h {
                 let idx = (row - row_start) * TS + col - col_start;
-                orow[col] = [self.rgb[0][idx].max(0.0), self.rgb[1][idx].max(0.0), self.rgb[2][idx].max(0.0)];
+                orow[col] = [self.rgb[0][idx], self.rgb[1][idx], self.rgb[2][idx]];
             }
         }
     }

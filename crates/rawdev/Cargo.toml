@@ -10,6 +10,8 @@ license.workspace = true
 pools = { path = "../pools" }
 graineo-color = { path = "../color" }
 raw = { path = "../raw" }
+hdr = { path = "../hdr" }
+serde = { version = "1", features = ["derive"] }
 lensprof = { path = "../lensprof" }
 develop = { path = "../develop", default-features = false }
 masks = { path = "../masks" }

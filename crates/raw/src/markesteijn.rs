@@ -9,7 +9,9 @@
 //! tile size fixed at 122 (as in darktable), negative remainders via `rem_euclid` (darktable uses
 //! C `%`, which yields negative remainders in the mirrored border region – only affects pixels outside the
 //! image). The final `_vng_lininterpolate` border handling is dropped because the mirrored
-//! tiles cover the whole image.
+//! tiles cover the whole image. The part of the input below 0 (clipped for the interpolation, as in darktable) is
+//! added back afterwards with a linear interpolation, and the output is not clipped at 0 (keeps the mean of the
+//! shadows).
 
 use rayon::prelude::*;
 
@@ -84,7 +86,7 @@ pub fn gpu_table(xt: [[u8; 6]; 6]) -> (Vec<[i32; 2]>, i32, i32) {
 }
 
 /// `xt[y][x]` is the color (0/1/2) of the 6×6 pattern relative to the image origin.
-/// `in_` normalized mosaic values (w×h). Result RGB per pixel.
+/// `in_` normalized mosaic values (w×h). Result RGB per pixel, may be negative (noise around black).
 pub(crate) fn markesteijn(in_: &[f32], width: usize, height: usize, xt: [[u8; 6]; 6], passes: usize) -> Vec<[f32; 3]> {
     let fc = |row: isize, col: isize| -> usize { xt[(row + 600).rem_euclid(6) as usize][(col + 600).rem_euclid(6) as usize] as usize };
     let dir: [isize; 4] = [1, TSI, TSI + 1, TSI - 1];
@@ -490,12 +492,15 @@ pub(crate) fn markesteijn(in_: &[f32], width: usize, height: usize, xt: [[u8; 6]
                             avg[3] += 1.0;
                         }
                     }
-                    orow[icol as usize] = [(avg[0] / avg[3]).max(0.0), (avg[1] / avg[3]).max(0.0), (avg[2] / avg[3]).max(0.0)];
+                    orow[icol as usize] = [avg[0] / avg[3], avg[1] / avg[3], avg[2] / avg[3]];
                 }
             }
             left += step;
         }
     });
+    // the tiles were filled with the mosaic clipped at 0; add the negative noise around black back linearly so the
+    // shadows keep their mean (see `add_negative_part`)
+    crate::add_negative_part(in_, width, height, 6, &|x: usize, y: usize| xt[y % 6][x % 6] as usize, &mut out);
     out
 }
 

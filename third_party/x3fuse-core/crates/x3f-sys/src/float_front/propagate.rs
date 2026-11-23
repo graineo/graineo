@@ -62,6 +62,13 @@ impl HighlightRestoration {
         // 1. Clipped = marked and a marked 8-neighbour in the same layer.
         let clipped = clean_saturation(sat, width, height, &mut stats);
         let threshold = self.threshold();
+        // graineo addition: a reconstruction registered by the application replaces the steps below
+        if let Some(hook) = super::highlight_hook() {
+            let mut input = super::HighlightInput { data, width, height, row_stride, clipped: &clipped, valid: [left, top, right, bottom], threshold };
+            if hook(&mut input) {
+                return Ok(stats);
+            }
+        }
         let mask = feathered_mask(&clipped, width, height);
         if clipped.iter().any(|&b| b & 0b110 != 0) {
             control.check()?;

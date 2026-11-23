@@ -59,6 +59,14 @@ pub enum Answer {
 
 /// Show the dialog. `content` draws text, chips, options (with the helpers below).
 pub fn show(ctx: &egui::Context, id: &str, title: &str, width: f32, content: impl FnOnce(&mut egui::Ui), buttons: Buttons) -> Answer {
+    show_extra(ctx, id, title, width, content, buttons, None).0
+}
+
+/// Like [`show`] with one more plain button left of the others (e.g. "Looks ansehen" beside "Fertig" in a result);
+/// returns whether that one was clicked. An empty `cancel` text leaves the cancel button out (Esc still answers
+/// [`Answer::Cancel`]).
+pub fn show_extra(ctx: &egui::Context, id: &str, title: &str, width: f32, content: impl FnOnce(&mut egui::Ui), buttons: Buttons, extra: Option<&str>) -> (Answer, bool) {
+    let mut extra_clicked = false;
     let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
     let mut answer = Answer::Open;
     let r = egui::Modal::new(egui::Id::unique(("dialog", id))).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
@@ -71,10 +79,16 @@ pub fn show(ctx: &egui::Context, id: &str, title: &str, width: f32, content: imp
         ui.separator();
         ui.add_space(6.0);
         answer = button_row(ui, &buttons);
+        if let Some(t) = extra {
+            // left of the row's buttons (drawn after them in the right-to-left row)
+            let row = ui.min_rect();
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(egui::pos2(row.left(), row.bottom() - BUTTON_H), row.max)).layout(egui::Layout::left_to_right(egui::Align::Center)));
+            extra_clicked = child.add(egui::Button::new(crate::tr(t)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE))).clicked();
+        }
     });
     // Keys only for the topmost dialog (a confirmation dialog above another one takes them alone)
     if !r.is_top_modal {
-        return answer;
+        return (answer, extra_clicked);
     }
     // Esc always cancels; ↩ only for a non-destructive main action (and not while typing multi-line)
     if answer == Answer::Open && (r.should_close() || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
@@ -87,7 +101,7 @@ pub fn show(ctx: &egui::Context, id: &str, title: &str, width: f32, content: imp
             }
         }
     }
-    answer
+    (answer, extra_clicked)
 }
 
 /// Part of a [`show_scrolling`] dialog the content closure draws.
@@ -173,6 +187,9 @@ fn button_row(ui: &mut egui::Ui, k: &Buttons) -> Answer {
             if style == Style::Normal && active {
                 ui.label(egui::RichText::new("↩").small().color(lr::TEXT_DIM));
             }
+        }
+        if k.cancel.is_empty() {
+            return;
         }
         if ui.add(egui::Button::new(crate::tr(k.cancel)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE))).clicked() {
             a = Answer::Cancel;

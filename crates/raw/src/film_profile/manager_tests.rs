@@ -351,3 +351,23 @@ fn previous_newest_source_wins_on_uuid_duplicates() {
         .unwrap();
     assert_eq!(a.search()[0].name, "New");
 }
+
+#[test]
+fn single_look_file_is_referenced_by_itself() {
+    let a = test_env();
+    let outside = a.data.parent().unwrap().join("drop");
+    fs::create_dir_all(&outside).unwrap();
+    let p = outside.join("Single.xmp");
+    fs::write(&p, profile("SINGLE-0001", "Single film", "Single package", 3)).unwrap();
+    // a file that is no look is refused, the look file itself is taken (not its folder)
+    let other = outside.join("notes.txt");
+    fs::write(&other, b"x").unwrap();
+    assert_eq!(a.add_folder(&[other]).skipped, 1);
+    let r = a.add_folder(std::slice::from_ref(&p));
+    assert_eq!((r.imported, r.skipped), (1, 0));
+    assert_eq!(a.options().folders, vec![p.canonicalize().unwrap()]);
+    let found = a.search();
+    assert!(found.iter().any(|f| f.uuid == "SINGLE-0001" && f.available && f.source == Source::Referenced));
+    // the same file again: already there
+    assert_eq!(a.add_folder(&[p]).existing, 1);
+}

@@ -255,7 +255,7 @@ impl App {
         let Some(c) = self.current.as_ref() else { return };
         let Some(e) = self.entries.get(c.index) else { return };
         let Some(target_film) = self.darkroom.compare.left_settings(&e.settings) else { return };
-        if self.darkroom.compare.target_film.as_ref() != Some(&target_film) {
+        if self.darkroom.compare.target_film.as_ref() != Some(&target_film) && !self.derived_waits(&target_film) {
             self.worker.send(Job::HoverRender { index: c.index, previews: c.loaded.previews.clone(), cal: c.loaded.cal.clone(), settings: target_film.clone(), supersede: false });
             self.darkroom.compare.target_film = Some(target_film);
         }

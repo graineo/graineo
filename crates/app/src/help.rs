@@ -51,6 +51,13 @@ const fn card(short: &'static str, text: &'static str, example: Option<Example>)
     Card { short, text, example, extra: None }
 }
 
+// ── Merged photos (tool "Zusammenfügen") ──
+pub static HDR_FRAMES: Card = card(
+    "Die Aufnahmen der Belichtungsreihe, nach Belichtung geordnet.",
+    "• **Haken** – Aufnahme benutzen; ohne Haken bleibt sie gedimmt an ihrem Platz\n• **Stern** – Referenz: ihre Lage, Farbe und Belichtung gelten für das Ergebnis\n• **Maustaste halten** – diese Aufnahme groß zeigen (loslassen = zurück zum HDR)\n• **Foto aus dem Filmstreifen hierher ziehen** – als Aufnahme hinzufügen",
+    None,
+);
+
 // ── Print room ──
 static PRINT_RESOLUTION: Card = card(
     "Pixel je Zoll auf dem Papier.",
@@ -398,7 +405,7 @@ pub static PREVIEWS: Card = card(
 /// Settings → Library → Cache limit
 pub static CACHE_LIMIT: Card = card(
     "Begrenzt den Platz, den der Cache auf diesem Mac belegen darf.",
-    "• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.",
+    "• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.",
     None,
 );
 
@@ -867,10 +874,10 @@ pub static FILM_AND_LOOK: Card = card(
     None,
 );
 
-/// Series review (series_review.rs).
-pub static SERIES_REVIEW: Card = card(
-    "Fotos einer Serie vergleichen und das beste wählen.",
-    "• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück",
+/// Photo comparison (photo_compare_ui.rs).
+pub static COMPARE: Card = card(
+    "Ausgewählte Fotos nebeneinander vergleichen und das beste wählen.",
+    "Die Fotos kommen aus der Auswahl im Filmstreifen: ⌘-Klick nimmt eins hinzu oder heraus, Klick tauscht es gegen das fokussierte Feld.\n• **Vergleich** – bis zu 4 große Felder, mit der Anordnung „Alle“ bis zu 8 kleinere; Zoom und Verschieben wirken in allen Feldern gleich, ⇧-Ziehen verschiebt ein Feld einzeln; mehr Fotos blättern ‹ › oben rechts\n• **Turnier** – zwei Fotos je Duell bis Platz 1–3; danach steht die Rangliste in der Anordnung „Alle“ (Platz-Marken 1., 2., 3.), gesetzt wird erst mit „Übernehmen“: Platz 1 wird Auswahl und Titelfoto, alle anderen werden abgelehnt (ein ⌘Z)\n\nDie Hinweise sind relativ zur Auswahl: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts.\n\n### Tasten\n↩ bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wirken auf das fokussierte Feld · Z Zoom · Leertaste halten 100 % an der Maus · L gekoppelt · H Gesichter · ⌘↩ gesichtet, weiter · Esc zurück",
     None,
 );
 

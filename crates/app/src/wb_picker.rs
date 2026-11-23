@@ -180,11 +180,18 @@ impl Outcome {
     }
 }
 
+/// White of a (possibly merged) RAW: the as-shot gains, times the highlight headroom of a merge (reference units).
+fn merged_white(gains: [f32; 3], headroom: Option<f32>) -> [f32; 3] {
+    let h = headroom.unwrap_or(1.0).max(1.0);
+    gains.map(|g| g * h)
+}
+
 /// Levels of the sample image of `loaded` (see [`Levels`]).
 pub fn levels(loaded: &Loaded) -> Levels {
     match &loaded.previews.foreign {
         // graineo RAW: camera RGB times the as-shot gains (a blown channel reaches its gain)
-        Some(doc) if !doc.finished && doc.apple.is_none() => Levels { white: doc.info.wb.unwrap_or([1.0; 3]) },
+        // a merged photo reaches `headroom` times its reference white: only that counts as blown
+        Some(doc) if !doc.finished && doc.apple.is_none() => Levels { white: merged_white(doc.info.wb.unwrap_or([1.0; 3]), doc.merged.as_ref().map(|m| m.meta.headroom)) },
         // finished image, Apple path, Sigma: 1 = white
         _ => Levels { white: [1.0; 3] },
     }
@@ -446,6 +453,18 @@ mod tests {
     }
 
     const LV: Levels = Levels { white: [1.0; 3] };
+
+    /// Bright areas of a merged photo (above the reference white) are not blown; without headroom nothing changes.
+    #[test]
+    fn merged_white_scales_with_headroom() {
+        assert_eq!(merged_white([2.0, 1.0, 1.5], None), [2.0, 1.0, 1.5]);
+        assert_eq!(merged_white([2.0, 1.0, 1.5], Some(4.0)), [8.0, 4.0, 6.0]);
+        let bright = |_: usize, _: usize| [3.0f32, 3.0, 3.0];
+        let plain = sample(&bright, 9, 9, 4, 4, 5, &Levels { white: [1.0; 3] });
+        let merged = sample(&bright, 9, 9, 4, 4, 5, &Levels { white: merged_white([1.0; 3], Some(4.0)) });
+        assert_eq!(plain.verdict, Verdict::Clipped);
+        assert_eq!(merged.verdict, Verdict::Good);
+    }
 
     fn flat(v: [f32; 3]) -> impl Fn(usize, usize) -> [f32; 3] {
         move |_, _| v

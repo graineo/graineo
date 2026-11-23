@@ -16,6 +16,7 @@ pub mod learn;
 pub mod looks;
 pub mod look_lut;
 pub mod lightroom;
+pub mod merged;
 pub mod lr_masks;
 pub mod render;
 pub mod wb;

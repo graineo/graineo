@@ -372,14 +372,10 @@ Profildateien werden weder kopiert, verschoben noch gelöscht. Abgeleitete alte 
 Adobe-Ordner automatisch durchsuchen	Search Adobe folders automatically
 Jetzt neu suchen	Rescan Now
 Keine Looks gefunden	No looks found
-Referenzierter Ordner	Referenced folder
-Ordner entfernen …	Remove Folder…
 Anzeigen	Show
-{a} Profile · {b} verfügbar	{a} profiles · {b} available
 Ausgeblendete Profile	Hidden profiles
 Wieder anzeigen	Unhide
 Wird gelesen …	Reading…
-{a} hinzugefügt · {b} bereits vorhanden · {c} übersprungen	{a} added · {b} already present · {c} skipped
 Wird gesucht …	Searching…
 Die Vorschau enthält diesen Look nicht. Der Profilverweis bleibt gespeichert.	The preview doesn’t include this look. The profile reference is kept.
 Ohne Look exportieren?	Export without the look?
@@ -1759,7 +1755,7 @@ Einpassen ({a} %)	Fit ({a} %)
 Begradigt: {a2}°	Straightened: {a2}°
 Standard ({default_name})	Default ({default_name})
 Freistellen	Crop
-Ausrichten	Straighten
+Ausrichten	Align
 Horizont begradigen (A)	Level the horizon (A)
 Frei	Free
 Linie	Line
@@ -2023,7 +2019,6 @@ Ausschnitt, Winkel, Perspektive, 90°-Drehung	Crop, angle, perspective, 90° rot
 Farbsäume	Color fringes
 Rauschreduzierung	Noise reduction
 Freistellen & Drehen	Crop & Rotate
-graineo enthält keine Filmprofile von Drittanbietern. Es liest Profile, die Sie selbst gekauft und installiert haben. Bitte beachten Sie die Lizenzbedingungen des Anbieters.	graineo doesn’t include third-party film profiles. It reads profiles you’ve purchased and installed yourself. Please respect the provider’s license terms.
 Auf dem Mac sind {} frei, nötig sind {} plus {} Reserve.	This Mac has {} free; {} plus a {} buffer is needed.
 Ordner {} fehlt	Folder {} is missing
 Am alten Ort liegt eine andere Datei – nichts überschrieben	A different file is now at the original location – nothing was overwritten
@@ -3082,7 +3077,7 @@ Wird abgebrochen …	Canceling…
 Der Ordner wird umbenannt …	Renaming the folder…
 „{a}“ wird zusammengeführt	Merging “{a}”
 Wird angehalten …	Pausing…
-Vergleichen	Comparing
+Vergleichen	Compare
 Vorschauen und Offline-Kopien vorbereiten	Preparing previews and offline copies
 Kopieren und prüfen	Copying and verifying
 Bibliothek umstellen	Updating the library
@@ -3466,7 +3461,6 @@ Quellen	Sources
 Lookup-Tabellen	Lookup tables
 Profilordner entfernen?	Remove Profile Folder?
 Look-Paket ausblenden?	Hide Look Pack?
-Automatisch gefunden	Found automatically
 Filmsimulation	Film simulation
 Importe	Imports
 Diagonal	Diagonal
@@ -3957,7 +3951,7 @@ Tauschen nicht möglich: die Kamera-JPEG lässt sich nicht als Stand der Regler 
 Vergleich: jetzigen Stand als linke Seite festhalten	Comparison: capture the current state as the left side
 Vergleich: linke und rechte Seite tauschen	Comparison: swap left and right sides
 Begrenzt den Platz, den der Cache auf diesem Mac belegen darf.	Limits how much space the cache may use on this Mac.
-• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Unlimited** (default) – nothing is ever removed automatically.\n• **10 to 100 GB** – if the cache grows larger, graineo removes the oldest Foveon intermediates and the least recently viewed previews of photos on this Mac in the background whenever the Mac is idle, until the cache is down to about 90 % of the limit.\n\nEverything in the cache counts toward the limit. Never removed: offline copies and previews of photos on other drives, developed previews, fingerprints and faces; the most recently used previews are kept too. Originals, edits and the library aren’t stored in the cache and are never affected.\n\n### Note\nRemoved previews are recreated when needed. That takes processing time while browsing, especially with Sigma Quattro and photos on the NAS.
+• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Unlimited** (default) – nothing is ever removed automatically.\n• **10 to 100 GB** – if the cache grows larger, graineo removes the oldest Foveon and HDR intermediates and the least recently viewed previews of photos on this Mac in the background whenever the Mac is idle, until the cache is down to about 90 % of the limit.\n\nEverything in the cache counts toward the limit. Never removed: offline copies and previews of photos on other drives, developed previews, fingerprints and faces; the most recently used previews are kept too. Originals, edits and the library aren’t stored in the cache and are never affected.\n\n### Note\nRemoved previews are recreated when needed. That takes processing time while browsing, especially with Sigma Quattro and photos on the NAS.
 Zuletzt entfernt: {a} ({n} Dateien)	Last removed: {a} ({n} files)
 Vorschau-Cache bereinigen: {a} von {b}	Trimming preview cache: {a} of {b}
 Vorschau-Cache bereinigen …	Trimming preview cache…
@@ -3971,7 +3965,7 @@ Offline-Kopien, andere Laufwerke	Offline copies, other drives
 Vorschau-Cache bereinigen	Trim preview cache
 Bereinigen	Trim
 Es gibt nichts zu entfernen.	Nothing to remove.
-Es werden etwa {a} entfernt: die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	About {a} will be removed: the oldest Foveon intermediates and the least recently viewed previews of photos on this Mac. They’re recreated when needed, which takes processing time while browsing, especially with Sigma Quattro. Originals, edits, offline copies and developed previews are kept.
+Es werden etwa {a} entfernt: die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	About {a} will be removed: the oldest Foveon and HDR intermediates and the least recently viewed previews of photos on this Mac. They’re recreated when needed, which takes processing time while browsing, especially with Sigma Quattro. Originals, edits, offline copies and developed previews are kept.
 Die Obergrenze wird dadurch nicht erreicht: der Rest ist geschützt oder erst kürzlich benutzt.	That won’t get the cache under the limit: the rest is protected or was used recently.
 Jetzt bereinigen …	Trim Now…
 Zuerst eine Obergrenze wählen	Choose a limit first
@@ -4090,7 +4084,6 @@ importiert	imported
 GUT	GOOD
 BRAUCHBAR	USABLE
 UNSICHER	UNCERTAIN
-Für sRGB-LUTs (3D, 1D-Kurve oder beides).	For sRGB LUTs (3D, 1D curve or both).
 Gewählten Look als 3D-LUT (.cube) speichern	Save the selected look as a 3D LUT (.cube)
 Kein Foto geöffnet	No photo open
 Kein Look gewählt	No look selected
@@ -4700,6 +4693,16 @@ Kein Etikett	No label
 Copyright	Copyright
 z. B. © 2026 Name	e.g. © 2026 Name
 Hinzugefügt wird	To be added
+nicht verfügbar	not available
+Keine neuen Looks	No new looks
+Keine Fotos oder Looks erkannt	No photos or looks recognised
+Keine Looks erkannt	No looks recognised
+{a} hinzufügen?	Add {a}?
+Wird hinzugefügt …	Adding…
+Looks ansehen	View looks
+{a} hinzugefügt	{a} added
+Inhalt von „{a}“ · {b}	Contents of “{a}” · {b}
+Klicke auf einen Ordner, um seine Fotos zu sehen.	Click a folder to see its photos.
 Keine Ordner mit Fotos.	No folders with photos.
 schon in der Bibliothek	already in the library
 liegt in einem Ordner der Bibliothek	is in a library folder
@@ -5469,7 +5472,6 @@ Alben aus Apple Fotos bleiben in ihrem Satz	Albums from Apple Photos stay in the
 In Lightroom: {n} Schritte	In Lightroom: {n} steps
 graineo unterstützen …	Support graineo…
 Fotos einer Serie vergleichen und das beste wählen.	Compare the photos of a series and choose the best one.
-• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **Compare** – 2–4 photos large side by side; double-click or Z zooms all fields together to 1:1 at the sharpest spot\n• **Light table** – all photos of the series; a click puts one into the comparison\n• **Duel** – two photos, ← keeps the left one, → the right one, until one is left\n\nThe hints are relative to the series: sharpness as a share of the sharpest photo, eyes and faces (Apple Vision, macOS only), clipped highlights, motion blur. The suggestion gives its reason and sets nothing; when there is hardly a difference it says so.\n\n### Keys\n↩/Space choose best · ⇧X reject the rest · P/X/U/0–5 as everywhere · Z zoom · H faces · ⌘↩ reviewed, next · ↓/↑ next/previous series · ⌘Z undo · Esc back
 Stapel nicht geändert: {e}	Stack not changed: {e}
 Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	Exposure bracket: {n} photos, {k} steps across {ev} EV
 Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	Series: {n} photos in {t}, same subject (similarity {s})
@@ -5570,7 +5572,6 @@ zurück ins Raster	back to the grid
 Feld 1–4 fokussieren (auch ← →)	focus field 1–4 (also ← →)
 fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	switch the focused field; in the duel: keep the left / right photo
 Vergleich	Compare
-Leuchttisch	Light table
 Duell	Duel
 2–4 Fotos groß nebeneinander	2–4 photos large side by side
 Alle Fotos der Serie; Klick legt eins in den Vergleich	All photos of the series; a click puts one into the comparison
@@ -6451,8 +6452,10 @@ Gesicht „{a}“ benannt	Face named “{a}”
 Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Preset “{a}” deleted – ⌘Z brings it back
 Rückgängig: Vorgabe „{a}“ gelöscht	Undo: preset “{a}” deleted
 {a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} of {b} photos shown, the others are hidden by the source on the left or a filter
-Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	On Quattro, noise reduction already runs in the preparation.
-Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	On Quattro, noise reduction runs in the preparation; the stored values switch it off.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung.	Below ISO 400, the Quattro’s noise reduction is a fixed part of the preparation.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Below ISO 400 the Quattro’s noise reduction is built into the preparation. The slider values saved with this photo turn it off.
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet diese Regler aus.	The full Quattro path is switched off; only that path uses these sliders.
+Der volle Quattro-Weg ist ausgeschaltet; die gespeicherten Werte gelten weiter.	The full Quattro path is switched off; the stored values still apply.
 rechnet {p} %	computing {p} %
 Modul fehlt	module missing
 Modul laden …	Load module…
@@ -6589,3 +6592,470 @@ Wenn vorhanden	If it exists
 Gain-Map behalten	Keep gain map
 HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Keep the HDR brightness of iPhone photos; sRGB only
 Mehr	More
+# HDR merge (hdr_ui.rs)
+Mindestens zwei Fotos einer Belichtungsreihe wählen.	Choose at least two photos of an exposure bracket.
+Höchstens {n} Fotos.	At most {n} photos.
+{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a}: only RAW photos with a Bayer or X-Trans sensor.
+Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	The photos come from different cameras or have different sizes.
+{a} ist nicht erreichbar.	{a} is not reachable.
+{a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b}: brightness differs by {e} EV from the shooting data – did the light change?
+{a} → {b}: zu wenig Überlappung, Belichtung aus den Aufnahmedaten	{a} → {b}: too little overlap, exposure from the shooting data
+{a} ist um {p} px verschoben – aus der Hand?	{a} is shifted by {p} px – hand-held?
+Verschiedene Blenden: Schärfentiefe und Vignette unterscheiden sich	Different apertures: depth of field and vignetting differ
+{a} → {b}: großer Abstand ({e} EV)	{a} → {b}: large gap ({e} EV)
+{n} Bilder zusammenfügen	Merge {n} images
+Referenz	Reference
+{a} – als Referenz wählen	{a} – choose as reference
+Vorschau wird berechnet …	Computing preview …
+Gleicht Verschiebung, Drehung und Maßstab zwischen den Aufnahmen aus	Corrects shift, rotation and scale between the shots
+Vorschau nicht möglich: {e}	Preview not possible: {e}
+Analysiert Belichtung und Lage …	Analysing exposure and position …
+{a} … {b} EV · Ergebnis erscheint oben im Stapel	{a} … {b} EV · the result appears on top of the stack
+Zusammenfügen	Merge
+HDR {a} {p} % · noch etwa {t}	HDR {a} {p} % · about {t} left
+HDR {a} {p} %	HDR {a} {p} %
+HDR fertig · {s} s	HDR done · {s} s
+HDR abgebrochen	HDR cancelled
+HDR nicht möglich: {e}	HDR not possible: {e}
+HDR zusammenfügen	Merge to HDR
+HDR wird berechnet – ⌘Z macht es rückgängig	Computing HDR – ⌘Z undoes it
+HDR nicht angelegt: {e}	HDR not created: {e}
+HDR nicht entfernt: {e}	HDR not removed: {e}
+HDR zusammenfügen …	Merge to HDR…
+HDR zusammenfügen (Dialog)	Merge to HDR (dialog)
+Rezept fehlt	Recipe missing
+Lineares DNG aus graineos Entwicklung: Kamerawerte ohne Tonkurve, nichts beschnitten, auch Lichter über Weiß bleiben erhalten.	Linear DNG from graineo's development: camera values without tone curve, nothing clipped, highlights above white are kept.
+Erkannte Bewegung zeigen	Show detected movement
+Ergebnis in den Stapel legen	Put the result in the stack
+Stichwort für das Ergebnis	Keyword for the result
+leer = keins	empty = none
+Nur HDR	HDR only
+Der HDR-Filter lässt sich nicht als Regel sichern	The HDR filter cannot be saved as a rule
+Alle Aufnahmen überall verrechnen (für ruhige Motive)	Merge all frames everywhere (for still scenes)
+Bewegte Stellen aus der Referenz, weich überblendet	Moving areas from the reference, blended softly
+Jede Aufnahme einzeln dort ausschließen, wo sie abweicht	Exclude each frame where it differs
+Oben im Stapel des Referenzbilds	On top of the reference's stack
+Eigenes Foto neben den Quellen, ohne Stapel	A photo of its own beside the sources, no stack
+Färbt die Stellen ein, an denen eine Aufnahme abweicht	Tints the areas where a frame differs
+Keine Bewegung erkannt	No movement detected
+Nur zusammengefügte Fotos (HDR)	Only merged photos (HDR)
+Bewegung	Movement
+Alle Striche löschen	Delete all strokes
+Letzten Strich zurück	Undo last stroke
+Malen	Paint
+Radieren	Erase
+Mit gedrückter Maustaste über das Bild malen: dort gilt nur das gewählte Quellbild	Paint over the image with the mouse button held down: only the chosen source counts there
+Quelle malen	Paint source
+{a} malen	Paint {a}
+HDR nicht geändert: {e}	HDR not changed: {e}
+ZUSAMMENFÜGEN	MERGE
+Zusammenfügen: Quelle malen, Bewegung	Merge: paint source, movement
+Dieses Foto ist kein zusammengefügtes Foto.	This photo is not a merged photo.
+Blatt hochkant; Reihen und Spalten werden neu aufgeteilt	Sheet upright; rows and columns are divided anew
+Blatt quer; Reihen und Spalten werden neu aufgeteilt	Sheet landscape; rows and columns are divided anew
+Quelle der HDR-Reihe nicht erreichbar: {a}	HDR bracket source unavailable: {a}
+Referenzbild der HDR-Reihe nicht erreichbar	HDR bracket reference photo unavailable
+{a} … {b} EV · Ergebnis erscheint neben den Quellen	{a} … {b} EV · the result appears next to the sources
+1 Strich	1 stroke
+Pinselgröße (bleibt beim Zoomen auf dem Bildschirm gleich)	Brush size (stays the same on screen when zooming)
+Linear	Linear
+Fusion	Fusion
+Szenenlinear, die Lichter bleiben über Weiß erhalten (für die eigene Entwicklung)	Scene-linear, highlights above white are kept (for your own development)
+Natürlicher Look: die Belichtungen werden überblendet, der Umfang auf 0 bis 1 verdichtet	Natural look: the exposures are blended, the range is compressed to 0 to 1
+schon zusammengefügt	already merged
+{n} Bilder	{n} images
+{n} Reihen zusammenfügen	Merge {n} brackets
+Eine Reihe zusammenfügen	Merge one bracket
+Keine Reihe eingeschaltet.	No bracket switched on.
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse oben im Stapel	{a} of {b} brackets · one after the other, results on top of the stack
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse neben den Quellen	{a} of {b} brackets · one after the other, results beside the sources
+HDR Reihe {k} von {n} · {a} {p} %	HDR bracket {k} of {n} · {a} {p} %
+Alle Reihen zusammenfügen	Merge all brackets
+{n} Reihen werden berechnet, {f} nicht angelegt – ⌘Z macht alles rückgängig	{n} brackets are being computed, {f} not created – ⌘Z undoes everything
+{n} Reihen werden berechnet – ⌘Z macht alles rückgängig	{n} brackets are being computed – ⌘Z undoes everything
+HDR nicht angelegt	HDR not created
+Alle Reihen zusammenfügen …	Merge all brackets…
+In der Auswahl sind keine Belichtungsreihen.	There are no exposure brackets in the selection.
+Glatt	Smooth
+sehr scharf, kann an harten Kanten leicht saumen	very sharp, may produce slight halos at hard edges
+fast so scharf, weniger Säume	almost as sharp, fewer halos
+ruhiger, kaum Säume, mindert Moiré	calmer, hardly any halos, reduces moiré
+sehr glatt, keine Säume, dämpft Moiré und Rauschen	very smooth, no halos, damps moiré and noise
+Lanczos, 3 Lappen (Fensterbreite 3 Pixel je Seite). Der bisherige Standard.	Lanczos, 3 lobes (window 3 pixels on each side). The previous default.
+Catmull-Rom, kubisch (B 0, C 0,5; Fensterbreite 2). Etwas weniger Überschwingen als Lanczos.	Catmull-Rom, cubic (B 0, C 0.5; window 2). Slightly less overshoot than Lanczos.
+Hann-gefenstertes Sinc (Fensterbreite 3), in XnView und ImageMagick „Hanning“.	Hann-windowed sinc (window 3), called “Hanning” in XnView and ImageMagick.
+Mitchell-Netravali, kubisch (B = C = 1/3; Fensterbreite 2). Kaum Überschwingen.	Mitchell-Netravali, cubic (B = C = 1/3; window 2). Hardly any overshoot.
+Verkleinerung	Downscaling
+SFD {a} {p} % · noch etwa {t}	SFD {a} {p} % · about {t} left
+SFD {a} {p} %	SFD {a} {p} %
+AUFNAHME {n}{ev} · nicht das HDR	FRAME {n}{ev} · not the HDR
+Vorschau aktuell · volle Auflösung {p} %	Preview current · full resolution {p} %
+Wird zusammengefügt … {p} %	Merging … {p} %
+Wartet auf die Berechnung …	Waiting for the computation …
+Vorschau aktuell · volle Auflösung beim Zoomen	Preview current · full resolution when zooming in
+Aktuell · volle Auflösung	Current · full resolution
+Aufnahmen	Frames
+{a} · Maustaste halten: nur diese Aufnahme zeigen	{a} · hold the mouse button: show only this frame
+Aufnahme nicht benutzen	Leave this frame out
+Aufnahme dazunehmen	Add this frame
+Foto aus dem Filmstreifen hierher ziehen	Drag a photo from the filmstrip here
+Mindestens zwei Aufnahmen.	At least two frames.
+Geister entfernen	Remove ghosts
+Bereich malen	Paint area
+Über einen Geist malen, dann die Aufnahme für den Bereich wählen	Paint over a ghost, then choose the frame for the area
+Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])	Brush size, stays the same on screen when zooming (larger: ])
+Neuer Bereich	New area
+Bereich löschen	Delete area
+Bereich {k} · aus {f}	Area {k} · from {f}
+Erkannte Bewegung	Detected motion
+Dieses Foto kann keine Aufnahme sein.	This photo cannot be a frame.
+Die Fotos unterscheiden sich kaum in der Belichtung (weniger als 0,5 EV).	The photos hardly differ in exposure (less than 0.5 EV).
+Oben im Stapel der Quellen; aus: eigenes Foto neben den Quellen.	On top of the stack of its sources; off: a photo of its own beside the sources.
+Als Referenz nehmen	Use as reference
+HDR erstellt	HDR created
+Quellen zeigen	Show sources
+Hinweis schließen	Close hint
+Das HDR liegt in keinem Stapel.	The HDR is not in a stack.
+HDR entfernt, die Quellen bleiben	HDR removed, the sources stay
+HDR bearbeiten	Edit HDR
+HDR entfernen (Quellen bleiben)	Remove HDR (sources stay)
+Aus Aufnahme	From frame
+Die Aufnahmen der Belichtungsreihe, nach Belichtung geordnet.	The frames of the bracket, in order of exposure.
+• **Haken** – Aufnahme benutzen; ohne Haken bleibt sie gedimmt an ihrem Platz\n• **Stern** – Referenz: ihre Lage, Farbe und Belichtung gelten für das Ergebnis\n• **Maustaste halten** – diese Aufnahme groß zeigen (loslassen = zurück zum HDR)\n• **Foto aus dem Filmstreifen hierher ziehen** – als Aufnahme hinzufügen	• **Tick** – use the frame; without a tick it stays dimmed in its place\n• **Star** – reference: its position, colour and exposure apply to the result\n• **Hold the mouse button** – show this frame large (let go = back to the HDR)\n• **Drag a photo from the filmstrip here** – add it as a frame
+Zurück zur vorigen Ansicht	Back to the previous view
+Gesichtet, nächste Serie	Reviewed, next series
+Nächste Serie	Next series
+Vorige Serie	Previous series
+Vergleich: bis zu 4 Fotos groß	Compare: up to 4 photos large
+Entkoppelt: jedes Feld wird einzeln verschoben	Unlinked: each field pans on its own
+Gekoppelt: Zoom und Verschieben in allen Feldern gleich (einzeln: ⇧-Ziehen)	Linked: zoom and pan the same in all fields (single field: ⇧-drag)
+Ausrichten: Einzel-Versätze zurücksetzen	Align: reset individual offsets
+Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	Automatic: portrait in one row, landscape 2 × 2
+Eine Reihe	One row
+Messen: Rechteck ziehen, Schärfe je Feld	Measure: drag a rectangle, sharpness per field
+Fokussiertes Foto als Referenz festhalten	Hold the focused photo as reference
+Differenz (Prüfhilfe)	Difference (inspection aid)
+Gleich gut: beide bleiben	Equally good: both stay
+Letztes Duell zurücknehmen	Undo the last duel
+Fokussiertes Foto als bestes: Markierung „Auswahl“ und Titelfoto	Focused photo as the best: flag “Pick” and cover
+Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)	Reject the rest: all photos except the picked ones (one ⌘Z)
+Gleich gut	Equally good
+Linkes Foto behalten	Keep the left photo
+Rechtes Foto behalten	Keep the right photo
+Linkes Foto behalten (←)	Keep the left photo (←)
+Rechtes Foto behalten (→)	Keep the right photo (→)
+Vergleichen: die ausgewählten Fotos bzw. die ganze Serie des aktiven Fotos	Compare: the selected photos, or the whole series of the active photo
+Modus Vergleich (bis zu 4 Felder)	Compare mode (up to 4 fields)
+Modus Turnier (Duelle bis Platz 1–3)	Tournament mode (duels down to places 1–3)
+Anordnung weiterschalten: Auto · 1 Reihe · 2 × 2	Next arrangement: auto · 1 row · 2 × 2
+Einpassen ↔ 100 % (an Fokuspunkt, Gesicht oder schärfster Stelle)	Fit ↔ 100 % (at the focus point, a face or the sharpest spot)
+Leertaste halten	Hold space
+100 % an der Maus, solange gehalten	100 % at the pointer while held
+Zoom und Verschieben gekoppelt an/aus	Linked zoom and pan on/off
+ein Feld einzeln verschieben	pan a single field
+Fokuspunkt der Kamera in allen Feldern	Camera focus point in all fields
+Kanten zeigen (Fokus-Peaking, gleiche Schwelle in allen Feldern)	Show edges (focus peaking, same threshold in all fields)
+Clipping in allen Feldern	Clipping in all fields
+Aufnahme-Zeile (Abweichungen hervorgehoben)	Capture line (differences highlighted)
+Messen: Rechteck ziehen, Schärfewert je Feld	Measure: drag a rectangle, sharpness value per field
+fokussiertes Foto als Referenz festhalten / aufheben	hold / release the focused photo as reference
+Blinken: Referenz und Kandidat abwechselnd (nochmal: nebeneinander)	Blink: reference and candidate in turn (again: side by side)
+Wischer zwischen Referenz und Kandidat (nochmal: nebeneinander)	Wipe between reference and candidate (again: side by side)
+Differenzbild zwischen Referenz und Kandidat (nochmal: nebeneinander)	Difference image of reference and candidate (again: side by side)
+Feld 1–4 fokussieren	Focus field 1–4
+fokussiertes Feld bzw. Kandidat wechseln; im Turnier: linkes / rechtes Foto behalten	change the focused field or candidate; in the tournament: keep the left / right photo
+Turnier: gleich gut (beide bleiben)	Tournament: equally good (both stay)
+Turnier: beide raus	Tournament: both out
+Turnier: letztes Duell zurücknehmen	Tournament: undo the last duel
+fokussiertes Foto in Entwickeln öffnen	open the focused photo in Develop
+Vergleichen: die im Filmstreifen ausgewählten Fotos	Compare: the photos selected in the filmstrip
+Vergleich beenden (im Turnier: anhalten)	End the comparison (in the tournament: pause)
+Erst den Vergleich beenden	End the comparison first
+Ergebnis übernommen – ⌘Z macht die Bewertung rückgängig	Result applied – ⌘Z undoes the rating
+Erst das beste Foto wählen (↩ oder „Als bestes“)	Choose the best photo first (↩ or “Best”)
+Mindestens 2 Fotos auswählen (⌘-Klick)	Select at least 2 photos (⌘-click)
+Serie auswählen und vergleichen	Select series and compare
+Stapel auswählen und vergleichen	Select stack and compare
+Mit diesem Foto vergleichen	Compare with this photo
+Im Filmstreifen weitere Fotos mit ⌘-Klick wählen	Select more photos in the filmstrip with ⌘-click
+Als Referenz festhalten	Hold as reference
+Als bestes	Best
+Aus dem Vergleich nehmen	Remove from the comparison
+Auswahl · Titelfoto	Pick · cover
+DIFFERENZ	DIFFERENCE
+Darstellung gegen die Referenz: Nebeneinander, Blinken (W), Wischer (⇧W), Differenz (⌥W)	View against the reference: side by side, blink (W), wipe (⇧W), difference (⌥W)
+Duell {a} von etwa {b} · Ziel Platz 1–3	Duel {a} of about {b} · goal places 1–3
+ERGEBNIS · {a} Fotos · {b} Duelle	RESULT · {a} photos · {b} duels
+Erst eine Referenz festhalten (R)	Hold a reference first (R)
+Feld {n}	Field {n}
+Feldmenü	Field menu
+Gekoppelt	Linked
+Im Filmstreifen Fotos mit ⌘-Klick auswählen	Select photos in the filmstrip with ⌘-click
+Im Raster zeigen	Show in grid
+In Entwickeln öffnen	Open in Develop
+KANDIDAT	CANDIDATE
+Klick: Feldmenü	Click: field menu
+Nur ansehen	Just look
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 vier und drei Sterne (ein ⌘Z)	Place 1 pick and cover, places 2 and 3 four and three stars (one ⌘Z)
+Prüfhilfe	inspection aid
+REFERENZ	REFERENCE
+Referenz aufheben	Release the reference
+Schärfe: {a} % des schärfsten Fotos der Auswahl (gemessen an der schärfsten Stelle)	Sharpness: {a} % of the sharpest photo of the selection (measured at the sharpest spot)
+Turnier abbrechen: nichts wird gesetzt (anhalten: Esc)	Cancel the tournament: nothing is set (pause: Esc)
+Vergleich schließen	Close comparison
+Wieder gekoppelt	Link again
+Zum Vergleichen mindestens 2 Fotos auswählen (⌘-Klick)	Select at least 2 photos to compare (⌘-click)
+auf 0 Sterne (4–5 Sterne bleiben)	to 0 stars (4–5 stars stay)
+blinkt alle {s} s	blinks every {s} s
+schärfstes	sharpest
+unverändert	unchanged
+wird bearbeitet	being edited
+{a} Fotos · {b} raus	{a} photos · {b} out
+{k} – Klick: in den Vergleich (ins fokussierte Feld)	{k} – click: into the comparison (into the focused field)
+{k}: Augen zu	{k}: eyes closed
+{k}: Gesichtsqualität {q}	{k}: face quality {q}
+· {a} ausgewählt · {b} im Vergleich	· {a} selected · {b} in the comparison
+– {n} weitere: {w} (Einstellung „⇧X beim Sichten“)	– {n} more: {w} (setting “⇧X when reviewing”)
+↶ Letztes Duell	↶ Last duel
+⌘-Klick im Streifen	⌘-click in the strip
+Ausgewählte Fotos nebeneinander vergleichen und das beste wählen.	Compare selected photos side by side and choose the best.
+{n} Fotos vergleichen	Compare {n} photos
+Serie · {n} ähnliche Fotos	Series · {n} similar photos
+Belichtungsreihe · {n} Fotos	Exposure bracket · {n} photos
+Stapel · {n} Fotos	Stack · {n} photos
+Im Vergleich öffnen	Open in the comparison
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Arrangement: auto · 1 row · 1 column · 2 × 2 · chosen large
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Next arrangement: auto · 1 row · 1 column · 2 × 2 · chosen large
+Automatisch: gleich große Felder, so groß wie möglich	Automatic: equal fields, as large as possible
+Eine Spalte	One column
+Gewähltes groß, die anderen klein daneben	Chosen one large, the others small beside it
+Vorschau · Speicher knapp	Preview · memory low
+Keine Serien oder Stapel in dieser Ansicht	No series or stacks in this view
+Die Ansicht „Serien“ zeigt je Serie eine Kachel	The “Series” view shows one tile per series
+Alle Serien aufklappen	Expand All Series
+Alle Serien zuklappen	Collapse All Series
+Turnier abbrechen	Cancel the tournament
+Füllen	Fill
+Ganz zeigen	Show whole
+Füllen: jedes Foto füllt sein Feld (Ränder beschnitten) – Klick: ganz zeigen	Fill: every photo fills its field (edges cropped) – click: show whole
+Ganz zeigen: jedes Foto ganz im Feld – Klick: füllen	Show whole: every photo whole in its field – click: fill
+Füllen ↔ ganz zeigen: Fotos füllen ihr Feld oder stehen ganz darin	Fill ↔ show whole: photos fill their field or stand whole in it
+HDR nicht gefunden – die Bibliothek wird neu gelesen.	HDR not found – the library is being read again.
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ gezeigt	The HDR is not in this view – showing folder “{a}”
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ ohne Filter gezeigt	The HDR is not in this view – showing folder “{a}” without filters
+Diese Fotos sehen nicht nach einer Belichtungsreihe aus. Trotzdem zusammenfügen?	These photos do not look like an exposure bracket. Merge anyway?
+Zwischen zwei Aufnahmen liegen {n} Minuten.	There are {n} minutes between two shots.
+Die Bildinhalte unterscheiden sich deutlich.	The pictures differ clearly in content.
+{a} ist eine SFD-Aufnahme: ihre Belichtungen fügt graineo beim Entwickeln selbst zusammen. Das Foto einzeln in Entwickeln öffnen.	{a} is an SFD shot: graineo merges its exposures itself when developing it. Open the photo on its own in Develop.
+{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} is a Foveon photo (X3F). For HDR, use the camera's multi-shot files (X3I) – they open directly as one photo – or RAW brackets from other cameras.
+Die Fotos stammen von verschiedenen Kameras: {a}.	The photos come from different cameras: {a}.
+Die Fotos haben verschiedene Größen: {a}.	The photos have different sizes: {a}.
+Aus diesen Aufnahmen gibt es schon ein HDR: {a}.	There is already an HDR of these shots: {a}.
+Trotzdem neues HDR	New HDR anyway
+„{a}“ gehört nicht zur Auswahl. Zusammengefügt werden die {n} ausgewählten Fotos:	“{a}” is not part of the selection. The {n} selected photos will be merged:
+HDR nicht möglich	HDR not possible
+SFD-Aufnahme: graineo fügt ihre Belichtungen beim Entwickeln zusammen	SFD shot: graineo merges its exposures when developing it
+Diese Ansicht zeigt jedes Foto einzeln	This view shows every photo on its own
+Nur dieses Foto davon ist in der Ansicht sichtbar	Only this photo of it is visible in the view
+Die verglichenen Serien bleiben aufgeklappt, solange der Vergleich offen ist	The compared series stay expanded while the comparison is open
+Nächste Fotos in die Felder	Next photos into the fields
+Vorige Fotos in die Felder	Previous photos into the fields
+Felder {a} von {n}	Fields {a} of {n}
+Die gewählten Aufnahmen gehören schon zum HDR {a} – ein HDR wird nie selbst zur Quelle.	The selected shots already belong to the HDR {a} – an HDR is never a source itself.
+Schon zusammengefügt, wird nicht verwendet: {a}. Aus diesen {n} Aufnahmen ein neues HDR zusammenfügen?	Already merged, not used: {a}. Merge a new HDR from these {n} shots?
+Neues HDR	New HDR
+Schon zusammengefügt, nicht als Quelle verwendet: {a}.	Already merged, not used as a source: {a}.
+Die ganze Serie vergleichen	Compare the whole series
+Serie {a} von {b}	Series {a} of {b}
+Doppelklick auf die Kachel: aufklappen	Double-click the tile: expand
+Doppelklick auf das aktive Foto: zuklappen	Double-click the active photo: collapse
+wie jetzt	as now
+Im Turnier gibt es keine Referenz	The tournament has no reference
+Erst ein Foto fokussieren (Klick)	Focus a photo first (click)
+Original offline	Original offline
+Das Original ist nicht erreichbar: das Feld zeigt die Vorschau der Bibliothek	The original cannot be reached: the field shows the library preview
+Zum Entwickeln dieses Feldes fehlt gerade Speicher; es folgt, sobald ein anderes fertig ist	Not enough memory to develop this field right now; it follows once another one is done
+wird berechnet	computing
+Das Feld wird mit seinen Einstellungen in voller Qualität entwickelt; bis dahin die Vorschau der Bibliothek	The field is being developed at full quality with its settings; until then the library preview
+Alle ({n}, je {k})	All ({n}, {k} at a time)
+Alle ({n})	All ({n})
+sucht {d}/{n}	searching {d}/{n}
+sucht …	searching…
+wartet	waiting
+Modus Vergleich (Felder nebeneinander)	Compare mode (fields side by side)
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Next arrangement: Auto · 1 row · 1 column · 2 × 2 · Chosen large · All
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Arrangement: Auto · 1 row · 1 column · 2 × 2 · Chosen large · All
+Vergleich: Fotos in Feldern nebeneinander	Compare: photos in fields side by side
+Im Turnier stehen die zwei Fotos immer nebeneinander	In the tournament the two photos always stand side by side
+Bei einem Feld gibt es nichts anzuordnen	With one field there is nothing to arrange
+Gekoppelt wirkt erst ab zwei Feldern	Coupling acts from two fields on
+Ausrichten: kein Feld ist einzeln verschoben (⇧-Ziehen)	Align: no field is moved on its own (⇧-drag)
+Fokuspunkt: in diesen Dateien nicht gespeichert	Focus point: not stored in these files
+Messen vergleicht die Schärfe mehrerer Felder – erst zwei Fotos auswählen	Measuring compares the sharpness of several fields – select two photos first
+Gesichterleiste: in diesen Fotos keine Gesichter gefunden	Faces bar: no faces found in these photos
+Die Fotos kommen aus der Auswahl im Filmstreifen: ⌘-Klick nimmt eins hinzu oder heraus, Klick tauscht es gegen das fokussierte Feld.\n• **Vergleich** – bis zu 4 große Felder, mit der Anordnung „Alle“ bis zu 8 kleinere; Zoom und Verschieben wirken in allen Feldern gleich, ⇧-Ziehen verschiebt ein Feld einzeln; mehr Fotos blättern ‹ › oben rechts\n• **Turnier** – zwei Fotos je Duell bis Platz 1–3; danach steht die Rangliste in der Anordnung „Alle“ (Platz-Marken 1., 2., 3.), gesetzt wird erst mit „Übernehmen“: Platz 1 wird Auswahl und Titelfoto, alle anderen werden abgelehnt (ein ⌘Z)\n\nDie Hinweise sind relativ zur Auswahl: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts.\n\n### Tasten\n↩ bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wirken auf das fokussierte Feld · Z Zoom · Leertaste halten 100 % an der Maus · L gekoppelt · H Gesichter · ⌘↩ gesichtet, weiter · Esc zurück	The photos come from the selection in the filmstrip: ⌘-click adds or removes one, a click swaps it into the focused field.\n• **Compare** – up to 4 large fields, up to 8 smaller ones with the arrangement “All”; zoom and pan act the same in all fields, ⇧-drag pans a single field; ‹ › at the top right pages through more photos\n• **Tournament** – two photos per duel down to places 1–3; then the ranking stands in the arrangement “All” (place marks 1., 2., 3.), nothing is set until “Apply”: place 1 becomes the pick and the cover, all others are rejected (one ⌘Z)\n\nThe hints are relative to the selection: sharpness as a share of the sharpest photo, eyes and faces (Apple Vision, macOS only), clipped highlights, motion blur. The suggestion gives its reason and sets nothing.\n\n### Keys\n↩ choose best · ⇧X reject rest · P/X/U/0–5 act on the focused field · Z zoom · hold space 100 % at the pointer · L linked · H faces · ⌘↩ reviewed, next · Esc back
+Mehr Fotos als Felder: die Pfeile blättern, ein Klick im Filmstreifen holt ein Foto ins gewählte Feld, die Anordnung „Alle“ zeigt bis zu 8	More photos than fields: the arrows page through, a click in the filmstrip brings a photo into the chosen field, the arrangement “All” shows up to 8
+Reihe aufklappen	Expand bracket
+Reihe zuklappen	Collapse bracket
+Reihe auswählen und vergleichen	Select and compare bracket
+Aus Reihe nehmen	Remove from bracket
+Reihe teilen ab hier	Split bracket here
+Reihe auflösen	Dissolve bracket
+Ergebnis des Turniers · {a} Fotos · {b} Duelle	Tournament result · {a} photos · {b} duels
+Ergebnis verwerfen	Discard result
+Ergebnis verwerfen: nichts wird gesetzt	Discard result: nothing is set
+Platz {n} im Turnier – „Übernehmen“ setzt: {w}	Place {n} in the tournament – “Apply” sets: {w}
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 unverändert, die übrigen {w} (Einstellung „⇧X beim Sichten“) – ein ⌘Z	Place 1 pick and cover, places 2 and 3 unchanged, the others {w} (setting “⇧X when reviewing”) – one ⌘Z
+Platz {n} im Turnier – „Übernehmen“ lässt die Bewertung unverändert	Place {n} in the tournament – “Apply” leaves its rating unchanged
+Einzelbild öffnen (auch Leertaste, D, Doppelklick); auf einer zugeklappten Serie: aufklappen	Open single photo (also Space, D, double click); on a collapsed series: expand it
+durch die Fotos der Serien gehen: eine zugeklappte Serie öffnet sich und schließt sich wieder, wenn man sie verlässt	step through the photos of the series: a collapsed series opens and closes again when you leave it
+vorheriges / nächstes Bild	previous / next photo
+vorheriges / nächstes Bild mit gleichem Zoom, auch in zugeklappte Serien hinein (sie schließen sich wieder, wenn man sie verlässt)	previous / next photo with the same zoom, also into collapsed series (they close again when you leave them)
+Serie/Stapel des aktiven Fotos auf-/zuklappen (Filmstreifen)	expand/collapse the series/stack of the active photo (filmstrip)
+zugeklappte Serie im Filmstreifen aufklappen (wie Doppelklick)	expand a collapsed series in the filmstrip (like a double click)
+Rechteck ziehen: Schärfe je Feld	Drag a rectangle: sharpness per field
+{n} vergleichen	compare {n}
+Belichtungsreihe über {ev} EV	Exposure bracket over {ev} EV
+Serie in {t}, gleiches Motiv	Series in {t}, same subject
+Serie in {t}, nur nach Zeit	Series in {t}, by time only
+Stapel aus Lightroom	Stack from Lightroom
+Reihe	Bracket
+virtuell · aus {n} Aufnahmen	virtual · from {n} exposures
+Ein zusammengefügtes Foto liegt nicht als Datei vor	A merged photo is not a file
+Mit Farbmodus	With color mode
+Nur Kameramatrix	Camera matrix only
+Farbe wie im gewählten Farbmodus der Entwicklung	Color as in the color mode chosen in the development
+Kalibrierte Kamerafarbe ohne den Look des Farbmodus	Calibrated camera color without the look of the color mode
+Wie stark Lichter und Tiefen ausgeglichen werden (0 % = Referenzaufnahme)	How strongly highlights and shadows are evened out (0 % = reference frame)
+Wie stark Lichter und Tiefen ausgeglichen werden (setzt Belichtung, Lichter, Tiefen, Weiß, Schwarz)	How strongly highlights and shadows are evened out (sets Exposure, Highlights, Shadows, Whites, Blacks)
+Tonwerte von Hand geändert: neue Aufnahmen stimmen nicht mehr ab, der Regler stimmt neu ab	Tones changed by hand: new frames no longer retune them, this slider retunes
+Bei ISO unter 400 hat diese Kamera keine einstellbare Rauschminderung.	Below ISO 400 this camera has no adjustable noise reduction.
+Ausgabe: {name}	Output: {name}
+Stärke {n} %	Amount {n}%
+HDR · virtuell	HDR · virtual
+{a}: bleibt mit dem fertigen Bild erhalten, lässt sich ohne die Quellen aber nicht mehr ändern oder neu berechnen.	{a}: stays with its finished image, but can no longer be changed or computed again without the sources.
+HDR-Foto aus diesen Aufnahmen	HDR photo made from these shots
+HDR-Fotos aus diesen Aufnahmen	HDR photos made from these shots
+gemalter Bereich	painted area
+gemalte Bereiche	painted areas
+eigene Entwicklung	own development
+HDR entfernen	Remove HDR
+HDR entfernt, die Quellen bleiben – ⌘Z holt es zurück	HDR removed, the sources stay – ⌘Z brings it back
+HDR-Foto	HDR photo
+HDR-Fotos	HDR photos
+HDR nicht zurückgeholt: {e}	HDR not brought back: {e}
+„{a}“ entfernen?	Remove “{a}”?
+Die Quellen bleiben. Mit dem HDR verschwinden:	The sources stay. Removed with the HDR:
+⌘Z holt es zurück.	⌘Z brings it back.
+{a} ohne eigene Datei – nichts zu verschieben	{a} without a file of its own – nothing to move
+{a} ohne eigene Datei bleiben, wo sie sind	{a} without a file of their own stay where they are
+HDR-Rezept nicht lesbar – es wird nicht überschrieben	HDR recipe can’t be read – it won’t be overwritten
+HDR-Zwischenspeicher	HDR intermediates
+HDR-Fotos bleiben; ihr Bild wird beim Öffnen aus den Quellen neu berechnet	HDR photos stay; their image is computed again from the sources when opened
+Nicht aktuell – die Berechnung wurde abgebrochen	Out of date – the computation was cancelled
+Die Aufnahmen werden neu berechnet – ändern geht gleich wieder	The frames are being recomputed – changes are possible again in a moment
+{a}: andere Kamera oder Sensorgröße	{a}: different camera or sensor size
+{n} Aufnahmen: mindestens {m} nötig	{n} frames: at least {m} needed
+{n} Aufnahmen: höchstens {m} möglich	{n} frames: at most {m} possible
+HDR-Ergebnis fehlt im Cache	HDR result is missing from the cache
+HDR: Referenzbild nicht als Mosaik lesbar	HDR: the reference frame can’t be read as a mosaic
+Gleitkomma- und lineare Formate gibt es nur für RAW-Fotos	Floating-point and linear formats are only available for RAW photos
+Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)	This export format is only available for Sigma X3F (here JPEG, TIFF or PNG)
+Dieses Foto hat keine Kameramatrix für ein DNG	This photo has no camera matrix for a DNG
+Keine gültige LUT (Kopf oder Größe)	Not a valid LUT (header or size)
+LUT ist keine Textdatei	The LUT is not a text file
+LUT fehlerhaft: {}	LUT faulty: {}
+Look ohne lesbare Farbtabelle	Look without a readable colour table
+Profil von Adobe (nicht unterstützt)	Adobe profile (not supported)
+Vorgabe ohne Look-Tabelle (nicht unterstützt)	Preset without a look table (not supported)
+Keine XMP-Datei mit Look	Not an XMP file with a look
+Quelle fehlt: {}	Source missing: {}
+mindestens zwei Fotos	at least two photos
+kein zusammengefügtes Foto	not a merged photo
+HDR-Rezept nicht lesbar: {}	HDR recipe can’t be read: {}
+{a} → {b}: Belichtung unbekannt (keine Messung, keine Aufnahmedaten) – als gleich hell angenommen	{a} → {b}: exposure unknown (no measurement, no shooting data) – assumed equally bright
+Nicht aktuell – {e}	Out of date – {e}
+Quelle fehlt: {a}	Source missing: {a}
+Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.	The changed choice of frames has not been computed. The list shows the frames of the picture.
+Auswahl zurücknehmen	Revert choice
+Das Rezept nimmt wieder die Aufnahmen des gezeigten Bildes; danach lässt sich die Liste wieder ändern	The recipe takes the frames of the picture shown again; after that the list can be changed again
+Die Aufnahmen des gezeigten Bildes sind nicht mehr in der Bibliothek.	The frames of the picture shown are no longer in the library.
+Der Platz des HDR ist inzwischen von einem anderen Foto belegt	Another photo has taken the place of the HDR by now
+Es werden gerade Reihen zusammengefügt – weitere Reihen danach	Brackets are being merged right now – further ones afterwards
+Bricht die Berechnung ab; das neue HDR wird wieder entfernt	Stops the computation; the new HDR is removed again
+Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	Stops the computation; the photo stays as it is shown
+die Berechnung wurde abgebrochen	the computation was cancelled
+Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Quattro detail from ISO 400 on: from soft (−3) to strong (+3), 0 = the camera's setting. Best judged at 100 %
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	The full Quattro path is switched off; only it evaluates the detail slider.
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	For multi-shot files (X3I) the detail is fixed; the Foveon sharpness above still applies.
+Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	Below ISO 400 the Quattro's detail is fixed; the Foveon sharpness above still applies.
+{a}: Ausrichtung nicht plausibel – wie aufgenommen verwendet	{a}: alignment not plausible – used as shot
+{a}: andere Ausrichtung – Hoch- und Querformat lassen sich nicht zusammenfügen	{a}: different orientation – portrait and landscape cannot be merged
+Ein unfertiges HDR vom letzten Mal entfernt – die Quellen sind unverändert	One unfinished HDR from last time removed – the sources are unchanged
+{n} unfertige HDR vom letzten Mal entfernt – die Quellen sind unverändert	{n} unfinished HDR photos from last time removed – the sources are unchanged
+Interner Fehler beim Zusammenfügen	Internal error while merging
+Wartet – eine andere Berechnung läuft noch	Waiting – another computation is still running
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	For multi-shot files (X3I) the detail is fixed. “Additional sharpening” above gives more sharpness.
+Unter ISO 400 ist das Detail der Quattro fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	Below ISO 400 the Quattro's detail is fixed. “Additional sharpening” above gives more sharpness.
+Die Foveon-Schärfe gibt es nur für Merrill-Fotos. Hier schärft „Zusätzlich schärfen“; bei der Quattro ab ISO 400 auch „Detail“.	Foveon sharpness exists only for Merrill photos. Here “Additional sharpening” sharpens; for the Quattro from ISO 400 on, “Detail” does too.
+Die Foveon-Schärfe wirkt nur mit eingeschaltetem Foveon-Detail.	Foveon sharpness only works with Foveon detail switched on.
+Fein	Fine
+Ausrichten (Horizont)	Straighten
+Duelle	duels
+Foto abgelehnt	photo rejected
+Fotos abgelehnt	photos rejected
+Turnier übernommen: {a} – ⌘Z nimmt es zurück	Tournament applied: {a} – ⌘Z undoes it
+Ergebnis des Turniers · {a} · {b}	Tournament result · {a} · {b}
+Platz 1 wird Auswahl und Titelfoto, alle anderen Fotos des Turniers werden abgelehnt (auch Platz 2 und 3); Sterne bleiben, wie sie sind – ein ⌘Z nimmt alles zurück	Place 1 becomes the pick and the cover, all other photos of the tournament are rejected (places 2 and 3 too); stars stay as they are – one ⌘Z undoes it all
+Nur für Sigma-Fotos (X3F) in den Formaten TIFF 32 Bit und OpenEXR	Only for Sigma photos (X3F) in the formats TIFF 32-bit and OpenEXR
+Nur für die Formate TIFF 32 Bit und OpenEXR	Only for the formats TIFF 32-bit and OpenEXR
+Quelle nicht lesbar: {}	Source cannot be read: {}
+HDR ohne eigene Datei – mit „HDR entfernen (Quellen bleiben)“ aus der Bibliothek nehmen	HDR without a file of its own – take it out of the library with “Remove HDR (sources stay)”
+Quelle nicht erreichbar: {a}. Das Bild bleibt, wie es ist – ändern und neu berechnen geht wieder, wenn sie da ist.	Source not reachable: {a}. The picture stays as it is – changing and recomputing work again once it is back.
+{a}: noch nicht in voller Auflösung berechnet – ohne die Quellen bleibt nur die Vorschau. Vorher öffnen und hineinzoomen oder exportieren.	{a}: not computed at full resolution yet – without the sources only the preview stays. Open it and zoom in, or export it, first.
+Vorschau aktuell · volle Auflösung abgebrochen	Preview current · full resolution cancelled
+HDR: die volle Auflösung wurde nicht berechnet (abgebrochen) – „Neu berechnen“ im Werkzeug „Zusammenfügen“	HDR: the full resolution was not computed (cancelled) – “Compute again” in the tool “Merge”
+Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht	Reference shot not reachable: lens correction simplified
+schnelle Vorschau	fast preview
+Die genaue Rechnung dieses Fotos ist gescheitert: das Feld zeigt die schnelle Vorschau mit mehr Rauschen	The exact computation of this photo failed: the field shows the fast preview, with more noise
+Turnier ohne Sieger – nichts gesetzt	Tournament without a winner – nothing set
+Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	Tournament not applied: ratings cannot be set here
+Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	Tournament applied: winner picked – ⌘Z undoes it
+HDR abgebrochen und entfernt (Quellen bleiben)	HDR cancelled and removed (sources stay)
+Lichter-Farbe	Highlight Color
+Lichter-Struktur	Highlight Structure
+Lichter neutral, Lichter-Farbe, Lichter-Struktur	Neutral highlights, highlight color, highlight structure
+Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	Color of the reconstructed highlights: 0 neutral, 50 as reconstructed, 100 stronger (clear colours only)
+Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	Detail in the reconstructed highlights: 0 smooth, 50 as reconstructed, 100 tripled
+Nur für Farbe	Color only
+Nur für Fotos der Sigma Quattro	Only for Sigma Quattro photos
+Dieses Foto hat keine rekonstruierbaren Lichter	This photo has no highlights to reconstruct
+Wird noch vorbereitet …	Still being prepared …
+Metadaten neu einlesen: {k} von {n}	Rereading metadata: {k} of {n}
+Metadaten neu einlesen …	Reread Metadata…
+{a} gelesen, {m} geändert	{a} read, {m} changed
+, {k} nicht erreichbar	, {k} not reachable
+Metadaten werden bereits eingelesen.	Metadata is already being reread.
+Keine Fotos zum Einlesen.	No photos to read.
+Metadaten neu einlesen	Reread metadata
+Metadaten neu einlesen · {a}	Reread metadata · {a}
+Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien.	Reads date, camera, lens, exposure, location, size and orientation again from the files.
+Neben {a} liegt eine XMP-Begleitdatei.	{a} have an XMP sidecar next to them.
+Bewertung, Stichwörter, Etikett aus XMP	Rating, keywords, label from XMP
+Ersetzt die Werte der Bibliothek; Entwicklung bleibt.	Replaces the library's values; edits stay.
+Dateien bleiben unverändert; {k} macht es rückgängig.	Files stay unchanged; {k} undoes it.
+Einlesen	Read
+Foveon: Lichter	Foveon: Highlights
+KI-Entrauschen gibt es nur in Farbe.	AI denoise works in color only.
+KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	AI denoise works only with noise reduction switched on.
+Nur für Merrill und Quattro	Only for Merrill and Quattro
+Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	No sliders for Merrill, the reconstruction works automatically
+Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	No sliders for this photo (high ISO), the reconstruction works automatically
+Lichter werden rekonstruiert …	Reconstructing highlights …
+Lichter werden rekonstruiert … (seit {n} s)	Reconstructing highlights … ({n} s)
+Merrill: Lichter rekonstruieren	Merrill: reconstruct highlights
+Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung und Farbe); farbige Lichter bleiben farbig statt weiß. Wirkt automatisch, ohne Regler. Aus: bisheriger Weg	Rebuilds blown layers from the layers that are still valid (detail and color); colored highlights stay colored instead of white. Works automatically, without sliders. Off: previous path
+Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	Highlight reconstruction for Merrill is off in the preferences (Develop → “Merrill: reconstruct highlights”)
+Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	Highlight reconstruction for Quattro is off in the preferences (Develop → “Quattro: reconstruct highlights”)
+Quattro: Lichter rekonstruieren	Quattro: reconstruct highlights
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	Compute-heavy on strongly overexposed photos (they open a few seconds slower). dp, sd and sd H Quattro: rebuilds the blown top layer from the lower ones, with the sliders “Highlight Color” and “Highlight Structure”. Off: previous path

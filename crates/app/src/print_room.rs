@@ -75,6 +75,10 @@ pub(crate) struct PrintRoom {
     film: Option<develop::film::FilmSettings>,
     /// layout last computed
     cache: Option<LayoutCache>,
+    /// the sheet orientation was switched by hand in this room: a template chosen later keeps it, no suggestion
+    orientation_manual: bool,
+    /// suggest the sheet orientation from the photos with the next layout (once: on opening, on choosing a template)
+    suggest_orientation: bool,
     /// running file output: chosen file
     pending_output: Option<Output>,
     /// image ids of the view in view order (the strip's positions), rebuilt when the view changes
@@ -215,6 +219,8 @@ impl App {
                 room.t = last.unwrap_or_default();
             }
         }
+        room.orientation_manual = false;
+        room.suggest_orientation = true;
         room.show_all = library::settings::value(strip::SHOW_ALL_KEY).as_bool().unwrap_or(true);
         room.order = self.entries.iter().map(|e| e.image).collect();
         room.list_version = self.source_version;
@@ -242,7 +248,7 @@ impl App {
 
     /// Can the photo at entry `i` go into the print (present, a photo that can be developed)?
     fn printable_entry(&self, i: usize) -> bool {
-        self.entries.get(i).is_some_and(|e| e.state == 0 && crate::image_kind::of(&e.path).editable())
+        self.entries.get(i).is_some_and(|e| crate::developable_state(e.state) && crate::image_kind::of(&e.path).editable())
     }
 
     /// The print room's photo for entry `i` (caption fields from the library row, the title once it is read).
@@ -385,6 +391,12 @@ impl App {
         }
         let (specs, missing) = self.print_specs();
         let room = &mut self.print_room;
+        if room.suggest_orientation && !specs.is_empty() {
+            // a first suggestion, never a decision: only a template with several photos per sheet, only until the
+            // orientation is switched by hand
+            room.suggest_orientation = false;
+            suggest_sheet_orientation(&mut room.t, room.orientation_manual, specs.iter().map(|s| s.width as f64 / s.height.max(1) as f64));
+        }
         let layout = Arc::new(print::layout(&room.t, &specs, room.unprintable, &info));
         room.cache = Some(LayoutCache { photos_gen: room.photos_gen, t: room.t.clone(), unprintable: room.unprintable, info, offsets_gen: room.offsets_gen, missing, layout: layout.clone() });
         layout
@@ -417,12 +429,17 @@ impl App {
             let (w, h) = setup.paper_mm;
             let (a, b) = (w.min(h), w.max(h));
             let known = tpl::PAPERS.iter().find(|p| (p.width_mm - a).abs() < 1.0 && (p.height_mm - b).abs() < 1.0);
+            let was = room.t.paper.orientation;
             room.t.paper = Paper {
                 id: known.map(|p| p.id.to_string()).unwrap_or_else(|| tpl::CUSTOM_PAPER.into()),
                 width_mm: known.map(|p| p.width_mm).unwrap_or(a),
                 height_mm: known.map(|p| p.height_mm).unwrap_or(b),
                 orientation: if setup.landscape { Orientation::Landscape } else { Orientation::Portrait },
             };
+            if room.t.paper.orientation != was {
+                room.t.swap_grid_axes();
+                room.orientation_manual = true;
+            }
             room.unprintable = Some(setup.unprintable);
             room.printer = Some(setup.printer.clone()).filter(|s| !s.is_empty());
             room.t.printer = room.printer.clone().map(|name| tpl::PrinterRef { name, paper_name: setup.paper_name.clone() });
@@ -669,7 +686,13 @@ impl App {
             let room = &mut self.print_room;
             room.chosen = Some(t.name.clone());
             // a template changes the layout, never the paper chosen in the page setup
+            let manual = room.orientation_manual.then_some(room.t.paper.orientation);
             room.t = t;
+            if let Some(o) = manual.filter(|_| room.t.is_multi_photo_sheet()) {
+                // the orientation switched by hand stays
+                room.t.set_orientation(o);
+            }
+            room.suggest_orientation = true;
             room.page = 0;
             room.offsets.clear();
             room.offsets_gen += 1;
@@ -786,8 +809,19 @@ impl App {
             });
         }
         row(ui, crate::tr("Ausrichtung"), |ui| {
-            lr::segmented_pad(ui, &mut t.paper.orientation, &[(Orientation::Portrait, "Hoch"), (Orientation::Landscape, "Quer")], 8.0);
+            lr::segmented_tips(
+                ui,
+                &mut t.paper.orientation,
+                &[(Orientation::Portrait, "Hoch"), (Orientation::Landscape, "Quer")],
+                &["Blatt hochkant; Reihen und Spalten werden neu aufgeteilt", "Blatt quer; Reihen und Spalten werden neu aufgeteilt"],
+                8.0,
+            );
         });
+        if t.paper.orientation != before.paper.orientation {
+            // switched by hand: the cells are divided anew for the other sheet (rows × columns swap)
+            t.swap_grid_axes();
+            self.print_room.orientation_manual = true;
+        }
         let raised = l.notes.contains(&Note::MarginRaised);
         let minimum = self.print_room.unprintable;
         let side = |ui: &mut egui::Ui, label: &str, v: &mut f64, min: Option<f64>| {
@@ -1149,6 +1183,21 @@ impl App {
 }
 
 /// Hand the finished PDF to the printer (or the test hook) and say what happened.
+/// Preset the sheet orientation from the photos' aspect ratios: only a template with several photos per sheet, never
+/// after the orientation was switched by hand. Returns whether the template changed.
+fn suggest_sheet_orientation(t: &mut Template, manual: bool, aspects: impl IntoIterator<Item = f64>) -> bool {
+    if manual || !t.is_multi_photo_sheet() {
+        return false;
+    }
+    match tpl::suggest_orientation(aspects) {
+        Some(o) if o != t.paper.orientation => {
+            t.set_orientation(o);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn hand_to_printer(pdf: &std::path::Path, t: &Template) -> String {
     let cleanup = || {
         let _ = std::fs::remove_file(pdf);
@@ -1191,5 +1240,43 @@ fn media_name(m: Media) -> &'static str {
     match m {
         Media::Glossy => "Glanz",
         Media::Matte => "Matt",
+    }
+}
+
+#[cfg(test)]
+mod orientation_tests {
+    use super::*;
+
+    fn named(n: &str) -> Template {
+        tpl::builtin().into_iter().find(|t| t.name == n).unwrap()
+    }
+
+    #[test]
+    fn suggestion_follows_the_photos_and_leaves_manual_choice_alone() {
+        let mut t = named("4 Fotos, A4");
+        assert!(suggest_sheet_orientation(&mut t, false, [1.5, 1.5, 0.67]));
+        assert_eq!(t.paper.orientation, Orientation::Landscape);
+        assert_eq!(t.paper.size_mm(), (297.0, 210.0));
+        // mostly portrait photos: back to portrait
+        assert!(suggest_sheet_orientation(&mut t, false, [0.67, 0.67, 1.5]));
+        assert_eq!(t.paper.orientation, Orientation::Portrait);
+        // switched by hand: no suggestion
+        assert!(!suggest_sheet_orientation(&mut t, true, [1.5, 1.5]));
+        assert_eq!(t.paper.orientation, Orientation::Portrait);
+        // single photo templates and contact sheets are left alone
+        let mut one = named("1 Foto, A4, 10 mm Rand");
+        assert!(!suggest_sheet_orientation(&mut one, false, [1.5]));
+        let mut contact = named("Kontaktabzug A4 5 × 6");
+        assert!(!suggest_sheet_orientation(&mut contact, false, [1.5, 1.5]));
+    }
+
+    #[test]
+    fn cells_are_divided_for_the_sheet() {
+        let mut t = named("2 Fotos, A4");
+        assert_eq!((t.grid.rows, t.grid.columns), (2, 1));
+        suggest_sheet_orientation(&mut t, false, [1.5, 1.5]);
+        assert_eq!((t.grid.rows, t.grid.columns), (1, 2));
+        let l = print::layout(&t, &[print::layout::PhotoSpec { width: 6000, height: 4000, caption: String::new(), offset: [0.0; 2] }], None, "");
+        assert!(l.cell_w < l.cell_h * 1.0 + 200.0 && l.cell_w > 100.0 && l.cell_h > 150.0);
     }
 }

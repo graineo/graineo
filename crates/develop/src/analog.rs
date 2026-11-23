@@ -190,6 +190,37 @@ pub fn layer_matrix(cal: &Calibration, s: &Settings) -> Option<LayerMatrix> {
     weights(cal, s).map(|w| [w.w; 3])
 }
 
+/// Floor of the film exposure from the layers: below `FLOOR_KNEE` × the plain layer mean the exposure is compressed
+/// smoothly (C¹ at the knee) towards `FLOOR_SHARE` × that share, so it stays positive.
+///
+/// Why: the weights of narrow filters are large and of opposite sign (Wratten 47 on T-Max: ≈ 1.8, −6.8, 6.0). For
+/// saturated warm colours (orange petals, red) the linear prediction then falls below zero, which no real surface
+/// can give; the film took it as "no exposure" and the whole area printed as one flat paper black without any
+/// texture. Real surfaces keep a few percent reflectance in every band, so their exposure through the filter is a
+/// small positive fraction of their brightness, and texture follows the brightness. Pixels at or above the knee are
+/// unchanged (test photos: no pixel without filter or with yellow/orange/green reaches it; red 25: < 0.1 %).
+pub const FLOOR_KNEE: f32 = 0.15;
+/// See [`FLOOR_KNEE`]: lower limit (share of the knee) for exposures far below zero.
+pub const FLOOR_SHARE: f32 = 0.7;
+
+/// Matrix (same input as the layer matrix, all rows equal) giving the plain layer mean, the brightness reference of
+/// [`exposure_floor`]; neutral grey gives the same value as the film's weights (both sum to 1).
+pub fn floor_reference(cal: &Calibration, s: &Settings) -> Mat3 {
+    cam_to_input(cal, s, &[[1.0 / 3.0; 3]; 3])
+}
+
+/// Film exposure `e` (from the layer weights) kept above a positive floor relative to the brightness `y`
+/// (see [`FLOOR_KNEE`]); unchanged for `e ≥ FLOOR_KNEE · y` and for `y ≤ 0`.
+#[inline]
+pub fn exposure_floor(e: f32, y: f32) -> f32 {
+    let knee = FLOOR_KNEE * y;
+    if knee <= 0.0 || knee.is_nan() || e >= knee {
+        return e;
+    }
+    let a = FLOOR_SHARE;
+    knee * (a + (1.0 - a) * ((e / knee - 1.0) / (1.0 - a)).exp())
+}
+
 /// Matrix from white-balanced camera values to the film input: as [`crate::layers::cam_to_rgb`], but without
 /// temperature/tint (they would tint the neutral input of a black-and-white film).
 pub fn cam_to_input(cal: &Calibration, s: &Settings, l: &LayerMatrix) -> Mat3 {
@@ -339,5 +370,30 @@ mod tests {
         t.film.stock = "kodak_trix_400".into();
         assert!(film_settings(&cal, &t).sensor_noise.is_some());
     }
-}
 
+    /// The exposure floor leaves exposures at or above the knee alone, is continuous with slope 1 at the knee, monotone,
+    /// and keeps even strongly negative predictions (blue filter on orange) positive and proportional to the brightness.
+    #[test]
+    fn exposure_floor_keeps_texture() {
+        let y = 0.4;
+        let knee = FLOOR_KNEE * y;
+        for e in [knee, 0.2, 0.5, 2.0] {
+            assert_eq!(exposure_floor(e, y), e);
+        }
+        let d = 1e-4;
+        assert!((exposure_floor(knee - d, y) - (knee - d)).abs() < 1e-6, "continuous, slope 1 at the knee");
+        let mut last = 0.0;
+        for i in 0..200 {
+            let e = -0.5 + i as f32 * (knee + 0.5) / 200.0;
+            let v = exposure_floor(e, y);
+            assert!(v > FLOOR_SHARE * knee * 0.999 && v <= knee && v >= last, "{e} → {v}");
+            last = v;
+        }
+        // proportional to the brightness far below zero: texture of the surface survives
+        let (a, b) = (exposure_floor(-1.0, 0.2), exposure_floor(-1.0, 0.4));
+        assert!((b / a - 2.0).abs() < 1e-3, "{a} {b}");
+        // no reference (black, noise): unchanged
+        assert_eq!(exposure_floor(-0.01, 0.0), -0.01);
+        assert_eq!(exposure_floor(-0.01, -0.02), -0.01);
+    }
+}

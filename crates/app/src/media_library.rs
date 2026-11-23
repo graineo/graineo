@@ -110,6 +110,7 @@ impl App {
     pub(crate) fn image_click_free(&self, ctx: &Context) -> bool {
         !masks_ui::painting(ctx)
             && !crate::retouch_ui::grabs_pointer(ctx)
+            && !crate::hdr_paint::active(ctx)
             && !crate::face_frames::above(ctx)
             && self.crop_mode.is_none()
             && !self.wb_picker
@@ -163,6 +164,10 @@ impl App {
             self.sync_source(true);
         }
         self.export_scope = 0;
+        // the preferences may have changed it since the start
+        if let Some(r) = library::settings::value("export")["reveal"].as_bool() {
+            self.reveal_after_export = r;
+        }
         self.show_export = !self.entries.is_empty();
         self.navigation.click.cancel();
     }

@@ -7,6 +7,7 @@ pub mod auto_wb;
 pub mod output;
 pub mod auto_wb_old;
 pub mod region;
+pub mod sliders;
 pub mod region_filter;
 pub mod region_scaling;
 pub mod dcraw;
@@ -100,14 +101,18 @@ fn auto_wb_input<'a>(img: &'a [i32], w: usize, h: usize, d: &calibration::Data, 
     auto_wb::Input { image: img, w, h, saturation: sat, post_polynomial: pp, bv, flash, matrix: k.color.m_raw, iso_factor, offset, short: limit >= time }
 }
 
-/// Exposure time in seconds (the SD9/SD10 store seconds, the others microseconds; else the header).
+/// Exposure time in seconds for the brightness value: the camera data (the SD9/SD10 store seconds,
+/// the others microseconds), else the shutter time of the file's properties (`SHUTTER`, seconds; on
+/// the SD10 sample equal to the camera data, while `EXPTIME` is a different number), else 1 s as in
+/// the maker's software. The early SD9 files carry neither, so their brightness value is that of
+/// 1 s (measured against the SD9 reference export: mean ΔE00 1.18 with `EXPTIME` → 0.52).
 fn exposure_s(d: &calibration::Data, m: &Meta, k: &calibration::Calibration) -> f64 {
     let mut time = f64::from(d.number("CaptureShutter"));
     if !matches!(k.model.class, calibration::Camera::Sd9 | calibration::Camera::Sd10) {
         time /= 1_000_000.0;
     }
     if time == 0.0 {
-        time = m.props.get("EXPTIME").and_then(|v| v.trim().parse::<f64>().ok()).map_or(0.0, |us| us / 1_000_000.0);
+        time = m.props.get("SHUTTER").and_then(|v| v.trim().parse::<f64>().ok()).filter(|t| t.is_finite()).unwrap_or(0.0);
     }
     if time == 0.0 {
         time = 1.0;
@@ -149,7 +154,7 @@ pub(crate) fn correction_new(img: &mut [i32], w: usize, h: usize, m: &Meta, wb: 
             auto_wb::neutral_point(&new_e)
         };
         if std::env::var_os("GRAINEO_CLASSIC_DUMP").is_some() {
-            eprintln!("Image white balance: {x:?} (stored {:?})", k0.color.neutral);
+            eprintln!("Image white balance: {x:?} (stored {:?}), brightness value {:.3}", k0.color.neutral, new_e.bv);
         }
         if x.iter().all(|v| v.is_finite() && *v != 0.0) {
             AUTO_NEUTRAL.set(Some(x));

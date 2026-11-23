@@ -14,7 +14,7 @@ use crate::db::Db;
 pub fn read(path: &Path, format: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     #[cfg(target_os = "macos")]
-    if format != "X3F" && format != "VIDEO" {
+    if format != "X3F" && format != "X3I" && format != "VIDEO" {
         parts.extend(crate::imageio::text_fields(path));
     }
     // embedded XMP (JPEG) and sidecar (also next to RAWs)

@@ -231,6 +231,20 @@
     "symbol": "plus.square.on.square"
   },
   {
+    "action": "MergeHdr",
+    "text_id": "menu-merge-hdr",
+    "de": "HDR zusammenfügen …",
+    "shortcut": "merge_hdr",
+    "symbol": "camera.aperture"
+  },
+  {
+    "action": "RereadMetadata",
+    "text_id": "menu-reread-metadata",
+    "de": "Metadaten neu einlesen …",
+    "shortcut": null,
+    "symbol": "arrow.clockwise.circle"
+  },
+  {
     "action": "StackReview",
     "text_id": "menu-stack-review",
     "de": "Serie sichten …",
@@ -495,6 +509,13 @@
     "de": "Farbumfang-Warnung",
     "shortcut": "gamut_warning",
     "symbol": "exclamationmark.triangle.fill"
+  },
+  {
+    "action": "Navigator",
+    "text_id": "menu-navigator",
+    "de": "Navigator beim Zoomen",
+    "shortcut": null,
+    "symbol": null
   },
   {
     "action": "JumpToSelection",

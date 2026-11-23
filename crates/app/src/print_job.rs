@@ -277,14 +277,16 @@ fn lanczos(img: &Image16, w: usize, h: usize) -> Image16 {
     Image16 { width: r.width, height: r.height, data: r.data }
 }
 
-/// The photo developed in full resolution through the export's rendering.
+/// The photo developed in full resolution through the export's rendering. Sigma photos take the exact base (from the
+/// disk cache, computed if missing), the same result as the developed photo and the export at best quality; other
+/// cameras and non-RAW files ignore the engine.
 fn full_source(p: &JobPhoto, t: &Template, space: graineo_color::Space, db: Option<&library::db::Db>) -> Result<Image16, String> {
     let mut s = p.settings.clone();
     s.output_size = None;
     crate::tone_eq_ui::without_mask(&mut s);
     let fail = |e: String| crate::trf!("{name}: {e}", name = p.name, e = e);
     let src = crate::jobs::output_source(&p.path, s, p.image, db, t.page.darkroom_border, false).map_err(fail)?;
-    let img = crate::jobs::render_for_output(&src, develop::export::Engine::Own, space).map_err(fail)?;
+    let img = crate::jobs::render_for_output(&src, develop::export::Engine::Spp, space).map_err(fail)?;
     if img.width == 0 || img.height == 0 || img.data.len() != img.width * img.height * 3 {
         return Err(fail(crate::tr("leeres Bild").into()));
     }
@@ -453,5 +455,37 @@ mod tests {
         let t0 = std::time::Instant::now();
         let r = run(Request { template: t, photos, unprintable: None, page_info: String::new(), destination: Destination::File(out.clone()), previews: None }, &AtomicBool::new(false), &|p, n| eprintln!("MEASURE page {p}/{n} after {:.1?}", t0.elapsed())).unwrap();
         eprintln!("MEASURE {} pages in {:.1} s → {}", r.pages, r.seconds, out.display());
+    }
+
+    /// Evidence (not a test): `GRAINEO_PRINT_EXACT_DIR` with photos, `GRAINEO_PRINT_EXACT_OUT` → per photo the printed
+    /// page (sRGB TIFF, no sharpening) and the export rendering of both engines as 16-bit PNG, for comparison.
+    #[test]
+    #[ignore]
+    fn print_matches_exact_export() {
+        let (Some(dir), Some(out)) = (crate::env::var_os("GRAINEO_PRINT_EXACT_DIR"), crate::env::var_os("GRAINEO_PRINT_EXACT_OUT")) else { return };
+        let (dir, out) = (PathBuf::from(dir), PathBuf::from(out));
+        std::fs::create_dir_all(&out).unwrap();
+        for e in std::fs::read_dir(&dir).unwrap().flatten() {
+            let path = e.path();
+            if crate::image_kind::of(&path) != crate::image_kind::ImageKind::Foveon {
+                continue;
+            }
+            let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+            let src = crate::jobs::output_source(&path, Settings::default(), 0, None, false, false).unwrap();
+            for (tag, engine) in [("export-exact", develop::export::Engine::Spp), ("export-fast", develop::export::Engine::Own)] {
+                let img = crate::jobs::render_for_output(&src, engine, graineo_color::Space::Srgb).unwrap();
+                let buf: image::ImageBuffer<image::Rgb<u16>, _> = image::ImageBuffer::from_raw(img.width as u32, img.height as u32, img.data).unwrap();
+                buf.save(out.join(format!("{name}-{tag}.png"))).unwrap();
+            }
+            let p = JobPhoto { path: path.clone(), settings: Settings::default(), image: 0, name: name.clone(), spec: PhotoSpec { width: 3000, height: 2000, caption: String::new(), offset: [0.0; 2] }, preview_key: None };
+            let mut t = builtin().into_iter().find(|t| t.name == "1 Foto, A3+, 15 mm Rand").unwrap();
+            t.job.ppi = 150;
+            t.job.output = Output::Tiff;
+            t.job.sharpen.amount = print::template::SharpenAmount::Off;
+            t.job.color.space = PageSpace::Srgb;
+            let t0 = std::time::Instant::now();
+            run(Request { template: t, photos: vec![p], unprintable: None, page_info: String::new(), destination: Destination::File(out.join(format!("{name}-print.tif"))), previews: None }, &AtomicBool::new(false), &|_, _| {}).unwrap();
+            eprintln!("EXACT {name}: print {:.1?}", t0.elapsed());
+        }
     }
 }

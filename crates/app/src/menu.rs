@@ -47,6 +47,10 @@ pub enum Cmd {
     /// window "Kamera-Looks" (`camera_looks_ui.rs`)
     CameraLooks,
     VirtualCopy,
+    /// "HDR zusammenfügen …" with the selection or the stack (hdr_ui.rs)
+    MergeHdr,
+    /// "Metadaten neu einlesen …": shooting data of the selection again from the files (metadata_reread_ui.rs)
+    RereadMetadata,
     /// series and stacks (grid): review (N), group the selection (⌘G), dissolve (⇧⌘G), expand/collapse all (⇧S)
     StackReview,
     StackGroup,
@@ -117,6 +121,8 @@ pub enum Cmd {
     ProofToggle,
     /// ⇧⌘Y: gamut warning
     GamutWarning,
+    /// View → "Navigator beim Zoomen" (check mark, `navigator.rs`)
+    Navigator,
 }
 
 impl Cmd {
@@ -154,9 +160,9 @@ pub struct AppMenu {
     _menu: Menu,
     rx: Receiver<Cmd>,
     labels: Vec<Label>,
-    /// entries with a check mark (colour proof, gamut warning) and the state last shown in them
+    /// entries with a check mark (colour proof, gamut warning, navigator) and the state last shown in them
     checks: Vec<(muda::CheckMenuItem, Cmd)>,
-    checks_shown: Cell<Option<(u8, bool)>>,
+    checks_shown: Cell<Option<(u8, bool, bool)>>,
     language: Cell<Language>,
     route: u64,
     ctx: egui::Context,
@@ -463,6 +469,8 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
         Some("virtual_copy"),
         Some("plus.square.on.square"),
     ),
+    (Cmd::MergeHdr, Text::MenuMergeHdr, Some("merge_hdr"), Some("camera.aperture")),
+    (Cmd::RereadMetadata, Text::MenuRereadMetadata, None, Some("arrow.clockwise.circle")),
     (Cmd::StackReview, Text::MenuStackReview, Some("stack_review"), Some("square.stack")),
     (Cmd::StackGroup, Text::MenuStackGroup, Some("stack_group"), Some("square.stack.3d.down.right")),
     (Cmd::StackDissolve, Text::MenuStackDissolve, Some("stack_dissolve"), Some("square.stack.3d.up.slash")),
@@ -582,6 +590,7 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
     (Cmd::ProofProPhoto, Text::MenuProofProPhoto, None, None),
     (Cmd::ProofToggle, Text::MenuProofToggle, Some("soft_proof"), Some("circle.lefthalf.filled")),
     (Cmd::GamutWarning, Text::MenuGamutWarning, Some("gamut_warning"), Some("exclamationmark.triangle.fill")),
+    (Cmd::Navigator, Text::MenuNavigator, None, None),
 ];
 
 #[cfg(any(target_os = "macos", windows))]
@@ -849,6 +858,8 @@ impl AppMenu {
                 &item(Cmd::RotateRight),
                 &PredefinedMenuItem::separator(),
                 &item(Cmd::VirtualCopy),
+                &item(Cmd::MergeHdr),
+                &item(Cmd::RereadMetadata),
                 &PredefinedMenuItem::separator(),
                 &item(Cmd::StackReview),
                 &item(Cmd::StackGroup),
@@ -902,6 +913,7 @@ impl AppMenu {
                 &item(Cmd::Clipping),
                 &item(Cmd::Info),
                 &item(Cmd::Loupe100),
+                &check(Cmd::Navigator),
                 &item(Cmd::JumpToSelection),
                 &PredefinedMenuItem::separator(),
                 &proof_menu,
@@ -1089,14 +1101,15 @@ impl AppMenu {
             return commands;
         }
         let commands: Vec<Cmd> = self.rx.try_iter().collect();
-        self.sync_checks(commands.iter().any(|c| c.proof().is_some() || *c == Cmd::GamutWarning));
+        self.sync_checks(commands.iter().any(|c| c.proof().is_some() || matches!(c, Cmd::GamutWarning | Cmd::Navigator)));
         commands
     }
 
     /// Check marks of the colour proof and the gamut warning follow the state (also after ⌘Y, ⇧⌘Y and the
     /// settings); `force`: a check entry was clicked (the system toggled its mark by itself).
     pub fn sync_checks(&self, force: bool) {
-        let key = crate::proof::display_key();
+        let (proof, warning) = crate::proof::display_key();
+        let key = (proof, warning, crate::navigator::enabled());
         if !force && self.checks_shown.get() == Some(key) {
             return;
         }
@@ -1104,6 +1117,7 @@ impl AppMenu {
         for (item, cmd) in &self.checks {
             let on = match cmd {
                 Cmd::GamutWarning => crate::proof::warning(),
+                Cmd::Navigator => crate::navigator::enabled(),
                 c => c.proof() == Some(current),
             };
             item.set_checked(on);

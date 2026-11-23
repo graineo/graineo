@@ -28,6 +28,8 @@ mod library_filter_bar;
 mod library_load;
 #[path = "library_manage.rs"]
 mod library_manage;
+#[path = "metadata_reread_ui.rs"]
+pub(crate) mod metadata_reread_ui;
 #[path = "content_keywords_ui.rs"]
 mod content_keywords_ui;
 #[path = "collection_order_ui.rs"]
@@ -41,8 +43,13 @@ mod library_pairs;
 mod library_dupes;
 #[path = "library_series.rs"]
 mod library_series;
-#[path = "series_review.rs"]
-mod series_review;
+// HDR merge from the library (candidates, creating the merged photo, ⌘Z)
+#[path = "library_hdr.rs"]
+pub(crate) mod library_hdr;
+// Photo comparison: hints, series decisions (the view itself: photo_compare_ui.rs)
+#[path = "library_compare.rs"]
+mod library_compare;
+pub use library_compare::{CompareRequest, PreviewSource};
 // Typed completion in the search field
 #[path = "search_suggest.rs"]
 mod search_suggest;
@@ -71,6 +78,9 @@ pub mod view_folder_guard;
 pub use view_folder_guard::needs_library;
 #[path = "view_exif.rs"]
 mod view_exif;
+#[cfg(test)]
+#[path = "library_rows_test.rs"]
+mod rows_test;
 /// Status text after reading a viewed folder again (tests of the app).
 #[cfg(test)]
 pub fn view_folder_tree_text(new: usize, gone: usize) -> String {
@@ -80,6 +90,8 @@ pub use library_manage::PhotoDrag;
 pub use library_load::Loaded;
 pub use library_series::ScopeKind;
 pub use library_series::StackMenu;
+pub use library_series::{paint_strip_number, series_all_button, strip_number_rect};
+pub use library_hdr::Doubt;
 use crate::library_filter::Facets;
 
 /// Selection of the column filters and the filters themselves, kept across a rebuild (see `take_facets_state`).
@@ -239,7 +251,19 @@ enum SimilarState {
 
 /// Displayed file name: for photos from Apple Photos the original name (`IMG_1234.HEIC`) instead of the identifier.
 fn display_name(z: &Row) -> String {
-    crate::apple_photos_ui::original_name(z.file).unwrap_or_else(|| z.name.clone())
+    crate::apple_photos_ui::original_name(z.file).unwrap_or_else(|| library::merge::shown_name(&z.name, z.status as i64))
+}
+
+/// Why file commands are greyed for a merged photo.
+pub(crate) const NOT_A_FILE: &str = "Ein zusammengefügtes Foto liegt nicht als Datei vor";
+
+/// "virtuell · aus 5 Aufnahmen" for a merged photo (info box, tooltip of a cell); `None` for every other photo.
+pub(crate) fn virtual_note(file: i64, status: i64) -> Option<String> {
+    if status != library::merge::STATUS_VIRTUAL {
+        return None;
+    }
+    let n = library::merge::source_count(file)?;
+    Some(crate::trf!("virtuell · aus {n} Aufnahmen", n = n))
 }
 
 
@@ -290,29 +314,33 @@ struct Filter {
     stars_min: u8,
     /// bit n = label n (1 red … 5 purple); 0 = no restriction
     labels: u8,
+    /// only merged (HDR) photos
+    hdr: bool,
 }
 
 impl Filter {
     /// Image matches flags, stars and labels.
-    fn attributes_match(&self, flag: i8, stars: u8, label: u8) -> bool {
+    fn attributes_match(&self, flag: i8, stars: u8, label: u8, merged: bool) -> bool {
         let flag = match flag {
             1 => FLAG_PICKED,
             -1 => FLAG_REJECTED,
             _ => FLAG_NONE,
         };
-        (self.flags == 0 || self.flags & flag != 0)
+        (!self.hdr || merged)
+            && (self.flags == 0 || self.flags & flag != 0)
             && stars >= self.stars_min
             && (self.labels == 0 || (label > 0 && self.labels & (1 << label) != 0))
     }
 
     fn attributes_active(&self) -> bool {
-        self.flags != 0 || self.stars_min != 0 || self.labels != 0
+        self.flags != 0 || self.stars_min != 0 || self.labels != 0 || self.hdr
     }
 
     fn clear_attributes(&mut self) {
         self.flags = 0;
         self.stars_min = 0;
         self.labels = 0;
+        self.hdr = false;
     }
 }
 
@@ -378,7 +406,11 @@ const TEXTURES_MAX: usize = 700;
 const TEXTURES_PER_FRAME: usize = 48;
 /// at most this many textures of the large level (single image and the ones decoded ahead while paging: the current,
 /// three ahead, one behind and the last few seen – ≈ 17 MB each at 2560 px, ≈ 43 MB at 4000 px)
-const LARGE_TEXTURES_MAX: usize = 8;
+/// The comparison shows up to [`crate::photo_compare::MAX_ALL`] fields with large previews; one more for the photo of
+/// the single view and one spare. With 8 a ninth large texture still in use (a merged photo without a small preview
+/// in the filmstrip kept its large one fresh) pushed out a field's texture every frame, which was asked for again:
+/// about 80 % of a core while idle (QA 1.5.0-test.7).
+const LARGE_TEXTURES_MAX: usize = crate::photo_compare::MAX_ALL + 2;
 /// grid measurement logged once per run
 static GRID_COMPLETE_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -582,6 +614,14 @@ pub struct LibraryView {
     dupes: library_dupes::DupesState,
     /// series and stacks (library_series.rs)
     series: library_series::SeriesView,
+    /// the photo comparison (drawn by the app in the centre of the library and of Develop, photo_compare_ui.rs)
+    pub(crate) compare: Option<crate::photo_compare::Compare>,
+    /// a wish to open the comparison, taken by the app
+    compare_request: Option<CompareRequest>,
+    /// previews requested for the comparison
+    compare_requested: Vec<(i64, u32)>,
+    /// the comparison's hints by file (a copy, readable while the app draws the comparison)
+    compare_hints: HashMap<i64, crate::photo_compare::Hint>,
     manage_message: Option<String>,
     /// active image (image ID)
     active: Option<i64>,
@@ -775,6 +815,8 @@ enum Dialog {
     /// Completion of an operation (e.g. import) in a dialog instead of a notice: status light, summary, further
     /// lines (visible), details (collapsed)
     Outcome { title: String, verdict: crate::dialog::Verdict, summary: String, rows: Vec<String>, details: Vec<String> },
+    /// "Metadaten neu einlesen": sidecars lie beside some photos – take over rating, label, keywords too? (`take`)
+    Reread { files: Vec<i64>, photos: usize, sidecars: usize, take: bool },
 }
 
 
@@ -871,6 +913,12 @@ fn reload_test_due() -> bool {
 fn ui_connection(db: Db) -> Db {
     let _ = db.conn.busy_timeout(std::time::Duration::from_millis(250));
     db
+}
+
+/// The files "Verschieben nach …" moves out of the selection `(file, is a merged photo without a file)`, and how many
+/// merged photos are left out.
+fn move_selection(rows: &[(i64, bool)]) -> (Vec<i64>, usize) {
+    (rows.iter().filter(|r| !r.1).map(|r| r.0).collect(), rows.iter().filter(|r| r.1).count())
 }
 
 impl LibraryView {
@@ -998,6 +1046,10 @@ impl LibraryView {
             pairs: Default::default(),
             dupes: Default::default(),
             series: Default::default(),
+            compare: None,
+            compare_request: None,
+            compare_requested: Vec::new(),
+            compare_hints: HashMap::new(),
             manage_message: None,
             active: None,
             loupe: false,
@@ -1167,6 +1219,19 @@ impl LibraryView {
         if let Some(cache) = self.generator.as_ref().map(|g| g.cache().clone()) {
             crate::series_job::start(cache);
         }
+        // merged photos (HDR) an older version marked missing show again at once, not only after the next sync
+        // (asked with a read first: nothing is written when there is nothing to repair)
+        if self.db.as_ref().is_some_and(|d| library::merge::needs_repair(&d.conn)) {
+            self.in_background(
+                |db| library::merge::repair(db),
+                |b, _, r| {
+                    if let Ok(n @ 1..) = r {
+                        crate::log(&format!("library: {n} merged photos set back to virtual"));
+                        b.reload();
+                    }
+                },
+            );
+        }
         // sync with the disk at startup (read-only, ~0.5 s), the result reloads silently
         // without a search index (first version 2): AI data, capture dates and index in the background
         let without_index = self.db.as_ref().is_some_and(|d| d.info("search_index").is_none());
@@ -1178,7 +1243,7 @@ impl LibraryView {
         }
     }
 
-    /// Test aid `GRAINEO_LIBRARY_TEST="search=beach;columns=1;lens=EF20-35mm f/2.8L;aperture=1-4;folder=2024/;collection=Name;cell=240;active=12;sort=stars;loupe=1;quick=1"`.
+    /// Test aid `GRAINEO_LIBRARY_TEST="source=all;search=beach;columns=1;lens=EF20-35mm f/2.8L;aperture=1-4;folder=2024/;collection=Name;cell=240;active=12;sort=stars;loupe=1;quick=1;select=1+2;compare=1"`.
     fn test_filter(&mut self, ctx: &egui::Context) {
         let Ok(spec) = crate::env::var("GRAINEO_LIBRARY_TEST") else { return };
         for part in spec.split(';') {
@@ -1201,6 +1266,7 @@ impl LibraryView {
                     self.set_source(Source::Date(v.to_string()));
                 }
                 "cell" => self.cell_size = v.parse().unwrap_or(self.cell_size),
+                "source" if v == "all" => self.set_source(Source::All),
                 "columns" => self.columns_open = v == "1",
                 "sort" => {
                     self.sort_order = match v { "name" => SortOrder::Name, "stars" => SortOrder::Stars, _ => SortOrder::CaptureTime };
@@ -1254,6 +1320,18 @@ impl LibraryView {
                     }
                 }
                 "loupe" => self.loupe = v == "1",
+                // a selection by image IDs ("select=16+17+18"), the first one active (HDR and other menu tests)
+                "select" => {
+                    let ids: Vec<i64> = v.split('+').filter_map(|t| t.trim().parse().ok()).collect();
+                    if let Some(&first) = ids.first() {
+                        self.active = Some(first);
+                        self.selection = ids.iter().copied().collect();
+                        self.nothing_selected = false;
+                        self.to_active = true;
+                    }
+                }
+                // the comparison of the selection ("select=…;compare=1")
+                "compare" if v == "1" => self.request_compare(None, None),
                 // a viewed folder (⌘O): "subfolders=0" switches "Unterordner einbeziehen" off, "view=A/B" opens the
                 // tree down to that folder and shows it (screenshots)
                 "subfolders" => self.view_set_subfolders(v != "0"),
@@ -1280,6 +1358,11 @@ impl LibraryView {
                 }
                 "import" => self.test_import_source(ctx, PathBuf::from(v)),
                 "lr-window" => self.lr_window = true,
+                // "Metadaten neu einlesen" on the selection, as the menu does (screenshots of the question and the result)
+                "reread" if v == "1" => {
+                    let mut a = Vec::new();
+                    self.reread_metadata(ctx, &mut a);
+                }
                 "check" => {
                     if let Some(a) = self.db.as_ref().and_then(|db| library::reconcile::reconcile(db, None, &|_| {}).ok()) {
                         self.dialog = Some(sync_outcome(crate::tr("Bibliothek geprüft"), &serde_json::json!({"kind": "check", "sync": a.json()})));
@@ -1738,6 +1821,11 @@ impl LibraryView {
             let fields_only = search::Query { clauses: self.query.clauses.iter().filter(|k| k.iter().all(|t| matches!(t.kind, search::Kind::Field(..)))).cloned().collect() };
             self.evaluate_query(&fields_only)
         };
+        // while comparing, all members of the compared series stay visible (filters of marks, search and columns
+        // do not hide them): others of the series can be taken into the comparison from the filmstrip
+        let held = self.held_images();
+        // a series compared as a whole: only its members (whatever the source and the filters)
+        let series_only = self.compare_series_only();
         let t_loop = crate::frame_watch::section("filter: rows");
         let mut v2: Vec<usize> = Vec::new();
         let mut v: Vec<usize> = Vec::with_capacity(self.rows.len());
@@ -1759,11 +1847,18 @@ impl LibraryView {
                 Source::Similar(_) => self.similar_order.contains_key(&z.file),
                 Source::Collection(_) | Source::Quick | Source::Keyword(_) | Source::Smart(_) => self.source_ids.as_ref().is_some_and(|s| s.contains(&z.image)),
             };
-            if !source_ok {
+            // members of a compared series from outside the source (a series across two folders) stand beside the
+            // others while comparing; they do not count as photos of the source
+            let kept = held.contains(&z.image) && z.folder != VIEW_FOLDER;
+            if series_only.as_ref().is_some_and(|o| !o.contains(&z.image)) {
+                continue;
+            }
+            let kept = kept || series_only.is_some();
+            if !source_ok && !kept {
                 continue;
             }
             // camera JPEGs in a stack are not photos of their own and don't count
-            if !(self.stack && z.jpeg_for.is_some()) {
+            if source_ok && !(self.stack && z.jpeg_for.is_some()) {
                 total += 1;
             }
             // stack: a RAW's camera JPEG is part of its image
@@ -1774,11 +1869,12 @@ impl LibraryView {
             if self.stack && z.jpeg_for.is_some() {
                 continue;
             }
-            let mark_ok = self.filter.attributes_match(z.flag, z.stars, z.label);
-            if !mark_ok {
+            let mark_ok = self.filter.attributes_match(z.flag, z.stars, z.label, z.status as i64 == library::merge::STATUS_VIRTUAL);
+            if !mark_ok && !kept {
                 continue;
             }
-            if self.query_matches.as_ref().is_some_and(|t| !t[i]) {
+            // the last result may come from an older list (the new one is still being computed): rows beyond it count as hits
+            if !kept && self.query_matches.as_ref().is_some_and(|t| t.get(i).is_some_and(|hit| !hit)) {
                 // not in the full text: maybe "similar in meaning" (fields must still match)
                 if sem_rank.contains_key(&z.file) && fields.as_ref().is_none_or(|f| f[i]) {
                     v2.push(i);
@@ -1792,7 +1888,13 @@ impl LibraryView {
         // column filters (count even when there is no selection – for the display)
         if let Some(f) = self.facets.as_mut().filter(|f| f.rows_len() == self.rows.len()) {
             if f.active() || self.columns_open {
-                v = f.apply(&self.rows, &v);
+                if held.is_empty() {
+                    v = f.apply(&self.rows, &v);
+                } else {
+                    let all = std::mem::take(&mut v);
+                    let hit: HashSet<usize> = f.apply(&self.rows, &all).into_iter().collect();
+                    v = all.into_iter().filter(|i| hit.contains(i) || held.contains(&self.rows[*i].image)).collect();
+                }
             }
         }
         drop(t_order);
@@ -1864,9 +1966,23 @@ impl LibraryView {
         }
         self.motion.pending = false;
         if self.active.is_none_or(|a| !self.visible.iter().any(|&i| self.rows[i].image == a)) {
-            let pos = old_pos.unwrap_or(0).min(self.visible.len().saturating_sub(1));
-            self.active = self.visible.get(pos).map(|&i| self.rows[i].image);
+            // the active photo is no longer shown on its own: the tile of its own series first (a collapsed series
+            // now covers it, the view "Serien"), else one of the photos it was stacked with (⌘Z of an HDR: one of its
+            // sources) – never the photo that happens to sit at its old place, perhaps of another series (QA run 3:
+            // rating or deleting would hit a photo the user did not choose)
+            let shown: HashSet<i64> = self.visible.iter().map(|&i| self.rows[i].image).collect();
+            let own = self.active.map(|a| self.tile_for(a)).filter(|t| shown.contains(t));
+            let peer = || self.series.active_peers.iter().map(|&p| self.tile_for(p)).find(|t| shown.contains(t));
+            self.active = match own.or_else(peer) {
+                Some(t) => Some(t),
+                None => {
+                    let pos = old_pos.unwrap_or(0).min(self.visible.len().saturating_sub(1));
+                    self.visible.get(pos).map(|&i| self.rows[i].image)
+                }
+            };
         }
+        // the photos the active one is stacked with, for the next time it drops out of the list (see above)
+        self.series.active_peers = self.active.and_then(|a| self.series.of(a)).map(|k| self.series.stacks[k].images.clone()).unwrap_or_default();
         self.background_set = false;
     }
 
@@ -2025,11 +2141,15 @@ impl LibraryView {
         if let Some(o) = lens {
             rows.push((crate::tr("Objektiv"), o));
         }
-        let exposure = if z.time.is_some() || z.aperture.is_some() || z.iso.is_some() || z.focal.is_some() {
+        // merged photo: time and ISO of its reference frame where its own row has none
+        let merged = z.status as i64 == library::merge::STATUS_VIRTUAL;
+        let reference = if merged && (z.time.is_none() || z.iso.is_none()) { merge_reference_file(z.file).and_then(|f| self.rows.iter().find(|r| r.file == f)) } else { None };
+        let (time, iso) = (z.time.or(reference.and_then(|r| r.time)), z.iso.or(reference.and_then(|r| r.iso)));
+        let exposure = if time.is_some() || z.aperture.is_some() || iso.is_some() || z.focal.is_some() {
             crate::info_rows::exposure_line(
-                z.time.map(|v| crate::library_filter::value_text(3, v)),
+                time.map(|v| crate::library_filter::value_text(3, v)),
                 z.aperture.map(|v| crate::library_filter::value_text(0, v)),
-                z.iso.map(|v| format!("ISO {v}")),
+                iso.map(|v| format!("ISO {v}")),
                 z.focal.map(|v| format!("{} mm", v.round())),
                 crate::info_rows::detail(details, "Brennweite"),
             )
@@ -2127,7 +2247,11 @@ impl LibraryView {
 
     /// File type for Info, unambiguous: "X3F · Foveon RAW", "JPEG · camera JPEG for X.X3F" …
     fn format_text(&self, z: &Row) -> String {
-        let name_of = |b: i64| self.index.get(&b).map(|&i| self.rows[i].name.clone()).unwrap_or_default();
+        // a merged photo is no file: not the format of its pixel cache
+        if z.status as i64 == library::merge::STATUS_VIRTUAL {
+            return crate::tr("HDR · virtuell").to_string();
+        }
+        let name_of = |b: i64| self.index.get(&b).map(|&i| library::merge::shown_name(&self.rows[i].name, self.rows[i].status as i64)).unwrap_or_default();
         let kind = match crate::image_kind::from_extension(z.format.as_str()) {
             crate::image_kind::ImageKind::Foveon => crate::trf!("{a} · Foveon-RAW", a = z.format.as_str()),
             crate::image_kind::ImageKind::Raw => format!("{} · RAW", z.format.as_str()),
@@ -2235,6 +2359,7 @@ impl LibraryView {
             // here and afterwards left the UI connection at a 3 s busy timeout for every later read)
             let pending = std::mem::take(&mut self.meta_pending);
             let n = pending.len();
+            let dated = completes_capture_times(&pending);
             self.in_background(
                 move |db| {
                     let tx = db.conn.unchecked_transaction().map_err(|e| e.to_string())?;
@@ -2243,10 +2368,12 @@ impl LibraryView {
                     }
                     tx.commit().map_err(|e| e.to_string())
                 },
-                move |_, _, r| {
-                    if let Err(e) = r {
-                        crate::log(&format!("library: {n} completions (size, date, camera) not written: {e}"));
-                    }
+                move |_, _, r| match r {
+                    Err(e) => crate::log(&format!("library: {n} completions (size, date, camera) not written: {e}")),
+                    // a capture time read only with the preview (import in place): the series job groups that day
+                    // again (before, a bracket stayed split until some later change: GX7 _01 + _02 a series, _03 alone)
+                    Ok(_) if dated => crate::series_job::poke(),
+                    Ok(_) => {}
                 },
             );
         }
@@ -2478,6 +2605,10 @@ impl LibraryView {
                         sync_pause();
                     }
                     report("Aufnahmedaten lesen …");
+                    // files changed since their shooting data were read (and, once per library, photos with empty
+                    // date or camera): read again from the file, quietly (`library::metadata_reread`)
+                    let _ = library::metadata_reread::mark_empty_once(&db);
+                    let _ = library::metadata_reread::refresh_stale(&db, 100_000, &std::sync::atomic::AtomicBool::new(false));
                     let _ = library::exif::backfill_with(&db, 100_000, &std::sync::atomic::AtomicBool::new(false), &|_| {
                         work.lock().unwrap_or_else(|e| e.into_inner()).interim = true;
                         c.request_repaint();
@@ -2706,7 +2837,14 @@ impl LibraryView {
             return None;
         }
         let old = self.rating_undo.pop()?;
-        self.rating_at.pop();
+        let at = self.rating_at.pop();
+        // a step of the stacks made together with this rating (tournament: the cover) goes back with it
+        if let Some((_, m)) = self.manage.with_rating.filter(|l| Some(l.0) == at) {
+            self.manage.with_rating = None;
+            if self.manage.undo_at.last() == Some(&m) {
+                self.manage_undo();
+            }
+        }
         for &(b, s, m, e) in &old {
             if let Some(&i) = self.index.get(&b) {
                 let z = &mut Arc::make_mut(&mut self.rows)[i];
@@ -2966,8 +3104,8 @@ impl LibraryView {
         }
         let (cmd, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         let p = |k: egui::Key| ctx.input(|i| i.key_pressed(k));
-        // series review open: its own keys (series_review.rs)
-        if self.series.review.is_some() && self.review_keys(ctx, actions) {
+        // the comparison has its own keys (photo_compare_ui.rs, handled by the app)
+        if self.compare.is_some() {
             return;
         }
         if cmd {
@@ -2999,6 +3137,11 @@ impl LibraryView {
             self.clear_selection();
         }
         // arrows and rating keys: in event order in `App::shortcuts_ordered`
+        // ↩ on a collapsed stack opens it (the keyboard's double click of the filmstrip, library_series.rs); otherwise
+        // ↩ opens the single photo as before
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter) && i.modifiers.is_none()) && self.enter_expand() {
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
+        }
         // single image: Return/Space/D (workspace without modules, the app switches the view)
         if p(egui::Key::Enter) || p(egui::Key::Space) || p(egui::Key::D) {
             if self.active.is_some_and(|a| self.index.contains_key(&a)) {
@@ -3018,6 +3161,7 @@ impl LibraryView {
 
     /// Per frame before drawing: fetch background work, grid keys, filter the list.
     pub fn prepare(&mut self, ctx: &egui::Context, shortcuts: bool) -> Vec<Action> {
+        self.heal_visible();
         let mut actions = Vec::new();
         if let Some(a) = self.check_work() {
             actions.push(a);
@@ -3216,11 +3360,6 @@ impl LibraryView {
         if std::mem::take(&mut self.people_stale) {
             self.reload();
         }
-        // series review: own view instead of the grid (series_review.rs)
-        if self.series.review.is_some() {
-            self.review_center(ui, &mut actions);
-            return actions;
-        }
         if self.source == Source::NotInCatalog {
             self.not_in_catalog_center(ui);
             return actions;
@@ -3303,10 +3442,18 @@ impl LibraryView {
             self.dialog = Some(Dialog::Outcome { title: d.title, verdict: d.verdict, summary: d.summary, rows: d.rows, details: d.details });
         }
         if let Some(target) = crate::file_dialog::fetch_one("bib-verschieben") {
-            let mut files: Vec<i64> = self.target().iter().filter_map(|b| self.index.get(b).map(|&i| self.rows[i].file)).collect();
+            // merged photos (HDR) have no file: they stay where they are and are named, the others move
+            let rows: Vec<(i64, bool)> = self.target().iter().filter_map(|b| self.index.get(b).map(|&i| (self.rows[i].file, self.rows[i].status as i64 == library::merge::STATUS_VIRTUAL))).collect();
+            let (mut files, merged) = move_selection(&rows);
             files.sort();
             files.dedup();
-            self.operation(move |db| library::relocate::plan_files(db, &files, &target, None), &mut actions);
+            if merged > 0 {
+                let n = crate::dialog::count(merged, crate::tr("HDR-Foto"), crate::tr("HDR-Fotos"));
+                actions.push(Action::Status(if files.is_empty() { crate::trf!("{a} ohne eigene Datei – nichts zu verschieben", a = n) } else { crate::trf!("{a} ohne eigene Datei bleiben, wo sie sind", a = n) }));
+            }
+            if !files.is_empty() {
+                self.operation(move |db| library::relocate::plan_files(db, &files, &target, None), &mut actions);
+            }
         }
         self.import_dialog(ctx, &mut actions);
         self.not_in_catalog_done(ctx, &mut actions);
@@ -3346,7 +3493,17 @@ impl LibraryView {
     /// without a selection and for the single views.
     /// Context menu of a photo outside the grid (filmstrip, single image): the same entries as in the grid.
     pub fn photo_menu_for(&self, ui: &mut egui::Ui, image: i64, present: bool) -> Option<Menu> {
-        photo_menu(ui, self.quick_possible(image).then(|| self.quick.contains(&image)), present, self.can_paste, self.removable_collection().as_deref())
+        photo_menu(ui, self.quick_possible(image).then(|| self.quick.contains(&image)), present, self.can_paste, self.removable_collection().as_deref(), self.is_merged_image(image), self.compare_count(image))
+    }
+
+    /// How many photos "Vergleichen" on `image` would compare: the selection if the photo belongs to it, else 1.
+    /// How many photos "Vergleichen" in the menu of `image` compares: the selection it belongs to, otherwise its series
+    /// as a whole (as N; QA 5: greyed on a collapsed series although N compared it), else only itself.
+    fn compare_count(&self, image: i64) -> usize {
+        if self.selection.len() > 1 && self.selection.contains(&image) {
+            return self.selection.len();
+        }
+        self.series.of(image).map_or(1, |k| self.stack_pictures(&self.series.stacks[k]).max(1))
     }
 
     /// Carry out a photo command from outside the grid (on the active photo / the selection set before).
@@ -3470,7 +3627,8 @@ impl LibraryView {
                 // a viewed folder ("Zur Bibliothek hinzufügen …")
                 // viewing a backup: importing is refused there, so the button is disabled (not gold), with the reason
                 let can_import = library::backup_view::active().is_none();
-                let gold = can_import && !self.grid_replaced() && self.viewed_folder().is_none();
+                // the comparison has its own gold button too ("Weiter" / "Übernehmen"): one main button per view
+                let gold = can_import && !self.grid_replaced() && self.viewed_folder().is_none() && self.compare.is_none();
                 let r = ui.add_enabled_ui(can_import, |ui| lr::arrow_button_gold(ui, crate::tr("Importieren …"), w, true, gold)).inner;
                 if !can_import {
                     // a disabled widget reports no hover: the reason on a hover area over the same place
@@ -3741,9 +3899,7 @@ impl LibraryView {
 
     /// Leave a viewed folder: its photos go out of the list, back to the library.
     fn close_view_folder(&mut self) {
-        let all = Arc::make_mut(&mut self.rows);
-        all.retain(|z| z.folder != VIEW_FOLDER);
-        self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
+        self.edit_rows(|all| all.retain(|z| z.folder != VIEW_FOLDER));
         self.viewed = None;
         self.viewed_listing = None;
         self.view_close();
@@ -4137,6 +4293,9 @@ impl LibraryView {
             ui.set_max_width(width);
             // turn and jump act on the selection: right of the size slider (library_filter_bar.rs)
             self.selection_actions(ui);
+            ui.add_space(4.0);
+            // expand / collapse all series (⇧S): always in its place, greyed with the reason when there is nothing to do
+            self.series_all_cell(ui);
             ui.add_space(10.0);
             if !self.loupe {
                 ui.spacing_mut().slider_width = 110.0;
@@ -4263,6 +4422,7 @@ impl LibraryView {
 
     fn raster(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Action>) {
         let t0 = std::time::Instant::now();
+        self.heal_visible();
         self.header_row(ui);
         // a viewed folder: the band below the navigation says so in every view (view_folder_band.rs)
         // "View folder" without photos: the reason below the header row (which keeps its place)
@@ -4299,9 +4459,9 @@ impl LibraryView {
         let info = crate::cell_info::shown();
         let cell_h = cell + crate::cell_info::extra_height(info.len());
         // rows: full-text hits, then (if any) a separator row and "Similar in meaning"
-        let n1 = self.sem_from.unwrap_or(self.visible.len());
+        let n1 = self.sem_from.unwrap_or(self.visible.len()).min(self.visible.len());
         let r1 = n1.div_ceil(columns);
-        let r2 = (self.visible.len() - n1).div_ceil(columns);
+        let r2 = self.visible.len().saturating_sub(n1).div_ceil(columns);
         let rows_n = r1 + if self.sem_from.is_some() { 1 + r2 } else { 0 };
         let start_of = |order: usize| -> Option<usize> {
             if order < r1 {
@@ -4319,7 +4479,7 @@ impl LibraryView {
         let mut clicked = None;
         let mut double_click = None;
         let mut menu: Option<(Menu, i64)> = None;
-        let mut stack_cmd: Option<(library_series::StackCmd, i64)> = None;
+        let mut stack_cmd: Option<(library_series::StackCmd, i64, bool)> = None;
         let mut quick_click: Option<i64> = None;
         let mut cell_hovered = false;
         let mut shown: Vec<usize> = Vec::new();
@@ -4475,9 +4635,14 @@ impl LibraryView {
                             break;
                         }
                         let Some(&i) = self.visible.get(pos) else { break };
+                        // `visible` can briefly outlive `rows` (a reload that came back empty while the
+                        // grid was still drawing the old selection): never index blindly, refilter instead.
+                        let Some(z) = self.rows.get(i).cloned() else {
+                            self.refilter = true;
+                            break;
+                        };
                         shown.push(i);
                         let (rect, resp) = ui.allocate_exact_size(egui::vec2(cell, cell_h), egui::Sense::click_and_drag());
-                        let z = self.rows[i].clone();
                         #[cfg(test)]
                         self.test_cells.push((z.image, rect));
                         let tex = match &self.hover_preview {
@@ -4487,15 +4652,17 @@ impl LibraryView {
                         self.paint_series_ground(ui.painter(), rect, z.image);
                         let badge = self.paint_cell(ui, rect, &resp, &z, tex.as_ref(), pos + 1, &info);
                         if let Some(c) = self.paint_series_mark(ui, rect, &z, tex.as_ref()) {
-                            stack_cmd = Some((c, z.image));
+                            stack_cmd = Some((c, z.image, true));
                         }
-                        cell_hovered |= resp.hovered() || resp.context_menu_opened();
+                        // `contains_pointer`: also under the number button on the tile (a click there is no click on
+                        // free space, which would clear the selection)
+                        cell_hovered |= resp.contains_pointer() || resp.context_menu_opened();
                         resp.context_menu(|ui| {
-                            if let Some(m) = photo_menu(ui, (z.folder != VIEW_FOLDER).then(|| self.quick.contains(&z.image)), z.status == 0, self.can_paste, self.removable_collection().as_deref()) {
+                            if let Some(m) = photo_menu(ui, (z.folder != VIEW_FOLDER).then(|| self.quick.contains(&z.image)), z.status == 0, self.can_paste, self.removable_collection().as_deref(), z.status as i64 == library::merge::STATUS_VIRTUAL, self.compare_count(z.image)) {
                                 menu = Some((m, z.image));
                             }
                             if let Some(c) = self.series_menu(ui, z.image) {
-                                stack_cmd = Some((c, z.image));
+                                stack_cmd = Some((c, z.image, false));
                             }
                         });
                         // drag onto a collection on the left: the whole selection if this photo belongs to it
@@ -4563,7 +4730,9 @@ impl LibraryView {
                     continue;
                 }
                 // missing/archived files: only from the cache
-                if z.status != 0 && !self.generator.as_ref().is_some_and(|e| e.cache().has(self.key(z), level)) {
+                // (a merged photo has no file: its developed preview, stored when it was computed, serves the job)
+                let merged_preview = z.status as i64 == library::merge::STATUS_VIRTUAL && preview::has_any_developed(z.file);
+                if z.status != 0 && !merged_preview && !self.generator.as_ref().is_some_and(|e| e.cache().has(self.key(z), level)) {
                     continue;
                 }
                 wanted.push((z.file, level));
@@ -4592,7 +4761,11 @@ impl LibraryView {
         }
         if let Some(b) = double_click {
             self.active = Some(b);
-            self.open(b, actions);
+            // the view "Serien" shows one tile per series: a double click opens the series in the comparison
+            match (self.source == Source::Series).then(|| self.series.of(b)).flatten() {
+                Some(k) => self.request_compare(Some(self.series.stacks[k].id), None),
+                None => self.open(b, actions),
+            }
         }
         if let Some((m, b)) = menu {
             if !self.selection.contains(&b) {
@@ -4601,11 +4774,15 @@ impl LibraryView {
             self.active = Some(b);
             self.menu(m, ui.ctx(), actions);
         }
-        if let Some((c, b)) = stack_cmd {
-            if c != library_series::StackCmd::Group && !self.selection.contains(&b) {
-                self.selection.clear();
+        if let Some((c, b, number)) = stack_cmd {
+            // the number on a tile is its own button: opening or closing a stack by it never changes the selection
+            // (closing makes the cover active only when the active photo was in that stack, `series_command`)
+            if !(number && c == library_series::StackCmd::Toggle) {
+                if c != library_series::StackCmd::Group && !self.selection.contains(&b) {
+                    self.selection.clear();
+                }
+                self.active = Some(b);
             }
-            self.active = Some(b);
             self.series_command(c, b, actions);
         }
         // measurement: time from opening the library until the grid shows its first tiles (once per run)
@@ -4729,17 +4906,19 @@ impl LibraryView {
     fn paint_cell(&self, ui: &egui::Ui, rect: egui::Rect, resp: &egui::Response, z: &Row, tex: Option<&TextureHandle>, number: usize, info: &[crate::cell_info::Field]) -> bool {
         let p = ui.painter();
         let inner = rect.shrink(3.0);
-        let active = !self.nothing_selected && self.active == Some(z.image);
+        // the active photo hidden in a collapsed stack: its tile is the active one
+        let active = !self.nothing_selected && self.active.is_some_and(|a| a == z.image || self.tile_for(a) == z.image);
         let selected = !self.nothing_selected && self.selection.contains(&z.image);
-        let mut fill = if active {
-            Color32::from_gray(0x4a)
-        } else if selected {
-            Color32::from_gray(0x36)
-        } else if resp.hovered() {
-            Color32::from_gray(0x26)
-        } else {
-            Color32::from_gray(0x1a)
+        // a tile of an expanded series keeps the tone of the group's ground (library_series.rs); active, selected and
+        // hovered make it lighter in the same tone, outside a group the greys as before
+        let fill = match self.group_tone(z.image) {
+            Some(t) => library_series::lighter(t, if active { 0.75 } else if selected { 0.45 } else if resp.hovered() { 0.2 } else { 0.0 }),
+            None if active => Color32::from_gray(0x4a),
+            None if selected => Color32::from_gray(0x36),
+            None if resp.hovered() => Color32::from_gray(0x26),
+            None => Color32::from_gray(0x1a),
         };
+        let mut fill = fill;
         // color label tints the cell
         if z.label > 0 {
             let c = library::label::COLORS[z.label as usize];
@@ -4829,6 +5008,13 @@ impl LibraryView {
                     let field = egui::Rect::from_min_size(r.left_bottom() + egui::vec2(4.0, -g.size().y - 8.0), g.size() + egui::vec2(8.0, 4.0));
                     p.rect_filled(field, 0.0, Color32::from_black_alpha(170));
                     p.galley(field.min + egui::vec2(4.0, 2.0), g, Color32::WHITE);
+                }
+                // merged photo (HDR): a small mark at the bottom left of the image
+                if z.status as i64 == library::merge::STATUS_VIRTUAL {
+                    crate::hdr_live::paint_mark(p, r);
+                    if let Some(note) = virtual_note(z.file, z.status as i64).filter(|_| resp.hovered()) {
+                        lr::hover_tip(ui, resp, &format!("{} · {note}", display_name(z)));
+                    }
                 }
                 // virtual copy: folded corner at the bottom left
                 if z.copy.is_some() {
@@ -6061,6 +6247,24 @@ fn lightroom_handover(db: &Db, catalog: &std::path::Path, step: &dyn Fn(Option<f
 
 /// "11 bearbeitete Fotos": photos (originals and virtual copies) Lightroom marks as edited – one term and one count
 /// when checking and after the handover.
+/// Library file of the reference frame of merged photo `file` (recipe: the chosen reference, else the middle frame;
+/// read at most twice a second).
+fn merge_reference_file(file: i64) -> Option<i64> {
+    static CACHE: std::sync::Mutex<Option<(i64, std::time::Instant, Option<i64>)>> = std::sync::Mutex::new(None);
+    let mut g = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((f, t, v)) = g.as_ref() {
+        if *f == file && t.elapsed() < std::time::Duration::from_millis(500) {
+            return *v;
+        }
+    }
+    let v = library::merge::recipe_of_file(file).and_then(|(r, _)| {
+        let reference = serde_json::from_str::<hdr::Settings>(&r.settings).ok().and_then(|s| s.reference).unwrap_or(r.sources.len() / 2);
+        r.sources.get(reference.min(r.sources.len().saturating_sub(1))).map(|s| s.file)
+    });
+    *g = Some((file, std::time::Instant::now(), v));
+    v
+}
+
 fn edited_photos(n: usize) -> String {
     crate::dialog::count(n, crate::tr("bearbeitetes Foto"), crate::tr("bearbeitete Fotos"))
 }
@@ -6340,7 +6544,7 @@ impl LibraryView {
         egui::Area::new(egui::Id::new("test-photo-menu")).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
             egui::Frame::menu(ui.style()).show(ui, |ui| {
                 ui.set_width(300.0);
-                let _ = photo_menu(ui, self.quick_possible(a).then(|| self.quick.contains(&a)), present, self.can_paste, self.removable_collection().as_deref());
+                let _ = photo_menu(ui, self.quick_possible(a).then(|| self.quick.contains(&a)), present, self.can_paste, self.removable_collection().as_deref(), self.is_merged_image(a), self.compare_count(a));
             });
         });
     }
@@ -6351,6 +6555,16 @@ impl LibraryView {
 pub enum Menu {
     Export,
     Print,
+    /// "HDR zusammenfügen …" (hdr_ui.rs)
+    MergeHdr,
+    /// "Alle Reihen zusammenfügen …": every bracket of the selection (hdr_batch.rs)
+    MergeHdrAll,
+    /// merged photo: open its stack with the sources
+    HdrSources,
+    /// merged photo: Develop with the tool "Zusammenfügen"
+    HdrEdit,
+    /// merged photo: take it out of the library, the sources stay
+    HdrRemove,
     /// add to or remove from the quick collection
     Quick,
     VirtualCopy,
@@ -6370,24 +6584,54 @@ pub enum Menu {
     RemoveFromLibrary,
     /// take out of the collection shown (the photo stays in the library)
     RemoveFromCollection,
+    /// compare the selection (photo_compare_ui.rs)
+    Compare,
+    /// compare with this photo held as the reference
+    CompareWith,
+    /// read the shooting data of the selection again from the files (metadata_reread_ui.rs)
+    Reread,
 }
 
 /// Context menu of a photo (grid; the filmstrip and the single image use the same order): frequent at the top,
 /// file commands together, destructive last; shortcuts right-aligned. Returns the chosen command.
 /// `collection`: name of the collection shown, if photos can be taken out of it (then ⌫ does that, ⌘⌫ the trash).
-fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_paste: bool, collection: Option<&str>) -> Option<Menu> {
+/// `merged`: the photo is a merged one (HDR): its own entries come first.
+/// `selected`: photos "Vergleichen" would compare (the selection the photo belongs to; 1 = only this one).
+fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_paste: bool, collection: Option<&str>, merged: bool, selected: usize) -> Option<Menu> {
     use crate::shortcuts::display;
     let mut chosen = None;
     // `in_quick == None`: a photo of a viewed folder, entries that need the library are greyed with the reason
     let library = in_quick.is_some();
     let mut item = |ui: &mut egui::Ui, m: Menu, text: &str, key: String, enabled: bool| {
         let refused = !library && m.needs_library();
-        if lr::menu_item_why(ui, text, &key, enabled && !refused, if refused { crate::tr(view_folder_guard::NEEDS_LIBRARY) } else { "" }) {
+        // a merged photo is no file: the file commands are greyed with the reason
+        let no_file = merged && matches!(m, Menu::Rename | Menu::Move | Menu::Finder);
+        let why = if refused { crate::tr(view_folder_guard::NEEDS_LIBRARY) } else if no_file { crate::tr(NOT_A_FILE) } else { "" };
+        if lr::menu_item_why(ui, text, &key, enabled && !refused && !no_file, why) {
             chosen = Some(m);
         }
     };
+    if merged {
+        item(ui, Menu::HdrSources, crate::tr("Quellen zeigen"), String::new(), true);
+        item(ui, Menu::HdrEdit, crate::tr("HDR bearbeiten"), String::new(), true);
+        item(ui, Menu::HdrRemove, crate::tr("HDR entfernen (Quellen bleiben)"), String::new(), true);
+        ui.separator();
+    }
     item(ui, Menu::Export, crate::tr("Exportieren …"), display("export"), true);
     item(ui, Menu::Print, crate::tr("Drucken …"), display("print"), true);
+    if !merged {
+        item(ui, Menu::MergeHdr, crate::tr("HDR zusammenfügen …"), display("merge_hdr"), true);
+        item(ui, Menu::MergeHdrAll, crate::tr("Alle Reihen zusammenfügen …"), String::new(), true);
+    }
+    ui.separator();
+    // the comparison (photo_compare_ui.rs): the selection, or this photo held as the reference
+    let mut compare = None;
+    if lr::menu_item_why(ui, crate::tr("Vergleichen"), &display("stack_review"), selected >= 2, crate::tr("Mindestens 2 Fotos auswählen (⌘-Klick)")) {
+        compare = Some(Menu::Compare);
+    }
+    if lr::menu_item(ui, crate::tr("Mit diesem Foto vergleichen"), "", true) {
+        compare = Some(Menu::CompareWith);
+    }
     ui.separator();
     // `None`: a photo of a viewed folder, the quick collection cannot hold it (greyed)
     let quick = if in_quick == Some(true) { crate::tr("Aus der Schnellsammlung entfernen") } else { crate::tr("Zur Schnellsammlung hinzufügen") };
@@ -6398,6 +6642,7 @@ fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_past
     ui.separator();
     item(ui, Menu::Similar, crate::tr("Ähnliche Fotos"), String::new(), true);
     item(ui, Menu::Time, crate::tr("Aufnahmezeit bearbeiten …"), String::new(), true);
+    item(ui, Menu::Reread, crate::tr("Metadaten neu einlesen …"), String::new(), true);
     ui.separator();
     item(ui, Menu::Rename, crate::tr("Umbenennen …"), String::new(), present);
     item(ui, Menu::Move, crate::tr("Verschieben nach …"), String::new(), present);
@@ -6411,7 +6656,7 @@ fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_past
     // in a collection ⌫ only takes the photo out of it; ⌘⌫ moves it to the trash everywhere
     let trash_key = if collection.is_some() { display("trash_selected") } else { "⌫".into() };
     item(ui, Menu::Delete, crate::tr("In den Papierkorb …"), trash_key, present);
-    chosen
+    compare.or(chosen)
 }
 
 
@@ -6496,13 +6741,33 @@ impl LibraryView {
         }
         match m {
             Menu::Export => actions.push(Action::Export),
+            // one photo of a series (also its collapsed tile): the series as a whole, as N
+            Menu::Compare => self.request_compare(self.button_series(), None),
+            Menu::CompareWith => self.request_compare(None, Some(z.image)),
             Menu::Print => actions.push(Action::Print),
+            Menu::MergeHdr => crate::hdr_ui::ask(self.hdr_candidates(Some(z.image))),
+            Menu::HdrSources => self.show_sources(z.image, actions),
+            Menu::HdrEdit => {
+                crate::hdr_ui::open_tool_next();
+                self.set_active(z.image);
+                actions.push(Action::Develop);
+            }
+            Menu::HdrRemove => self.remove_merge(z.file, actions),
+            Menu::MergeHdrAll => {
+                let groups = self.hdr_groups();
+                if groups.is_empty() {
+                    actions.push(Action::Status(crate::tr("In der Auswahl sind keine Belichtungsreihen.").to_string()));
+                } else {
+                    crate::hdr_batch::open(groups);
+                }
+            }
             Menu::Delete => actions.push(Action::Delete),
             Menu::Time => {
                 let (files, photos) = capture_time_files(&self.target(), |b| self.index.get(&b).map(|&j| &self.rows[j]), self.stack);
                 let input = z.capture.as_deref().map(time_display).unwrap_or_default();
                 self.dialog = Some(Dialog::Time { files, photos, reference: z.capture.clone(), kind: 0, input, hours: 0 });
             }
+            Menu::Reread => self.reread_metadata(ctx, actions),
             Menu::VirtualCopy => actions.push(Action::VirtualCopy(z.image)),
             Menu::Rename => {
                 let stem = Path::new(&z.name).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
@@ -6666,12 +6931,17 @@ impl LibraryView {
                 Err(e) => Dialog::Error(e),
             });
         }
+        self.reread_poll(ctx, actions);
         let Some(d) = self.dialog.take() else { return };
+        if matches!(d, Dialog::Reread { .. }) {
+            self.dialog = self.reread_dialog(ctx, d);
+            return;
+        }
         let mut d = d;
         let old_name = match &d {
             Dialog::Rename { file, .. } => self.rows.iter().find(|z| z.file == *file).map(|z| z.name.clone()).unwrap_or_default(),
             Dialog::RenameFolder { folder, .. } => self.folder.iter().find(|o| o.id == *folder).map(|o| o.path.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string()).unwrap_or_default(),
-            Dialog::Error(_) | Dialog::Outcome { .. } | Dialog::Time { .. } => String::new(),
+            Dialog::Error(_) | Dialog::Outcome { .. } | Dialog::Time { .. } | Dialog::Reread { .. } => String::new(),
         };
         let title = match &d {
             Dialog::Rename { .. } => crate::trf!("„{old_name}“ umbenennen", old_name = old_name),
@@ -6679,10 +6949,11 @@ impl LibraryView {
             Dialog::Error(_) => crate::tr("Vorgang nicht ausgeführt").to_string(),
             Dialog::Outcome { title, .. } => title.clone(),
             Dialog::Time { photos, .. } => crate::trf!("Aufnahmezeit korrigieren · {a}", a = dialog::count(*photos, crate::tr("Foto"), crate::tr("Fotos"))),
+            Dialog::Reread { .. } => String::new(),
         };
         let buttons = match &d {
             Dialog::Rename { name, .. } | Dialog::RenameFolder { name, .. } => dialog::Buttons::confirm(crate::tr("Umbenennen"), !name.trim().is_empty()),
-            Dialog::Error(_) | Dialog::Outcome { .. } => dialog::Buttons::close(),
+            Dialog::Error(_) | Dialog::Outcome { .. } | Dialog::Reread { .. } => dialog::Buttons::close(),
             Dialog::Time { reference, kind, input, hours, .. } => {
                 let enabled = match kind {
                     0 => time_offset(reference.as_deref(), input).is_some_and(|d| d != 0),
@@ -6736,6 +7007,7 @@ impl LibraryView {
                     ui.add_space(4.0);
                     dialog::hint(ui, crate::tr("Die Originale bleiben unverändert; die Zeit steht in der Begleitdatei (auch für Lightroom). Fotos aus Apple Fotos bleiben unverändert."));
                 }
+                Dialog::Reread { .. } => {}
                 Dialog::Outcome { verdict, summary, rows, details, .. } => {
                     dialog::outcome(ui, *verdict, summary, details);
                     for z in rows.iter() {
@@ -6786,7 +7058,7 @@ impl LibraryView {
                 Dialog::RenameFolder { folder, name } => {
                     self.operation(move |db| library::relocate::plan_folder(db, folder, name.trim()), actions);
                 }
-                Dialog::Error(_) | Dialog::Outcome { .. } | Dialog::Time { .. } => {}
+                Dialog::Error(_) | Dialog::Outcome { .. } | Dialog::Time { .. } | Dialog::Reread { .. } => {}
             }
             return;
         }
@@ -7406,6 +7678,11 @@ impl LibraryView {
     }
 }
 
+/// Do these completions from the preview generation bring a capture time (the series of that day change)?
+fn completes_capture_times(pending: &[(i64, preview::Meta)]) -> bool {
+    pending.iter().any(|(_, m)| m.capture.is_some())
+}
+
 /// Compute missing image and description vectors (throttled). Returns: count.
 fn backfill_vectors(image_dir: Option<PathBuf>, text_model: Option<library::semantic::TextModel>) -> usize {
     let Ok(db) = Db::standard() else { return 0 };
@@ -7866,7 +8143,7 @@ impl LibraryView {
             .iter()
             .filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && library::is_raw(&z.format))
             .filter_map(|z| {
-                let group = if z.format == "X3F" { crate::sigma_refresh::group_of(z.camera.as_deref()?, z.iso)? } else { crate::sigma_refresh::Group::CameraLook };
+                let group = if z.format == "X3F" || z.format == "X3I" { crate::sigma_refresh::group_of(z.camera.as_deref()?, z.iso)? } else { crate::sigma_refresh::Group::CameraLook };
                 Some(crate::sigma_refresh::Candidate { image: z.image, file: z.file, path: self.path_of(z), key: self.key(z), group, camera: z.camera.clone().unwrap_or_default() })
             })
             .collect();
@@ -7892,7 +8169,7 @@ impl LibraryView {
         let cache = self.generator.as_ref().map(|e| e.cache().clone());
         self.rows
             .iter()
-            .filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && z.status == 0 && z.format != "X3F" && library::is_raw(&z.format))
+            .filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && z.status == 0 && z.format != "X3F" && z.format != "X3I" && library::is_raw(&z.format))
             .filter_map(|z| {
                 let day = z.capture.as_deref()?.get(..10)?.to_string();
                 let path = self.path_of(z);
@@ -7948,7 +8225,10 @@ impl LibraryView {
             if self.textures.contains_key(&k) || wanted.contains(&k) {
                 continue;
             }
-            if z.status != 0 && !self.generator.as_ref().is_some_and(|e| e.cache().has(self.key(z), k.1)) {
+            // a merged photo (HDR) has no file: its developed preview serves the job, as in the grid (QA 1.5.0-test.7:
+            // the filmstrip of Develop showed "DNG" instead of it)
+            let merged_preview = z.status as i64 == library::merge::STATUS_VIRTUAL && preview::has_any_developed(z.file);
+            if z.status != 0 && !merged_preview && !self.generator.as_ref().is_some_and(|e| e.cache().has(self.key(z), k.1)) {
                 continue;
             }
             wanted.push(k);
@@ -7997,11 +8277,11 @@ impl LibraryView {
     /// Swap the rows of "View folder" without re-reading the library (that took half a second
     /// in the foreground for large libraries).
     fn insert_viewed(&mut self, dir: &std::path::Path, rows: Vec<Row>) {
-        let all = Arc::make_mut(&mut self.rows);
-        all.retain(|z| z.folder != VIEW_FOLDER);
-        all.extend(rows.iter().cloned());
+        self.edit_rows(|all| {
+            all.retain(|z| z.folder != VIEW_FOLDER);
+            all.extend(rows.iter().cloned());
+        });
         Arc::make_mut(&mut self.folder_paths).insert(VIEW_FOLDER, format!("{}/", dir.display()));
-        self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
         self.viewed = Some((dir.to_path_buf(), rows));
         // values read before (another folder of the tree and back, a refresh)
         self.view_exif_fill(dir);
@@ -8681,4 +8961,19 @@ static FACE_DOWNLOAD_FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::
 fn report_start(status: &Arc<Mutex<String>>, ctx: &egui::Context, search: bool) {
     *status.lock().unwrap_or_else(|e| e.into_inner()) = if search { "Gesichter werden gesucht …" } else { "Namensvorschläge werden aktualisiert …" }.to_string();
     ctx.request_repaint();
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::*;
+
+    /// A capture time completed from the preview generation regroups the series (GX7 bracket split 20.11.2026);
+    /// sizes or a camera alone do not.
+    #[test]
+    fn a_completed_capture_time_pokes_the_series() {
+        let meta = |capture: Option<&str>| preview::Meta { width: Some(4592), height: Some(3448), capture: capture.map(str::to_string), camera: Some("Panasonic DMC-GX7".into()) };
+        assert!(!completes_capture_times(&[(1, meta(None)), (2, meta(None))]));
+        assert!(completes_capture_times(&[(1, meta(None)), (3, meta(Some("2017-11-24T08:41:29")))]));
+        assert!(!completes_capture_times(&[]));
+    }
 }

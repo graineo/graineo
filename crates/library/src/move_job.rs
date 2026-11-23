@@ -1367,7 +1367,17 @@ fn do_dir(db: &Db, job: &mut Job, i: usize, cache: &Cache, cancel: &AtomicBool, 
     let (root_path, folder) = ensure_target_folder(&tx, job, &rel)?;
     let folder_rel = tgt_rel_in(job, &rel, &root_path);
     cur.moved_rows = plan.moves.iter().map(|m| (m.row.file, folder)).collect();
+    // the folder rows the photos leave (merged photos without a file stay behind there and follow below)
+    let mut left: Vec<i64> = Vec::new();
+    for m in &plan.moves {
+        if let Some(o) = tx.query_row("SELECT folder FROM file WHERE id = ?1", [m.row.file], |r| r.get::<_, i64>(0)).optional().map_err(f)? {
+            if o != folder && !left.contains(&o) {
+                left.push(o);
+            }
+        }
+    }
     let mut merged = 0;
+    let mut kept_rows: Vec<i64> = Vec::with_capacity(plan.moves.len());
     for m in &plan.moves {
         let new_path = format!("{root_path}{folder_rel}{}", crate::nfc(&m.target_name));
         let old_key = m.row.key_at(&m.old_path, m.row.size, m.row.mtime);
@@ -1387,6 +1397,13 @@ fn do_dir(db: &Db, job: &mut Job, i: usize, cache: &Cache, cancel: &AtomicBool, 
             }
         };
         tx.execute("INSERT OR REPLACE INTO moved_files(file, job, old_path, moved_at) VALUES(?1, ?2, ?3, ?4)", params![kept, job.id, m.old_path, crate::now()]).map_err(f)?;
+        kept_rows.push(kept);
+    }
+    // merged photos (HDR): the recipes name the sources where they are now, and a merged photo follows its
+    // reference into the new folder instead of staying in a folder that is gone
+    crate::merge::refresh_sources(&tx, &kept_rows)?;
+    for o in left {
+        crate::merge::follow_sources(&tx, o)?;
     }
     // noted before the commit: after a crash the next run sees whether it happened ([`committed`])
     cur.save(job)?;
@@ -1620,6 +1637,8 @@ pub(crate) fn merge_rows(tx: &rusqlite::Transaction, s: i64, t: i64) -> Result<(
         )
         .map_err(f)?;
     }
+    // a merged photo (HDR) made of `s` is made of `t` from now on: its recipe names the sources by their row
+    crate::merge::replace_source(tx, s, t)?;
     // a sidecar write still waiting for `s` is due for `t` now
     tx.execute("INSERT OR IGNORE INTO pending_sidecar_write(file, since, baseline) SELECT ?2, since, baseline FROM pending_sidecar_write WHERE file = ?1", params![s, t]).map_err(f)?;
     tx.execute("DELETE FROM file WHERE id = ?1", [s]).map_err(f)?;
@@ -1659,6 +1678,35 @@ mod merge_tests {
         // the histories go with the develop states
         let steps: i64 = db.conn.query_row("SELECT count(*) FROM develop_step WHERE file = ?1", [t], |r| r.get(0)).unwrap();
         assert_eq!(steps, 2);
+        drop(db);
+        for x in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{x}", p.display()));
+        }
+    }
+
+    /// A photo that is a source of a merged photo (HDR) is merged into the row already at the target: the recipe
+    /// names the kept row (before, it kept the deleted one and the merge could not be computed again).
+    #[test]
+    fn merge_rewrites_the_sources_of_merged_photos() {
+        let p = std::env::temp_dir().join(format!("graineo-merge-hdr-{}-{}.sqlite", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let db = Db::open(&p).unwrap();
+        let root = db.create_root("/tmp/graineo-merge/", "m", "own", None).unwrap();
+        let a = db.create_folder(root, "a/", None).unwrap();
+        let b = db.create_folder(root, "b/", None).unwrap();
+        let file = |folder: i64, name: &str| {
+            db.conn.execute("INSERT INTO file(folder, name, format, size, mtime) VALUES(?1, ?2, 'CR2', 10, 20)", params![folder, name]).unwrap();
+            let d = db.conn.last_insert_rowid();
+            db.conn.execute("INSERT INTO image(file) VALUES(?1)", [d]).unwrap();
+            d
+        };
+        let (s1, s2, t1) = (file(a, "x1.CR2"), file(a, "x2.CR2"), file(b, "x1.CR2"));
+        let c = crate::merge::create(&db, "hdr", &[s1, s2], 0, "{}", 2).unwrap();
+        let tx = db.conn.unchecked_transaction().unwrap();
+        merge_rows(&tx, s1, t1).unwrap();
+        tx.commit().unwrap();
+        let r = crate::merge::recipe(&db.conn, c.file).unwrap();
+        assert_eq!(r.sources.iter().map(|s| s.file).collect::<Vec<_>>(), vec![t1, s2]);
+        assert_eq!(r.source_paths(&db.conn)[0], PathBuf::from("/tmp/graineo-merge/b/x1.CR2"));
         drop(db);
         for x in ["", "-wal", "-shm"] {
             let _ = std::fs::remove_file(format!("{}{x}", p.display()));

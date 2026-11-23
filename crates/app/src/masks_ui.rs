@@ -1671,7 +1671,7 @@ pub fn overlay(
     }
     // while a control outside the photo is held down (a slider, also when held still), the overlay steps aside so the
     // effect is visible; it comes back on release
-    let slider_drag = ui.input(|i| i.pointer.primary_down() && i.pointer.press_origin().is_some_and(|p| !rect.contains(p)));
+    let slider_drag = control_held(ui.ctx(), rect);
     if overlay_shown(ui.ctx(), &s, acting && tool == PartTool::Brush) && !slider_drag && s.hover.is_none_or(|h| h == s.selected) {
         weights_overlay(ui, painter, rect, frame, full, layer, index);
     }
@@ -1827,6 +1827,38 @@ fn brush_ready(s: &State) -> bool {
     (s.draw || s.armed) && s.tool == PartTool::Brush
 }
 
+/// Is a control outside the photo held down? The press is remembered when it starts and forgotten only when no
+/// button is down any more: egui's `press_origin` is cleared by the release of any other button (or a lost event)
+/// while the primary button is still down, which made the overlay reappear during a slider drag.
+pub(crate) fn control_held(ctx: &Context, rect: egui::Rect) -> bool {
+    let id = egui::Id::new("masks_control_held");
+    let (down, pressed_at, origin) = ctx.input(|i| {
+        (
+            i.pointer.primary_down(),
+            i.pointer.button_pressed(egui::PointerButton::Primary).then(|| i.pointer.interact_pos()).flatten(),
+            i.pointer.press_origin(),
+        )
+    });
+    let prev = ctx.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    let held = held_outside(prev, down, pressed_at.map(|p| rect.contains(p)), origin.map(|p| rect.contains(p)));
+    if held != prev {
+        ctx.data_mut(|d| d.insert_temp(id, held));
+    }
+    held
+}
+
+/// State step of `control_held`: `pressed_inside` is set in the frame the primary button went down (inside the photo
+/// or not), `origin_inside` is egui's own press origin, a fallback if that frame was missed.
+fn held_outside(prev: bool, down: bool, pressed_inside: Option<bool>, origin_inside: Option<bool>) -> bool {
+    if !down {
+        return false;
+    }
+    match pressed_inside {
+        Some(inside) => !inside,
+        None => prev || origin_inside == Some(false),
+    }
+}
+
 /// Is the overlay shown: switched on, or the brush is ready (`painting`) and the overlay was not switched off on
 /// purpose ("auto")?
 fn overlay_shown(ctx: &Context, s: &State, painting: bool) -> bool {
@@ -1841,6 +1873,25 @@ fn set_overlay(ctx: &Context, s: &mut State, on: bool) {
 
 #[cfg(test)]
 mod tests {
+
+    /// The overlay stays hidden for the whole press on a control outside the photo, even when egui loses its press
+    /// origin (another button released meanwhile); it is released only with the button, and a press in the photo
+    /// never hides it.
+    #[test]
+    fn a_press_outside_the_photo_is_remembered_until_release() {
+        use super::held_outside;
+        let mut h = held_outside(false, true, Some(false), Some(false));
+        assert!(h);
+        // press origin lost while the primary button is still down
+        h = held_outside(h, true, None, None);
+        assert!(h, "must not flip back while held");
+        // an old-style check would have said false here; now release ends it
+        assert!(!held_outside(h, false, None, None));
+        // a press in the photo (brush stroke) never counts
+        assert!(!held_outside(false, true, Some(true), Some(true)));
+        // a new press in the photo after one outside replaces the state
+        assert!(!held_outside(true, true, Some(true), None));
+    }
 
     /// A click on a menu button opens its popup (a regression: `open_memory(None)` had replaced the click, and
     /// "+ New mask" did nothing); the test hook opens it without a click.

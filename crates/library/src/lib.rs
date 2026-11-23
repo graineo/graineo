@@ -12,6 +12,7 @@
 //! writing only goes to the own database and the preview cache.
 
 pub mod reconcile;
+pub mod metadata_reread;
 pub mod pairs;
 pub mod apple_photos;
 pub mod sidecar;
@@ -23,6 +24,7 @@ pub mod db;
 pub mod manage;
 pub mod duplicates;
 pub mod series;
+pub mod merge;
 pub mod series_quality;
 pub mod duplicate_cleanup;
 pub mod trash_batch;
@@ -287,6 +289,8 @@ pub fn extension_format(ext: &str) -> Option<&'static str> {
 /// decoder (preview, metadata, development). Check a new entry with `scripts/format-check.sh` (docs: formats).
 pub const EXTENSIONS: &[(&str, &str)] = &[
     ("x3f", "X3F"),
+    // sd Quattro H SFD bracket (seven exposures in one file): one photo, developed from the merge of its exposures
+    ("x3i", "X3I"),
     ("cr3", "CR3"),
     ("cr2", "CR2"),
     ("crw", "CRW"),
@@ -335,7 +339,7 @@ pub const EXTENSIONS: &[(&str, &str)] = &[
 
 /// RAW formats (embedded preview via rawler or x3f).
 pub fn is_raw(format: &str) -> bool {
-    matches!(format, "X3F" | "CR3" | "CR2" | "CRW" | "RAF" | "DNG" | "ARW" | "NEF" | "ORF" | "RW2" | "PEF" | "SRW" | "MRW" | "ERF" | "3FR" | "IIQ" | "MOS" | "DCR" | "KDC" | "MEF")
+    matches!(format, "X3F" | "X3I" | "CR3" | "CR2" | "CRW" | "RAF" | "DNG" | "ARW" | "NEF" | "ORF" | "RW2" | "PEF" | "SRW" | "MRW" | "ERF" | "3FR" | "IIQ" | "MOS" | "DCR" | "KDC" | "MEF")
 }
 
 /// Finished image formats the general path edits (JPEG, HEIC, TIFF, PNG).
@@ -345,7 +349,7 @@ pub fn is_finished_image(format: &str) -> bool {
 
 /// RAW of the general RAW path (every RAW except Sigma X3F), by extension (any case).
 pub fn is_raw_extension(ext: &str) -> bool {
-    extension_format(ext).is_some_and(|f| f != "X3F" && is_raw(f))
+    extension_format(ext).is_some_and(|f| f != "X3F" && f != "X3I" && is_raw(f))
 }
 
 /// Finished image the general path edits, by extension (any case).
@@ -404,7 +408,7 @@ mod format_tests {
             assert!(is_raw_extension(e), "{e}");
             assert!(!is_finished_image_extension(e), "{e}");
         }
-        assert!(!is_raw_extension("x3f") && is_raw(extension_format("X3F").unwrap()));
+        assert!(!is_raw_extension("x3f") && !is_raw_extension("x3i") && is_raw(extension_format("X3F").unwrap()));
         for e in ["jpg", "JPEG", "jpe", "heic", "HIF", "tif", "TIFF", "png"] {
             assert!(is_finished_image_extension(e) && !is_raw_extension(e), "{e}");
         }

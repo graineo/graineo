@@ -280,11 +280,13 @@ impl App {
                 self.committed = Some((index, current.clone()));
             }
         }
+        let from = self.history.cursor_of(key);
         if let Some(target) = self.history.jump(key, index, current, target) {
             let view = self.entries[index].settings.view;
             self.entries[index].settings = Settings { view, ..target.clone() };
             self.committed = Some((index, target));
             self.hover_preset = None;
+            crate::hdr_auto::history_moved(from);
         }
     }
 }

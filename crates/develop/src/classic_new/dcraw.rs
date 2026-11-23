@@ -24,9 +24,8 @@
 //! shift). Own forms and measurements against the reference exports: the highlight step
 //! ([`highlights_gray`]: clipping level per layer from the image, fade into grey; dcraw's pull towards
 //! the largest layer tinted nearly clipped skies), the column filter share of the second layer when
-//! one filter serves all layers ([`COLUMN_G`]), the sum correction of the large chroma smoothing
-//! ([`large`]) and the strength of the colour coring of cameras without per-layer amplitudes
-//! (`kette`). The colour step uses a black level estimate from the image ([`super::color`];
+//! one filter serves all layers ([`COLUMN_G`]) and the sum correction of the large chroma smoothing
+//! ([`large`]). The colour step uses a black level estimate from the image ([`super::color`];
 //! without it dark images shift by up to ΔE00 2).
 
 use rayon::prelude::*;
@@ -340,22 +339,35 @@ pub struct LightGray {
 /// coloured objects (mean ΔE00 in the bright parts, L* > 85: dcraw's form 1.24, start 0.95 → 0.62,
 /// 0.85 → 0.58, 0.6 → 0.51, 0.4 → 0.55; the share towards the largest layer hardly matters;
 /// spreading radius 0 → 0.47, 1 → 0.46, 2 → 0.66, 3 → 0.79 with the final clipping detection).
-pub const LIGHT_GRAY: LightGray = LightGray { start: 0.6, to_max: 0.5, radius: 1 };
+/// With the clipping detection that also finds small clipped lights (21.11.2026, mean ΔE00 of the
+/// whole image against the reference exports, start 0.6 → 0.8: dp2x_13 0.31 → 0.23, dp2x_09 0.18 →
+/// 0.16, DP1s SDIM2041 0.087 → 0.066, sd15_15 0.06 → 0.04; start 0.6 with the spreading radius 0 or a
+/// target capped at the lowest clipping level were worse).
+pub const LIGHT_GRAY: LightGray = LightGray { start: 0.8, to_max: 0.5, radius: 1 };
 
 /// Clipping level of each layer, estimated from the image: a layer counts as clipped when more than
-/// 0.2 % of the pixels lie within 5 % of its largest value and these are at least 15 % of the
+/// 0.02 % of the pixels lie within 5 % of its largest value and these are at least 15 % of the
 /// pixels within 20 % of it (a pile-up at the top, not just a bright smooth area); its level is then
-/// the median of the pixels within 10 % of that value. `None` for a layer without such a pile-up.
+/// the median of the pixels within 10 % of that value. The largest value leaves out the brightest
+/// 0.001 % of the pixels (single values above the pile-up). `None` for a layer without such a
+/// pile-up. (Before 21.11.2026: 0.2 % and the plain maximum, which missed small clipped lights and
+/// left them magenta or green, e.g. DP1s pb_03 p99.9 ΔE00 3.06 → 1.7.)
 pub fn clip_limits(img: &[i32]) -> [Option<f64>; 3] {
     let n = img.len() / 3;
     std::array::from_fn(|c| {
-        let max = img.iter().skip(c).step_by(3).map(|v| *v as i16 as i32).max().unwrap_or(0);
-        if max <= 0 || n == 0 {
+        // top of the layer without its brightest 0.001 % (single hot pixels above a clipped area)
+        if n == 0 {
+            return None;
+        }
+        let mut all: Vec<i32> = img.iter().skip(c).step_by(3).map(|v| *v as i16 as i32).collect();
+        let max = *all.select_nth_unstable(n - 1 - n / 100_000).1;
+        drop(all);
+        if max <= 0 {
             return None;
         }
         let near = img.iter().skip(c).step_by(3).filter(|v| f64::from(**v as i16) > 0.95 * f64::from(max)).count();
         let band20 = img.iter().skip(c).step_by(3).filter(|v| f64::from(**v as i16) > 0.8 * f64::from(max)).count();
-        if (near as f64) < 0.002 * n as f64 || (near as f64) < 0.15 * band20 as f64 {
+        if (near as f64) < 0.0002 * n as f64 || (near as f64) < 0.15 * band20 as f64 {
             return None;
         }
         let mut band: Vec<i32> = img.iter().skip(c).step_by(3).map(|v| *v as i16 as i32).filter(|v| f64::from(*v) > 0.9 * f64::from(max)).collect();

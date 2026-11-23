@@ -12,7 +12,7 @@ pub const GROUPS: [(&str, &str); N] = [
     ("Tonwert", "Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz"),
     ("Fill Light", "Fill Light, Rauschbremse"),
     ("Präsenz", "Struktur, Klarheit, Dunst entfernen, Dynamik, Sättigung"),
-    ("Farbstiche", "Lichter neutral"),
+    ("Farbstiche", "Lichter neutral, Lichter-Farbe, Lichter-Struktur"),
     ("Tonwert-Entzerrer", "Belichtung je Helligkeitszone, Maske"),
     ("Gradationskurve", "Punktkurve RGB, Rot, Grün, Blau"),
     ("Schwarzweiß", "Behandlung und Schichtmischung"),
@@ -131,6 +131,8 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
     }
     if on("Farbstiche") {
         s.highlight_neutralize = src.highlight_neutralize;
+        s.highlight_colour = src.highlight_colour;
+        s.highlight_structure = src.highlight_structure;
         s.bypass.casts = src.bypass.casts;
     }
     if on("Tonwert-Entzerrer") {
@@ -200,6 +202,7 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
         s.denoise = src.denoise;
         s.nr_luma = src.nr_luma;
         s.nr_chroma = src.nr_chroma;
+        s.quattro_detail = src.quattro_detail;
         // binning (Quattro at high ISO) belongs to the noise
         s.binning = src.binning;
         s.raw.nr_luma = src.raw.nr_luma;

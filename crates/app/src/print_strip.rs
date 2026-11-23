@@ -275,6 +275,18 @@ impl App {
             return;
         }
         let order = self.print_room.order.clone();
+        // GRAINEO_PRINT_ORIENTATION=portrait|landscape: as if switched by hand (no suggestion afterwards)
+        match crate::env::var("GRAINEO_PRINT_ORIENTATION").as_deref() {
+            Ok("portrait") => {
+                self.print_room.t.set_orientation(print::template::Orientation::Portrait);
+                self.print_room.orientation_manual = true;
+            }
+            Ok("landscape") => {
+                self.print_room.t.set_orientation(print::template::Orientation::Landscape);
+                self.print_room.orientation_manual = true;
+            }
+            _ => {}
+        }
         if crate::env::var("GRAINEO_PRINT_ALL").is_ok_and(|v| v == "1") {
             self.print_room.sel.select_all(&order);
         }
@@ -539,7 +551,7 @@ impl App {
                 let pos = cells.pos(c);
                 let Some(e) = self.entries.get(pos) else { continue };
                 let (image, file) = (e.image, e.file);
-                let printable = e.state == 0 && crate::image_kind::of(&e.path).editable();
+                let printable = crate::developable_state(e.state) && crate::image_kind::of(&e.path).editable();
                 let r = Rect::from_min_size(origin + egui::vec2(layout.x(c), 0.0), egui::vec2(layout.width(c), cell_h));
                 let resp = ui.interact(r, ui.scope_id().with(("print-strip", image)), egui::Sense::click());
                 let is_sel = self.print_room.sel.selected.contains(&image);

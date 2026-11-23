@@ -21,6 +21,8 @@ struct Meas {
     developed: u64,
     /// stored Sigma bases (trimmed)
     bases: u64,
+    /// computed merges (HDR; trimmed where the sources are reachable)
+    merged: u64,
     /// fingerprints, faces, …
     other: u64,
     /// what the automatic trimming would remove now / what "Trim now" would remove (0 = nothing)
@@ -32,7 +34,7 @@ struct Meas {
 
 impl Meas {
     fn total(&self) -> u64 {
-        self.previews + self.offline + self.developed + self.bases + self.other
+        self.previews + self.offline + self.developed + self.bases + self.merged + self.other
     }
 }
 
@@ -54,7 +56,8 @@ fn bases_folder() -> Option<std::path::PathBuf> {
 
 fn roots(cache: &preview::Cache) -> limit::Roots {
     let spp = bases_folder();
-    let mut v: Vec<&std::path::Path> = vec![cache.folder()];
+    let merged = rawdev::merged::cache_dir();
+    let mut v: Vec<&std::path::Path> = vec![cache.folder(), &merged];
     if let Some(s) = &spp {
         v.push(s);
     }
@@ -64,8 +67,18 @@ fn roots(cache: &preview::Cache) -> limit::Roots {
 /// All candidates for trimming (stored bases, previews of photos on this Mac).
 fn candidates(cache: &preview::Cache) -> Vec<limit::Item> {
     let mut v = bases_folder().map(|d| limit::scan_bases(&d, "sppc", std::time::SystemTime::now())).unwrap_or_default();
+    v.extend(merged_items(std::time::SystemTime::now()));
     v.extend(limit::preview_items(&cache.inventory(), cache.protection_known(), &|k| cache.is_protected(k), &|k, l| cache.path(k, l)));
     v
+}
+
+/// Computed merges (HDR) that can be made again from their sources, as bases (oldest first, young ones left out).
+fn merged_items(now: std::time::SystemTime) -> Vec<limit::Item> {
+    rawdev::merged::trimmable()
+        .into_iter()
+        .filter(|(_, _, t)| now.duration_since(*t).is_ok_and(|d| d.as_secs() >= limit::KEEP_YOUNG_SECS))
+        .map(|(path, bytes, t)| limit::Item { path, bytes, age: t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()), kind: limit::Kind::Base })
+        .collect()
 }
 
 /// Measure (sizes of the groups, plans). Runs in the calling thread (always a background thread).
@@ -81,6 +94,7 @@ fn measure(cache: &preview::Cache) -> Meas {
     m.developed = limit::folder_bytes(&preview::developed_folder());
     let base_dir = bases_folder();
     m.bases = base_dir.as_deref().map_or(0, |d| limit::scan_bases(d, "sppc", std::time::UNIX_EPOCH + Duration::from_secs(u32::MAX as u64)).iter().map(|i| i.bytes).sum());
+    m.merged = rawdev::merged::cache_bytes();
     let folder = cache.folder();
     m.other = limit::folder_bytes(&folder.join("fingerprints")) + folder.parent().map_or(0, |p| limit::folder_bytes(&p.join("faces")));
     if let Some(l) = limit::limit_bytes() {
@@ -158,7 +172,14 @@ pub(super) fn start(cache: Arc<preview::Cache>) {
         let secs = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_CACHE_LIMIT_SECS").ok()).and_then(|s| s.parse::<u64>().ok());
         std::thread::spawn(move || {
             library::platform::background_priority();
-            std::thread::sleep(Duration::from_secs(secs.unwrap_or(90)));
+            // once per start: states of merged photos (HDR) that no recipe needs any more
+            std::thread::sleep(Duration::from_secs(secs.unwrap_or(90).min(30)));
+            let freed = rawdev::merged::sweep();
+            if freed > 0 {
+                crate::log(&format!("merge cache: {freed} bytes of unused states removed"));
+                *MEAS.lock().unwrap() = None;
+            }
+            std::thread::sleep(Duration::from_secs(secs.unwrap_or(90).saturating_sub(30)));
             loop {
                 if limit::limit_bytes().is_some() && crate::jobs::idle() {
                     run(cache.clone(), false);
@@ -210,12 +231,28 @@ pub(super) fn group_ui(ui: &mut egui::Ui) {
             for (name, bytes, trimmed) in [
                 (crate::tr("Vorschauen von Fotos auf diesem Mac"), m.previews, true),
                 (crate::tr("Foveon-Zwischenspeicher"), m.bases, true),
+                (crate::tr("HDR-Zwischenspeicher"), m.merged, true),
                 (crate::tr("Offline-Kopien, andere Laufwerke"), m.offline, false),
                 (crate::tr("Entwickelte Vorschauen"), m.developed, false),
                 (crate::tr("Übriges (Fingerabdrücke, Gesichter)"), m.other, false),
             ] {
                 separator(ui);
-                row(ui, name, None, |ui| value(ui, &gb(bytes), if trimmed { Signal::Gray } else { Signal::Green }));
+                let merged = name == crate::tr("HDR-Zwischenspeicher");
+                row(ui, name, None, |ui| {
+                    // the computed merges can be emptied by hand: they are made again from the sources when a photo opens
+                    if merged {
+                        let r = ui.add_enabled(bytes > 0 && !rawdev::merged::other_library(), egui::Button::new(crate::tr("Leeren")));
+                        if r.clicked() {
+                            std::thread::spawn(|| {
+                                let freed = rawdev::merged::clear_cache();
+                                crate::log(&format!("merge cache emptied by hand: {freed} bytes"));
+                                *MEAS.lock().unwrap() = None;
+                            });
+                        }
+                        lr::hover_tip(ui, &r, crate::tr("HDR-Fotos bleiben; ihr Bild wird beim Öffnen aus den Quellen neu berechnet"));
+                    }
+                    value(ui, &gb(bytes), if trimmed { Signal::Gray } else { Signal::Green })
+                });
             }
         }
         separator(ui);
@@ -234,7 +271,7 @@ pub(super) fn group_ui(ui: &mut egui::Ui) {
             let text = if plan == 0 {
                 crate::tr("Es gibt nichts zu entfernen.").to_string()
             } else {
-                crate::trf!("Es werden etwa {a} entfernt: die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.", a = gb(plan))
+                crate::trf!("Es werden etwa {a} entfernt: die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.", a = gb(plan))
             };
             dialog_hint_small(ui, &text);
             if plan > 0 && m.as_ref().is_some_and(|m| !m.reaches) {

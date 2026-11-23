@@ -12,6 +12,7 @@ legacy_names = { path = "../legacy_names" }
 # bundled SQLite (the one shipped with macOS is too old for rusqlite 0.41)
 rusqlite = { version = "0.41.0", features = ["bundled", "backup"] }
 serde_json = "1"
+serde = { version = "1", features = ["derive"] }
 # embedded previews of non-Sigma RAWs (same pinned version as crates/raw)
 rawler = "=0.8.0"
 # decode embedded JPEG previews directly at reduced size (DCT scaling 1/2 … 1/8)

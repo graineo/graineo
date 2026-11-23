@@ -106,14 +106,27 @@ fn has_mark(head: &[u8]) -> bool {
     head.get(6..6 + n).is_some_and(|t| t.len() > DEVELOPED_SUFFIX.len() && t.ends_with(DEVELOPED_SUFFIX))
 }
 
-/// Stable key (FNV-1a 64) – independent of Rust version and database IDs.
+/// Stable key (FNV-1a 64) – independent of Rust version and database IDs. Formats whose development changed so
+/// that their developed previews are wrong carry a version ([`compute_version`]): a new version gives new keys, and
+/// the previews are made anew (only those files, not the whole cache).
 pub fn cache_key(path: &str, size: i64, mtime: i64) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in path.bytes().chain(size.to_le_bytes()).chain(mtime.to_le_bytes()) {
         h ^= b as u64;
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
-    h
+    match compute_version(path) {
+        0 => h,
+        v => (h ^ v as u64).wrapping_mul(0x0100_0000_01b3),
+    }
+}
+
+/// Version of the development of a format, part of [`cache_key`] when not 0. X3I (merged SFD bracket): 1 = start tone
+/// like the base exposure (before: dark, grey bracket tone); 2 = merge without the wrong colours of dark areas, the
+/// coloured specks at clipped highlights and the dot lattice of the focus pixels.
+pub fn compute_version(path: &str) -> u32 {
+    let ext = std::path::Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("");
+    if ext.eq_ignore_ascii_case("x3i") { 2 } else { 0 }
 }
 
 fn env_gb(name: &str) -> Option<u64> {
@@ -905,22 +918,29 @@ fn tiff_value(t: &[u8], tag: u16) -> Option<Result<u32, String>> {
 struct Tiff<'a> {
     b: &'a [u8],
     le: bool,
+    /// file offset of `b[0]` (0 for a buffer from the start of the file; otherwise a piece read from further back)
+    base: usize,
 }
 
 impl<'a> Tiff<'a> {
     fn new(b: &'a [u8]) -> Option<Self> {
         match b.get(0..4)? {
-            b"II*\0" => Some(Tiff { b, le: true }),
-            b"MM\0*" => Some(Tiff { b, le: false }),
+            b"II*\0" => Some(Tiff { b, le: true, base: 0 }),
+            b"MM\0*" => Some(Tiff { b, le: false, base: 0 }),
             _ => None,
         }
     }
+    /// `len` bytes at the file offset `o`
+    fn bytes(&self, o: usize, len: usize) -> Option<&'a [u8]> {
+        let o = o.checked_sub(self.base)?;
+        self.b.get(o..o.checked_add(len)?)
+    }
     fn u16_(&self, o: usize) -> Option<u16> {
-        let x = self.b.get(o..o + 2)?;
+        let x = self.bytes(o, 2)?;
         Some(if self.le { u16::from_le_bytes([x[0], x[1]]) } else { u16::from_be_bytes([x[0], x[1]]) })
     }
     fn u32_(&self, o: usize) -> Option<u32> {
-        let x = self.b.get(o..o + 4)?;
+        let x = self.bytes(o, 4)?;
         Some(if self.le { u32::from_le_bytes([x[0], x[1], x[2], x[3]]) } else { u32::from_be_bytes([x[0], x[1], x[2], x[3]]) })
     }
     /// numbers of an entry (SHORT or LONG, also several)
@@ -943,6 +963,17 @@ impl<'a> Tiff<'a> {
     }
     fn number(&self, ifd: usize, tag: u16) -> Option<u32> {
         self.numbers(ifd, tag)?.first().copied()
+    }
+    /// position of the 4-byte value field of an entry (offset or inline value), for any type
+    fn field(&self, ifd: usize, tag: u16) -> Option<usize> {
+        (0..self.u16_(ifd)? as usize).map(|i| ifd + 2 + i * 12).find(|&e| self.u16_(e) == Some(tag)).map(|e| e + 8)
+    }
+    /// text of an ASCII entry
+    fn ascii(&self, ifd: usize, tag: u16) -> Option<String> {
+        let f = self.field(ifd, tag)?;
+        let n = self.u32_(f - 4)? as usize;
+        let b = if n <= 4 { self.bytes(f, n)? } else { self.bytes(self.u32_(f)? as usize, n)? };
+        Some(String::from_utf8_lossy(b).trim_end_matches('\0').trim().to_string())
     }
 }
 
@@ -984,25 +1015,17 @@ fn dng_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
     let mut jpeg = vec![0u8; len];
     f.read_exact(&mut jpeg).ok()?;
     let img = jpeg_downscaled(&jpeg, min)?;
-    Some(tiff_finish(&t, &header, ifd0, img))
+    Some(tiff_finish(&t, ifd0, img))
 }
 
-/// Orientation, camera and capture time from IFD0 of a TIFF-based RAW (start of the file in `header`), applied to
-/// the preview `img`.
-fn tiff_finish(t: &Tiff, header: &[u8], ifd0: usize, img: RgbImage) -> (RgbImage, Meta) {
+/// Orientation, camera and capture time from IFD0 of a TIFF-based RAW, applied to the preview `img`.
+fn tiff_finish(t: &Tiff, ifd0: usize, img: RgbImage) -> (RgbImage, Meta) {
     let o = t.number(ifd0, 0x0112).unwrap_or(1);
-    let camera = tiff_value(header, 0x0110).and_then(|v| v.err()).filter(|s| !s.is_empty());
+    let camera = t.ascii(ifd0, 0x0110).filter(|s| !s.is_empty());
     let capture = t.number(ifd0, 0x8769).and_then(|exif| {
         // DateTimeOriginal in the EXIF IFD (ASCII, pointer to 20 bytes)
-        for i in 0..t.u16_(exif as usize)? as usize {
-            let e = exif as usize + 2 + i * 12;
-            if t.u16_(e)? == 0x9003 {
-                let o = t.u32_(e + 8)? as usize;
-                let s = String::from_utf8_lossy(header.get(o..o + 19)?).to_string();
-                return crate_exif_date(&s);
-            }
-        }
-        None
+        let s = t.ascii(exif as usize, 0x9003)?;
+        crate_exif_date(&s)
     });
     (orient(img, o as u16), Meta { width: None, height: None, capture, camera })
 }
@@ -1012,23 +1035,36 @@ fn tiff_finish(t: &Tiff, header: &[u8], ifd0: usize, img: RgbImage) -> (RgbImage
 /// thumbnail, which took seconds per photo. Here only the smallest JPEG that reaches `min` is read and decoded
 /// downscaled. This also works for NEF compressions the RAW reader cannot decode (High Efficiency).
 fn nef_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
-    use std::io::{Read, Seek, SeekFrom};
     let (header, _) = read_header(path, 1 << 20)?;
     let t = Tiff::new(&header)?;
     let ifd0 = t.u32_(4)? as usize;
+    let jpegs = tiff_jpegs(&t, ifd0);
+    smallest_jpeg(path, &t, ifd0, jpegs, min)
+}
+
+/// JPEG previews (offset, length) of IFD0 and its SubIFDs: JPEGInterchangeFormat 0x0201/0x0202 with Compression 6 or
+/// without a Compression entry (Samsung SRW leaves it out).
+fn tiff_jpegs(t: &Tiff, ifd0: usize) -> Vec<(u64, usize)> {
     let mut ifds = vec![ifd0];
     ifds.extend(t.numbers(ifd0, 330).unwrap_or_default().into_iter().map(|o| o as usize));
-    let mut jpegs: Vec<(u64, usize)> = ifds
-        .into_iter()
-        .filter(|&ifd| t.number(ifd, 259) == Some(6))
+    ifds.into_iter()
+        .filter(|&ifd| matches!(t.number(ifd, 259), Some(6) | None))
         .filter_map(|ifd| Some((t.number(ifd, 0x0201)? as u64, t.number(ifd, 0x0202)? as usize)))
-        .filter(|&(_, len)| len > 1000 && len <= 40 << 20)
-        .collect();
+        .collect()
+}
+
+/// Of the JPEG candidates (offset, length) the smallest one that reaches `min` (long edge), decoded downscaled and
+/// finished with the orientation, camera and time of IFD0.
+fn smallest_jpeg(path: &Path, t: &Tiff, ifd0: usize, mut jpegs: Vec<(u64, usize)>, min: u32) -> Option<(RgbImage, Meta)> {
+    use std::io::{Read, Seek, SeekFrom};
+    jpegs.retain(|&(_, len)| len > 1000 && len <= 40 << 20);
     jpegs.sort_by_key(|&(_, len)| len);
     let mut f = std::fs::File::open(path).ok()?;
     for (off, len) in jpegs {
-        let mut jpeg = vec![0u8; len];
-        if f.seek(SeekFrom::Start(off)).is_err() || f.read_exact(&mut jpeg).is_err() {
+        // a little more than the stated length: the maker note preview of the NX300 is 133 bytes short, the decoder
+        // ignores what follows the end of the image
+        let mut jpeg = Vec::with_capacity(len + 1024);
+        if f.seek(SeekFrom::Start(off)).is_err() || (&mut f).take(len as u64 + 1024).read_to_end(&mut jpeg).is_err() || jpeg.len() < len {
             continue;
         }
         let mut d = jpeg_decoder::Decoder::new(std::io::Cursor::new(&jpeg));
@@ -1036,10 +1072,85 @@ fn nef_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
         if (info.width.max(info.height) as u32) < min {
             continue;
         }
-        let img = jpeg_downscaled(&jpeg, min)?;
-        return Some(tiff_finish(&t, &header, ifd0, img));
+        let Some(img) = jpeg_downscaled(&jpeg, min) else { continue };
+        return Some(tiff_finish(t, ifd0, img));
     }
     None
+}
+
+/// Samsung SRW: IFD0 has the full-size JPEG in its first SubIFD (without a Compression entry) and, in the maker note,
+/// a medium one (1616 px on the NX series, 640 px on the EX1) that PreviewIFD (maker note tag 0x0035, offset relative
+/// to the maker note) points to. The RAW reader offers neither. A 400 px tile takes the medium one (about 0.8 MB)
+/// instead of developing the sensor data (0.4-1.4 s); the large level decodes the full-size JPEG downscaled.
+fn srw_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
+    let (header, _) = read_header(path, 1 << 20)?;
+    let t = Tiff::new(&header)?;
+    let ifd0 = t.u32_(4)? as usize;
+    let mut jpegs = tiff_jpegs(&t, ifd0);
+    let note = (|| {
+        let exif = t.number(ifd0, 0x8769)? as usize;
+        let note = t.u32_(t.field(exif, 0x927C)?)? as usize;
+        let preview = note + t.number(note, 0x0035)? as usize;
+        Some((note as u64 + t.number(preview, 0x0201)? as u64, t.number(preview, 0x0202)? as usize))
+    })();
+    jpegs.extend(note);
+    smallest_jpeg(path, &t, ifd0, jpegs, min)
+}
+
+/// Bytes of an uncompressed 8-bit RGB thumbnail of `w × h` in a file of `len` bytes; `None` when the size is empty,
+/// overflows, is larger than a thumbnail ever is ([`IIQ_PREVIEW_MAX_EDGE`]) or than the file itself.
+fn iiq_preview_bytes(w: usize, h: usize, len: u64) -> Option<usize> {
+    if w == 0 || h == 0 || w > IIQ_PREVIEW_MAX_EDGE || h > IIQ_PREVIEW_MAX_EDGE {
+        return None;
+    }
+    let bytes = w.checked_mul(h)?.checked_mul(3)?;
+    (bytes as u64 <= len).then_some(bytes)
+}
+
+/// Longest edge accepted for the thumbnail of an IIQ file (the cameras write a few hundred pixels).
+const IIQ_PREVIEW_MAX_EDGE: usize = 8192;
+
+/// Phase One / Leaf IIQ: the TIFF directory sits at the end of the file (pointer in the header). IFD0 holds an
+/// uncompressed 8-bit RGB thumbnail (296 px on the P65+, 608 px on the Credo 40), already upright, with tone curve and
+/// white balance applied. Only that end piece is read. A thumbnail shorter than 70 % of `min` is not used (the large
+/// level is developed from the sensor data).
+fn iiq_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut head = [0u8; 8];
+    f.read_exact(&mut head).ok()?;
+    if &head[..4] != b"II*\0" {
+        return None;
+    }
+    let ifd0 = u32::from_le_bytes([head[4], head[5], head[6], head[7]]) as u64;
+    let len = f.metadata().ok()?.len();
+    if ifd0 < 8 || ifd0 >= len || len - ifd0 > 1 << 20 {
+        return None;
+    }
+    f.seek(SeekFrom::Start(ifd0)).ok()?;
+    let mut tail = Vec::with_capacity((len - ifd0) as usize);
+    f.read_to_end(&mut tail).ok()?;
+    let t = Tiff { b: &tail, le: true, base: ifd0 as usize };
+    let ifd0 = ifd0 as usize;
+    let (w, h) = (t.number(ifd0, 0x0100)? as usize, t.number(ifd0, 0x0101)? as usize);
+    let bytes = iiq_preview_bytes(w, h, len)?;
+    let uncompressed_rgb = t.number(ifd0, 0x0103) == Some(1)
+        && t.number(ifd0, 0x0106) == Some(2)
+        && t.numbers(ifd0, 0x0102).as_deref() == Some(&[8, 8, 8])
+        && t.number(ifd0, 0x011c).unwrap_or(1) == 1
+        && t.number(ifd0, 0x0117).map(|n| n as usize) == Some(bytes);
+    if !uncompressed_rgb || (w.max(h) as u32) * 10 < min * 7 {
+        return None;
+    }
+    let off = t.number(ifd0, 0x0111)? as u64;
+    if off.checked_add(bytes as u64).is_none_or(|end| end > len) {
+        return None;
+    }
+    f.seek(SeekFrom::Start(off)).ok()?;
+    let mut px = vec![0u8; bytes];
+    f.read_exact(&mut px).ok()?;
+    let img = RgbImage::from_raw(w as u32, h as u32, px)?;
+    Some(tiff_finish(&t, ifd0, downscale(img, min)))
 }
 
 /// ORF (Olympus, OM System): the preview JPEG lies in the maker note (CameraSettings 0x2020, PreviewImageStart 0x0101
@@ -1055,7 +1166,7 @@ fn orf_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
         b"MMOR" | b"MM\0*" => false,
         _ => return None,
     };
-    let t = Tiff { b: &header, le };
+    let t = Tiff { b: &header, le, base: 0 };
     // entry of an IFD: position of its 4-byte value field (offset or inline value), for any type
     let field = |t: &Tiff, ifd: usize, tag: u16| -> Option<usize> { (0..t.u16_(ifd)? as usize).map(|i| ifd + 2 + i * 12).find(|&e| t.u16_(e) == Some(tag)).map(|e| e + 8) };
     let ifd0 = t.u32_(4)? as usize;
@@ -1077,7 +1188,7 @@ fn orf_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
         Some(b"MM") => false,
         _ => le,
     };
-    let n = Tiff { b: &header, le: le_note };
+    let n = Tiff { b: &header, le: le_note, base: 0 };
     let settings = base + n.u32_(field(&n, ifd, 0x2020)?)? as usize;
     if n.number(settings, 0x0100) == Some(0) {
         return None;
@@ -1091,7 +1202,7 @@ fn orf_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
     let mut jpeg = vec![0u8; len];
     f.read_exact(&mut jpeg).ok()?;
     let img = jpeg_downscaled(&jpeg, min)?;
-    Some(tiff_finish(&t, &header, ifd0, img))
+    Some(tiff_finish(&t, ifd0, img))
 }
 
 /// CR3 without the RAW reader: preview JPEG (PRVW), orientation, camera and capture time are all
@@ -1123,8 +1234,10 @@ fn raw_preview(path: &Path, min: u32) -> Result<(RgbImage, Meta), String> {
         // ORF and the ORI frame of a high-resolution shot
         Some("ORF") => orf_fast(path, min),
         // other TIFF-based RAWs whose JPEG the RAW reader does not offer (Samsung SRW, Hasselblad 3FR, Mamiya/Leaf
-        // MOS, Epson ERF …): the same search for a JPEG in IFD0 and its SubIFDs as for NEF
-        Some("SRW" | "3FR" | "MOS" | "ERF" | "DCR" | "KDC" | "MEF" | "IIQ" | "PEF" | "ARW") => nef_fast(path, min),
+        // MOS, Epson ERF …; Samsung SRW and Phase One IIQ have their own readers above): the same search for a JPEG in IFD0 and its SubIFDs as for NEF
+        Some("SRW") => srw_fast(path, min),
+        Some("IIQ") => iiq_fast(path, min),
+        Some("3FR" | "MOS" | "ERF" | "DCR" | "KDC" | "MEF" | "PEF" | "ARW") => nef_fast(path, min),
         _ => None,
     };
     if let Some(r) = fast {
@@ -1287,7 +1400,7 @@ pub fn load(path: &Path, format: &str, max: u32) -> Result<(RgbImage, Meta), Str
     }
     match format {
         "VIDEO" => Ok((downscale(crate::video::preview(path, max)?, max), Meta::default())),
-        "X3F" => {
+        "X3F" | "X3I" => {
             // image size from the header of the largest embedded preview (camera output size, unrotated as with ImageIO)
             let size = x3f::read_image_size(path);
             Ok((downscale(x3f_preview(path, max)?, max), Meta { width: size.map(|s| s.0), height: size.map(|s| s.1), ..Meta::default() }))
@@ -1378,6 +1491,12 @@ pub fn remove_developed(file: i64, levels: &[u32]) {
     }
 }
 
+/// Remove every developed preview of `file` (the photo is gone for good: its file id may be given to another photo).
+pub fn remove_all_developed(file: i64) {
+    let levels = developed_index().lock().unwrap().get(&file).cloned().unwrap_or_default();
+    remove_developed(file, &levels);
+}
+
 /// Photo on this Mac: remove its developed large previews (no offline copy here). The small level `small` is
 /// derived from them first if it is missing, so the edit stays visible in the grid. Returns: number removed.
 pub fn remove_developed_large(file: i64, small: u32) -> usize {
@@ -1399,6 +1518,11 @@ pub fn remove_developed_large(file: i64, small: u32) -> usize {
 /// Is a developed preview of exactly this level present?
 pub fn has_developed(file: i64, level: u32) -> bool {
     developed_index().lock().unwrap().get(&file).is_some_and(|v| v.contains(&level))
+}
+
+/// Is a developed preview of any level present?
+pub fn has_any_developed(file: i64) -> bool {
+    developed_index().lock().unwrap().get(&file).is_some_and(|v| !v.is_empty())
 }
 
 /// Read a developed preview of exactly this level, if present.
@@ -1451,7 +1575,7 @@ pub fn exif_orientation(quarter: u8) -> i64 {
 /// properties of the file, and only if the library knows a rotation at all.
 pub fn extra_rotation(path: &Path, format: &str, library_orientation: Option<i64>) -> u8 {
     let Some(expected) = library_orientation.and_then(quarter) else { return 0 };
-    if format == "VIDEO" || format == "X3F" {
+    if format == "VIDEO" || format == "X3F" || format == "X3I" {
         return 0;
     }
     let file = crate::imageio::properties(path).map_or(1, |e| e.orientation.map_or(1, i64::from));
@@ -1522,11 +1646,9 @@ pub struct Generator {
     inner: Arc<Inner>,
 }
 
-impl Generator {
-    /// `threads`: number of workers; `wake` is called after each result (e.g. redraw), with `true` for a visible
-    /// tile (wanted at once) and `false` for background work (a redraw within a second is enough).
-    pub fn new(cache: Arc<Cache>, threads: usize, wake: Box<dyn Fn(bool) + Send + Sync>) -> Generator {
-        let inner = Arc::new(Inner {
+impl Inner {
+    fn new(cache: Arc<Cache>, wake: Box<dyn Fn(bool) + Send + Sync>) -> Inner {
+        Inner {
             cache,
             urgent: Mutex::new(None),
             front: Mutex::new(VecDeque::new()),
@@ -1545,7 +1667,15 @@ impl Generator {
             heavy_running: AtomicUsize::new(0),
             heavy_limit: AtomicUsize::new(1),
             time_us: AtomicU64::new(0),
-        });
+        }
+    }
+}
+
+impl Generator {
+    /// `threads`: number of workers; `wake` is called after each result (e.g. redraw), with `true` for a visible
+    /// tile (wanted at once) and `false` for background work (a redraw within a second is enough).
+    pub fn new(cache: Arc<Cache>, threads: usize, wake: Box<dyn Fn(bool) + Send + Sync>) -> Generator {
+        let inner = Arc::new(Inner::new(cache, wake));
         for i in 0..threads.max(1) {
             let inn = inner.clone();
             std::thread::Builder::new().name(format!("vorschau-{i}")).spawn(move || workers(inn, i)).ok();
@@ -1639,18 +1769,29 @@ fn to_do(inn: &Inner, a: &Job) -> bool {
     is_heavy(a.level) && develops(&a.format) && !inn.failed.lock().unwrap().contains(&a.key) && !inn.cache.is_developed(a.key, a.level)
 }
 
-fn nearest(inn: &Inner) -> Option<(Job, bool)> {
+/// Where a job came from (what it may cause afterwards).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Origin {
+    /// [`Generator::urgent`]: the large preview of the photo opened in the single image view
+    Urgent,
+    /// visible tiles and jobs ahead (paging, the fields of a comparison)
+    Shown,
+    /// soon / background: generation only
+    Back,
+}
+
+fn nearest(inn: &Inner) -> Option<(Job, Origin)> {
     let running = inn.running.lock().unwrap();
     if let Some(a) = inn.urgent.lock().unwrap().take() {
         if !running.contains(&(a.key, a.level)) {
-            return Some((a, true));
+            return Some((a, Origin::Urgent));
         }
     }
     for queue in [&inn.front, &inn.ahead] {
         let mut v = queue.lock().unwrap();
         while let Some(a) = v.pop_front() {
             if !running.contains(&(a.key, a.level)) {
-                return Some((a, true));
+                return Some((a, Origin::Shown));
             }
         }
     }
@@ -1670,11 +1811,19 @@ fn nearest(inn: &Inner) -> Option<(Job, bool)> {
                     h.push_front(a);
                     return None;
                 }
-                return Some((a, false));
+                return Some((a, Origin::Back));
             }
         }
     }
     None
+}
+
+/// After a shown job of a large level left the camera JPEG standing in for a RAW: develop it soon? Only for the photo
+/// opened in the single image view: fields of a comparison and photos read ahead
+/// keep the camera JPEG (a Quattro X3F costs about a minute of processor each, which went on long after closing the
+/// comparison).
+fn develop_soon_after(origin: Origin) -> bool {
+    origin == Origin::Urgent
 }
 
 
@@ -1791,11 +1940,12 @@ pub fn ensure_offline(cache: &Cache, job: &Job) -> Result<bool, String> {
 fn workers(inn: Arc<Inner>, _nr: usize) {
     low_priority();
     loop {
-        let Some((a, visible)) = nearest(&inn) else {
+        let Some((a, origin)) = nearest(&inn) else {
             let g = inn.wait_for.lock().unwrap();
             let _ = inn.signal.wait_timeout(g, std::time::Duration::from_millis(500)).unwrap();
             continue;
         };
+        let visible = origin != Origin::Back;
         inn.running.lock().unwrap_or_else(|e| e.into_inner()).insert((a.key, a.level));
         // whatever happens below (also a panic in a reader): "running" and the heavy counter are reset
         let mut guard = RunningMark { inn: &inn, key: (a.key, a.level), heavy: false };
@@ -1856,7 +2006,7 @@ fn workers(inn: Arc<Inner>, _nr: usize) {
                 if !inn.cache.paused() && a.path.is_file() {
                     inn.failed.lock().unwrap().insert(a.key);
                 }
-            } else if result.error.is_none() && !inn.failed.lock().unwrap().contains(&a.key) && a.path.is_file() {
+            } else if develop_soon_after(origin) && result.error.is_none() && !inn.failed.lock().unwrap().contains(&a.key) && a.path.is_file() {
                 // the single image shows the camera JPEG for now: develop it soon (replaces it)
                 let mut soon = inn.soon.lock().unwrap();
                 if !soon.iter().any(|j| j.key == a.key && j.level == a.level) {
@@ -1893,10 +2043,57 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// Sizes from a damaged IIQ directory never reserve memory: empty, overflowing, larger than the file.
+    #[test]
+    fn iiq_thumbnail_size_is_checked() {
+        assert_eq!(iiq_preview_bytes(296, 222, 60 << 20), Some(296 * 222 * 3));
+        assert_eq!(iiq_preview_bytes(0, 222, 60 << 20), None);
+        assert_eq!(iiq_preview_bytes(65536, 65536, u64::MAX), None, "w·h·3 wraps to 0 in 32 bits");
+        assert_eq!(iiq_preview_bytes(usize::MAX, 3, u64::MAX), None);
+        assert_eq!(iiq_preview_bytes(8192, 8192, 1 << 20), None, "more than the file holds");
+        assert_eq!(iiq_preview_bytes(8193, 10, u64::MAX), None);
+    }
+
+    #[test]
+    fn x3i_keys_carry_the_compute_version() {
+        // other formats keep their keys (no regeneration of the whole cache)
+        assert_eq!(compute_version("/a/b.X3F"), 0);
+        assert_eq!(compute_version("/a/b.x3i"), 2);
+        let plain = |p: &str| {
+            let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+            for b in p.bytes().chain(5i64.to_le_bytes()).chain(7i64.to_le_bytes()) {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x0100_0000_01b3);
+            }
+            h
+        };
+        assert_eq!(cache_key("/a/b.X3F", 5, 7), plain("/a/b.X3F"));
+        assert_ne!(cache_key("/a/b.X3I", 5, 7), plain("/a/b.X3I"));
+    }
+
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("graineo-preview-{name}-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    /// Only the photo opened in the single image view (urgent) has its stand-in
+    /// developed later; fields of a comparison and photos read ahead never queue a development (it ran on for minutes
+    /// after closing a comparison of Quattro X3F).
+    #[test]
+    fn only_the_single_image_queues_a_later_development() {
+        let d = tmp("origin");
+        let inn = Inner::new(Arc::new(Cache::open(&d)), Box::new(|_| {}));
+        let job = |file: i64| Job { file, path: PathBuf::from(format!("/nowhere/{file}.X3F")), format: "X3F".into(), key: file as u64, level: 2560, orientation: None };
+        *inn.urgent.lock().unwrap() = Some(job(1));
+        inn.front.lock().unwrap().push_back(job(2));
+        inn.ahead.lock().unwrap().extend([job(3), job(4)]);
+        let order: Vec<(i64, Origin)> = std::iter::from_fn(|| nearest(&inn)).map(|(a, o)| (a.file, o)).collect();
+        assert_eq!(order, vec![(1, Origin::Urgent), (2, Origin::Shown), (3, Origin::Shown), (4, Origin::Shown)]);
+        assert!(develop_soon_after(Origin::Urgent));
+        assert!(!develop_soon_after(Origin::Shown), "comparison fields / read ahead");
+        assert!(!develop_soon_after(Origin::Back));
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -2132,7 +2329,7 @@ mod nef_tests {
                     continue;
                 }
                 let Some(f) = crate::format_from_extension(&p.to_string_lossy()) else { continue };
-                if !crate::is_raw(f) || f == "X3F" {
+                if !crate::is_raw(f) || f == "X3F" || f == "X3I" {
                     continue;
                 }
                 let (small, _) = raw_preview(&p, 400).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
@@ -2178,5 +2375,43 @@ mod nef_tests {
             assert!(meta.camera.is_some(), "{}: no camera", p.display());
             assert!(raw_preview(&p, 400).is_ok(), "{}", p.display());
         }
+    }
+
+    /// SRW and IIQ sample files (`GRAINEO_TEST_FORMATS_DIR`, also in subfolders; skipped without it): the own readers
+    /// find the embedded preview for the tile level, with the sensor's aspect ratio (3:2 or 4:3) and the camera name;
+    /// the large level of an SRW comes from the full-size JPEG, that of an IIQ (thumbnail only) is left to the fallback.
+    #[test]
+    fn srw_and_iiq_fast_find_the_preview() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_FORMATS_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_FORMATS_DIR not set, skipped");
+            return;
+        };
+        let mut dirs = vec![dir];
+        let mut n = 0;
+        while let Some(d) = dirs.pop() {
+            for p in std::fs::read_dir(&d).unwrap().filter_map(|e| e.ok().map(|e| e.path())) {
+                if p.is_dir() {
+                    dirs.push(p);
+                    continue;
+                }
+                let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+                if ext != "srw" && ext != "iiq" {
+                    continue;
+                }
+                let fast = |min| if ext == "srw" { srw_fast(&p, min) } else { iiq_fast(&p, min) };
+                let (img, meta) = fast(400).unwrap_or_else(|| panic!("no fast preview: {}", p.display()));
+                let ratio = img.width().max(img.height()) as f32 / img.width().min(img.height()) as f32;
+                assert!(img.width().max(img.height()) >= 280 && ((ratio - 1.5).abs() < 0.03 || (ratio - 4.0 / 3.0).abs() < 0.03), "{}: {}x{}", p.display(), img.width(), img.height());
+                assert!(meta.camera.is_some() && meta.capture.is_some(), "{}: {:?}", p.display(), meta);
+                if ext == "srw" {
+                    let (large, _) = fast(2560).unwrap_or_else(|| panic!("no large preview: {}", p.display()));
+                    assert!(large.width().max(large.height()) >= 2560, "{}", p.display());
+                } else {
+                    assert!(fast(2560).is_none(), "{}", p.display());
+                }
+                n += 1;
+            }
+        }
+        assert!(n > 0, "no SRW/IIQ found");
     }
 }

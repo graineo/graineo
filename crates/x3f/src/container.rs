@@ -104,6 +104,20 @@ impl ImageHeader {
     }
 }
 
+/// Opens an X3F for the header readers below: returns the file, the offset where the X3F starts and its length.
+/// A plain X3F starts at 0; an X3I (SFD bracket) is read as its first frame, the base exposure, as with
+/// [`X3fFile::open`].
+fn open_range(path: &Path) -> Result<(std::fs::File, u64, u64)> {
+    let f = std::fs::File::open(path)?;
+    let len = f.metadata()?.len();
+    if crate::x3i::is_x3i(path) {
+        let x = crate::x3i::X3iFile::open(path)?;
+        let &(s, e) = x.frames.first().ok_or_else(|| Error::Corrupt("X3I: no frame".into()))?;
+        return Ok((f, s, e - s));
+    }
+    Ok((f, 0, len))
+}
+
 /// Reads only the embedded JPEG with the smallest (`largest = false`) or largest
 /// area, without loading the whole file (for thumbnails in the file browser).
 pub fn read_embedded_jpeg(path: impl AsRef<Path>, largest: bool) -> Result<Vec<u8>> {
@@ -114,13 +128,12 @@ pub fn read_embedded_jpeg(path: impl AsRef<Path>, largest: bool) -> Result<Vec<u
 /// network drive one small read suffices instead of several megabytes per file.
 pub fn read_embedded_jpeg_up_to(path: impl AsRef<Path>, largest: bool, max: usize) -> Result<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path)?;
-    let size = f.metadata()?.len();
+    let (mut f, base, size) = open_range(path.as_ref())?;
     let mut read_at = |off: u64, len: usize| -> Result<Vec<u8>> {
         if off.checked_add(len as u64).is_none_or(|end| end > size) {
             return corrupt("Sektion ragt über das Dateiende");
         }
-        f.seek(SeekFrom::Start(off))?;
+        f.seek(SeekFrom::Start(base + off))?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b)?;
         Ok(b)
@@ -161,13 +174,12 @@ pub fn read_embedded_jpeg_up_to(path: impl AsRef<Path>, largest: bool, max: usiz
 /// 3 bytes per pixel.
 pub fn read_embedded_plain(path: impl AsRef<Path>, largest: bool) -> Option<(u32, u32, Vec<u8>)> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let size = f.metadata().ok()?.len();
+    let (mut f, base, size) = open_range(path.as_ref()).ok()?;
     let mut read_at = |off: u64, len: usize| -> Option<Vec<u8>> {
         if off.checked_add(len as u64)? > size {
             return None;
         }
-        f.seek(SeekFrom::Start(off)).ok()?;
+        f.seek(SeekFrom::Start(base + off)).ok()?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b).ok()?;
         Some(b)
@@ -219,13 +231,12 @@ pub fn read_embedded_plain(path: impl AsRef<Path>, largest: bool) -> Option<(u32
 /// Header of the RAW image section, without loading the whole file (type/format determine the decoder).
 pub fn read_raw_header(path: impl AsRef<Path>) -> Option<ImageHeader> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let size = f.metadata().ok()?.len();
+    let (mut f, base, size) = open_range(path.as_ref()).ok()?;
     let mut read_at = |off: u64, len: usize| -> Option<Vec<u8>> {
         if off.checked_add(len as u64)? > size {
             return None;
         }
-        f.seek(SeekFrom::Start(off)).ok()?;
+        f.seek(SeekFrom::Start(base + off)).ok()?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b).ok()?;
         Some(b)
@@ -266,13 +277,12 @@ pub fn read_raw_header(path: impl AsRef<Path>) -> Option<ImageHeader> {
 /// (Merrill HI 4704 × 3136, LOW 2336 × 1568). Without a preview: `None`.
 pub fn read_image_size(path: impl AsRef<Path>) -> Option<(u32, u32)> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let size = f.metadata().ok()?.len();
+    let (mut f, base, size) = open_range(path.as_ref()).ok()?;
     let mut read_at = |off: u64, len: usize| -> Option<Vec<u8>> {
         if off.checked_add(len as u64)? > size {
             return None;
         }
-        f.seek(SeekFrom::Start(off)).ok()?;
+        f.seek(SeekFrom::Start(base + off)).ok()?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b).ok()?;
         Some(b)
@@ -327,7 +337,17 @@ pub struct X3fFile {
 }
 
 impl X3fFile {
+    /// Open an X3F. An X3I (SFD bracket in one file) opens as its first frame (the base exposure); a virtual path
+    /// `NAME.X3I#n` opens frame `n` (0-based, file order) of the X3I, see [`crate::x3i::split_virtual`]. The X3I is
+    /// only read, never changed.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        if let Some((file, n)) = crate::x3i::split_virtual(path) {
+            return crate::x3i::X3iFile::open(file)?.frame(n);
+        }
+        if crate::x3i::is_x3i(path) {
+            return crate::x3i::X3iFile::open(path)?.frame(0);
+        }
         Self::from_bytes(std::fs::read(path)?)
     }
 
@@ -492,13 +512,12 @@ impl X3fFile {
 /// 3 bytes per pixel.
 pub fn read_embedded_plain(path: impl AsRef<Path>, largest: bool) -> Option<(u32, u32, Vec<u8>)> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let size = f.metadata().ok()?.len();
+    let (mut f, base, size) = open_range(path.as_ref()).ok()?;
     let mut read_at = |off: u64, len: usize| -> Option<Vec<u8>> {
         if off.checked_add(len as u64)? > size {
             return None;
         }
-        f.seek(SeekFrom::Start(off)).ok()?;
+        f.seek(SeekFrom::Start(base + off)).ok()?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b).ok()?;
         Some(b)
@@ -550,13 +569,12 @@ pub fn read_embedded_plain(path: impl AsRef<Path>, largest: bool) -> Option<(u32
 /// Header of the RAW image section, without loading the whole file (type/format determine the decoder).
 pub fn read_raw_header(path: impl AsRef<Path>) -> Option<ImageHeader> {
     use std::io::{Read, Seek, SeekFrom};
-    let mut f = std::fs::File::open(path).ok()?;
-    let size = f.metadata().ok()?.len();
+    let (mut f, base, size) = open_range(path.as_ref()).ok()?;
     let mut read_at = |off: u64, len: usize| -> Option<Vec<u8>> {
         if off.checked_add(len as u64)? > size {
             return None;
         }
-        f.seek(SeekFrom::Start(off)).ok()?;
+        f.seek(SeekFrom::Start(base + off)).ok()?;
         let mut b = vec![0u8; len];
         f.read_exact(&mut b).ok()?;
         Some(b)

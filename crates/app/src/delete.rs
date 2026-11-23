@@ -46,6 +46,10 @@ pub struct Plan {
     pub apple: Vec<(i64, String)>,
     /// of `disk`: photos of a viewed folder (no library entry, only the files go to the Trash)
     pub viewed: usize,
+    /// merged photos (HDR) that stay and have one of the photos to delete as a source
+    pub merged_using: usize,
+    /// of those: merged photos whose full resolution is not in the cache (without the sources only their preview stays)
+    pub merged_unfinished: usize,
 }
 
 /// Which switches the dialog offers: only those that can be chosen.
@@ -166,6 +170,7 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
     let mut cache = DirCache::default();
     // JPEGs that are in the selection themselves are deleted as photos, not as the "camera JPEG" of a RAW
     let selected: std::collections::HashSet<PathBuf> = k.iter().map(|c| c.path.clone()).collect();
+    let mut going: Vec<i64> = Vec::new();
     for c in k {
         let name = c.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         if c.copy {
@@ -194,6 +199,11 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
             p.skipped.push((name, crate::tr("Netzlaufwerk ohne Papierkorb – erst zur Bibliothek hinzufügen").into()));
             continue;
         }
+        // a merged photo (HDR) has no file: it leaves the library through its own command, with a ⌘Z step
+        if c.state as i64 == library::merge::STATUS_VIRTUAL {
+            p.skipped.push((library::merge::shown_name(&name, library::merge::STATUS_VIRTUAL), crate::tr("HDR ohne eigene Datei – mit „HDR entfernen (Quellen bleiben)“ aus der Bibliothek nehmen").into()));
+            continue;
+        }
         match c.state {
             0 if c.path.exists() => {
                 p.viewed += usize::from(viewed);
@@ -206,10 +216,22 @@ pub fn plan(k: Vec<Candidate>) -> Plan {
                     p.network += 1;
                 }
                 p.disk.push((c.image, c.path.clone(), companions_cached(&c.path, &mut cache)));
+                going.push(c.file);
             }
-            0 | 1 => p.missing.push(c.image),
+            0 | 1 => {
+                p.missing.push(c.image);
+                going.push(c.file);
+            }
             _ => p.skipped.push((name, crate::tr("Zustand unbekannt").into())),
         }
+    }
+    if let Some(db) = db.as_ref().filter(|_| !going.is_empty()) {
+        p.merged_using = library::merge::count_using(&db.conn, &going);
+        // which of them have their finished picture in the cache (it opens and exports without the sources)
+        let mut merges: Vec<i64> = going.iter().flat_map(|f| library::merge::using_source(&db.conn, *f)).filter(|m| !going.contains(m)).collect();
+        merges.sort_unstable();
+        merges.dedup();
+        p.merged_unfinished = merges.iter().filter(|m| !library::merge::recipe(&db.conn, **m).is_some_and(|r| rawdev::merged::cached(&r.cache_key(&db.conn)))).count();
     }
     p
 }
@@ -546,6 +568,13 @@ impl App {
                 }
                 if p.network > 0 {
                     dialog::hint(ui, &crate::trf!("{a} davon liegen auf Netzlaufwerken: dort gibt es keinen Papierkorb, die Dateien wandern in den Papierkorb-Ordner des Laufwerks und lassen sich unter Einstellungen → Speicher zurücklegen.", a = dialog::number(p.network)));
+                }
+                let finished = p.merged_using.saturating_sub(p.merged_unfinished);
+                if finished > 0 {
+                    dialog::warning(ui, &crate::trf!("{a}: bleibt mit dem fertigen Bild erhalten, lässt sich ohne die Quellen aber nicht mehr ändern oder neu berechnen.", a = dialog::count(finished, crate::tr("HDR-Foto aus diesen Aufnahmen"), crate::tr("HDR-Fotos aus diesen Aufnahmen"))));
+                }
+                if p.merged_unfinished > 0 {
+                    dialog::warning(ui, &crate::trf!("{a}: noch nicht in voller Auflösung berechnet – ohne die Quellen bleibt nur die Vorschau. Vorher öffnen und hineinzoomen oder exportieren.", a = dialog::count(p.merged_unfinished, crate::tr("HDR-Foto aus diesen Aufnahmen"), crate::tr("HDR-Fotos aus diesen Aufnahmen"))));
                 }
                 if !p.skipped.is_empty() {
                     let unreachable = p.skipped.iter().filter(|(_, r)| r == crate::tr("Original nicht erreichbar – Löschen geht erst nach dem Verbinden")).count();

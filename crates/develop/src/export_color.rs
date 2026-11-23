@@ -68,11 +68,11 @@ pub fn render(session:&mut Session,s:&Settings,engine:Engine,space:Space)->std::
    let linear:Vec<f32>=wide.data.par_iter().map(|&v|if v.is_finite(){graineo_color::srgb_decode(v)}else{0.0}).collect();
    let img=Rgb16{width:wide.width,height:wide.height,data:graineo_color::encode_rgb16(&linear,space).map_err(std::io::Error::other)?};
    // without film the border is neutral (paper/black); the profile does not change neutrals
-   super::apply_output_size(crate::film::apply_border(crate::geometry::apply(img,s,session.cal.orientation),&s.film),s.output_size)
+   super::apply_output_size(crate::film::apply_border(crate::geometry::apply(img,s,session.cal.orientation),&s.film),s.output_size,s.output_filter)
   }
   None=>{
    let img=if spp{session.render_full(s)}else{session.render_full_own(s)};
-   let mut img=super::apply_output_size(crate::film::apply_border(crate::geometry::apply(img,s,session.cal.orientation),&s.film),s.output_size);
+   let mut img=super::apply_output_size(crate::film::apply_border(crate::geometry::apply(img,s,session.cal.orientation),&s.film),s.output_size,s.output_filter);
    img.data=graineo_color::transcode_srgb16(&img.data,space).map_err(std::io::Error::other)?;
    img
   }

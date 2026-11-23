@@ -717,7 +717,8 @@ impl App {
         let all: Vec<String> = GROUPS.iter().flat_map(|(cat, _)| film::films().iter().filter(move |f| f.category == *cat)).map(|f| f.id.clone()).collect();
         self.film_previews_request(ui, &visible, &all);
         // Hovering a film: quick preview in the large image (as with presets) without selecting it
-        match hover.filter(|_| pick.is_none()) {
+        let waits = self.derived_waits(&self.entries[index].settings);
+        match hover.filter(|_| pick.is_none() && !waits) {
             Some(id) => {
                 let mut h = self.entries[index].settings.clone();
                 set_film(&mut h, Some(id));

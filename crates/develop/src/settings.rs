@@ -46,6 +46,53 @@ impl Binning {
     }
 }
 
+/// Steps of the Quattro detail slider on each side of the middle ([`Settings::quattro_detail`]).
+pub const QUATTRO_DETAIL_RANGE: i8 = 3;
+
+fn half() -> f32 {
+    0.5
+}
+
+fn is_half(v: &f32) -> bool {
+    *v == 0.5
+}
+
+/// Highlight sliders of the rebuild ([`crate::highlight_rebuild`]) in thousandths, part of the base key: 500 = as
+/// rebuilt.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct HighlightSliders {
+    pub colour_milli: u16,
+    pub structure_milli: u16,
+    /// the rebuild is on (a Merrill base developed with it differs although the sliders do not act there)
+    pub on: bool,
+}
+
+impl Default for HighlightSliders {
+    fn default() -> Self {
+        Self { colour_milli: 500, structure_milli: 500, on: false }
+    }
+}
+
+impl HighlightSliders {
+    pub fn new(colour: f32, structure: f32) -> Self {
+        let m = |v: f32| (v.clamp(0.0, 1.0) * 1000.0).round() as u16;
+        Self { colour_milli: m(colour), structure_milli: m(structure), on: true }
+    }
+    pub fn colour(&self) -> f32 {
+        self.colour_milli as f32 / 1000.0
+    }
+    pub fn structure(&self) -> f32 {
+        self.structure_milli as f32 / 1000.0
+    }
+    pub fn is_default(&self) -> bool {
+        self.colour_milli == 500 && self.structure_milli == 500
+    }
+}
+
+fn is_zero_step(v: &i8) -> bool {
+    *v == 0
+}
+
 /// Slider position "Off" of the luminance/colour noise sliders, a quarter step below SPP's
 /// minimum 0 (x3fuse-core `SppNoiseSliders::OFF`).
 pub const NR_OFF: f64 = -0.25;
@@ -57,6 +104,9 @@ pub const NR_OFF: f64 = -0.25;
 pub struct SppKey {
     pub mode: Option<String>,
     pub nr: (i8, i8),
+    /// Detail step of the Quattro chain from capture ISO 400 on, −3 (soft) … 3 (strong), 0 = the camera's setting
+    /// ([`Settings::quattro_detail`]); 0 for every other class
+    pub detail: i8,
     /// Chromatic aberration correction as in SPP (computed in the base, see [`crate::lens`])
     pub ca: crate::lens::CaKey,
     /// Black and white the Sigma way: grey base from the preprocessed layers ([`crate::mono`])
@@ -71,6 +121,8 @@ pub struct SppKey {
     pub binning: Binning,
     /// Neural denoising after Sigma's noise reduction in percent ([`crate::ai_denoise`]); 0 = off (colour bases only)
     pub ai: u8,
+    /// Highlight sliders (Quattro with the highlight rebuild switched on; default otherwise)
+    pub highlight: HighlightSliders,
 }
 
 impl SppKey {
@@ -79,9 +131,9 @@ impl SppKey {
         crate::denoise::DenoiseSliders::new(self.nr.0 as f64 / 4.0, self.nr.1 as f64 / 4.0)
     }
 
-    /// Both noise sliders in the middle position?
+    /// Both noise sliders and the detail slider in the middle position?
     pub fn neutral_noise(&self) -> bool {
-        self.nr == (2, 2)
+        self.nr == (2, 2) && self.detail == 0
     }
 
     /// Only what changes the base of this camera class (`prepared`: Quattro or Classic, otherwise Merrill);
@@ -97,6 +149,8 @@ impl SppKey {
             self.ca = crate::lens::CaKey::default();
         } else {
             self.binning = Binning::Auto;
+            self.detail = 0;
+            self.highlight = HighlightSliders::default();
         }
         self
     }
@@ -148,6 +202,13 @@ pub struct Settings {
     pub highlight: f64,
     /// Fill Light −2 … +2
     pub fill_light: f32,
+    /// Slider "Lichter-Farbe" 0 … 1 (0.5 = as rebuilt, 0 = neutral): colour of the rebuilt highlights of Foveon photos
+    /// ([`crate::highlight_rebuild`], only with the rebuild switched on). Left out of the stored JSON at its default.
+    #[serde(default = "half", skip_serializing_if = "is_half")]
+    pub highlight_colour: f32,
+    /// Slider "Lichter-Struktur" 0 … 1 (0.5 = as rebuilt, 0 = smooth): detail of the rebuilt highlights.
+    #[serde(default = "half", skip_serializing_if = "is_half")]
+    pub highlight_structure: f32,
     /// Noise brake when brightening (see [`crate::lift::Brake`]); off by default (switched on by hand, costs some
     /// export time).
     #[serde(default = "NoiseBrake::off", skip_serializing_if = "NoiseBrake::is_off")]
@@ -234,6 +295,11 @@ pub struct Settings {
     /// detail without smoothing; our own noise reduction treats it as 0)
     pub nr_luma: f64,
     pub nr_chroma: f64,
+    /// Detail of the Quattro from capture ISO 400 on: seven steps −3 (soft) … 3 (strong), 0 = the camera's setting.
+    /// Sets how much of the fine detail of the top layer comes back after the noise reduction, the local contrast and
+    /// the sharpening of the chain ([`crate::quattro_hi`]). Missing in stored settings → 0.
+    #[serde(default, skip_serializing_if = "is_zero_step")]
+    pub quattro_detail: i8,
     /// Binning of the sd Quattro at high ISO (neighbouring pixels averaged, smaller output, see
     /// [`crate::quattro::binning_factor`]). Missing in stored settings → automatic.
     #[serde(default, skip_serializing_if = "Binning::is_auto")]
@@ -273,6 +339,9 @@ pub struct Settings {
     /// Export only, never saved: maximum output size for JPEG/TIFF (downscales, never upscales)
     #[serde(skip)]
     pub output_size: Option<crate::export::OutputSize>,
+    /// Export only, never saved: resampling filter for `output_size`
+    #[serde(skip)]
+    pub output_filter: crate::resize::ResizeFilter,
 }
 
 /// Noise brake when brightening with Fill Light.
@@ -464,6 +533,8 @@ impl Default for Settings {
             shadow: 0.0,
             highlight: 0.0,
             fill_light: 0.0,
+            highlight_colour: 0.5,
+            highlight_structure: 0.5,
             dehaze: 0.0,
             tone_eq: crate::tone_eq::ToneEq::default(),
             tone_eq_mask: false,
@@ -507,6 +578,7 @@ impl Default for Settings {
             denoise: true,
             nr_luma: 0.5,
             nr_chroma: 0.5,
+            quattro_detail: 0,
             binning: Binning::Auto,
             white_balance: None,
             wb_mult: [1.0; 3],
@@ -523,6 +595,7 @@ impl Default for Settings {
             removals: Vec::new(),
             gray_mix: [0.0; 8],
             output_size: None,
+            output_filter: Default::default(),
         }
     }
 }
@@ -548,6 +621,8 @@ impl Settings {
             s.highlight = d.highlight;
             s.shadow = d.shadow;
             s.fill_light = d.fill_light;
+            s.highlight_colour = d.highlight_colour;
+            s.highlight_structure = d.highlight_structure;
             s.vibrance = d.vibrance;
             s.saturation = d.saturation;
             s.clarity = d.clarity;
@@ -613,7 +688,7 @@ impl Settings {
         let step = |v: f64| (v.clamp(NR_OFF, 1.0) * 4.0).round() as i8;
         // neural denoising after Sigma's noise reduction (every Foveon generation), colour only
         let ai = if mono || self.raw.ai_denoise <= 0.0 || !crate::ai_denoise::installed() { 0 } else { (self.raw.ai_denoise.clamp(0.0, 1.0) * 100.0).round() as u8 };
-        SppKey { mode: self.color_mode.clone(), nr: (step(self.nr_luma), step(self.nr_chroma)), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning, ai }
+        SppKey { mode: self.color_mode.clone(), nr: (step(self.nr_luma), step(self.nr_chroma)), detail: self.quattro_detail.clamp(-QUATTRO_DETAIL_RANGE, QUATTRO_DETAIL_RANGE), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning, ai, highlight: if crate::highlight_rebuild::enabled_for(prepared) && !mono { HighlightSliders::new(self.highlight_colour, self.highlight_structure) } else { HighlightSliders::default() } }
             .for_class(prepared)
     }
 
@@ -748,6 +823,20 @@ mod binning_settings_tests {
         assert_eq!(off.spp_key_class(true).binning, Binning::Off);
         assert_eq!(off.spp_key_class(false).binning, Binning::Auto);
         assert_eq!(serde_json::from_str::<Settings>("{\"binning\":\"on\"}").unwrap().binning, Binning::On);
+    }
+
+    #[test]
+    fn detail_step_is_stored_only_away_from_the_middle_and_keys_the_quattro_base() {
+        assert!(!serde_json::to_string(&Settings::default()).unwrap().contains("quattro_detail"));
+        let strong = Settings { quattro_detail: 2, ..Settings::default() };
+        let text = serde_json::to_string(&strong).unwrap();
+        assert!(text.contains("\"quattro_detail\":2"));
+        assert_eq!(serde_json::from_str::<Settings>(&text).unwrap().quattro_detail, 2);
+        assert_eq!(serde_json::from_str::<Settings>("{}").unwrap().quattro_detail, 0);
+        assert_eq!(strong.spp_key_class(true).detail, 2);
+        assert!(!strong.spp_key_class(true).neutral_noise());
+        assert_eq!(strong.spp_key_class(false).detail, 0, "Merrill has no such step");
+        assert_eq!(Settings { quattro_detail: 9, ..Settings::default() }.spp_key_class(true).detail, QUATTRO_DETAIL_RANGE);
     }
 }
 

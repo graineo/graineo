@@ -20,10 +20,11 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 mod manager;
 mod cube;
+mod detect;
 pub use cube::table as cube_table;
+pub use detect::{classify as classify_look_file, detect as detect_looks, FileKind as LookFileKind, Found as FoundLooks, FoundLook, LookKind};
 pub use manager::{
     generation, installed, load_failed, reread, visible_profiles, Storage, Report, Options, Package, Source,
-    NOTICE,
 };
 
 use crate::looks::Look;

@@ -193,6 +193,8 @@ pub use spatial_gain::{
 // kernels, including image resampling. These modules are crate-private.
 pub(crate) mod cr_offset;
 pub(crate) mod float_front;
+// graineo addition: highlight reconstruction registered by the application
+pub use float_front::{set_highlight_hook, HighlightHook, HighlightInput};
 pub(crate) mod spp_denoise;
 
 // M6e: incremental native Rust port of src/x3f_process.c. M6e1 lifts

@@ -175,7 +175,7 @@ pub(super) struct Loader {
     applied: u64,
     running: Option<Receiver<Result<Loaded, String>>>,
     /// callbacks waiting for a load newer than the number
-    then: Vec<(u64, Then)>,
+    pub(super) then: Vec<(u64, Then)>,
     /// first load shown (start)
     pub(super) first_done: bool,
     /// local rating changes: running number, image → number of its last change, number up to which all are written
@@ -346,7 +346,7 @@ impl LibraryView {
             .collect();
         self.loader.rated.retain(|_, e| *e > l.settled);
         // the visible list as images: keeps the active photo's place (see `apply_filter`)
-        let before: Vec<i64> = self.visible.iter().filter_map(|&i| self.rows.get(i)).map(|z| z.image).collect();
+        let before = self.visible_images();
         self.meta_comparison = None;
         // freeing 70 000 old rows (several strings each) takes tens of milliseconds: not in the frame
         let old = std::mem::replace(&mut self.rows, Arc::new(l.rows));
@@ -367,8 +367,7 @@ impl LibraryView {
                 (z.stars, z.flag, z.label) = (s, m, e);
             }
         }
-        self.visible = before.iter().filter_map(|b| self.index.get(b).copied()).collect();
-        self.visible_before = Some(before);
+        self.remap_visible(before);
         self.roots = l.roots;
         self.folder = l.folder;
         self.set_collections(l.collections);
@@ -402,6 +401,48 @@ impl LibraryView {
         if first {
             self.after_first_load();
         }
+    }
+
+    /// Images of the shown list, in grid order (indices that no longer fit `rows` are skipped).
+    pub(super) fn visible_images(&self) -> Vec<i64> {
+        self.visible.iter().filter_map(|&i| self.rows.get(i)).map(|z| z.image).collect()
+    }
+
+    /// Re-point the shown list after `rows` was replaced: INVARIANT `visible` only holds indices below `rows.len()`
+    /// (and `sem_from <= visible.len()`) at every moment the grid may draw. `rows` and `index` must already be new.
+    /// `before`: the shown images before the change; photos that are gone drop out, the filter runs again afterwards.
+    pub(super) fn remap_visible(&mut self, before: Vec<i64>) {
+        self.visible = before.iter().filter_map(|b| self.index.get(b).copied()).collect();
+        if self.sem_from.is_some_and(|n| n > self.visible.len()) {
+            self.sem_from = None;
+        }
+        self.visible_before = Some(before);
+        self.refilter = true;
+    }
+
+    /// Safety net for the invariant of [`Self::remap_visible`]: a path that replaced `rows` without re-pointing
+    /// `visible` must not bring the UI thread down (index out of bounds in the grid). One cheap pass per frame;
+    /// in a healthy state nothing happens. A repair is logged (it names a missed path) and filters again.
+    pub(super) fn heal_visible(&mut self) {
+        let n = self.rows.len();
+        if self.visible.iter().all(|&i| i < n) && self.sem_from.is_none_or(|k| k <= self.visible.len()) {
+            return;
+        }
+        crate::log(&format!("library: shown list pointed past the rows ({} rows, {} shown): repaired", n, self.visible.len()));
+        self.visible.retain(|&i| i < n);
+        if self.sem_from.is_some_and(|k| k > self.visible.len()) {
+            self.sem_from = None;
+        }
+        self.refilter = true;
+    }
+
+    /// Change `rows` in place (viewed folder swapped, closed, refreshed) and keep `index` and `visible` consistent in the
+    /// same step, so that no frame between the change and the next filter run can index past the end.
+    pub(super) fn edit_rows(&mut self, f: impl FnOnce(&mut Vec<Row>)) {
+        let before = self.visible_images();
+        f(Arc::make_mut(&mut self.rows));
+        self.index = self.rows.iter().enumerate().map(|(i, z)| (z.image, i)).collect();
+        self.remap_visible(before);
     }
 
     /// Take the list a job loaded after its write; without one (load failed) re-read in the background.

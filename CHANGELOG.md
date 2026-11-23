@@ -421,6 +421,26 @@ A small update after the first reports from users.
 
 ---
 
+## 1.5.0 · HDR, Photo Compare, Export for All Raws, Sigma Optimizations
+
+- **Merge to HDR.** Combine an exposure series from the raw data into one new photo you can still develop in full (Bayer and X-Trans cameras). Choose the photos, then Photo > Merge to HDR (⇧⌘H); merging starts right away. In the new Merge tool you then pick the reference, switch single exposures on or off, set alignment and motion handling (Off, Standard, Fine), and paint which source counts where. Ghosts from moving subjects are handled automatically. The result is a virtual photo: it lives in the library next to its sources, takes no extra file on disk, and is recomputed from the originals when needed. An automatic tone suggestion and a Strength slider give you a starting point. Merging runs in the background with progress and can be cancelled or undone. "Merge All Series" finds series in a folder and merges them one after another. Your originals are never touched.
+- **Compare photos.** Review a series side by side with linked zoom and pan; only the series is shown in the filmstrip while you compare. A tournament mode walks you through pairs until one photo is left; when you apply the result, the winner becomes the pick and the others are marked as rejected.
+- **Navigator.** When you zoom in, a small overview shows where you are in the photo.
+- **Export for all raws.** Linear DNG, OpenEXR and 32-bit TIFF are now available for every raw you can develop, not only for Sigma. Highlights above white are kept. For Sigma photos, a new option exports linear data with the camera matrix only.
+- **Resize filter on export.** Choose how photos are reduced: Sharp (the default, unchanged), Balanced, Soft or Smooth. Your choice is remembered and saved with export presets.
+- **Sigma SFD files (X3I).** X3I files from the sd Quattro H show up in the library and open for development. graineo combines the seven exposures itself, with progress and a cancel button.
+- **Sigma Quattro, optimized.** Photos from ISO 400 upwards are processed with an optimized pipeline: cleaner color, fewer stray pixels, better highlights. The Luminance and Color noise sliders are active again, and a new Detail slider (seven steps from soft to strong) joins them. Parts of the processing run on the GPU. Binning is now off by default; photos you already edited keep their setting. While a photo is being computed, graineo keeps showing a clean picture instead of a rough intermediate one.
+- **Highlight reconstruction for Foveon photos (new).** For Merrill and Quattro photos, areas where one sensor layer is blown are rebuilt from the layers that still hold information, so bright colored areas keep their color and detail instead of turning white. Highlight reconstruction is on by default for Merrill photos, off for Quattro (Settings → Develop → "Merrill: reconstruct highlights" and "Quattro: reconstruct highlights"; it takes a few seconds longer on strongly overexposed Quattro photos). Exports of Merrill photos with blown highlights therefore look different from earlier versions. For Quattro, two sliders, Highlight Color and Highlight Structure, set how much color and detail come back.
+- **Printing uses the full Sigma processing,** so prints match the export.
+- **Older Foveon cameras (SD9 to DP2x).** The noise sliders now take effect from ISO 400.
+- **Bayer and X-Trans raws.** Deepest shadows no longer pick up a color cast, and bright saturated colors keep their detail near the highlights.
+- **Reread metadata.** Photo > Reread Metadata (also in the grid's context menu) reads the shooting data of the selection, or of the folder or collection shown, again from the files: date, camera, lens, exposure, location, dimensions and orientation. If XMP sidecars lie next to the photos, you can choose to take over rating, keywords and label as well (off by default). Develop settings, virtual copies and collections are never touched, the files stay unchanged, and ⌘Z restores the previous values. The library now also notices when a photo file was replaced and reads its shooting data again, and once fills in photos with an empty date or camera. Portrait Sigma photos keep their shape in the filmstrip while their thumbnails load.
+- **Printing.** The sheet is suggested in landscape or portrait to match your photos, and rows and columns swap when you switch.
+- **Faster thumbnails** for Samsung SRW and Phase One IIQ files.
+- **Smaller things.** A clearer scroll indicator on the filmstrip. The mask overlay stays hidden for as long as you hold a slider. Buttons follow one consistent hierarchy.
+
+---
+
 ## Thanks
 
 - **spektrafilm** by Andrea Volpato (GPL-3.0), film profiles CC BY-SA 4.0

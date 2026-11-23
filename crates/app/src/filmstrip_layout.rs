@@ -108,6 +108,14 @@ impl Layout {
     }
 }
 
+/// Offset that puts cell `i` with its left edge at `x` in the visible strip (a stack opened or closed stays where it
+/// stood), clamped to the strip; a cell that would not be visible there is brought into view instead.
+pub fn keep_at(layout: &Layout, i: usize, x: f32, view_w: f32) -> f32 {
+    let max = (layout.total() - view_w).max(0.0);
+    let offset = (layout.x(i) - x).clamp(0.0, max);
+    layout.bring_into_view(i, offset, view_w)
+}
+
 /// Salt of the filmstrip's scroll area.
 pub const AREA: &str = "filmstrip";
 
@@ -201,6 +209,19 @@ mod tests {
             assert!(n <= max + 1e-3 && n + 1e-3 >= off.min(max));
             off = n;
         }
+    }
+
+    /// A stack closed or opened: its first cell keeps its place in the visible strip; at the ends the strip clamps.
+    #[test]
+    fn keep_at_holds_the_stack_in_place() {
+        let l = Layout::new(std::iter::repeat(1.5).take(200), 60.0);
+        let view = 800.0;
+        let o = keep_at(&l, 100, 240.0, view);
+        assert!((l.x(100) - o - 240.0).abs() < 1e-3);
+        // near the start: clamped at 0, the cell stays visible
+        assert_eq!(keep_at(&l, 1, 600.0, view), 0.0);
+        // near the end: clamped at the end
+        assert!((keep_at(&l, 199, 0.0, view) - (l.total() - view)).abs() < 1e-3);
     }
 
     #[test]

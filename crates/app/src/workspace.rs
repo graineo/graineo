@@ -31,6 +31,8 @@ pub enum ToolTab {
     Sensor,
     /// virtual copies of the photo
     Versions,
+    /// merged (HDR) photo: ghost level, "Quelle malen"
+    Merge,
 }
 
 impl ToolTab {
@@ -86,6 +88,14 @@ impl App {
         // filmstrip, also while it is still loading (otherwise the grid went back to the photo loaded last)
         if let Some(b) = self.loading.or(self.current.as_ref().map(|c| c.index)).or(self.not_developable).and_then(|i| self.entries.get(i)).map(|e| e.image) {
             self.lib.set_active(b);
+            // comparing: the filmstrip's selection becomes the grid's, the comparison goes on in the library
+            if self.lib.compare_open() {
+                let mut images: Vec<i64> = self.entries.iter().filter(|e| e.selected).map(|e| e.image).collect();
+                if !images.contains(&b) {
+                    images.push(b);
+                }
+                self.lib.set_selection(b, &images);
+            }
         }
         self.leave_darkroom();
         if self.crop_mode.is_some() { self.toggle_crop(true); }
@@ -127,7 +137,7 @@ impl App {
             self.navigation.finish();
             // Whoever is already editing (Edit, Film & Look, Presets, Masks, Retouch, Versions) stays in their tool;
             // from Info (and everything that exists only in single image view) it goes to "Edit"
-            if !matches!(self.tool_tab, ToolTab::Edit | ToolTab::FilmLook | ToolTab::Masks | ToolTab::Retouch | ToolTab::Presets | ToolTab::Versions) {
+            if !matches!(self.tool_tab, ToolTab::Edit | ToolTab::FilmLook | ToolTab::Masks | ToolTab::Retouch | ToolTab::Presets | ToolTab::Versions | ToolTab::Merge) {
                 self.tool_tab = ToolTab::Edit;
             }
             self.show_right = true;
@@ -285,9 +295,17 @@ impl App {
                 let text = match self.not_developable.and_then(|i| self.entries.get(i)) {
                     Some(e) if e.state != 0 && self.lib.work_running() => crate::tr("Bibliothek wird gerade abgeglichen …").to_string(),
                     Some(e) if e.state == 2 => crate::tr("Original nicht erreichbar\nEntwickeln geht wieder, sobald der Speicherort verbunden ist.").to_string(),
+                    Some(e) if e.state as i64 == library::merge::STATUS_VIRTUAL => crate::photo_state::merged_open_error(&e.path).unwrap_or_else(|| crate::state_message(e.state)),
                     Some(e) if e.state != 0 => crate::state_message(e.state),
                     Some(e) => crate::photo_state::unsupported_text(&e.path).unwrap_or_else(|| crate::trf!("{a} lässt sich nicht bearbeiten", a = e.format)),
-                    None if self.loading.is_some() => crate::tr("Wird geladen …").to_string(),
+                    // a heavily clipped Quattro spends seconds in the highlight rebuild: say so
+                    None if self.loading.is_some() => match develop::highlight_rebuild::running_for() {
+                        Some(t) => {
+                            ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
+                            crate::trf!("Lichter werden rekonstruiert … (seit {n} s)", n = t.as_secs())
+                        }
+                        None => crate::tr("Wird geladen …").to_string(),
+                    },
                     None => crate::tr("Kein Bild gewählt").to_string(),
                 };
                 ui.label(egui::RichText::new(text).color(lr::TEXT_DIM));
@@ -318,6 +336,7 @@ impl App {
             match self.tool_rail_active() {
                 ToolTab::Crop => self.crop_panel(ui),
                 ToolTab::Versions => self.versions_panel(ui),
+                ToolTab::Merge => self.merge_panel(ui),
                 ToolTab::Presets => {
                     if !self.in_grid() {
                         lr::section(ui, "Navigator", true, |ui| self.navigator(ui));
@@ -361,6 +380,10 @@ impl App {
                     "delete" => self.confirm_delete = true,
                     "delete-selection" => self.request_delete(),
                     "export" => self.show_export = true,
+                    // all photos of the shown grid (at most nine) in the HDR dialog
+                    "hdr" => crate::hdr_ui::ask(self.lib.hdr_test_candidates()),
+                    // every bracket of the library in the dialog "Alle Reihen zusammenfügen"
+                    "hdr-all" => crate::hdr_batch::open(self.lib.hdr_test_groups()),
                     "copy" => self.copy_dialog = true,
                     "transfer" => self.open_transfer_dialog(),
                     "shortcuts" => self.show_shortcuts = true,
@@ -396,7 +419,7 @@ impl App {
         }
         // Test hook: GRAINEO_SET_MONO="0@1.5,1@6,mode=Vivid@7" sets "Treatment" (colour 0 / black & white 1) or the
         // Sigma colour mode of the open photo the given seconds after it is shown (outdated intermediate images after a
-        // change, see `spp_accept.rs`)
+        // change, see `spp_accept.rs`); `nr=0.75@8` sets both noise sliders, `ev=0.5@9` adds exposure (`preview_hold.rs`)
         if let (Ok(spec), Some(i)) = (crate::env::var("GRAINEO_SET_MONO"), self.current.as_ref().map(|c| c.index).filter(|_| self.loading.is_none())) {
             static STEP: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let steps: Vec<(String, f64)> = spec.split(',').filter_map(|p| p.rsplit_once('@').and_then(|(m, t)| Some((m.trim().to_string(), t.trim().parse().ok()?)))).collect();
@@ -405,9 +428,16 @@ impl App {
                 let since = ctx.input(|i| i.time) - self.shown_at;
                 if since >= *at {
                     let s = &mut self.entries[i].settings;
-                    match what.strip_prefix("mode=") {
-                        Some(m) => s.color_mode = Some(m.to_string()),
-                        None => s.monochrome = what == "1",
+                    if let Some(v) = what.strip_prefix("nr=").and_then(|v| v.parse::<f64>().ok()) {
+                        // both noise sliders (0 … 1), as dragging them does
+                        (s.nr_luma, s.nr_chroma) = (v, v);
+                    } else if let Some(v) = what.strip_prefix("ev=").and_then(|v| v.parse::<f64>().ok()) {
+                        s.exposure += v;
+                    } else {
+                        match what.strip_prefix("mode=") {
+                            Some(m) => s.color_mode = Some(m.to_string()),
+                            None => s.monochrome = what == "1",
+                        }
                     }
                     crate::log(&format!("test: treatment {} colour mode {:?} after {since:.2} s", if s.monochrome { "black & white" } else { "colour" }, s.color_mode));
                     STEP.store(n + 1, std::sync::atomic::Ordering::Relaxed);
@@ -448,6 +478,11 @@ impl App {
 
     pub(crate) fn show_in_finder(&mut self) {
         if let Some(e) = self.active_entry().and_then(|i| self.entries.get(i)) {
+            // a merged photo is no file: nothing to show (the grid menu greys the entry with the reason)
+            if e.state as i64 == library::merge::STATUS_VIRTUAL {
+                self.status = crate::tr(crate::library_ui::NOT_A_FILE).to_string();
+                return;
+            }
             crate::system::show(&e.path);
         }
     }
@@ -565,8 +600,19 @@ impl App {
         // own layer above the image (drawn last, the box stays over the photo)
         let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("info-overlay"));
         let painter = &painter.ctx().layer_painter(layer).with_clip_rect(painter.clip_rect());
-        let Some((galleys, rect)) = self.info_layout(painter, area) else { return };
+        let Some((mut galleys, mut rect)) = self.info_layout(painter, area) else { return };
+        // a single exposure of a merged photo is shown (held down in the tool): said in the box, thin gold frame
+        let peek = self.merge_info().and_then(|mi| crate::hdr_paint::peek_label(painter.ctx(), &mi));
+        if let Some(label) = &peek {
+            let g = painter.layout_no_wrap(label.clone(), lr::semibold(12.0), Color32::WHITE);
+            let extra = g.size().y + 2.0;
+            rect = egui::Rect::from_min_max(egui::pos2(rect.left().min(rect.right() - g.size().x - 16.0), rect.top()), egui::pos2(rect.right(), rect.bottom() + extra));
+            galleys.insert(0, g);
+        }
         painter.rect_filled(rect, 0.0, Color32::from_black_alpha(150));
+        if peek.is_some() {
+            painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, lr::GOLD), egui::StrokeKind::Inside);
+        }
         let right = rect.right() - 8.0;
         let mut y = rect.top() + 8.0;
         for g in galleys {
@@ -629,6 +675,9 @@ impl App {
                     rows.push(format!("HDR {:.1}×{}", k.headroom, if an { String::new() } else { format!(" ({})", crate::tr("aus")) }).de_comma());
                 }
             }
+        }
+        if let Some(note) = crate::library_ui::virtual_note(e.file, e.state as i64) {
+            rows.push(note);
         }
         let name_row = rows.len();
         rows.push(e.name.clone());

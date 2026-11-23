@@ -306,7 +306,7 @@ impl App {
         let images: std::collections::HashSet<i64> = self.lib.target_images().into_iter().collect();
         let (mut targets, mut skipped) = (Vec::new(), 0usize);
         for (i, e) in self.entries.iter().enumerate().filter(|(_, e)| images.contains(&e.image)) {
-            if crate::image_kind::of(&e.path).editable() && e.state == 0 {
+            if crate::image_kind::of(&e.path).editable() && crate::developable_state(e.state) {
                 targets.push(i);
             } else {
                 skipped += 1;

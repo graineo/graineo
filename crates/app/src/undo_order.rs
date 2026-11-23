@@ -85,6 +85,11 @@ impl crate::App {
             self.multi_cancel_then_undo();
             return;
         }
+        // the comparison's tournament: ⌘Z takes back the last duel – from the menu too (the menu's key equivalent
+        // reaches the app before the comparison's own keys; QA matrix 20.11.2026)
+        if self.compare_undo_duel() {
+            return;
+        }
         match pick(&self.undo_candidates()) {
             Some(Stack::Commands) => {
                 self.turn_undo.recent = true;
@@ -95,6 +100,8 @@ impl crate::App {
                 self.undo_rating();
             }
             Some(Stack::Library) => {
+                // (the step may take a merged photo out: the develop settings of the open photo go with it)
+                self.save_current();
                 let a = self.lib.undo_external();
                 self.library_actions(a);
             }

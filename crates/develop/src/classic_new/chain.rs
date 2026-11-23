@@ -105,8 +105,8 @@ fn flow(file: &X3fFile, m: &Meta, wb: &str, mode: &str, rotation: u32) -> Result
             Some(g) => calibration::calc(&Input { gray_mean: Some(g), auto_neutral: super::AUTO_NEUTRAL.get(), ..e(None) })?,
             None => k1,
         };
-        let c = if k.skip & 0x800000 != 0 {
-            // variant without noise reduction: black level and matrix only
+        let c = if k.skip & 0x800000 != 0 || region::sliders_off() {
+            // variant without noise reduction: black level and matrix only (also both noise sliders at "Off")
             region::without_noise_reduction(&img, &d, &k, mode, w, h)?
         } else {
             let p = region::parameter(&d, &k, mode)?;
@@ -137,15 +137,9 @@ fn low(mut img: Vec<i32>, w: usize, h: usize, d: &Data, k: &Calibration, mode: &
             dump(dir, name, &img);
         }
     }
-    let mut p = color::parameter(d, k, mode)?;
-    if !d.present("ColorDQCamRGB") && d.present("ColorDQ") && k.skip & 0x20000 == 0 {
-        // like dcraw, the camera's `ColorDQ` when it lists no `ColorDQCamRGB`, at half strength (own
-        // measurement on the SD9 reference export, mean ΔE00: × 1 → 1.53, × 0.75 → 1.40, × 0.5 →
-        // 1.15, × 0.33 → 1.18; standard amplitude 1.18)
-        let dq = d.triple("ColorDQ", [0.0; 3]);
-        let g = k.amplification.gain;
-        p.amp = std::array::from_fn(|c| 0.5 * dq[c] * k.iso.bulb_factor * ((g[c] * f64::from(k.iso.factor1)) * k.statistics));
-    }
+    // cameras without per-layer coring amplitudes (SD9/SD10) take the replacement amplitude of the
+    // colour step (`color::parameter`), as the maker's software does
+    let p = color::parameter(d, k, mode)?;
     let f = dcraw::color(&img, w, h, &p);
     drop(img);
     dump(dir, "color.codes", &f.codes);
@@ -179,10 +173,10 @@ fn low(mut img: Vec<i32>, w: usize, h: usize, d: &Data, k: &Calibration, mode: &
 /// signal to the linear codes.
 fn end(codes: Vec<i32>, w: usize, h: usize, m: &Meta, d: &Data, rotation: u32, dir: Option<&Path>) -> Result<Codes, String> {
     let keep = d.values("KeepImageArea").filter(|v| v.len() >= 4).map_or([0.0; 4], |v| [v[0], v[1], v[2], v[3]]);
-    let act = d.values("ActiveImageArea").filter(|v| v.len() >= 4).ok_or("ActiveImageArea fehlt")?;
+    let act = d.values("ActiveImageArea").filter(|v| v.len() >= 4).ok_or("ActiveImageArea missing")?;
     let crop = [(act[0] - keep[0]) as usize, (act[1] - keep[1]) as usize, (act[2] - keep[0] + 1.0) as usize, (act[3] - keep[1] + 1.0) as usize];
     if crop[0] >= crop[2] || crop[1] >= crop[3] || crop[2] > w || crop[3] > h {
-        return Err("Bildbereich ungültig".into());
+        return Err("image area invalid".into());
     }
     let cross = matches!(rotation % 360, 90 | 270);
     let skip = d.integer("SkipStepFlags");

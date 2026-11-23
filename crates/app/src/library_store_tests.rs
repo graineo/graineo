@@ -20,6 +20,30 @@ fn hash(img: &image::RgbImage) -> u64 {
 /// Tests that point `GRAINEO_LIBRARY_DB` at their own library run one after the other (the variable is process-wide).
 static OWN_LIBRARY: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// Points `GRAINEO_LIBRARY_DB` at a test library and puts the earlier value back when dropped – also when the test
+/// panics, so that a failure never leaves the following tests of the process on a foreign library.
+struct OwnDb(Option<std::ffi::OsString>);
+
+impl OwnDb {
+    fn point_at(lib: &Path) -> OwnDb {
+        // (changes other tests saved before are written to their library first, not to this one)
+        library::store::flush(std::time::Duration::from_secs(10));
+        let before = std::env::var_os("GRAINEO_LIBRARY_DB");
+        std::env::set_var("GRAINEO_LIBRARY_DB", lib);
+        OwnDb(before)
+    }
+}
+
+impl Drop for OwnDb {
+    fn drop(&mut self) {
+        library::store::flush(std::time::Duration::from_secs(10));
+        match self.0.take() {
+            Some(v) => std::env::set_var("GRAINEO_LIBRARY_DB", v),
+            None => std::env::remove_var("GRAINEO_LIBRARY_DB"),
+        }
+    }
+}
+
 fn raw_dir() -> PathBuf {
     crate::env::var_os("GRAINEO_TEST_RAW_DIR").map(PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testbilder/signature-edits"))
 }
@@ -55,13 +79,14 @@ fn library_develops_the_same_as_the_sidecars_did() {
         eprintln!("test RAWs missing – skipped");
         return;
     };
+    // (GRAINEO_LIBRARY_DB is process-wide: the window tests under the app lock must not see this library)
+    let _app = crate::ui_test::app_lock();
     let _own = OWN_LIBRARY.lock().unwrap_or_else(|e| e.into_inner());
     let dir = std::env::temp_dir().join(format!("graineo-store-test-{}-{}", std::process::id(), library::now()));
     let photos = dir.join("Fotos");
     std::fs::create_dir_all(&photos).unwrap();
     let lib = dir.join("library.sqlite");
-    let before_db = std::env::var_os("GRAINEO_LIBRARY_DB");
-    std::env::set_var("GRAINEO_LIBRARY_DB", &lib);
+    let _db = OwnDb::point_at(&lib);
 
     let a = Photo { path: photos.join("A.dng"), xmp: photos.join("A.xmp") };
     let b = Photo { path: photos.join("B.dng"), xmp: photos.join("B.xmp") };
@@ -79,8 +104,10 @@ fn library_develops_the_same_as_the_sidecars_did() {
     xmp::write_lightroom(&b.xmp, &lr("B.dng"), None).unwrap();
     let sidecar_a = std::fs::read_to_string(&a.xmp).unwrap();
 
-    // before: no library – everything from the sidecars
-    assert!(!lib.exists());
+    // before: the photos are not in the library – everything from the sidecars. (The library file itself is made
+    // here: a helper thread another test left running may open the library of the moment and so create it empty.)
+    let n: i64 = library::db::Db::open(&lib).unwrap().conn.query_row("SELECT count(*) FROM file", [], |r| r.get(0)).unwrap();
+    assert_eq!(n, 0, "the photos are not in the library yet");
     let a_before = state(&a, true);
     let b_before = state(&b, false);
     assert!(a_before.original.2 && a_before.copy.as_ref().unwrap().2 && !b_before.original.2);
@@ -127,10 +154,6 @@ fn library_develops_the_same_as_the_sidecars_did() {
     assert!(!library::store::write_sidecar_from_library(&db, file_a, true).unwrap());
 
     drop(db);
-    match before_db {
-        Some(v) => std::env::set_var("GRAINEO_LIBRARY_DB", v),
-        None => std::env::remove_var("GRAINEO_LIBRARY_DB"),
-    }
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -139,13 +162,14 @@ fn library_develops_the_same_as_the_sidecars_did() {
 /// Ratings are still saved; the unchanged initial values are no error (review of 1.3.0, M1).
 #[test]
 fn library_keeps_a_development_of_a_newer_version() {
+    // (GRAINEO_LIBRARY_DB is process-wide: the window tests under the app lock must not see this library)
+    let _app = crate::ui_test::app_lock();
     let _own = OWN_LIBRARY.lock().unwrap_or_else(|e| e.into_inner());
     let dir = std::env::temp_dir().join(format!("graineo-newer-lib-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
     let photos = dir.join("Fotos");
     std::fs::create_dir_all(&photos).unwrap();
     let lib = dir.join("library.sqlite");
-    let before_db = std::env::var_os("GRAINEO_LIBRARY_DB");
-    std::env::set_var("GRAINEO_LIBRARY_DB", &lib);
+    let _db = OwnDb::point_at(&lib);
 
     let mut doc = masks::Document::from_json(include_str!("../../masks/samples/masks-example.json")).unwrap();
     doc.settle_version();
@@ -196,9 +220,5 @@ fn library_keeps_a_development_of_a_newer_version() {
     assert!(crate::photo_state::get(&x3f).iter().any(|n| n.kind == crate::photo_state::Kind::NewerDevelop));
 
     drop(db);
-    match before_db {
-        Some(v) => std::env::set_var("GRAINEO_LIBRARY_DB", v),
-        None => std::env::remove_var("GRAINEO_LIBRARY_DB"),
-    }
     let _ = std::fs::remove_dir_all(&dir);
 }

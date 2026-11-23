@@ -38,7 +38,7 @@ impl Menu {
     pub fn needs_library(self) -> bool {
         matches!(
             self,
-            Menu::Quick | Menu::VirtualCopy | Menu::Similar | Menu::Time | Menu::Rename | Menu::Move | Menu::ShowFolder | Menu::RemoveFromLibrary | Menu::RemoveFromCollection
+            Menu::Quick | Menu::VirtualCopy | Menu::MergeHdr | Menu::MergeHdrAll | Menu::Similar | Menu::Time | Menu::Reread | Menu::Rename | Menu::Move | Menu::ShowFolder | Menu::RemoveFromLibrary | Menu::RemoveFromCollection
         )
     }
 }
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn which_commands_need_the_library() {
-        let need = [Menu::Quick, Menu::VirtualCopy, Menu::Similar, Menu::Time, Menu::Rename, Menu::Move, Menu::ShowFolder, Menu::RemoveFromLibrary, Menu::RemoveFromCollection];
+        let need = [Menu::Quick, Menu::VirtualCopy, Menu::Similar, Menu::Time, Menu::Reread, Menu::Rename, Menu::Move, Menu::ShowFolder, Menu::RemoveFromLibrary, Menu::RemoveFromCollection];
         let free = [Menu::Export, Menu::Print, Menu::Finder, Menu::Delete, Menu::CopySettings, Menu::PasteSettings];
         assert!(need.iter().all(|m| m.needs_library()));
         assert!(free.iter().all(|m| !m.needs_library()));
@@ -84,7 +84,8 @@ mod tests {
         let ctx = egui::Context::default();
         let mut b = LibraryView::new(&ctx);
         b.browse_folder(&root, None);
-        let ids: Vec<i64> = b.rows.iter().map(|z| z.image).collect();
+        // the photos of the viewed folder (the shared test library may hold photos of other tests next to them)
+        let ids: Vec<i64> = b.rows.iter().filter(|z| z.folder == super::super::VIEW_FOLDER).map(|z| z.image).collect();
         assert_eq!(ids.len(), 2);
         assert!(ids.iter().all(|&i| viewed(i)), "viewed photos carry negative IDs: {ids:?}");
         assert!(b.needs_library(&ids));
@@ -92,7 +93,7 @@ mod tests {
         let undo_before = b.manage.undo.len();
         let ops_before = b.ops;
         let reason = crate::tr(NEEDS_LIBRARY).to_string();
-        for m in [Menu::Quick, Menu::VirtualCopy, Menu::Similar, Menu::Time, Menu::Rename, Menu::Move, Menu::ShowFolder, Menu::RemoveFromLibrary] {
+        for m in [Menu::Quick, Menu::VirtualCopy, Menu::Similar, Menu::Time, Menu::Reread, Menu::Rename, Menu::Move, Menu::ShowFolder, Menu::RemoveFromLibrary] {
             let mut actions = Vec::new();
             b.menu(m, &ctx, &mut actions);
             assert!(matches!(actions.as_slice(), [Action::Status(t)] if *t == reason), "{m:?}: {:?}", actions.len());

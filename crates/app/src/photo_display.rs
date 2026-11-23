@@ -148,12 +148,7 @@ impl PhotoTex {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        rs.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            bytemuck::cast_slice(&rgba[..w * h * 4]),
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w as u32 * 8), rows_per_image: Some(h as u32) },
-            size,
-        );
+        upload_pixels(rs, &texture, bytemuck::cast_slice(&rgba[..w * h * 4]), w * 8, w, h);
         let view = texture.create_view(&Default::default());
         let (id, smooth) = {
             let mut r = rs.renderer.write();
@@ -191,12 +186,7 @@ impl PhotoTex {
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-        rs.queue.write_texture(
-            wgpu::TexelCopyTextureInfo { texture: &texture, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-            &rgba,
-            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(w as u32 * 4), rows_per_image: Some(h as u32) },
-            size,
-        );
+        upload_pixels(rs, &texture, &rgba, w * 4, w, h);
         let view = texture.create_view(&Default::default());
         let sampler = |mag: wgpu::FilterMode| wgpu::SamplerDescriptor { label: Some("photo-8bit"), mag_filter: mag, min_filter: wgpu::FilterMode::Linear, ..Default::default() };
         let (id, smooth) = {
@@ -221,6 +211,60 @@ impl PhotoTex {
     pub fn bytes(&self) -> usize {
         self.bytes
     }
+}
+
+/// Rows per staging buffer of [`upload_pixels`] (bounded so that a huge photo needs no second copy of its size).
+const UPLOAD_CHUNK_BYTES: usize = 16 << 20;
+
+/// Copy `data` (`h` rows of `row_bytes`, tightly packed) into `texture` without holding the window's GPU queue
+/// while the pixels are copied.
+///
+/// `Queue::write_texture` copies the whole picture into its staging memory while it holds the queue's lock of pending
+/// writes, which every frame of the window needs for its own submit: for a large photo uploaded from a background job
+/// (tens to hundreds of MB, slow under memory pressure) the window stood still until the copy was done – seconds up to
+/// minutes (QA 10, H-1). Here the pixels go into buffers mapped at creation (no lock of the queue held while they are
+/// copied), in bands of at most [`UPLOAD_CHUNK_BYTES`]; the queue is only taken for the short submit of the copy
+/// commands.
+fn upload_pixels(rs: &egui_wgpu::RenderState, texture: &wgpu::Texture, data: &[u8], row_bytes: usize, w: usize, h: usize) {
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as usize;
+    let padded = row_bytes.div_ceil(align) * align;
+    let rows_per_chunk = (UPLOAD_CHUNK_BYTES / padded).clamp(1, h.max(1));
+    let mut encoder = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("photo-upload") });
+    let mut y = 0;
+    while y < h {
+        let rows = rows_per_chunk.min(h - y);
+        let buffer = rs.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("photo-upload"),
+            size: (padded * rows) as u64,
+            usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE,
+            mapped_at_creation: true,
+        });
+        {
+            let Ok(mut view) = buffer.slice(..).get_mapped_range_mut() else {
+                // not mappable (should not happen): this band the ordinary way
+                rs.queue.write_texture(
+                    wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d { x: 0, y: y as u32, z: 0 }, aspect: wgpu::TextureAspect::All },
+                    &data[y * row_bytes..(y + rows) * row_bytes],
+                    wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row_bytes as u32), rows_per_image: Some(rows as u32) },
+                    wgpu::Extent3d { width: w as u32, height: rows as u32, depth_or_array_layers: 1 },
+                );
+                y += rows;
+                continue;
+            };
+            for r in 0..rows {
+                let src = &data[(y + r) * row_bytes..(y + r + 1) * row_bytes];
+                view.slice(r * padded..r * padded + row_bytes).copy_from_slice(src);
+            }
+        }
+        buffer.unmap();
+        encoder.copy_buffer_to_texture(
+            wgpu::TexelCopyBufferInfo { buffer: &buffer, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(padded as u32), rows_per_image: Some(rows as u32) } },
+            wgpu::TexelCopyTextureInfo { texture, mip_level: 0, origin: wgpu::Origin3d { x: 0, y: y as u32, z: 0 }, aspect: wgpu::TextureAspect::All },
+            wgpu::Extent3d { width: w as u32, height: rows as u32, depth_or_array_layers: 1 },
+        );
+        y += rows;
+    }
+    rs.queue.submit([encoder.finish()]);
 }
 
 impl Drop for PhotoTex {
@@ -263,6 +307,39 @@ pub fn rgba_from_encoded(rgb: &[f32]) -> Vec<f16> {
         }
     });
     rgba
+}
+
+/// [`rgba_from_encoded`] with triangular dither of ±1 step of an 8-bit display (fixed pattern from the pixel
+/// position): a merged photo (HDR) has smooth, almost noise-free gradients that would otherwise show contour steps
+/// where the display quantises to 8 bits. The mean stays the same.
+pub fn rgba_from_encoded_dithered(rgb: &[f32]) -> Vec<f16> {
+    use rayon::prelude::*;
+    let hash = |mut x: u32| {
+        x ^= x >> 16;
+        x = x.wrapping_mul(0x7feb_352d);
+        x ^= x >> 15;
+        x = x.wrapping_mul(0x846c_a68b);
+        x ^ (x >> 16)
+    };
+    let mut rgba = vec![f16::ONE; rgb.len() / 3 * 4];
+    rgba.par_chunks_mut(4).zip(rgb.par_chunks(3)).enumerate().for_each(|(i, (o, p))| {
+        let a = hash(i as u32 * 2 + 1) as f32 / u32::MAX as f32;
+        let b = hash(i as u32 * 2 + 2) as f32 / u32::MAX as f32;
+        let d = (a - b) / 255.0;
+        for c in 0..3 {
+            o[c] = f16::from_f32(if p[c].is_finite() { (p[c] + d).clamp(-60000.0, 60000.0) } else { 0.0 });
+        }
+    });
+    rgba
+}
+
+/// Encoded pixels for a photo texture: dithered for a merged photo, as they are for every other photo.
+pub fn rgba_for(doc: Option<&rawdev::RawDoc>, rgb: &[f32]) -> Vec<f16> {
+    if doc.is_some_and(|d| d.merged.is_some()) && crate::env::var_os("GRAINEO_HDR_NO_DITHER").is_none() {
+        rgba_from_encoded_dithered(rgb)
+    } else {
+        rgba_from_encoded(rgb)
+    }
 }
 
 /// Half resolution (2×2 mean) of an RGBA f16 image: the level for strongly reduced views.

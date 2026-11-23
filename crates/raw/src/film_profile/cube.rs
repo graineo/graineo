@@ -195,6 +195,11 @@ pub fn table(text: &str) -> Result<(usize, Vec<[f32; 3]>), String> {
     Ok((n, d))
 }
 
+/// Is the text a complete, valid LUT (every row present and readable)?
+pub(super) fn check(text: &str) -> Result<(), String> {
+    parse(text).map(|_| ())
+}
+
 pub(super) fn look(text: &str, f: &FilmProfile) -> Result<Look, String> {
     let cube = parse(text)?;
     // Native grid preserves ordinary 3D LUTs exactly. A curve or a non-default domain is baked onto a 65³ grid.

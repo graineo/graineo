@@ -102,8 +102,8 @@ fn groups(n: usize) -> (u32, u32) {
     (x as u32, g.div_ceil(x) as u32)
 }
 
-/// Lanczos3 `img` → `nw`×`nh` on the GPU. `None`: no GPU, not allowed, image too small or too large for the buffers.
-pub fn lanczos3(img: &Rgb16, nw: usize, nh: usize) -> Option<Rgb16> {
+/// `img` → `nw`×`nh` with `filter` on the GPU (the kernel only enters through the weight tables). `None`: no GPU, not allowed, image too small or too large for the buffers.
+pub fn resize(img: &Rgb16, nw: usize, nh: usize, filter: crate::resize::ResizeFilter) -> Option<Rgb16> {
     let (w, h) = (img.width, img.height);
     if w == 0 || h == 0 || nw == 0 || nh == 0 || img.data.len() != w * h * 3 {
         return None;
@@ -117,8 +117,8 @@ pub fn lanczos3(img: &Rgb16, nw: usize, nh: usize) -> Option<Rgb16> {
     }
     let _one = g.lock.lock().unwrap_or_else(|e| e.into_inner());
     let errors_before = pools::gpu_errors();
-    let vt = crate::resize::taps(h, nh);
-    let ht = crate::resize::taps(w, nw);
+    let vt = crate::resize::taps(h, nh, filter);
+    let ht = crate::resize::taps(w, nw, filter);
     // tables: per output position [first source index (as bits), n weights]
     let table = |t: &crate::resize::Taps| -> Vec<f32> {
         let mut v = Vec::with_capacity(t.left.len() * (t.n + 1));

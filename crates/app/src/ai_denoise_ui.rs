@@ -85,11 +85,16 @@ pub fn section_sigma(ui: &mut egui::Ui, s: &mut Settings, path: &std::path::Path
         (None, true) => String::new(),
     };
     let mut on = p > 0;
-    ui.add_enabled_ui((installed || on) && possible, |ui| {
+    let row = ui.add_enabled_ui((installed || on) && possible, |ui| {
         if lr::choice_state(ui, "KI-Entrauschen", &state, &mut on, &[(false, "Aus"), (true, "An")], HINT) {
             s.raw.ai_denoise = if on { rawdev::ai_denoise::DEFAULT_STRENGTH } else { 0.0 };
         }
     });
+    if !possible {
+        // greyed out: say why (QA 11)
+        let r = ui.interact(row.response.rect, ui.id().with("ai-denoise-locked"), egui::Sense::hover());
+        lr::hover_tip(ui, &r, crate::tr(if s.monochrome { "KI-Entrauschen gibt es nur in Farbe." } else { "KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung." }));
+    }
     if installed {
         ui.add_enabled_ui(on && possible, |ui| {
             let mut v = p as f64;

@@ -24,6 +24,8 @@ pub enum Rank {
     Move,
     Delete,
     ContactPrint,
+    /// merging photos (HDR): progress, time still to go, cancellable from the list
+    Merge,
     /// work the user started in the settings or the library menu (check, rebuild …)
     Started,
     /// the face model download started with "Laden" (progress, ready, cause of a failure): always visible in the bar
@@ -44,7 +46,7 @@ pub enum Rank {
 impl Rank {
     pub fn tier(self) -> u8 {
         match self {
-            Rank::Import | Rank::Export | Rank::Move | Rank::Delete | Rank::ContactPrint | Rank::Started | Rank::FaceModel => 1,
+            Rank::Import | Rank::Export | Rank::Move | Rank::Delete | Rank::ContactPrint | Rank::Merge | Rank::Started | Rank::FaceModel => 1,
             Rank::Photo | Rank::Visible => 2,
             _ => 3,
         }
@@ -134,6 +136,9 @@ impl App {
         if let Some(t) = crate::prefs::work_status() {
             v.push(Task::new(Rank::Settings, t));
         }
+        if let Some(t) = reread_text() {
+            v.push(Task::new(Rank::Started, t));
+        }
         if let Some((done, total)) = library::sidecar_import::progress() {
             v.push(Task::new(Rank::Library, crate::trf!("Begleitdateien einlesen: noch {n}", n = crate::library_ui::thousands(total - done))));
         }
@@ -154,6 +159,21 @@ impl App {
         }
         if self.lib.pairs_running() {
             v.push(Task::new(Rank::Delete, crate::tr("Doppelte JPEGs entfernen").to_string()));
+        }
+        for t in crate::hdr_ui::activities() {
+            v.push(Task::new(Rank::Merge, t));
+        }
+        // SFD bracket (X3I) being merged while the photo opens
+        for j in develop::sfd::jobs() {
+            let name = j.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            let p = (j.progress * 100.0).floor() as u32;
+            v.push(Task::new(
+                Rank::Merge,
+                match j.remaining_secs() {
+                    Some(r) => crate::trf!("SFD {a} {p} % · noch etwa {t}", a = name, p = p, t = crate::dialog::duration(std::time::Duration::from_secs_f32(r.max(1.0)))),
+                    None => crate::trf!("SFD {a} {p} %", a = name, p = p),
+                },
+            ));
         }
         if self.darkroom.contact.an && self.darkroom.contact.computing() {
             v.push(Task::new(Rank::ContactPrint, crate::tr("Kontaktabzug wird berechnet").to_string()));
@@ -193,7 +213,12 @@ impl App {
         child.spacing_mut().item_spacing.x = 6.0;
         let hover = resp.hovered();
         if faults > 0 {
-            let label = if faults == 1 { self.notes.faults[0].title.clone() } else { crate::trf!("{a} Fehler", a = faults) };
+            // one error: its reason stays visible beside the title (shortened to the room there, all of it in the list)
+            let label = match self.notes.faults.as_slice() {
+                [f] if !f.cause.is_empty() => format!("{}: {}", f.title, f.cause),
+                [f] => f.title.clone(),
+                _ => crate::trf!("{a} Fehler", a = faults),
+            };
             dot(&mut child, RED);
             child.add(egui::Label::new(egui::RichText::new(label).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT })).truncate().selectable(false));
             if let Some(t) = summary(&tasks) {
@@ -206,6 +231,8 @@ impl App {
             let fade = ((DONE_SECS - (now - since)) / 0.5).clamp(0.0, 1.0) as f32;
             dot(&mut child, GREEN.gamma_multiply(fade));
             child.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT.gamma_multiply(fade))).truncate().selectable(false));
+            // the place has a fixed width: a longer message is cut there, all of it in the tooltip
+            lr::hover_tip(ui, &resp, text);
         } else if let Some(text) = summary(&tasks) {
             // background only: a calm, dimmed line without a spinner; work of the user or of what is visible: spinner
             let background = tasks.first().is_some_and(|t| t.rank.tier() == 3);
@@ -290,6 +317,25 @@ impl App {
                             });
                             continue;
                         }
+                        // "Metadaten neu einlesen": cancellable here (what was read stays, ⌘Z covers it)
+                        if t.rank == Rank::Started && Some(&t.text) == reread_text().as_ref() {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                                if ui.small_button(crate::tr("Abbrechen")).clicked() {
+                                    action = Some(Click::CancelReread);
+                                }
+                            });
+                            continue;
+                        }
+                        if t.rank == Rank::Merge {
+                            ui.horizontal(|ui| {
+                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                                if ui.small_button(crate::tr("Abbrechen")).clicked() {
+                                    action = Some(Click::CancelMerge);
+                                }
+                            });
+                            continue;
+                        }
                         ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
                     }
                 }
@@ -298,6 +344,11 @@ impl App {
         match action {
             Some(Click::Close(n)) => {
                 self.notes.faults.remove(n);
+            }
+            Some(Click::CancelReread) => crate::library_ui::metadata_reread_ui::cancel(),
+            Some(Click::CancelMerge) => {
+                crate::hdr_ui::cancel_all();
+                develop::sfd::cancel_all();
             }
             Some(Click::ShowImport) => {
                 self.lib.import_show();
@@ -332,9 +383,19 @@ impl App {
 enum Click {
     /// show the window of an import running in the background
     ShowImport,
+    /// cancel the running merges (HDR)
+    CancelMerge,
+    /// cancel "Metadaten neu einlesen"
+    CancelReread,
     Retry(usize),
     Reveal(usize),
     Close(usize),
+}
+
+/// Status text of a running "Metadaten neu einlesen" (`None`: none runs).
+fn reread_text() -> Option<String> {
+    let (done, total) = crate::library_ui::metadata_reread_ui::progress()?;
+    Some(crate::trf!("Metadaten neu einlesen: {k} von {n}", k = crate::library_ui::thousands(done), n = crate::library_ui::thousands(total)))
 }
 
 /// How long a success stays in the status (seconds).

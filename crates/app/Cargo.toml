@@ -27,6 +27,7 @@ library = { path = "../library" }
 # Develop non-Sigma RAWs (CR2/CR3/RAF/DNG/ARW)
 raw = { path = "../raw" }
 rawdev = { path = "../rawdev" }
+hdr = { path = "../hdr" }
 # own lens profiles: storage, assignment rules, exchange
 lensprof = { path = "../lensprof" }
 # sensor view for Bayer/X-Trans (analyses on the mosaic)

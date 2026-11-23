@@ -262,7 +262,7 @@ fn has_extension(p: &Path, exts: &[&str]) -> bool {
 /// X3F: shooting data from the X3F properties. Returns: short report.
 pub fn write(target: &Path, original: &Path, fields: &ExportFields) -> Result<String, String> {
     let mut f = fields.clone();
-    if has_extension(original, &["x3f"]) {
+    if has_extension(original, &["x3f", "x3i"]) {
         f.shot = Shot::from_x3f(original).or(f.shot);
     } else if f.shot.is_none() && cfg!(not(target_os = "macos")) {
         f.shot = Shot::from_header(original);

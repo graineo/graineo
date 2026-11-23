@@ -379,7 +379,7 @@ pub fn build(cities: &str, admin1: &str, countries: &str) -> Result<Vec<u8>, Str
 
 /// Write the place of a file: the row says "looked at"; without a position only that. Returns whether it got a
 /// place name.
-fn store(c: &rusqlite::Connection, file: i64, state: i64, position: Option<(f64, f64)>) -> rusqlite::Result<bool> {
+pub(crate) fn store(c: &rusqlite::Connection, file: i64, state: i64, position: Option<(f64, f64)>) -> rusqlite::Result<bool> {
     let place = position.and_then(|(lat, lon)| lookup(lat, lon));
     c.execute(
         "INSERT OR REPLACE INTO place(file, state, latitude, longitude, city, region, country, country_code, name) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",

@@ -871,6 +871,8 @@ def method_external(s, tmp, spec):
             img = img * (np.array(s.meta["dev"]["wb"], np.float32) / np.array(hdr["wb"], np.float32))[None, None, :]
     if spec.get("wb_from_dev", False):
         img = img * np.array(s.meta["dev"]["wb"], np.float32)[None, None, :]
+    if spec.get("encode") == "srgb":  # display result written as linear values: store it sRGB-encoded like other fusion tools
+        img = srgb_encode(img).astype(np.float32)
     return img, spec.get("kind", "linear"), {"note": spec.get("note", ""), "tool_seconds": w, "tool_rss_mb": r}
 
 
@@ -1106,6 +1108,42 @@ def bins_ev(lo=-14, hi=1, step=1.0):
     return list(zip(e[:-1], e[1:]))
 
 
+def halo_overshoot(Y, valid, far=14, near=9, n_max=20000, seed=1):
+    """Halo measure for a display-referred luma image `Y` (0..1, encoded): at strong edges (top 0.5 % of the gradient,
+    plateau step >= 0.12) the profile along the gradient axis from -near .. +near may not leave the band between the
+    two far levels (`far` px either side). Overshoot = excursion outside that band / step height. Returns the mean and
+    the 95th percentile over the edge pixels (natural texture contributes: compare with the same measure of the
+    tone-mapped truth, the caller reports both)."""
+    H, W = Y.shape
+    Y = cv2.GaussianBlur(Y, (0, 0), 1.5)  # profiles are read on a lightly smoothed image: noise must not count as a halo
+    gy, gx = np.gradient(Y)
+    g = np.hypot(gx, gy)
+    ok = valid.copy()
+    ok[:far + 1] = ok[-far - 1:] = False
+    ok[:, :far + 1] = ok[:, -far - 1:] = False
+    thr = np.percentile(g[ok], 99.5)
+    ys, xs = np.nonzero(ok & (g >= thr))
+    if len(ys) > n_max:
+        pick = np.random.default_rng(seed).choice(len(ys), n_max, replace=False)
+        ys, xs = ys[pick], xs[pick]
+    horiz = np.abs(gx[ys, xs]) >= np.abs(gy[ys, xs])
+    dx = np.where(horiz, 1, 0)
+    dy = np.where(horiz, 0, 1)
+    sgn = np.where(horiz, np.sign(gx[ys, xs]), np.sign(gy[ys, xs])).astype(int)
+    dx, dy = dx * sgn, dy * sgn  # direction of increasing brightness
+    prof = lambda k: Y[ys + dy * k, xs + dx * k]
+    a, b = prof(-far), prof(far)
+    lo, hi = np.minimum(a, b), np.maximum(a, b)
+    step = hi - lo
+    inner = np.stack([prof(k) for k in range(-near, near + 1)])
+    over = np.maximum(lo - inner.min(axis=0), inner.max(axis=0) - hi)
+    sel = step >= 0.12
+    if sel.sum() < 50:
+        return None, None, int(sel.sum())
+    o = np.maximum(over[sel], 0) / step[sel]
+    return float(o.mean()), float(np.percentile(o, 95)), int(sel.sum())
+
+
 def score_pair(s, method, R, kind, info):
     """all metrics of one result"""
     syn = "synthetic" in s.meta
@@ -1142,6 +1180,15 @@ def score_pair(s, method, R, kind, info):
         sh = tile_shifts(Ra, tonemap(target, 0, ref_level(s, target)), valid)
     row["align_med_px"] = round(float(np.median(sh)), 3) if len(sh) else None
     row["align_p95_px"] = round(float(np.percentile(sh, 95)), 3) if len(sh) else None
+    if kind == "display":
+        tm = tonemap(target, 0, ref_level(s, target))
+        hm, hp, hn = halo_overshoot(luma(Ra), valid)
+        tm_m, tm_p, _ = halo_overshoot(luma(tm), valid)
+        row["halo_mean"] = None if hm is None else round(hm, 4)
+        row["halo_p95"] = None if hp is None else round(hp, 4)
+        row["halo_ref_mean"] = None if tm_m is None else round(tm_m, 4)
+        row["halo_ref_p95"] = None if tm_p is None else round(tm_p, 4)
+        row["halo_edges"] = hn
     if kind != "linear":
         return row
     # global scale: median ratio in mid-tones where the target is reliable

@@ -280,7 +280,11 @@ impl App {
         let x3f_only = !items.is_empty() && items.iter().all(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
         let has_x3f = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
         let has_finished = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Done);
-        if !x3f_only && !self.export_format.is_finished_image() {
+        // scene-linear formats (TIFF 32 bit, OpenEXR, linear DNG) for every developable RAW: Sigma X3F and the
+        // other cameras; the camera-profile DNG and the sensor layers stay Sigma only
+        let raw_ok = !items.is_empty() && items.iter().all(|&i| matches!(image_kind::of(&self.entries[i].path), image_kind::ImageKind::Foveon | image_kind::ImageKind::Raw));
+        let allowed = self.export_format.is_finished_image() || (raw_ok && (self.export_format.is_scene_linear() || self.export_format == Format::Dng)) || x3f_only;
+        if !allowed {
             self.export_format = Format::Jpeg { quality: 92 };
         }
 
@@ -299,6 +303,8 @@ impl App {
         let mut kinds = vec![(Kind::Jpeg, "JPEG"), (Kind::Jxl, "JPEG XL"), (Kind::Tiff, "TIFF"), (Kind::Png, "PNG")];
         if x3f_only {
             kinds.push((Kind::Dng, "DNG (Raw)"));
+        }
+        if raw_ok {
             kinds.push((Kind::Linear, crate::tr("Lineares DNG")));
             kinds.push((Kind::Exr, "OpenEXR"));
         }
@@ -312,6 +318,7 @@ impl App {
                 Kind::Tiff | Kind::Png => crate::tr("Fertiges Bild ohne Verlust, für Druck und Bildbearbeitung."),
                 Kind::Dng if mono => crate::tr("Foveon-Schwarzweiß als Raw; deine Regler kommen als XMP mit."),
                 Kind::Dng => crate::tr("Raw mit dem Farbmodus der Kamera als Kameraprofil; deine Regler kommen als XMP mit."),
+                Kind::Linear if !x3f_only => crate::tr("Lineares DNG aus graineos Entwicklung: Kamerawerte ohne Tonkurve, nichts beschnitten, auch Lichter über Weiß bleiben erhalten."),
                 Kind::Linear => crate::tr("Raw aus graineos eigener Entwicklung, ohne Sigma-Profile."),
                 Kind::Exr => crate::tr("Szenenlinear ohne Tonkurve, nichts beschnitten."),
                 Kind::Original => crate::tr("Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben."),
@@ -338,7 +345,8 @@ impl App {
                 _ => Format::JXL_DEFAULT,
             },
             Kind::Tiff => match self.export_format {
-                Format::TiffFloat | Format::RawLayers if x3f_only => self.export_format,
+                Format::TiffFloat if raw_ok => self.export_format,
+                Format::RawLayers if x3f_only => self.export_format,
                 _ => Format::Tiff16,
             },
             Kind::Png => Format::Png16,
@@ -351,7 +359,7 @@ impl App {
             // the format stays for the next time; it does not apply to the originals
             Kind::Original => self.export_format,
         };
-        self.export_format_details(ui, kind, x3f_only, has_finished, &items);
+        self.export_format_details(ui, kind, x3f_only, raw_ok, has_finished, &items);
         if self.export_options != before_options {
             if let Ok(v) = serde_json::to_value(&self.export_options) {
                 library::settings::set("exportOptions", v);
@@ -394,9 +402,42 @@ impl App {
             }
         }
 
+        // ── Colour of the scene-linear formats of Sigma photos: with the colour mode or camera matrix only
+        {
+            let before = self.export_options.camera_matrix_only;
+            let on = self.export_format.is_scene_linear() && !self.export_original && has_x3f;
+            let row_top = ui.cursor().top();
+            row_if(ui, crate::tr("Farbe"), on, |ui| {
+                choice(
+                    ui,
+                    "export-camera-matrix",
+                    &mut self.export_options.camera_matrix_only,
+                    &[(false, crate::tr("Mit Farbmodus")), (true, crate::tr("Nur Kameramatrix"))],
+                    &[crate::tr("Farbe wie im gewählten Farbmodus der Entwicklung"), crate::tr("Kalibrierte Kamerafarbe ohne den Look des Farbmodus")],
+                );
+            });
+            if !on {
+                // greyed out: say why (a disabled widget reports no hover, so a hover area over the row)
+                let row = egui::Rect::from_min_max(egui::pos2(ui.max_rect().left(), row_top), egui::pos2(ui.max_rect().right(), ui.cursor().top()));
+                let r = ui.interact(row, ui.id().with("export-camera-matrix-locked"), egui::Sense::hover());
+                let why = if !has_x3f {
+                    crate::tr("Nur für Sigma-Fotos (X3F) in den Formaten TIFF 32 Bit und OpenEXR")
+                } else {
+                    crate::tr("Nur für die Formate TIFF 32 Bit und OpenEXR")
+                };
+                lr::hover_tip(ui, &r, why);
+            }
+            if self.export_options.camera_matrix_only != before {
+                if let Ok(v) = serde_json::to_value(&self.export_options) {
+                    library::settings::set("exportOptions", v);
+                }
+            }
+        }
+
         // ── Size
         section(ui, crate::tr("Größe und Metadaten"));
         self.export_size_row(ui, finished);
+        self.export_resize_row(ui, finished);
 
         // ── Metadata (never serial numbers or names of people)
         let before = self.export_options.metadata;
@@ -424,7 +465,7 @@ impl App {
 
     /// The two rows below "Format": quality, bit depth, compression, … of the chosen format (empty rows keep their
     /// place, so switching the format moves nothing).
-    fn export_format_details(&mut self, ui: &mut egui::Ui, kind: Kind, x3f_only: bool, has_finished: bool, items: &[usize]) {
+    fn export_format_details(&mut self, ui: &mut egui::Ui, kind: Kind, x3f_only: bool, raw_ok: bool, has_finished: bool, items: &[usize]) {
         let mut rows = 0;
         match kind {
             Kind::Jpeg => {
@@ -475,8 +516,10 @@ impl App {
                     _ => Depth::B16,
                 };
                 let mut depths = vec![(Depth::B16, crate::tr("16 Bit"))];
-                if x3f_only {
+                if raw_ok {
                     depths.push((Depth::Float, crate::tr("32 Bit linear")));
+                }
+                if x3f_only {
                     depths.push((Depth::Layers, crate::tr("Sensorschichten (unbearbeitet)")));
                 }
                 row(ui, crate::tr("Bit-Tiefe"), |ui| {
@@ -505,10 +548,12 @@ impl App {
                 row(ui, crate::tr("Bit-Tiefe"), |ui| {
                     choice(ui, "export-dng-depth", &mut self.export_options.dng_float, &[(false, crate::tr("16 Bit")), (true, crate::tr("32 Bit Gleitkomma"))], &[]);
                 });
-                row(ui, "", |ui| {
-                    ui.checkbox(&mut self.export_options.dng_embed_original, crate::tr("Original-X3F einbetten"));
-                });
-                rows += 2;
+                if x3f_only {
+                    row(ui, "", |ui| {
+                        ui.checkbox(&mut self.export_options.dng_embed_original, crate::tr("Original-X3F einbetten"));
+                    });
+                }
+                rows += if x3f_only { 2 } else { 1 };
             }
             Kind::Original => {
                 // the one hint that explains a decision: the originals are copied as they are
@@ -613,6 +658,42 @@ impl App {
         }
     }
 
+    /// Row "Verkleinern": resampling filter (only acts when a size limit is set; otherwise greyed out, the row stays).
+    fn export_resize_row(&mut self, ui: &mut egui::Ui, finished: bool) {
+        use develop::resize::ResizeFilter as F;
+        let before = self.export_resize;
+        row_if(ui, crate::tr("Verkleinerung"), finished && self.export_limit_size, |ui| {
+            let name = |f: F| match f {
+                F::Sharp => crate::tr("Scharf"),
+                F::Balanced => crate::tr("Ausgewogen"),
+                F::Soft => crate::tr("Weich"),
+                F::Smooth => crate::tr("Glatt"),
+            };
+            let brief = |f: F| match f {
+                F::Sharp => crate::tr("sehr scharf, kann an harten Kanten leicht saumen"),
+                F::Balanced => crate::tr("fast so scharf, weniger Säume"),
+                F::Soft => crate::tr("ruhiger, kaum Säume, mindert Moiré"),
+                F::Smooth => crate::tr("sehr glatt, keine Säume, dämpft Moiré und Rauschen"),
+            };
+            let detail = |f: F| match f {
+                F::Sharp => crate::tr("Lanczos, 3 Lappen (Fensterbreite 3 Pixel je Seite). Der bisherige Standard."),
+                F::Balanced => crate::tr("Catmull-Rom, kubisch (B 0, C 0,5; Fensterbreite 2). Etwas weniger Überschwingen als Lanczos."),
+                F::Soft => crate::tr("Hann-gefenstertes Sinc (Fensterbreite 3), in XnView und ImageMagick „Hanning“."),
+                F::Smooth => crate::tr("Mitchell-Netravali, kubisch (B = C = 1/3; Fensterbreite 2). Kaum Überschwingen."),
+            };
+            let r = egui::ComboBox::from_id_salt("export-resize").selected_text(name(self.export_resize)).width(128.0).show_ui(ui, |ui| {
+                for f in F::ALL {
+                    let r = ui.selectable_value(&mut self.export_resize, f, format!("{} – {}", name(f), brief(f)));
+                    lr::hover_tip(ui, &r, detail(f));
+                }
+            });
+            lr::hover_tip(ui, &r.response, detail(self.export_resize));
+        });
+        if self.export_resize != before {
+            library::settings::set("exportResize", serde_json::Value::String(self.export_resize.key().into()));
+        }
+    }
+
     /// Left part of "Advanced": print border, Foveon quality, GPS, keywords (greyed out where they do not apply).
     fn export_what_advanced(&mut self, ui: &mut egui::Ui, scope: &Scope) {
         row_if(ui, crate::tr("Abzug"), scope.finished, |ui| {
@@ -667,7 +748,15 @@ impl App {
             self.set_export_dir(d);
         }
         row(ui, "", |ui| {
-            ui.checkbox(&mut self.reveal_after_export, crate::tr("Danach im Finder zeigen"));
+            if ui.checkbox(&mut self.reveal_after_export, crate::tr("Danach im Finder zeigen")).changed() {
+                // remembered like the default in the preferences (the same value, "export" → "reveal")
+                let mut e = library::settings::value("export");
+                if !e.is_object() {
+                    e = serde_json::json!({"format": "jpeg", "quality": 92, "engine": "spp"});
+                }
+                e["reveal"] = serde_json::json!(self.reveal_after_export);
+                library::settings::set("export", e);
+            }
         });
         section(ui, crate::tr("Dateiname"));
         self.export_name_rows(ui, items);

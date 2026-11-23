@@ -23,7 +23,8 @@
 //! Classic stage ([`CLASSIC`], marker `classicPreviewRevision`): in 0.107.0 the processing of all older Foveon
 //! cameras (SD9, SD10, SD14, SD15, DP1, DP1s, DP1x, DP2, DP2s, DP2x) follows dcraw in most steps (sensor correction,
 //! defects, chroma smoothing, colour coring) with an own highlight step. Photos of these cameras with a stored developed
-//! preview are developed again. It runs right after the Sigma renewal.
+//! preview are developed again. It runs right after the Sigma renewal. Revision 2 (claude/classic-regler): the
+//! highlight step finds small clipped lights and fades later, SD9 coring and automatic white balance changed.
 //!
 //! Fourth stage ([`FILM`], marker `filmGrainPreviewRevision`): in 0.107.0 every photo with an active film looks
 //! different: the grain model (colour films: sub-layers or measured grain; B&W: measured grain size) and the corrections
@@ -60,7 +61,7 @@ pub struct Stage {
 pub const SIGMA: Stage = Stage { name: "sigma", marker: MARKER, revision: REVISION, done_name: "sigma-refresh", selects: |g| !matches!(g, Group::Classic | Group::CameraLook | Group::FilmGrain) };
 /// The older Foveon cameras after the processing change of 0.107.0 (one way for all of them). Raise the revision when
 /// their development changes visibly again.
-pub const CLASSIC: Stage = Stage { name: "classic", marker: "classicPreviewRevision", revision: 1, done_name: "classic-refresh", selects: |g| g == Group::Classic };
+pub const CLASSIC: Stage = Stage { name: "classic", marker: "classicPreviewRevision", revision: 2, done_name: "classic-refresh", selects: |g| g == Group::Classic };
 /// Non-Sigma RAWs with an empty look whose old previews show the former automatic camera look. Raise the revision to
 /// repeat it.
 pub const LOOK: Stage = Stage { name: "camera look", marker: "cameraLookPreviewRevision", revision: 1, done_name: "look-refresh", selects: |g| g == Group::CameraLook };

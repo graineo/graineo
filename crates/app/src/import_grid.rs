@@ -63,11 +63,11 @@ fn cell_kind(imp: &Import, c: &Cell) -> String {
 
 /// The file a cell shows: the JPEG half of RAW+JPEG (its embedded image is the same photo, read much faster than a
 /// RAW's preview), otherwise the first file that is part of the import.
-fn picture_of(imp: &Import, c: &Cell) -> usize {
+pub(super) fn picture_of(imp: &Import, c: &Cell) -> usize {
     c.members.iter().copied().find(|&i| library::import_select::is_jpeg_like(&imp.cand[i].format)).or_else(|| c.members.iter().copied().find(|&i| imp.member_on(c, i))).unwrap_or(c.members[0])
 }
 
-fn cell_name(imp: &Import, c: &Cell) -> String {
+pub(super) fn cell_name(imp: &Import, c: &Cell) -> String {
     imp.cand[c.members[0]].path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 

@@ -729,6 +729,38 @@ pub fn main_button_min(ui: &mut egui::Ui, text: &str, active: bool, min_width: f
     resp
 }
 
+/// Secondary button (close, cancel, side actions): framed grey, as high as [`main_button`], never gold – gold stays
+/// with the one main button of a window. `icon`: a symbol before the text (e.g. [`Icon::X`] for closing). Arrow
+/// pointer (no hand). The caller adds the tooltip (`hover_tip` / `tip_key`).
+pub fn secondary_button(ui: &mut egui::Ui, icon: Option<Icon>, text: &str) -> egui::Response {
+    let text = crate::tr(text);
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, TEXT);
+    let icon_w = if icon.is_some() { 18.0 } else { 0.0 };
+    let size = egui::vec2(galley.size().x + 20.0 + icon_w, 24.0);
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let (fill, frame) = if resp.is_pointer_button_down_on() {
+        (Color32::from_gray(0x44), Color32::from_gray(0x9a))
+    } else if resp.hovered() {
+        (Color32::from_gray(0x3a), Color32::from_gray(0x8a))
+    } else {
+        (Color32::from_gray(0x26), Color32::from_gray(0x5a))
+    };
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, fill);
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, frame), egui::StrokeKind::Inside);
+    if resp.has_focus() {
+        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
+    }
+    let mut x = rect.left() + 10.0;
+    if let Some(i) = icon {
+        paint_icon(painter, egui::Rect::from_center_size(egui::pos2(x + 6.0, rect.center().y), egui::vec2(12.0, 12.0)), i, TEXT);
+        x += icon_w;
+    }
+    painter.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, TEXT);
+    resp
+}
+
 /// Button of the tool rail on the right edge: icon 36 × 34, light fill when active, no frame.
 /// `available = false`: greyed out. Returns: clicked.
 pub fn tool_rail_button(ui: &mut egui::Ui, icon: Icon, on: bool, available: bool, tip: &str) -> bool {
@@ -1867,6 +1899,9 @@ pub enum Icon {
     Circle,
     SunDim,
     Palette,
+    /// Grid and filmstrip: expand / collapse all series
+    ArrowsOutLineH,
+    ArrowsInLineH,
 }
 
 impl Icon {
@@ -1960,6 +1995,8 @@ impl Icon {
             Icon::Circle => '\u{e18a}',
             Icon::SunDim => '\u{e474}',
             Icon::Palette => '\u{e6c8}',
+            Icon::ArrowsOutLineH => '\u{e534}',
+            Icon::ArrowsInLineH => '\u{e530}',
         }
     }
 }
@@ -2421,6 +2458,7 @@ pub fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str, siz
 pub const BAR_H: f32 = 28.0;
 
 /// Content of a cell in [`cell_group`].
+#[derive(Clone, Copy)]
 pub enum Cell<'a> {
     Symbol(Icon, Color32),
     Text(&'a str, f32, Color32),
@@ -2437,6 +2475,36 @@ pub fn cell_group(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], c
     cell_group_rect(ui, salt, cells, cell_w).0
 }
 
+/// [`cell_group`] with a width per cell.
+pub fn cell_group_w(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], widths: &[f32]) -> Option<usize> {
+    let h = BAR_H;
+    let total: f32 = widths.iter().sum();
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(total, h), egui::Sense::hover());
+    ui.painter().rect_filled(rect, 0.0, GROUP_FILL);
+    let mut click = None;
+    let mut x = 0.0;
+    for (i, (cell, active, tip)) in cells.iter().enumerate() {
+        let r = egui::Rect::from_min_size(rect.min + egui::vec2(x, 0.0), egui::vec2(widths[i], h));
+        x += widths[i];
+        let resp = ui.interact(r, ui.id().with((salt, i)), egui::Sense::click());
+        let fill = if *active { ACTIVE_FILL } else if resp.hovered() { Color32::from_gray(0x2e) } else { GROUP_FILL };
+        let inner = r.shrink(2.0);
+        ui.painter().rect_filled(inner, 0.0, fill);
+        match cell {
+            Cell::Symbol(icon, color) => paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(14.0, 14.0)), *icon, *color),
+            Cell::Text(t, size, color) => {
+                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size), *color);
+            }
+            _ => {}
+        }
+        hover_tip(ui, &resp, crate::tr(tip));
+        if resp.clicked() {
+            click = Some(i);
+        }
+    }
+    click
+}
+
 /// Like [`cell_group`], additionally returns the frame (for marks on the group).
 pub fn cell_group_rect(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], cell_w: f32) -> (Option<usize>, egui::Rect) {
     cell_group_sized(ui, salt, cells, cell_w, BAR_H)
@@ -2444,17 +2512,28 @@ pub fn cell_group_rect(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str
 
 /// Like [`cell_group_rect`] with its own height (compact rows such as the filmstrip header).
 pub fn cell_group_sized(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], cell_w: f32, h: f32) -> (Option<usize>, egui::Rect) {
+    cell_group_enabled(ui, salt, cells, &[], cell_w, h)
+}
+
+/// Colour of a cell that cannot act in the current state.
+pub const CELL_DISABLED: Color32 = Color32::from_gray(0x55);
+
+/// Like [`cell_group_sized`]; `enabled[i] == false` greys cell `i` (no hover, no click; its tooltip, which should say
+/// why, still shows). Cells beyond `enabled` are enabled.
+pub fn cell_group_enabled(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], enabled: &[bool], cell_w: f32, h: f32) -> (Option<usize>, egui::Rect) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(cell_w * cells.len() as f32, h), egui::Sense::hover());
     ui.painter().rect_filled(rect, 0.0, GROUP_FILL);
     let mut click = None;
     for (i, (cell, active, tip)) in cells.iter().enumerate() {
+        let on = enabled.get(i).copied().unwrap_or(true);
         let r = egui::Rect::from_min_size(rect.min + egui::vec2(cell_w * i as f32, 0.0), egui::vec2(cell_w, h));
-        let resp = ui.interact(r, ui.id().with((salt, i)), egui::Sense::click());
+        let resp = ui.interact(r, ui.id().with((salt, i)), if on { egui::Sense::click() } else { egui::Sense::hover() });
         let inner = r;
         let is_color_cell = matches!(cell, Cell::Color(_));
+        let active = &(*active && on);
         let fill = if *active && !is_color_cell {
             ACTIVE_FILL
-        } else if resp.hovered() {
+        } else if on && resp.hovered() {
             Color32::from_gray(0x2e)
         } else {
             Color32::TRANSPARENT
@@ -2465,10 +2544,10 @@ pub fn cell_group_sized(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &st
             painter.rect_filled(egui::Rect::from_min_max(egui::pos2(inner.left(), inner.bottom() - 2.0), inner.max), 0.0, ACTIVE_MARK);
         }
         match cell {
-            Cell::Symbol(icon, c) => paint_icon(painter, egui::Rect::from_center_size(r.center(), egui::vec2(16.0, 16.0)), *icon, if *active { Color32::WHITE } else { *c }),
+            Cell::Symbol(icon, c) => paint_icon(painter, egui::Rect::from_center_size(r.center(), egui::vec2(16.0, 16.0)), *icon, if !on { CELL_DISABLED } else if *active { Color32::WHITE } else { *c }),
             Cell::Flag(f) => paint_flag(painter, r.center(), 17.0, *f, *active, if *active { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { TEXT }),
             Cell::Text(t, size_pt, c) => {
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size_pt), *c);
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size_pt), if on { *c } else { CELL_DISABLED });
             }
             Cell::Color(c) => {
                 let swatch = egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0));
@@ -2481,7 +2560,7 @@ pub fn cell_group_sized(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &st
         if !tip.is_empty() {
             hover_tip(ui, &resp, tip);
         }
-        if resp.clicked() {
+        if on && resp.clicked() {
             click = Some(i);
         }
     }
@@ -2542,6 +2621,15 @@ pub fn with_placed_scroll<R>(ui: &mut egui::Ui, placed: bool, f: impl FnOnce(&mu
 }
 
 pub fn hover_tip(ui: &egui::Ui, resp: &egui::Response, text: &str) {
+    hover_tip_at(ui, resp, text, false);
+}
+
+/// [`hover_tip`] above the element: for a tip that points to the row below it (which it would cover otherwise).
+pub fn hover_tip_above(ui: &egui::Ui, resp: &egui::Response, text: &str) {
+    hover_tip_at(ui, resp, text, true);
+}
+
+fn hover_tip_at(ui: &egui::Ui, resp: &egui::Response, text: &str, above: bool) {
     if text.is_empty() {
         return;
     }
@@ -2555,7 +2643,11 @@ pub fn hover_tip(ui: &egui::Ui, resp: &egui::Response, text: &str) {
             // hidden after a click
         } else if now - start >= TIP_DELAY {
             let mut tip = egui::Tooltip::always_open(ui.ctx().clone(), resp.layer_id, resp.id, resp.rect);
-            tip.popup = tip.popup.align(egui::RectAlign::BOTTOM_START).align_alternatives(&[egui::RectAlign::TOP_START, egui::RectAlign::BOTTOM_END, egui::RectAlign::TOP_END]);
+            tip.popup = if above {
+                tip.popup.align(egui::RectAlign::TOP_START).align_alternatives(&[egui::RectAlign::TOP_END, egui::RectAlign::BOTTOM_START, egui::RectAlign::BOTTOM_END])
+            } else {
+                tip.popup.align(egui::RectAlign::BOTTOM_START).align_alternatives(&[egui::RectAlign::TOP_START, egui::RectAlign::BOTTOM_END, egui::RectAlign::TOP_END])
+            };
             tip.show(|ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                 ui.label(egui::RichText::new(crate::tr(text)).size(UI_SIZE - 0.5).color(TEXT))
@@ -2874,6 +2966,9 @@ fn icon_text(icon: Icon, text: &str) -> egui::text::LayoutJob {
     job
 }
 
+/// Room the arrow and the paddings of a drop-down field take from its width.
+const COMBO_ARROW_W: f32 = 30.0;
+
 /// Compact choice with icons: name above as with the sliders, below a drop-down list (icon and name per entry,
 /// the chosen one visible with its icon) and on the right an icon button (e.g. picker).
 /// `shown`: what the list shows when no entry is chosen (e.g. own white balance).
@@ -2898,17 +2993,25 @@ pub fn icon_select(
         ui.spacing_mut().item_spacing.x = 6.0;
         let (icon, text) = selected.and_then(|i| items.get(i).copied()).unwrap_or(shown);
         let combo_w = (w - 26.0 - 6.0).max(60.0);
-        egui::ComboBox::from_id_salt(("lr-icon-select", id))
-            .selected_text(icon_text(icon, crate::tr(text)))
-            .width(combo_w)
-            .height(400.0)
-            .show_ui(ui, |ui| {
-                for (i, (icon, text)) in items.iter().enumerate() {
-                    if ui.selectable_label(selected == Some(i), icon_text(*icon, crate::tr(text))).clicked() {
-                        picked = Some(i);
+        // fixed width: a long name is cut with an ellipsis (the whole name in the tooltip), never widens the panel
+        let name = crate::tr(text);
+        let full_w = ui.painter().layout_job(icon_text(icon, name)).size().x;
+        // (a truncating field takes all the width it is offered, so it gets exactly its own)
+        let r = ui
+            .allocate_ui_with_layout(egui::vec2(combo_w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_max_width(combo_w);
+                egui::ComboBox::from_id_salt(("lr-icon-select", id)).selected_text(icon_text(icon, name)).width(combo_w).truncate().height(400.0).show_ui(ui, |ui| {
+                    for (i, (icon, text)) in items.iter().enumerate() {
+                        if ui.selectable_label(selected == Some(i), icon_text(*icon, crate::tr(text))).clicked() {
+                            picked = Some(i);
+                        }
                     }
-                }
-            });
+                })
+            })
+            .inner;
+        if full_w > combo_w - COMBO_ARROW_W {
+            hover_tip(ui, &r.response, name);
+        }
         pressed = icon_button_hint(ui, button, button_on, button_tip);
     });
     ui.add_space(4.0);

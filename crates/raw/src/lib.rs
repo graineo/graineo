@@ -576,18 +576,9 @@ fn demosaic_mean(norm: &[f32], w: usize, h: usize, color_at: impl Fn(usize, usiz
     Ok(out)
 }
 
-/// Like [`demosaic_mean`], writes into `out`; with `border = Some(b)` only pixels at distance < b
-/// from the image edge (border fill for RCD).
-pub(crate) fn demosaic_mean_in(
-    norm: &[f32],
-    w: usize,
-    h: usize,
-    per: usize,
-    color_at: &(impl Fn(usize, usize) -> usize + Sync),
-    out: &mut [[f32; 3]],
-    border: Option<usize>,
-) -> Result<()> {
-    // offsets per (py, px, color)
+/// Neighbour offsets of the mean demosaic per pattern position and colour: the same colour in 3×3, or in 5×5 if 3×3
+/// has none (index `(y % per) * per + x % per`).
+fn mean_offsets(per: usize, color_at: &impl Fn(usize, usize) -> usize) -> Result<Vec<[Vec<(isize, isize)>; 3]>> {
     let mut offs: Vec<[Vec<(isize, isize)>; 3]> = Vec::with_capacity(per * per);
     for py in 0..per {
         for px in 0..per {
@@ -616,6 +607,21 @@ pub(crate) fn demosaic_mean_in(
             offs.push(o);
         }
     }
+    Ok(offs)
+}
+
+/// Like [`demosaic_mean`], writes into `out`; with `border = Some(b)` only pixels at distance < b
+/// from the image edge (border fill for RCD).
+pub(crate) fn demosaic_mean_in(
+    norm: &[f32],
+    w: usize,
+    h: usize,
+    per: usize,
+    color_at: &(impl Fn(usize, usize) -> usize + Sync),
+    out: &mut [[f32; 3]],
+    border: Option<usize>,
+) -> Result<()> {
+    let offs = mean_offsets(per, color_at)?;
     out.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for (x, o) in row.iter_mut().enumerate() {
             if let Some(b) = border {
@@ -652,6 +658,70 @@ pub(crate) fn demosaic_mean_in(
         }
     });
     Ok(())
+}
+
+/// Adds the part of the mosaic below 0 to a demosaic result, interpolated with the mean demosaic (bilinear for
+/// Bayer).
+///
+/// RCD and Markesteijn work on the mosaic clipped at 0 (their ratios and colour-space steps need non-negative input).
+/// Around black, half of the read noise is negative: clipping it lifts the mean of the deepest shadows by about
+/// 0.3 σ, more in red and blue (fewer photosites, larger white-balance gain), and an HDR merge multiplies that lift
+/// by the exposure factor of the dark frames. Adding the clipped-off negative part back as a linear interpolation keeps
+/// the local mean of the mosaic: the own colour gets its exact value again, and wherever the mosaic is ≥ 0 nothing
+/// changes. The result may be negative; the development clips only at the very end.
+pub(crate) fn add_negative_part(m: &[f32], w: usize, h: usize, per: usize, color_at: &(impl Fn(usize, usize) -> usize + Sync), out: &mut [[f32; 3]]) {
+    if w == 0 || h == 0 || m.len() < w * h || out.len() < w * h {
+        return;
+    }
+    // columns with a negative value per row (sparse: only a few percent of the photosites, all in the shadows)
+    let neg_cols: Vec<Vec<u32>> = m[..w * h].par_chunks(w).map(|r| r.iter().enumerate().filter(|(_, v)| **v < 0.0).map(|(x, _)| x as u32).collect()).collect();
+    if neg_cols.iter().all(|c| c.is_empty()) {
+        return;
+    }
+    let Ok(offs) = mean_offsets(per, color_at) else { return };
+    out[..w * h].par_chunks_mut(w).enumerate().for_each_init(Vec::new, |touched: &mut Vec<bool>, (y, row)| {
+        // pixels within 2 of a negative photosite (the reach of the mean demosaic)
+        touched.clear();
+        touched.resize(w, false);
+        let mut any = false;
+        for cols in &neg_cols[y.saturating_sub(2)..(y + 3).min(h)] {
+            for &c in cols {
+                let c = c as usize;
+                touched[c.saturating_sub(2)..(c + 3).min(w)].iter_mut().for_each(|t| *t = true);
+                any = true;
+            }
+        }
+        if !any {
+            return;
+        }
+        let neg = |i: usize| m[i].min(0.0);
+        for (x, o) in row.iter_mut().enumerate() {
+            if !touched[x] {
+                continue;
+            }
+            let own = color_at(x % per, y % per);
+            let lst = &offs[(y % per) * per + x % per];
+            let inner = x >= 2 && y >= 2 && x + 2 < w && y + 2 < h;
+            for c in 0..3 {
+                if c == own {
+                    o[c] += neg(y * w + x);
+                    continue;
+                }
+                let (mut s, mut n) = (0f32, 0f32);
+                for &(dx, dy) in &lst[c] {
+                    let (xx, yy) = (x as isize + dx, y as isize + dy);
+                    if !inner && (xx < 0 || yy < 0 || xx >= w as isize || yy >= h as isize) {
+                        continue;
+                    }
+                    s += neg(yy as usize * w + xx as usize);
+                    n += 1.0;
+                }
+                if s < 0.0 {
+                    o[c] += s / n;
+                }
+            }
+        }
+    });
 }
 
 fn make_info(dec: &dyn Decoder, img: &RawImage, meta: Option<&rawler::decoders::RawMetadata>) -> Info {

@@ -223,6 +223,10 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
     if let Ok(n @ 1..) = db.normalize_camera_names() {
         eprintln!("camera names normalized: {n}");
     }
+    // merged photos an older graineo version marked missing: virtual again (`crate::merge`)
+    if let Ok(n @ 1..) = crate::merge::repair(db) {
+        eprintln!("merged photos repaired: {n}");
+    }
     let stems = db.roots().map_err(error)?;
     let stems: Vec<&crate::db::Root> = stems.iter().filter(|s| stem_only.is_none_or(|n| n == s.id) && s.origin != crate::apple_photos::ORIGIN).collect();
     // Read first, then write briefly: the run over the disk (seconds to minutes, NAS) holds no
@@ -265,7 +269,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
         };
         let mut files: HashMap<i64, HashMap<String, DbFile>> = HashMap::new();
         {
-            let mut st = db.conn.prepare("SELECT d.folder, d.name, d.id, d.size, d.mtime, d.status, d.sidecars FROM file d JOIN folder o ON o.id=d.folder WHERE o.root=?1").map_err(error)?;
+            let mut st = db.conn.prepare("SELECT d.folder, d.name, d.id, d.size, d.mtime, d.status, d.sidecars FROM file d JOIN folder o ON o.id=d.folder WHERE o.root=?1 AND d.status <> 3").map_err(error)?;
             let mut rows = st.query([s.id]).map_err(error)?;
             while let Some(r) = rows.next().map_err(error)? {
                 let o: i64 = r.get(0).map_err(error)?;
@@ -567,14 +571,23 @@ fn write_steps(db: &Db, steps: &[Step], run: i64, b: &mut Report, new_files: &mu
         for s in block {
             match s {
                 Step::Offline(root) => {
-                    tx.execute("UPDATE file SET status=2 WHERE folder IN (SELECT id FROM folder WHERE root=?1)", [root])?;
+                    // merged photos (status 3) have no file: never "drive missing"
+                    tx.execute("UPDATE file SET status=2 WHERE folder IN (SELECT id FROM folder WHERE root=?1) AND status <> 3", [root])?;
                 }
                 Step::Missing { id, folder, name } => {
                     tx.execute("UPDATE file SET status=1 WHERE id=?1 AND folder=?2 AND name=?3", params![id, folder, name])?;
                 }
                 Step::Present { id, size, mtime } => {
                     // content changed (size or time): the stored checksums no longer apply
-                    tx.execute("UPDATE file SET status=0, partial_hash = CASE WHEN size IS ?2 AND mtime IS ?3 THEN partial_hash END, sha256 = CASE WHEN size IS ?2 AND mtime IS ?3 THEN sha256 END, size=?2, mtime=?3 WHERE id=?1", params![id, size, mtime])?;
+                    // … and its shooting data are read again after the sync (`metadata_reread::refresh_stale`)
+                    tx.execute(
+                        &format!(
+                            "UPDATE file SET status=0, partial_hash = CASE WHEN size IS ?2 AND mtime IS ?3 THEN partial_hash END, sha256 = CASE WHEN size IS ?2 AND mtime IS ?3 THEN sha256 END,
+                             exif = CASE WHEN size IS ?2 AND mtime IS ?3 THEN exif WHEN exif > 0 AND size IS NOT NULL THEN {} ELSE exif END, size=?2, mtime=?3 WHERE id=?1",
+                            crate::metadata_reread::STALE
+                        ),
+                        params![id, size, mtime],
+                    )?;
                 }
                 Step::Scan { root, rel, mtime_ns, entries } => {
                     tx.execute(
@@ -595,7 +608,8 @@ fn write_steps(db: &Db, steps: &[Step], run: i64, b: &mut Report, new_files: &mu
                         }
                     };
                     match tx.execute(
-                        "INSERT INTO file(folder, name, format, size, mtime, status) VALUES(?1,?2,?3,?4,?5,0) ON CONFLICT(folder, name) DO NOTHING",
+                        // (an id no merged photo ever had, see `merge::NEW_FILE_ID`)
+                        &format!("INSERT INTO file(id, folder, name, format, size, mtime, status) VALUES({},?1,?2,?3,?4,?5,0) ON CONFLICT(folder, name) DO NOTHING", crate::merge::NEW_FILE_ID),
                         params![folder_id, n.name, n.format, n.size, n.mtime],
                     ) {
                         Ok(0) => continue,
@@ -605,7 +619,10 @@ fn write_steps(db: &Db, steps: &[Step], run: i64, b: &mut Report, new_files: &mu
                         Err(e) => return Err(e),
                     }
                     let did = tx.last_insert_rowid();
-                    tx.execute("INSERT INTO image(file, run) VALUES(?1,?2)", params![did, run])?;
+                    tx.execute(&format!("INSERT INTO image(id, file, run) VALUES({},?1,?2)", crate::merge::NEW_IMAGE_ID), params![did, run])?;
+                    // developed previews are kept by file id: whatever an earlier photo with this id left behind is
+                    // not a picture of this one
+                    crate::preview::remove_all_developed(did);
                     new_files.push((did, n.size, n.name.clone()));
                     b.newly_added += 1;
                     *b.new_per_format.entry(n.format.to_string()).or_default() += 1;

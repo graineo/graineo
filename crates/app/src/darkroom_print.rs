@@ -190,7 +190,7 @@ impl App {
     /// Which photos go on the sheet and whether they are a real selection: the selected photos (film strip and grid, two or more),
     /// otherwise the active photo and the following ones. The actively shown photo alone is no selection.
     pub(crate) fn print_plan(&self, current: usize) -> (Vec<usize>, bool) {
-        let ok = |i: usize| self.entries.get(i).is_some_and(|e| e.state == 0);
+        let ok = |i: usize| self.entries.get(i).is_some_and(|e| crate::developable_state(e.state));
         plan_indices(&self.chosen_entries(), ok, current, self.entries.len())
     }
 

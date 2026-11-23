@@ -26,8 +26,113 @@ fn cube(x: f32) -> f32 {
 
 /// `cfa`: white-balanced, normalized mosaic values (white point per color = `wb[c]`).
 /// Returns the number of blown photosites; with 0, `cfa` stays unchanged.
+/// Afterwards blown colours are lifted towards the brightest colour around them (see [`neutralize_blown`]).
 pub(crate) fn opposed(cfa: &mut [f32], w: usize, h: usize, wb: [f32; 3], color_at: &(impl Fn(usize, usize) -> usize + Sync)) -> usize {
-    opposed_with(cfa, w, h, wb, color_at, true)
+    let n = opposed_with(cfa, w, h, wb, color_at, true);
+    if n > 0 && !legacy() {
+        neutralize_blown(cfa, w, h, wb, color_at);
+    }
+    n
+}
+
+/// The highlight handling of the single-frame development ([`opposed`]: blown colours reconstructed from the others,
+/// fully blown places neutral) on a normalised mosaic that is **not** white-balanced yet, whose colours saturate at
+/// `clip[c]` (raw units, 1 = nominal white). `wb`: the white balance the picture is developed with. Values are never
+/// lowered. Returns the number of blown photosites (0: the mosaic is unchanged). For merging exposure brackets:
+/// where even the darkest frame is blown, the merge shows what a single RAW shows there.
+pub fn reconstruct_mosaic(norm: &mut [f32], w: usize, h: usize, wb: [f32; 3], clip: [f32; 3], color_at: &(impl Fn(usize, usize) -> usize + Sync)) -> usize {
+    if w == 0 || h == 0 || norm.len() != w * h {
+        return 0;
+    }
+    // white-balanced values whose saturation per colour is wb[c]; the measured clip level lies a little below the
+    // real pile-up (see the callers), so saturated photosites come out above the threshold of `opposed`
+    let to: [f32; 3] = std::array::from_fn(|c| wb[c] / clip[c].max(1e-6));
+    let mut cfa: Vec<f32> = norm.par_chunks(w).enumerate().flat_map_iter(|(y, row)| row.iter().enumerate().map(move |(x, v)| v * to[color_at(x, y)])).collect();
+    let n = opposed(&mut cfa, w, h, wb, color_at);
+    if n == 0 {
+        return 0;
+    }
+    norm.par_chunks_mut(w).zip(cfa.par_chunks(w)).enumerate().for_each(|(y, (row, src))| {
+        for (x, (o, v)) in row.iter_mut().zip(src).enumerate() {
+            // (never lower than measured: the frame's own values stay where nothing was blown)
+            *o = o.max(v / to[color_at(x, y)]);
+        }
+    });
+    n
+}
+
+/// Test switch `GRAINEO_HL_LEGACY=1`: the highlight handling before 1.5 (demosaic input clipped at 1, chrominance map
+/// sampled by nearest neighbour, no neutral lift) – for before/after comparisons only.
+pub(crate) fn legacy() -> bool {
+    static L: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *L.get_or_init(|| std::env::var("GRAINEO_HL_LEGACY").as_deref() == Ok("1"))
+}
+
+/// Neutral lift (see [`neutralize_blown`]): start/end for the own colour (share of its saturation `wb[c]` in the 3×3
+/// neighbourhood) and start/end for the weakest colour of the neighbourhood (all three near saturation).
+const OWN_FROM: f32 = 0.85;
+const OWN_TO: f32 = 1.0;
+const ALL_FROM: f32 = 0.6;
+const ALL_TO: f32 = 0.95;
+
+/// A blown colour is only known to be *at least* its clip level, and the reconstruction estimates it from the other
+/// two colours, which may be lower bounds themselves. In white-balanced terms the clip levels differ per colour
+/// (red/blue at their gain, green at 1), so a blown green below a brighter red *and* blue turns pink or magenta.
+/// Two smooth lifts on the mosaic, never lowering a value:
+/// - a colour at (or close to) its saturation is lifted to the middle of the three colour means of its 3×3
+///   neighbourhood when it is the lowest: no blown colour stays below both others (no pink/magenta), while the
+///   order of the unclipped colours, i.e. the hue (orange sunset: red > green > blue), is kept;
+/// - where all three colours approach saturation the scene colour is unknown: lift towards the brightest mean
+///   (neutral white, a lower bound of the scene).
+///
+/// Bayer and X-Trans (every 3×3 window holds all three colours); preview binning, CPU and GPU demosaic all see the
+/// same values.
+fn neutralize_blown(cfa: &mut [f32], w: usize, h: usize, wb: [f32; 3], color_at: &(impl Fn(usize, usize) -> usize + Sync)) {
+    if w < 3 || h < 3 {
+        return;
+    }
+    let src = cfa.to_vec();
+    let inv = [1.0 / wb[0], 1.0 / wb[1], 1.0 / wb[2]];
+    cfa.par_chunks_mut(w).enumerate().for_each(|(row, out)| {
+        let (y0, y1) = (row.saturating_sub(1), (row + 2).min(h));
+        for (col, o) in out.iter_mut().enumerate() {
+            // cheap exit: the own value far below its saturation keeps the neighbourhood mean below the start
+            let own = color_at(col, row);
+            if src[row * w + col] * inv[own] < 0.5 * ALL_FROM {
+                continue;
+            }
+            let (x0, x1) = (col.saturating_sub(1), (col + 2).min(w));
+            let mut sum = [0f32; 3];
+            let mut n = [0f32; 3];
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let c = color_at(x, y);
+                    sum[c] += src[y * w + x];
+                    n[c] += 1.0;
+                }
+            }
+            if n.iter().any(|k| *k == 0.0) {
+                continue;
+            }
+            let mean = [sum[0] / n[0], sum[1] / n[1], sum[2] / n[2]];
+            let ratio = [mean[0] * inv[0], mean[1] * inv[1], mean[2] * inv[2]];
+            let k_own = ratio[own];
+            if k_own <= OWN_FROM.min(ALL_FROM) {
+                continue;
+            }
+            let smooth = |x: f32, a: f32, b: f32| {
+                let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
+                t * t * (3.0 - 2.0 * t)
+            };
+            let top = mean[0].max(mean[1]).max(mean[2]);
+            let low = mean[0].min(mean[1]).min(mean[2]);
+            let mid = mean[0] + mean[1] + mean[2] - top - low;
+            let mut v = *o;
+            v += smooth(k_own, OWN_FROM, OWN_TO) * (mid - v).max(0.0);
+            v += smooth(ratio[0].min(ratio[1]).min(ratio[2]), ALL_FROM, ALL_TO) * (top - v).max(0.0);
+            *o = v;
+        }
+    });
 }
 
 /// Like [`opposed`]; `local = true` (the default): *local*
@@ -143,6 +248,7 @@ pub(crate) fn opposed_with(cfa: &mut [f32], w: usize, h: usize, wb: [f32; 3], co
             if v >= clips[c] {
                 let r = refavg(&src, w, h, row, col, color_at);
                 let ch = match &map {
+                    Some(k) if !legacy() => bilinear(&k[c], mean, mh, (col as f32 + 0.5) / 3.0 - 0.5, (row as f32 + 0.5) / 3.0 - 0.5),
                     Some(k) => k[c][(row / 3).min(mh - 1) * mean + (col / 3).min(mean - 1)],
                     None => chroma[c],
                 };
@@ -174,7 +280,7 @@ fn push_pull(sum: &[f32], n: &[f32], w: usize, h: usize, fallback: f32) -> Vec<f
     (0..w * h)
         .map(|i| {
             let (x, y) = (i % w, i / w);
-            let g = coarse[(y / 2) * w2 + x / 2];
+            let g = if !legacy() { bilinear(&coarse, w2, h2, (x as f32 + 0.5) / 2.0 - 0.5, (y as f32 + 0.5) / 2.0 - 0.5) } else { coarse[(y / 2) * w2 + x / 2] };
             let k = n[i];
             if k <= 0.0 {
                 g
@@ -184,6 +290,18 @@ fn push_pull(sum: &[f32], n: &[f32], w: usize, h: usize, fallback: f32) -> Vec<f
             }
         })
         .collect()
+}
+
+/// Bilinear sample of a `w`×`h` map at `(x, y)` (cell centres at integer positions, clamped at the border).
+fn bilinear(m: &[f32], w: usize, h: usize, x: f32, y: f32) -> f32 {
+    let x = x.clamp(0.0, (w - 1) as f32);
+    let y = y.clamp(0.0, (h - 1) as f32);
+    let (x0, y0) = (x as usize, y as usize);
+    let (x1, y1) = ((x0 + 1).min(w - 1), (y0 + 1).min(h - 1));
+    let (fx, fy) = (x - x0 as f32, y - y0 as f32);
+    let top = m[y0 * w + x0] * (1.0 - fx) + m[y0 * w + x1] * fx;
+    let bot = m[y1 * w + x0] * (1.0 - fx) + m[y1 * w + x1] * fx;
+    top * (1.0 - fy) + bot * fy
 }
 
 fn dilated(m: &[u8], i: usize, w1: usize) -> u8 {

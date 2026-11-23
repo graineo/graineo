@@ -9,16 +9,62 @@
 //! of the colour step (tanh table on the matrix result and on its deviation from grey), and is
 //! multiplied by a factor from that ratio.
 //!
-//! Parameters come from the camera data with fixed defaults (all at the neutral position of the
-//! noise-reduction controls). Monochrome runs through the same path with its matrix. With flag
-//! 0x800000 of `SkipStepFlags` the noise reduction is skipped: [`without_noise_reduction`] only
-//! subtracts the black level and applies the matrix.
+//! Parameters come from the camera data with fixed defaults. The two noise sliders (luminance and
+//! colour, 0 … 1, 0.5 = neutral, set per run with [`with_noise_sliders`]) scale three of them, the
+//! same way as the maker's software ([`slider_factor`]): colour scales the range filter's exponent
+//! (and from 0.751 on the reduction is always 4), luminance scales the intensity noise model of the
+//! diffusion and the strength of the brightness ratio. At the neutral position all factors are
+//! exactly 1. Monochrome runs through the same path with its matrix. With flag 0x800000 of
+//! `SkipStepFlags` (or both sliders at "Off") the noise reduction is skipped:
+//! [`without_noise_reduction`] only subtracts the black level and applies the matrix.
 
 use rayon::prelude::*;
 use super::region_filter as filter;
 use super::region_scaling::{self as scaling, Rgb};
 use super::calibration::{self, cam2rimm, diag, inv, mm, mv, Data, Calibration, Mat, D65};
 use super::tanh_table;
+
+thread_local! {
+    /// Noise slider positions (luminance, colour) of the chain run on this thread, 0 … 1
+    /// (0.5 = neutral; negative = "Off").
+    static SLIDERS: std::cell::Cell<(f64, f64)> = const { std::cell::Cell::new((0.5, 0.5)) };
+}
+
+/// Runs `f` (a chain run on this thread) with the noise sliders `luma` and `chroma` (0 … 1,
+/// 0.5 = neutral, quarter steps; negative = "Off"). Outside such a call the sliders are neutral.
+pub fn with_noise_sliders<R>(luma: f64, chroma: f64, f: impl FnOnce() -> R) -> R {
+    let before = SLIDERS.replace((luma, chroma));
+    let r = f();
+    SLIDERS.set(before);
+    r
+}
+
+/// Noise slider positions of the current run (luminance, colour).
+pub fn noise_sliders() -> (f64, f64) {
+    SLIDERS.get()
+}
+
+/// Both sliders at "Off": the step runs without noise reduction ([`without_noise_reduction`]).
+pub fn sliders_off() -> bool {
+    let (l, c) = SLIDERS.get();
+    l < 0.0 && c < 0.0
+}
+
+/// Factor of a parameter for slider position `s` (0 … 1): `low` at 0, 1 at 0.5, `high` at 1,
+/// linear in between (each half on its own), computed in the same mixed precision as the maker's
+/// software; below 0 `low`, above 1 `high`. Exactly 1 at 0.5.
+pub fn slider_factor(s: f64, low: f32, high: f32) -> f32 {
+    if s < 0.0 {
+        low
+    } else if s < 0.5 {
+        ((1.0 - 2.0 * s) as f32) * low + (2.0 * s) as f32
+    } else if s <= 1.0 {
+        let t = 2.0 * (s - 0.5);
+        (1.0 - t) as f32 + (t as f32) * high
+    } else {
+        high
+    }
+}
 
 /// Everything the step needs, derived from the calibration and the camera data.
 #[derive(Clone, Debug)]
@@ -91,15 +137,18 @@ pub fn parameter(d: &Data, k: &Calibration, mode: &str) -> Result<Parameter, Str
     let iso = k.iso.iso;
     let tungsten = k.wb.code == 5;
     let high = tungsten || iso > 400.0;
-    // noise parameters (fixed defaults; the noise-reduction controls are at their
-    // neutral position, so their factors are 1)
-    let factor = int16(d, "DownSampleFactor", if high { 4 } else { 2 });
+    let (luma, chroma) = noise_sliders();
+    // noise parameters (camera data, else fixed defaults); the colour slider far up always reduces by 4
+    let mut factor = int16(d, "DownSampleFactor", if high { 4 } else { 2 });
+    if chroma > 0.751 {
+        factor = 4;
+    }
     if !matches!(factor, 1 | 2 | 4) {
         return Err(format!("Bereich: Verkleinerung {factor} nicht vorgesehen"));
     }
     let window = (int16(d, "BilateralFilterRadius", 5) * 2 + 1) as u32;
     let subsample = int16(d, "SubSampleKernel", 1) != 0;
-    let noise_scale = number(d, "NoiseScaling", 0.5);
+    let noise_scale = number(d, "NoiseScaling", 0.5) * slider_factor(chroma, number(d, "MinNoiseScalingFactor", 4.0), number(d, "MaxNoiseScalingFactor", 0.02));
     let edges_scale = number(d, "EdgeMapScale", 0.5);
     let mean_falloff = number(d, "LocalMeanDecay", 0.9);
     let mean_passes = int16(d, "LocalMeanIters", 1) as u32;
@@ -114,10 +163,11 @@ pub fn parameter(d: &Data, k: &Calibration, mode: &str) -> Result<Parameter, Str
     } else {
         1.0
     };
-    let scale_nm = number(d, "ResidualAnisoDiffScaleNM", scale_nm_standard);
+    // (ISO 1600 and above keep the general default 1, as in the maker's software)
+    let scale_nm = number(d, "ResidualAnisoDiffScaleNM", scale_nm_standard) * slider_factor(luma, number(d, "MinAnisoDiffScaleNMFactor", 0.5), number(d, "MaxAnisoDiffScaleNMFactor", 2.0));
     let lambda = number(d, "AnisoLambda", 0.25);
     let epsilon = number(d, "ResidualEpsilon", 5.0);
-    let rest_scale = number(d, "ResidualScaling", 1.0);
+    let rest_scale = number(d, "ResidualScaling", 1.0) * slider_factor(luma, number(d, "MinResidualScalingFactor", 1.0), number(d, "MaxResidualScalingFactor", 0.75));
     // colour noise model, scaled to the layer codes of this exposure
     let mut fm: [f64; 9] = match d.values("ColorNoiseModel") {
         Some(v) if v.len() >= 9 => std::array::from_fn(|i| f64::from(v[i] as f32)),
@@ -361,8 +411,10 @@ pub fn run(img: &[i32], w: usize, h: usize, p: &Parameter) -> Vec<i32> {
         let a: [i32; 3] = std::array::from_fn(|c| o[c] - t1[c]);
         let gray = ((a[0] + a[1] * 2) + a[2]) >> 2;
         let t2: [i32; 3] = std::array::from_fn(|c| lut.get(c, kl(a[c] - gray)));
+        // strength of the ratio: `r^s`, detail scaled in the log domain (Durand & Dorsey 2002);
+        // s = 1 (neutral) is the ratio itself
         let rf = f64::from(r);
-        let factor = if r > 1.0 { (rf + -1.0) * f64::from(p.rest_scale) + 1.0 } else { 1.0 - (1.0 - rf) * f64::from(p.rest_scale) };
+        let factor = if p.rest_scale == 1.0 { rf } else { rf.max(1e-6).powf(f64::from(p.rest_scale)) };
         for c in 0..3 {
             let x = (s[c] - f64::from(t1[c] + t2[c])) * factor;
             let x = if 24000.0 < x { 24000.0 } else { x };
@@ -498,6 +550,25 @@ pub fn without_noise_reduction(img: &[i32], d: &Data, k: &Calibration, mode: &st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Slider factor: exactly 1 in the middle, the limits at 0 and 1, linear in each half, held
+    /// outside 0 … 1.
+    #[test]
+    fn slider_factor_neutral_and_limits() {
+        for (lo, hi) in [(4.0f32, 0.02f32), (0.5, 2.0), (1.0, 0.75)] {
+            assert_eq!(slider_factor(0.5, lo, hi), 1.0);
+            assert_eq!(slider_factor(0.0, lo, hi), lo);
+            assert_eq!(slider_factor(1.0, lo, hi), hi);
+            assert_eq!(slider_factor(-0.25, lo, hi), lo);
+            assert!((slider_factor(0.25, lo, hi) - (lo + 1.0) / 2.0).abs() < 1e-6);
+            assert!((slider_factor(0.75, lo, hi) - (hi + 1.0) / 2.0).abs() < 1e-6);
+        }
+        // the sliders are neutral outside a run with them, and restored afterwards
+        assert_eq!(noise_sliders(), (0.5, 0.5));
+        assert_eq!(with_noise_sliders(1.0, 0.0, noise_sliders), (1.0, 0.0));
+        assert_eq!(noise_sliders(), (0.5, 0.5));
+        assert!(with_noise_sliders(-0.25, -0.25, sliders_off) && !with_noise_sliders(-0.25, 0.5, sliders_off));
+    }
 
     /// Prints the parameters of the step for one file (`GRAINEO_CLASSIC_REGION_FILE=<x3f>`).
     #[test]

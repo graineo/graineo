@@ -18,9 +18,17 @@ pub fn init() {
     develop::quattro::enable_binning(true);
 }
 
-/// Default for new photos (setting `binning`, default automatic as in the camera maker's software).
+/// Default for new photos (setting `binning`). Without a stored choice: off (decision of 2026-11-22; until then
+/// automatic as in the camera maker's software). Photos with a stored development keep what they have.
 pub fn standard() -> Binning {
-    serde_json::from_value(library::settings::value("binning")).unwrap_or_default()
+    standard_from(library::settings::value("binning"))
+}
+
+fn standard_from(stored: serde_json::Value) -> Binning {
+    if stored.is_null() {
+        return Binning::Off;
+    }
+    serde_json::from_value(stored).unwrap_or(Binning::Off)
 }
 
 fn set_standard(b: Binning) {
@@ -40,21 +48,93 @@ pub fn default_for(cal: &Calibration) -> Binning {
     if develop::quattro::binning_camera(cal).is_some() { standard() } else { Binning::Auto }
 }
 
-/// Noise sliders (luminance, colour) greyed out? Only for Quattro: there the noise reduction runs in the
-/// preparation (x3fuse-core), and `denoise::denoise` is a no-op (no noise model), so the sliders could only switch
-/// that preparation step off. `None` = not a Sigma photo (the Bayer/X-Trans noise controls are separate).
-pub fn noise_sliders_locked(model: Option<develop::calib::Model>) -> bool {
-    model.is_some_and(|m| m.is_quattro())
+/// Why the noise sliders (luminance, colour) of a Quattro photo are greyed out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuattroNoiseLock {
+    /// below capture ISO 400 (or a multi-shot file): the noise reduction of the preparation is fixed
+    LowIso,
+    /// the full chain is switched off (`GRAINEO_QUATTRO_FULL=0`)
+    ChainOff,
 }
 
-/// Tooltip of the greyed-out sliders; `switched_off` = stored values differ from the middle (they switch the
-/// preparation's noise reduction off, as before).
-pub fn noise_locked_tip(switched_off: bool) -> &'static str {
-    if switched_off {
-        "Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab."
-    } else {
-        "Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung."
+/// Noise sliders (luminance, colour) greyed out? Only for Quattro: from capture ISO 400 on the full chain evaluates
+/// them (five steps, the middle is the camera's setting, see `develop::quattro::noise_sliders_adjustable`). Below
+/// that the noise reduction runs in the preparation (x3fuse-core) and `denoise::denoise` is a no-op (no noise model),
+/// so the sliders could only switch that preparation step off. `None` = adjustable, or not a Quattro photo.
+pub fn noise_sliders_locked(cal: &Calibration, path: &std::path::Path) -> Option<QuattroNoiseLock> {
+    if !cal.model.is_quattro() || develop::quattro::noise_sliders_adjustable(cal, path) {
+        return None;
     }
+    Some(if develop::quattro::full_chain_enabled() { QuattroNoiseLock::LowIso } else { QuattroNoiseLock::ChainOff })
+}
+
+/// Capture ISO from which the older Foveon cameras (Classic) have an adjustable noise reduction: below it their
+/// processing has no noise reduction the sliders could change (the maker's software greys them out there as well).
+pub const CLASSIC_NOISE_MIN_ISO: f64 = 400.0;
+
+/// Noise sliders greyed out because a Classic photo was taken below [`CLASSIC_NOISE_MIN_ISO`]?
+pub fn classic_noise_locked(model: develop::calib::Model, iso: f64) -> bool {
+    model == develop::calib::Model::Classic && iso < CLASSIC_NOISE_MIN_ISO
+}
+
+/// Tooltip of the noise sliders greyed out by [`classic_noise_locked`].
+pub const CLASSIC_NOISE_TIP: &str = "Bei ISO unter 400 hat diese Kamera keine einstellbare Rauschminderung.";
+
+/// Tooltip of the sliders greyed out by [`noise_sliders_locked`]; `away` = stored values differ from the middle.
+/// Below ISO 400 such values switch the preparation's noise reduction off (as before); with the full chain off the
+/// previous high-ISO path still applies them.
+pub fn noise_locked_tip(lock: QuattroNoiseLock, away: bool) -> &'static str {
+    match (lock, away) {
+        (QuattroNoiseLock::LowIso, false) => "Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung.",
+        (QuattroNoiseLock::LowIso, true) => "Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung; die gespeicherten Werte schalten sie ab.",
+        (QuattroNoiseLock::ChainOff, false) => "Der volle Quattro-Weg ist ausgeschaltet; nur er wertet diese Regler aus.",
+        (QuattroNoiseLock::ChainOff, true) => "Der volle Quattro-Weg ist ausgeschaltet; die gespeicherten Werte gelten weiter.",
+    }
+}
+
+/// Tooltip of the greyed-out Foveon sharpness: it needs the detail image of the Merrill base (`prepared`: a Quattro
+/// or Classic photo, which has none), and the Foveon detail switched on.
+pub fn sigma_sharpness_locked_tip(prepared: bool) -> &'static str {
+    if prepared {
+        "Die Foveon-Schärfe gibt es nur für Merrill-Fotos. Hier schärft „Zusätzlich schärfen“; bei der Quattro ab ISO 400 auch „Detail“."
+    } else {
+        "Die Foveon-Schärfe wirkt nur mit eingeschaltetem Foveon-Detail."
+    }
+}
+
+/// Tooltip of the Quattro detail slider.
+pub const DETAIL_TIP: &str = "Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen";
+
+/// Tooltip of the detail slider greyed out for a Quattro photo (`multi_shot`: an X3I file).
+pub fn detail_locked_tip(lock: QuattroNoiseLock, multi_shot: bool) -> &'static str {
+    match (lock, multi_shot) {
+        (QuattroNoiseLock::ChainOff, _) => "Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.",
+        (QuattroNoiseLock::LowIso, true) => "Bei Mehrfachaufnahmen (X3I) ist das Detail fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.",
+        (QuattroNoiseLock::LowIso, false) => "Unter ISO 400 ist das Detail der Quattro fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.",
+    }
+}
+
+/// Detail slider of the Quattro below the noise sliders (seven steps, the middle is the camera's setting; acts in the
+/// full chain from capture ISO 400 on, `develop::Settings::quattro_detail`). Only shown for Quattro photos; greyed
+/// out with the reason where the chain does not run. Returns: changed.
+pub fn detail_slider(ui: &mut egui::Ui, cal: &Calibration, path: &std::path::Path, s: &mut Settings) -> bool {
+    if !cal.model.is_quattro() {
+        return false;
+    }
+    let locked = noise_sliders_locked(cal, path);
+    let range = f64::from(develop::settings::QUATTRO_DETAIL_RANGE);
+    let mut v = f64::from(s.quattro_detail);
+    let row = ui.add_enabled_ui(s.denoise && locked.is_none(), |ui| lr::slider_hint(ui, "Detail", &mut v, -range..=range, 0.0, 1.0, DETAIL_TIP));
+    if let Some(lock) = locked {
+        let r = ui.interact(row.response.rect, ui.id().with("detail-locked"), egui::Sense::hover());
+        lr::hover_tip(ui, &r, detail_locked_tip(lock, x3f::x3i::is_x3i(path)));
+    }
+    let step = v.round() as i8;
+    if row.inner && step != s.quattro_detail {
+        s.quattro_detail = step;
+        return true;
+    }
+    false
 }
 
 /// Is the photo edited ("edited" mark in filmstrip and grid)? Like `s != Settings::default()`, but the binning counts
@@ -147,12 +227,16 @@ impl crate::App {
             return;
         }
         let index = c.index;
+        // the picture on screen stays until the photo is rendered in its new size (no thumbnail in between, never
+        // the rough fast preview, see `preview_hold.rs`)
+        let kept = c.texture.clone().map(|t| (e.path.clone(), t));
         crate::log(&format!("binning {index}: ×{} → ×{}, opened again", c.loaded.cal.binning, develop::quattro::binning_for(&c.loaded.cal, &e.settings)));
         self.save_current();
         self.cache.retain(|(i, _)| *i != index);
         // the old session (another size) is dropped; jobs still holding it finish and are discarded by size
         self.current = None;
         self.select(index, true);
+        self.kept_view = kept;
     }
 
     /// Test hook (only with `GRAINEO_DATA_DIR`): `GRAINEO_BINNING_TEST="off@8"` (or `auto@…`, `on@…`) switches the
@@ -288,14 +372,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn noise_sliders_locked_only_for_quattro() {
+    fn noise_sliders_lock_rules() {
         use develop::calib::Model;
-        assert!(!noise_sliders_locked(Some(Model::Dp)));
-        assert!(!noise_sliders_locked(Some(Model::Sd1)));
-        assert!(noise_sliders_locked(Some(Model::DpQuattro)));
-        assert!(noise_sliders_locked(Some(Model::SdQuattro)));
-        assert!(!noise_sliders_locked(Some(Model::Classic)));
-        assert!(!noise_sliders_locked(None));
+        // Quattro: adjustable from capture ISO 400 on with the full chain, never below, without it or for X3I
+        let rule = develop::quattro::noise_sliders_rule;
+        assert!(rule(Model::DpQuattro, 1600.0, true, false) && rule(Model::SdQuattro, 400.0, true, false));
+        assert!(!rule(Model::DpQuattro, 100.0, true, false) && !rule(Model::SdQuattro, 320.0, true, false));
+        assert!(!rule(Model::DpQuattro, 1600.0, false, false) && !rule(Model::DpQuattro, 1600.0, true, true));
+        assert!(!rule(Model::Dp, 1600.0, true, false) && !rule(Model::Classic, 1600.0, true, false));
+        assert!(classic_noise_locked(Model::Classic, 100.0) && classic_noise_locked(Model::Classic, 200.0));
+        assert!(!classic_noise_locked(Model::Classic, 400.0) && !classic_noise_locked(Model::Classic, 1600.0));
+        assert!(!classic_noise_locked(Model::Dp, 100.0) && !classic_noise_locked(Model::DpQuattro, 100.0));
+    }
+
+    #[test]
+    fn without_a_stored_choice_the_default_is_off() {
+        assert_eq!(standard_from(serde_json::Value::Null), Binning::Off);
+        assert_eq!(standard_from(serde_json::json!("auto")), Binning::Auto, "a stored choice stays");
+        assert_eq!(standard_from(serde_json::json!("off")), Binning::Off);
+        assert_eq!(standard_from(serde_json::json!(17)), Binning::Off);
     }
 
     #[test]

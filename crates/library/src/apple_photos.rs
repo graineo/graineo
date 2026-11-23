@@ -457,8 +457,8 @@ fn reconcile_inner(db: &crate::db::Db, photos_library: &Path, force: bool, after
     let mut names: HashMap<String, String> = HashMap::new();
     {
         let mut upd = tx.prepare("UPDATE file SET camera = ?2, capture_time = ?3, width = ?4, height = ?5, size = ?6, mtime = ?7, status = 0 WHERE id = ?1").map_err(f)?;
-        let mut ins = tx.prepare("INSERT INTO file(folder, name, format, size, camera, capture_time, width, height, mtime, status) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,0)").map_err(f)?;
-        let mut into_image = tx.prepare("INSERT INTO image(file) VALUES(?1)").map_err(f)?;
+        let mut ins = tx.prepare(&format!("INSERT INTO file(id, folder, name, format, size, camera, capture_time, width, height, mtime, status) VALUES({},?1,?2,?3,?4,?5,?6,?7,?8,?9,0)", crate::merge::NEW_FILE_ID)).map_err(f)?;
+        let mut into_image = tx.prepare(&format!("INSERT INTO image(id, file) VALUES({}, ?1)", crate::merge::NEW_IMAGE_ID)).map_err(f)?;
         for a in &assets {
             let folder_path = format!("{}/", a.folder);
             let folder_id = match folder.get(&folder_path) {

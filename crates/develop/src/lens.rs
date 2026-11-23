@@ -142,7 +142,7 @@ pub fn parse_profile(text: &str) -> Option<LensProfile> {
     let lines: Vec<&str> = text.lines().map(|l| l.trim_end_matches('\r')).collect();
     let name = lines.get(1)?.trim().to_string();
     let count: usize = lines.get(13)?.trim().parse().ok()?;
-    let mut rows = Vec::with_capacity(count);
+    let mut rows = Vec::with_capacity(count.min(lines.len()));
     for line in lines.iter().skip(17).take(count) {
         let v: Vec<f64> = line.split_whitespace().take(11).map(atof).collect();
         if v.len() < 11 {

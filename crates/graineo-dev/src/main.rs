@@ -41,7 +41,9 @@ use tiff::encoder::{colortype, TiffEncoder};
 use x3f::{CamfEntry, MatrixData, X3fFile};
 
 mod classic_output;
+mod hlclip_cmd;
 mod scene_cmd;
+mod export_scene_cmd;
 mod learn_look_cmd;
 mod samples_look;
 mod film_shelf;
@@ -83,6 +85,11 @@ pub(crate) fn dev_catalog() -> std::path::PathBuf {
 mod formats_cmd;
 mod rawapp;
 mod ai_denoise_cmd;
+mod hdr_cmd;
+mod black_bias;
+mod hdr_foveon;
+mod x3i_cmd;
+mod sfd_cmd;
 mod apple_raw_cmd;
 mod color_chart_raw;
 mod gpu_compare;
@@ -270,12 +277,72 @@ fn main() -> Result<()> {
         return color_chart_raw::run(file, &args[2..]);
     }
     // neural denoising: one tile for the comparison with a reference runtime, time per tile (ai_denoise_cmd.rs)
+    // HDR merge of an exposure bracket for the test bench (hdr_cmd.rs)
+    if cmd == "black-bias" {
+        return black_bias::run(&args[1..]);
+    }
+    if cmd == "hdr" {
+        return hdr_cmd::run(&args[1..]);
+    }
+    // HDR merge of a Foveon bracket in the linear layer domain (hdr_foveon.rs)
+    if cmd == "hdr-foveon" {
+        return hdr_foveon::run(&args[1..]);
+    }
+    if cmd == "x3i-merge" {
+        return x3i_cmd::merge(&args[1..]);
+    }
+    if cmd == "x3i-render" {
+        return x3i_cmd::render(&args[1..]);
+    }
+    if cmd == "x3i-compare" {
+        return x3i_cmd::compare(&args[1..]);
+    }
+    // SFD bracket merged on the sensor grid and developed with the Quattro chain (sfd_cmd.rs)
+    if cmd == "sfd-merge" {
+        return sfd_cmd::merge(&args[1..]);
+    }
+    if cmd == "sfd-tone" {
+        return sfd_cmd::tone(&args[1..]);
+    }
+    if cmd == "sfd-scene" {
+        return sfd_cmd::scene(&args[1..]);
+    }
+    if cmd == "sfd-curve" {
+        return sfd_cmd::curve(&args[1..]);
+    }
+    if cmd == "sfd-compare" {
+        return sfd_cmd::compare(&args[1..]);
+    }
+    if cmd == "x3i-split" {
+        // `x3i-split FILE.X3I OUTDIR`: cut the frames out of a Sigma X3I (SFD bracket) as X3F files, print their size and exposure
+        let src = args.get(1).context("X3I missing")?;
+        let out = std::path::PathBuf::from(args.get(2).context("OUTDIR missing")?);
+        std::fs::create_dir_all(&out)?;
+        let x = x3f::x3i::X3iFile::open(src)?;
+        let stem = std::path::Path::new(src).file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        for i in 0..x.frames.len() {
+            let p = out.join(format!("{stem}_{}.X3F", i + 1));
+            x.extract(i, &p)?;
+            let f = x.frame(i)?;
+            println!("frame {} at {}..{} ({} bytes), X3F version {:#x}, {} sections -> {}", i + 1, x.frames[i].0, x.frames[i].1, x.frames[i].1 - x.frames[i].0, f.version, f.entries.len(), p.display());
+        }
+        return Ok(());
+    }
+    if cmd == "export-scene" {
+        return export_scene_cmd::run(&args[1..]);
+    }
+    if cmd == "hdr-library" {
+        return hdr_cmd::library(&args[1..]);
+    }
     if cmd == "ai-denoise" {
         return ai_denoise_cmd::run(&args[1..]);
     }
     // format check over a folder of sample files (grid, previews, info, develop, export, import), see formats_cmd.rs
     if cmd == "formats" {
         return formats_cmd::run(&args[1..]);
+    }
+    if cmd == "hlclip" {
+        return hlclip_cmd::run(&args[1..]);
     }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);
@@ -845,6 +912,7 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
             None if a == "--embed" => opts.dng_embed_original = true,
             Some(("--space", v)) => space = match v { "p3" => graineo_color::Space::DisplayP3, "adobe" => graineo_color::Space::AdobeRgb, "prophoto" => graineo_color::Space::ProPhotoRgb, _ => graineo_color::Space::Srgb },
             Some(("--compress", v)) => opts.tiff_compression = match v { "deflate" | "zip" => develop::tiffw::Compression::Deflate, "lzw" => develop::tiffw::Compression::Lzw, _ => develop::tiffw::Compression::None },
+            None if a == "--camera-matrix-only" => opts.camera_matrix_only = true,
             Some(("--linear", v)) => opts.linear_space = match v { "acescg" => graineo_color::LinearSpace::AcesCg, "prophoto" => graineo_color::LinearSpace::ProPhoto, _ => graineo_color::LinearSpace::Rec2020 },
             Some(("--format", v)) => forced = Some(match v { "png" => develop::export::Format::Png16, "tiff-float" => develop::export::Format::TiffFloat, "exr" => develop::export::Format::Exr { half: true }, "exr-float" => develop::export::Format::Exr { half: false }, "layers" => develop::export::Format::RawLayers, _ => bail!("--format=png|tiff-float|exr|exr-float|layers") }),
             // JPEG XL (out.jxl): quality 1–100, "lossless" (16 bit) or "lossless8"
@@ -869,6 +937,8 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
             Some(("--highlight", v)) => s.highlight = num(v)?,
             Some(("--mode", v)) => s.color_mode = Some(v.to_string()),
             Some(("--fill", v)) => s.fill_light = num(v)? as f32,
+            Some(("--hl-colour", v)) => s.highlight_colour = num(v)? as f32 / 100.0,
+            Some(("--hl-structure", v)) => s.highlight_structure = num(v)? as f32 / 100.0,
             // alternative Merrill parts (test switch, see x3f_core::merrill_new): --new=sharpness,highlights,…
             Some(("--new", v)) => std::env::set_var(develop::merrill_new::VAR, v),
             Some(("--sharpness", v)) => s.sigma_sharpness = num(v)? as f32,
@@ -894,6 +964,8 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
             Some(("--nr", "0" | "off")) => s.denoise = false,
             Some(("--luma", v)) => s.nr_luma = num(v)?,
             Some(("--chroma", v)) => s.nr_chroma = num(v)?,
+            // Quattro detail step −3 … 3 (from capture ISO 400 on)
+            Some(("--detail", v)) => s.quattro_detail = num(v)? as i8,
             // prototype color BM3D on the SPP base: --cbm3d=strength[,y]
             Some(("--cbm3d", v)) => {
                 std::env::set_var("GRAINEO_CHROMA_BM3D", v);

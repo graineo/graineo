@@ -45,6 +45,13 @@ pub fn store(image_id: i64, view: &ColorImage, fingerprint: u64) {
     });
 }
 
+/// Drop the stored view of an image (a pure cache; the next render stores it again).
+pub fn discard(image_id: i64) {
+    if image_id > 0 {
+        let _ = std::fs::remove_file(path(image_id));
+    }
+}
+
 /// Most recently stored view, if any.
 pub fn load(image_id: i64) -> Option<ColorImage> {
     if image_id <= 0 {

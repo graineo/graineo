@@ -235,8 +235,6 @@ impl Params {
         v
     }
 
-    /// Finished sRGB pixel (encoded, 0 … 1).
-    #[inline]
     /// Gray value with the black & white mixer: luminance is raised or lowered depending on the pixel's hue (weights of the eight color ranges),
     /// no effect on gray tones. `y` = luminance, `s` = linear RGB before the conversion.
     #[inline]

@@ -137,6 +137,8 @@ pub(super) struct Import {
     /// "Hinzufügen": folders and whether they are added
     folders: Vec<(PathBuf, usize, bool)>,
     folders_on: HashMap<PathBuf, bool>,
+    /// "Hinzufügen": the folder whose photos are shown below the list (view only; the first folder by default)
+    folder_focus: Option<PathBuf>,
     /// the source lies inside a root folder of the library (otherwise "Hinzufügen" makes it a new one)
     source_in_library: bool,
     run: Option<Arc<Mutex<Run>>>,
@@ -332,6 +334,9 @@ impl Import {
         for (p, _, all_there) in &self.folders {
             self.folders_on.entry(p.clone()).or_insert(!*all_there);
         }
+        if !self.folder_focus.as_ref().is_some_and(|f| self.folders.iter().any(|(p, _, _)| p == f)) {
+            self.folder_focus = self.folders.first().map(|(p, _, _)| p.clone());
+        }
         self.last_click = None;
         self.big = None;
     }
@@ -437,6 +442,7 @@ impl LibraryView {
             copyright: s("importCopyright").as_str().unwrap_or("").to_string(),
             folders: Vec::new(),
             folders_on: HashMap::new(),
+            folder_focus: None,
             source_in_library: false,
             run: None,
             cancel: Arc::new(AtomicBool::new(false)),
@@ -471,6 +477,7 @@ impl LibraryView {
         imp.days.clear();
         imp.folders.clear();
         imp.folders_on.clear();
+        imp.folder_focus = None;
         imp.last_click = None;
         imp.big = None;
         imp.source_error = None;
@@ -525,7 +532,7 @@ impl LibraryView {
         let files: Vec<PathBuf> = paths.iter().filter(|p| p.is_file() && is_photo(p)).cloned().collect();
         let folder: Vec<PathBuf> = paths
             .iter()
-            .filter(|p| p.is_dir() && std::fs::read_dir(p).is_ok_and(|rd| rd.flatten().any(|e| e.path().is_file() && is_photo(&e.path()))))
+            .filter(|p| p.is_dir() && dir_has_photo(p, &is_photo, 4, &mut 4000))
             .cloned()
             .collect();
         if files.is_empty() && folder.is_empty() {
@@ -633,6 +640,7 @@ impl LibraryView {
             imp.days.clear();
             imp.folders.clear();
             imp.folders_on.clear();
+            imp.folder_focus = None;
             imp.last_click = None;
             imp.big = None;
             imp.hovered = None;
@@ -1152,7 +1160,7 @@ impl LibraryView {
     }
 
     /// Test hooks for screenshots (only with GRAINEO_DATA_DIR): GRAINEO_IMPORT_VIEW=large opens the large view of the
-    /// first photo, `inplace` switches to "Hinzufügen".
+    /// first photo, `inplace` switches to "Hinzufügen" (`inplace:<n>`: with the photos of the n-th folder).
     fn import_test_hooks(&mut self, ctx: &egui::Context, imp: &mut Import) {
         if crate::env::var_os("GRAINEO_DATA_DIR").is_none() || imp.scanning || imp.cand.is_empty() {
             return;
@@ -1165,9 +1173,15 @@ impl LibraryView {
         ctx.data_mut(|d| d.insert_temp(id, true));
         match v.as_str() {
             "large" => imp.big = imp.visible_order().first().copied(),
-            "inplace" => {
+            v if v.starts_with("inplace") => {
                 imp.mode = Mode::InPlace;
                 imp.mode_automatic = false;
+                // `inplace:<n>`: show the photos of the n-th folder (from 1)
+                if let Some(n) = v.strip_prefix("inplace:").and_then(|n| n.parse::<usize>().ok()) {
+                    if let Some((p, _, _)) = imp.folders.get(n.saturating_sub(1)) {
+                        imp.folder_focus = Some(p.clone());
+                    }
+                }
             }
             _ => {}
         }
@@ -1184,6 +1198,7 @@ fn import_clear_source(imp: &mut Import) {
     imp.days.clear();
     imp.folders.clear();
     imp.folders_on.clear();
+    imp.folder_focus = None;
     imp.last_click = None;
     imp.big = None;
     imp.hovered = None;
@@ -1415,4 +1430,27 @@ mod tests {
         assert_eq!(block_reason(true, false, 7, Mode::InPlace, false, false, 0, 0, false), Some("Wähle mindestens einen Ordner"));
         assert_eq!(block_reason(true, false, 7, Mode::InPlace, false, false, 0, 1, true), Some("Gib der neuen Sammlung einen Namen"));
     }
+}
+
+/// Does the folder hold a photo, directly or in a subfolder (up to `depth` levels, looking at no more than
+/// `budget` entries in all, so that dropping a huge tree stays quick)? A folder that only holds subfolders with
+/// photos (a drop of "all my series") must open the import like any other folder.
+fn dir_has_photo(dir: &Path, is_photo: &dyn Fn(&Path) -> bool, depth: u32, budget: &mut u32) -> bool {
+    let Ok(rd) = std::fs::read_dir(dir) else { return false };
+    let mut subs = Vec::new();
+    for e in rd.flatten() {
+        if *budget == 0 {
+            return false;
+        }
+        *budget -= 1;
+        let path = e.path();
+        if path.is_file() {
+            if is_photo(&path) {
+                return true;
+            }
+        } else if depth > 0 && path.is_dir() && !e.file_name().to_string_lossy().starts_with('.') {
+            subs.push(path);
+        }
+    }
+    subs.iter().any(|d| dir_has_photo(d, is_photo, depth - 1, budget))
 }

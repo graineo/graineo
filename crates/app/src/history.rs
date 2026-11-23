@@ -154,6 +154,12 @@ impl Hint {
     pub fn auto() -> Self {
         Hint { kind: kind::AUTO, label: json!({ "k": "auto" }) }
     }
+    /// Automatic tone of a merged photo set or taken back ([`crate::hdr_auto`]). The step carries what the recipe
+    /// held before and after it – strength of the automatic tone and the output (`true` = fusion) – so that ⌘Z brings
+    /// them back together with the sliders ([`History::merge_recipe_at_cursor`]).
+    pub fn merge_tone(strength: [f32; 2], fusion: [bool; 2]) -> Self {
+        Hint { kind: kind::AUTO, label: json!({ "k": "merge_tone", "s": strength, "o": fusion }) }
+    }
     pub fn reset() -> Self {
         Hint { kind: kind::RESET, label: json!({ "k": "reset" }) }
     }
@@ -757,6 +763,38 @@ impl History {
         self.hover.take()
     }
 
+    /// Merged photo: what its recipe held as of the step under the cursor – strength of the automatic tone, output
+    /// (`true` = fusion) – and the state the automatic left (its five sliders are the "applied" values). From the
+    /// newest step of the automatic ([`Hint::merge_tone`]) up to the cursor, else from before the first one after it.
+    /// `from`: where the cursor stood before it moved. `None` unless the move crossed a step of the automatic (other
+    /// steps leave the recipe alone: it may have changed since without a step, e.g. the output with sliders set by
+    /// hand).
+    pub fn merge_recipe_at_cursor(&self, key: &Key, from: usize) -> Option<(f32, bool, Settings)> {
+        let p = self.photos.get(key)?;
+        let fact = |i: usize| step_label(p.steps.get(i)?).filter(|l| l.get("k").and_then(Value::as_str) == Some("merge_tone")).map(|l| (l, i));
+        (from.min(p.cursor) + 1..=from.max(p.cursor)).find_map(fact)?;
+        let (label, side, state) = match (0..=p.cursor).rev().find_map(fact) {
+            Some((l, i)) => (l, 1, i),
+            None => {
+                let (l, i) = (p.cursor + 1..p.steps.len()).find_map(fact)?;
+                (l, 0, i.checked_sub(1)?)
+            }
+        };
+        let strength = label.get("s")?.get(side)?.as_f64()? as f32;
+        let fusion = label.get("o")?.get(side)?.as_bool()?;
+        Some((strength, fusion, p.state_at(state)?))
+    }
+
+    /// Forget the history in memory of the photo at `path` and its copies (another photo has this path now).
+    pub fn forget_path(&mut self, path: &std::path::Path) {
+        self.photos.retain(|k, _| k.path != path);
+    }
+
+    /// Index of the step under the cursor (`None`: the history is not in memory).
+    pub fn cursor_of(&self, key: &Key) -> Option<usize> {
+        self.photos.get(key).map(|p| p.cursor)
+    }
+
     /// ⌘Z (`redo = false`) / ⇧⌘Z: move the cursor one step. Returns the state to apply (`None`: nothing to do).
     pub fn undo(&mut self, key: &Key, index: usize, current: &Settings, redo: bool) -> Option<Settings> {
         self.photo(key);
@@ -946,6 +984,7 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("sigma_sharpness", "Schärfen", true),
     ("nr_luma", "Rauschreduzierung", false),
     ("nr_chroma", "Rauschreduzierung", false),
+    ("quattro_detail", "Rauschreduzierung", false),
     ("denoise", "Rauschreduzierung", false),
     ("monochrome", "Schwarzweiß", false),
     ("mix", "Schwarzweiß", false),
@@ -954,6 +993,8 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("profile_amount", "Intensität", false),
     ("layer_matrix", "Schichtmischer", false),
     ("highlight_neutralize", "Lichter neutral", false),
+    ("highlight_colour", "Lichter-Farbe", false),
+    ("highlight_structure", "Lichter-Struktur", false),
     ("hsl", "Farbmischer", false),
     ("tone_curve", "Gradationskurve", false),
     ("toneEqualizer", "Tonwert-Entzerrer", false),
@@ -1171,6 +1212,14 @@ pub fn step_name(s: &Step) -> String {
             crate::trf!("Rückgängig: {name}", name = step_name(&inner))
         }
         "auto" => crate::tr("Auto").to_string(),
+        "merge_tone" => {
+            let pair = |k: &str| l.get(k).and_then(Value::as_array).filter(|a| a.len() == 2).cloned();
+            match (pair("o"), pair("s")) {
+                (Some(o), _) if o[0] != o[1] => crate::trf!("Ausgabe: {name}", name = crate::tr(if o[1].as_bool() == Some(true) { "Fusion" } else { "Linear" })),
+                (_, Some(s)) if s[0] != s[1] => crate::trf!("Stärke {n} %", n = (s[1].as_f64().unwrap_or(0.0) * 100.0).round() as i64),
+                _ => crate::tr("Auto").to_string(),
+            }
+        }
         "reset" => crate::tr("Zurücksetzen").to_string(),
         "rotate" => crate::tr("Drehen").to_string(),
         "wb_picker" => crate::tr("Weißabgleich-Pipette").to_string(),
@@ -1322,6 +1371,54 @@ mod tests {
         assert_eq!(step_name(&s), "Vorgabe: Kontrastreich");
         let start = Step { seq: 0, time: 0, kind: kind::START.into(), label: Some(json!({ "k": "start", "lr": true }).to_string()), patch: json!({}), count: 1, command: None };
         assert_eq!(step_name(&start), "Ausgangszustand (Lightroom)");
+    }
+
+    /// Merged photo: the steps of the automatic tone carry strength and output of the recipe; the cursor names what
+    /// applied as of its step (before the first such step: what that step found).
+    #[test]
+    fn merge_recipe_follows_the_cursor() {
+        let (mut h, k) = memory("hdr");
+        let s0 = Settings::default();
+        // new merge: tuned at 50 %, linear
+        let s1 = Settings { exposure: -0.5, highlight: -0.4, ..s0.clone() };
+        hint(0, Hint::merge_tone([0.5, 0.5], [false, false]));
+        h.record(&k, 0, &s0, &s1);
+        // strength to 80 %
+        let s2 = Settings { exposure: -0.8, highlight: -0.6, ..s0.clone() };
+        hint(0, Hint::merge_tone([0.5, 0.8], [false, false]));
+        h.record(&k, 0, &s1, &s2);
+        // a slider by hand, then the output to fusion: values taken back
+        let s3 = Settings { contrast: 0.2, ..s2.clone() };
+        h.record(&k, 0, &s2, &s3);
+        let s4 = Settings { exposure: 0.0, highlight: 0.0, ..s3.clone() };
+        hint(0, Hint::merge_tone([0.8, 0.8], [false, true]));
+        h.record(&k, 0, &s3, &s4);
+        let names: Vec<String> = h.get(&k).unwrap().steps.iter().map(step_name).collect();
+        assert_eq!(names[1..], ["Auto".to_string(), "Stärke 80 %".into(), names[3].clone(), "Ausgabe: Fusion".into()]);
+        let at = |h: &History, from: usize| h.merge_recipe_at_cursor(&k, from).map(|(s, o, st)| (s, o, st.exposure));
+        assert_eq!(h.cursor_of(&k), Some(4));
+        assert_eq!(at(&h, 0), Some((0.8, true, 0.0)));
+        // ⌘Z: linear again with the values of 80 % (the state of the newest automatic step, not the hand change)
+        assert_eq!(h.undo(&k, 0, &s4, false), Some(s3.clone()));
+        assert_eq!(at(&h, 4), Some((0.8, false, -0.8)));
+        // ⌘Z over the hand change: no step of the automatic crossed, the recipe is left alone
+        h.undo(&k, 0, &s3, false);
+        assert_eq!(at(&h, 3), None);
+        assert_eq!(at(&h, 4), Some((0.8, false, -0.8)), "a jump over the fusion step");
+        h.undo(&k, 0, &s2, false);
+        assert_eq!(at(&h, 2), Some((0.5, false, -0.5)));
+        // before the first tuning: what it found
+        h.undo(&k, 0, &s1, false);
+        assert_eq!(at(&h, 1), Some((0.5, false, 0.0)));
+        // ⇧⌘Z
+        h.undo(&k, 0, &s0, true);
+        assert_eq!(at(&h, 0), Some((0.5, false, -0.5)));
+        h.undo(&k, 0, &s1, true);
+        assert_eq!(at(&h, 1), Some((0.8, false, -0.8)));
+        // no automatic step: nothing to follow
+        let (mut plain, kp) = memory("plain");
+        plain.record(&kp, 0, &s0, &s3);
+        assert_eq!(plain.merge_recipe_at_cursor(&kp, 0).map(|r| r.0), None);
     }
 
     /// ⌘Z / ⇧⌘Z move the cursor; slider steps on the same field merge; a command step does not.

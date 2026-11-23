@@ -5,7 +5,8 @@
 //! the base for the new settings follows). A base already shown stays in use for small changes – colour mode,
 //! noise and CA sliders are converted from it – but never across the switch between colour and the grey base of
 //! black & white: a grey base renders grey whatever the settings say, a colour base cannot give the grey of the
-//! Sigma way. Until the fitting base is there, the fast preview with the new settings is shown. A base still being
+//! Sigma way. Until the fitting base is there, the fast preview with the new settings is shown (where that preview is
+//! too rough to be shown, the picture on screen stays instead, see `preview_hold.rs`). A base still being
 //! computed for settings changed meanwhile is cancelled (finished anyway, it stays in the disk cache under its key,
 //! by the cache's rules); the one for the new settings starts once they have rested for [`SETTLE_SECS`].
 

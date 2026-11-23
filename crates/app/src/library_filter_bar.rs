@@ -24,13 +24,17 @@ const CHIP_WASH: f32 = 0.30;
 /// Minimum widths of the two halves of row 1.
 const SEARCH_MIN: f32 = 150.0;
 const FILTER_MIN: f32 = 130.0;
-/// Fixed parts of row 1 besides the two halves: gap, gap, reset button (the "?" sits inside the search field).
-const ROW1_FIXED: f32 = 8.0 + 4.0 + RESET_W;
+/// Fixed parts of row 1 besides the two halves: gap, gap, reset button (the "?" sits inside the search field), gap
+/// and the view switch "Raster | Vergleichen" at the right end.
+const ROW1_FIXED: f32 = 8.0 + 4.0 + RESET_W + 8.0 + VIEW_W;
+/// Width of the view switch (two text cells, see [`LibraryView::view_switch`]).
+pub(crate) const VIEW_W: f32 = VIEW_CELLS[0] + VIEW_CELLS[1];
+pub(crate) const VIEW_CELLS: [f32; 2] = [70.0, 104.0];
 const RESET_W: f32 = 30.0;
 /// Width reserved for the sort order (dropdown and direction) at the right of row 2.
 const SORT_W: f32 = 160.0;
 /// Widths of the quick-filter groups in row 2: flags, stars, labels, kind, RAW+JPEG.
-const QUICK_GROUPS: [f32; 5] = [3.0 * 30.0, 5.0 * 22.0, 5.0 * 24.0, 3.0 * 30.0, 30.0];
+const QUICK_GROUPS: [f32; 5] = [3.0 * 30.0, 5.0 * 22.0, 5.0 * 24.0, 3.0 * 30.0, 30.0 + 38.0];
 /// Gap between the lines of row 2 when it wraps.
 const LINE_GAP: f32 = 6.0;
 /// Gap between the groups of row 2.
@@ -144,6 +148,11 @@ impl LibraryView {
             self.filter_button(ui, filter_w);
             ui.add_space(4.0);
             self.filter_reset(ui);
+            ui.add_space(8.0);
+            if self.view_switch(ui, false) == Some(true) {
+                // one photo of a series: the whole series (as N); a selection: as it is
+                self.request_compare(self.button_series(), None);
+            }
         });
         if self.columns_open {
             self.facets_panel(ui);
@@ -522,10 +531,19 @@ impl LibraryView {
     /// RAW+JPEG as one photo or as two.
     fn stack_group(&mut self, ui: &mut egui::Ui) {
         let hint = if self.stack { "RAW+JPEG zusammen (ein Foto)" } else { "RAW+JPEG einzeln (zwei Fotos)" };
-        if lr::cell_group(ui, "bib-raw-jpeg", &[(lr::Cell::Symbol(lr::Icon::Stack, lr::TEXT), self.stack, hint)], 30.0).is_some() {
-            self.stack = !self.stack;
-            library::settings::set("rawJpegStacks", serde_json::json!(self.stack));
-            self.refilter = true;
+        // second cell: only merged (HDR) photos – no stacks, no sources
+        let cells = [(lr::Cell::Symbol(lr::Icon::Stack, lr::TEXT), self.stack, hint), (lr::Cell::Text("HDR", 11.0, lr::TEXT), self.filter.hdr, "Nur zusammengefügte Fotos (HDR)")];
+        match lr::cell_group_w(ui, "bib-raw-jpeg", &cells, &[30.0, 38.0]) {
+            Some(0) => {
+                self.stack = !self.stack;
+                library::settings::set("rawJpegStacks", serde_json::json!(self.stack));
+                self.refilter = true;
+            }
+            Some(_) => {
+                self.filter.hdr = !self.filter.hdr;
+                self.refilter = true;
+            }
+            None => {}
         }
     }
 
@@ -562,6 +580,7 @@ impl LibraryView {
                 Flags,
                 Stars,
                 Labels,
+                Hdr,
             }
             let toks = raw_tokens(&self.filter.text);
             let mut chips: Vec<(ChipSource, String, Color32)> = Vec::new();
@@ -581,6 +600,9 @@ impl LibraryView {
             }
             if self.filter.labels != 0 {
                 chips.push((ChipSource::Labels, format!("{} {}", crate::tr("Etikett:"), labels_text(self.filter.labels)), Color32::from_rgb(0x4a, 0x42, 0x2c)));
+            }
+            if self.filter.hdr {
+                chips.push((ChipSource::Hdr, crate::tr("Nur HDR").to_string(), Color32::from_rgb(0x4a, 0x42, 0x2c)));
             }
             let clip = ui.painter().with_clip_rect(region);
             let mut x = region.left();
@@ -620,6 +642,7 @@ impl LibraryView {
                     ChipSource::Flags => self.filter.flags = 0,
                     ChipSource::Stars => self.filter.stars_min = 0,
                     ChipSource::Labels => self.filter.labels = 0,
+                    ChipSource::Hdr => self.filter.hdr = false,
                 }
             }
         });
@@ -711,6 +734,9 @@ impl LibraryView {
             _ if self.search_global() => {}
             _ => return Err(crate::trf!("„{a}“ lässt sich nicht als Regel sichern: wähle links „Alle Fotos“", a = self.source_name())),
         }
+        if self.filter.hdr {
+            return Err(crate::tr("Der HDR-Filter lässt sich nicht als Regel sichern").to_string());
+        }
         let text = rule_text(&self.filter.text);
         if !text.is_empty() {
             parts.push(text);
@@ -762,7 +788,7 @@ impl LibraryView {
         }
         let rule = self.smart_rule();
         let count_w = ui.painter().layout_no_wrap(left_text.clone(), font.clone(), lr::TEXT_DIM).size().x;
-        // Only the symbol, never a sentence (Nutzer, 16.11.2026); the text lives in the tooltip.
+        // Only the symbol, never a sentence; the text lives in the tooltip.
         let text_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT).size().x + 16.0;
         let label: Option<&str> = None;
         let button_w = label.map_or(ACTION_W, text_w);
@@ -860,6 +886,13 @@ impl LibraryView {
             self.turn_request = Some(k == 1);
         }
     }
+
+    /// The button "expand / collapse all series" of the status row (left of turn and jump).
+    pub(super) fn series_all_cell(&mut self, ui: &mut egui::Ui) {
+        if super::series_all_button(ui, self.series_all(), ACTION_W, ACTION_H) {
+            self.series_all_click();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -913,6 +946,21 @@ mod tests {
         // wide: one line; the narrow centre of a small window: two lines
         assert_eq!(quick_layout(900.0).2, lr::BAR_H);
         assert_eq!(quick_layout(400.0).2, 2.0 * lr::BAR_H + LINE_GAP);
+    }
+
+    /// The HDR filter shows merged photos only, combines with the other attributes and clears with them.
+    #[test]
+    fn hdr_filter_keeps_merged_photos_only() {
+        let mut f = Filter::default();
+        assert!(!f.attributes_active() && f.attributes_match(0, 0, 0, false));
+        f.hdr = true;
+        assert!(f.attributes_active());
+        assert!(!f.attributes_match(0, 5, 0, false), "an ordinary photo is hidden");
+        assert!(f.attributes_match(0, 0, 0, true), "a merged photo stays");
+        f.stars_min = 3;
+        assert!(!f.attributes_match(0, 2, 0, true), "the other attributes still count");
+        f.clear_attributes();
+        assert!(!f.hdr && !f.attributes_active());
     }
 
     /// The quick filters become rule terms the search understands, with the same meaning.

@@ -1179,7 +1179,7 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
             r
         };
         let mut new = tx
-            .prepare_cached("INSERT INTO file(folder, name, format, camera, capture_time, width, height, orientation, sidecars, lr_id) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)")
+            .prepare_cached(&format!("INSERT INTO file(id, folder, name, format, camera, capture_time, width, height, orientation, sidecars, lr_id) VALUES({},?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)", crate::merge::NEW_FILE_ID))
             .map_err(error)?;
         let mut upd = tx
             .prepare_cached(
@@ -1254,7 +1254,7 @@ pub fn import_with(db: &Db, catalog: &Path, opts: &Options, progress: &dyn Fn(&s
         let mut find_lr = tx.prepare_cached("SELECT id, stars, flag, label, lr_state, caption FROM image WHERE lr_id = ?1").map_err(error)?;
         let mut find_orig = tx.prepare_cached("SELECT id, stars, flag, label, lr_state, caption FROM image WHERE file = ?1 AND copy IS NULL AND lr_id IS NULL").map_err(error)?;
         let mut new = tx
-            .prepare_cached("INSERT INTO image(file, copy, stars, flag, label, label_lr, lr_id, lr_state, run) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)")
+            .prepare_cached(&format!("INSERT INTO image(id, file, copy, stars, flag, label, label_lr, lr_id, lr_state, run) VALUES({},?1,?2,?3,?4,?5,?6,?7,?8,?9)", crate::merge::NEW_IMAGE_ID))
             .map_err(error)?;
         // ?10: the catalog has no label column – the label text of the last import stays
         let mut upd = tx

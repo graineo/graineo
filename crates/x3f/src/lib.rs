@@ -26,6 +26,7 @@ pub mod prop;
 pub mod raw;
 pub mod rescue;
 pub mod sppa;
+pub mod x3i;
 
 pub use camf::{Camf, CamfEntry, CamfMatrix, MatrixData};
 pub use container::{zero_blocks, Integrity, read_embedded_jpeg, read_embedded_jpeg_up_to, read_embedded_plain, read_header_rotation, read_image_size, read_raw_header, DirEntry, ImageHeader, X3fFile};

@@ -188,6 +188,8 @@ impl App {
         let now = ctx.input(|i| i.time);
         let s = self.entries[index].settings.clone();
         let key = cache_key(index, &s, kind);
+        // no strip from a fast preview too rough to be shown: asked again once the exact base is there
+        let waits = self.derived_waits(&s);
         let st = &mut self.darkroom.probe;
         if st.finished == Some(key) || st.computing == Some(key) {
             st.requested = Some((key, st.requested.map_or(now, |w| if w.0 == key { w.1 } else { now })));
@@ -195,7 +197,7 @@ impl App {
         }
         match st.requested {
             Some((k, since)) if k == key => {
-                if now - since >= QUIET_PERIOD && st.computing.is_none() {
+                if now - since >= QUIET_PERIOD && st.computing.is_none() && !waits {
                     st.computing = Some(key);
                     let Some(c) = self.current.as_ref() else { return };
                     let list = variants(&s, kind, &grade, multi, &pi.list);

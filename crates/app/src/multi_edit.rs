@@ -462,7 +462,7 @@ impl App {
         (0..self.entries.len())
             .filter(|&i| i != cur && (self.entries[i].selected || grid.contains(&self.entries[i].image)))
             // by file name only: the exact check opens each file (thousands on a network drive) – it runs in the background
-            .filter(|&i| crate::image_kind::from_extension(self.entries[i].path.extension().and_then(|e| e.to_str()).unwrap_or("")).editable() && self.entries[i].state == 0)
+            .filter(|&i| crate::image_kind::from_extension(self.entries[i].path.extension().and_then(|e| e.to_str()).unwrap_or("")).editable() && crate::developable_state(self.entries[i].state))
             .collect()
     }
 

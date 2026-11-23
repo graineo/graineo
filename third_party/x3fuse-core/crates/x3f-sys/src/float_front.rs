@@ -420,6 +420,38 @@ impl ListedRepair {
 /// decoded from the camera RLE or Full entries. `dense` is one byte per
 /// pixel. `valid` is the inclusive ValidPixRect (the same rect the radial
 /// stage uses) and must carry a two-pixel lower/right halo.
+/// graineo addition: input of a [`HighlightHook`] (the frontend's buffer after the clip map was cleaned).
+pub struct HighlightInput<'a> {
+    /// Interleaved layers (bottom, middle, top) per pixel, rows `row_stride` floats apart.
+    pub data: &'a mut [f32],
+    pub width: usize,
+    pub height: usize,
+    pub row_stride: usize,
+    /// Clipped layers per pixel (bit c = layer c), after removing isolated marks.
+    pub clipped: &'a [u8],
+    /// Inclusive valid rectangle: left, top, right, bottom.
+    pub valid: [usize; 4],
+    /// Brightness threshold of the restoration (counts).
+    pub threshold: f64,
+}
+
+/// graineo addition: replacement of the own highlight reconstruction registered by the application; returns `true`
+/// when it handled the image (the own steps are then skipped).
+pub type HighlightHook = fn(&mut HighlightInput<'_>) -> bool;
+
+static HIGHLIGHT_HOOK: std::sync::RwLock<Option<HighlightHook>> = std::sync::RwLock::new(None);
+
+/// graineo addition: registers (or removes) the [`HighlightHook`].
+pub fn set_highlight_hook(hook: Option<HighlightHook>) {
+    if let Ok(mut h) = HIGHLIGHT_HOOK.write() {
+        *h = hook;
+    }
+}
+
+pub(crate) fn highlight_hook() -> Option<HighlightHook> {
+    HIGHLIGHT_HOOK.read().ok().and_then(|h| *h)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct HighlightRestoration {
     threshold: f64,

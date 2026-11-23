@@ -370,14 +370,10 @@ Profildateien werden weder kopiert, verschoben noch gelöscht. Abgeleitete alte 
 Adobe-Ordner automatisch durchsuchen	Parcourir automatiquement les dossiers Adobe
 Jetzt neu suchen	Relancer la recherche
 Keine Looks gefunden	Aucun look trouvé
-Referenzierter Ordner	Dossier référencé
-Ordner entfernen …	Retirer le dossier…
 Anzeigen	Afficher
-{a} Profile · {b} verfügbar	{a} profils · {b} disponibles
 Ausgeblendete Profile	Profils masqués
 Wieder anzeigen	Afficher à nouveau
 Wird gelesen …	Lecture…
-{a} hinzugefügt · {b} bereits vorhanden · {c} übersprungen	{a} ajoutés · {b} déjà présents · {c} ignorés
 Wird gesucht …	Recherche…
 Die Vorschau enthält diesen Look nicht. Der Profilverweis bleibt gespeichert.	L'aperçu ne contient pas ce look. La référence du profil reste enregistrée.
 Ohne Look exportieren?	Exporter sans le look ?
@@ -1748,7 +1744,7 @@ Einpassen ({a} %)	Ajuster ({a} %)
 Begradigt: {a2}°	Redressé : {a2}°
 Standard ({default_name})	Standard ({default_name})
 Freistellen	Recadrage
-Ausrichten	Redresser
+Ausrichten	Aligner
 Horizont begradigen (A)	Redresser l'horizon (A)
 Frei	Libre
 Linie	Ligne
@@ -2011,7 +2007,6 @@ Ausschnitt, Winkel, Perspektive, 90°-Drehung	Cadrage, angle, perspective, rotat
 Farbsäume	Franges colorées
 Rauschreduzierung	Réduction du bruit
 Freistellen & Drehen	Recadrage et rotation
-graineo enthält keine Filmprofile von Drittanbietern. Es liest Profile, die Sie selbst gekauft und installiert haben. Bitte beachten Sie die Lizenzbedingungen des Anbieters.	graineo ne contient aucun profil de film de tiers. Il lit les profils que vous avez achetés et installés vous-même. Veuillez respecter les conditions de licence du fournisseur.
 Auf dem Mac sind {} frei, nötig sind {} plus {} Reserve.	Sur le Mac, {} sont libres, il en faut {} plus {} de réserve.
 Ordner {} fehlt	Dossier {} introuvable
 Am alten Ort liegt eine andere Datei – nichts überschrieben	Un autre fichier se trouve à l'ancien emplacement – rien n'a été écrasé
@@ -3452,7 +3447,6 @@ Quellen	Sources
 Lookup-Tabellen	Tables de correspondance (LUT)
 Profilordner entfernen?	Retirer le dossier de profils ?
 Look-Paket ausblenden?	Masquer le paquet de looks ?
-Automatisch gefunden	Trouvé automatiquement
 Filmsimulation	Simulation de film
 Importe	Imports
 Diagonal	Diagonale
@@ -3956,7 +3950,7 @@ Tauschen nicht möglich: die Kamera-JPEG lässt sich nicht als Stand der Regler 
 Vergleich: jetzigen Stand als linke Seite festhalten	Comparaison : figer l'état actuel comme côté gauche
 Vergleich: linke und rechte Seite tauschen	Comparaison : échanger les côtés gauche et droit
 Begrenzt den Platz, den der Cache auf diesem Mac belegen darf.	Limite l'espace que le cache peut occuper sur ce Mac.
-• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Illimité** (par défaut) – rien n'est jamais supprimé automatiquement.\n• **10 à 100 Go** – si le cache dépasse la limite, graineo supprime en arrière-plan, dès que le Mac ne fait rien d'autre, les plus anciens fichiers intermédiaires Foveon et les aperçus des photos de ce Mac consultés le moins récemment, jusqu'à environ 90 % de la limite.\n\nTout ce qui est dans le cache est compté. Ne sont jamais supprimés : les copies hors ligne et les aperçus des photos d'autres disques, les aperçus développés, les empreintes et les visages ; les aperçus utilisés le plus récemment restent aussi. Les originaux, les retouches et la bibliothèque ne sont pas dans le cache et ne sont jamais touchés.\n\n### Remarque\nLes aperçus supprimés sont recréés au besoin. Cela demande du temps de calcul pendant la navigation, surtout avec Sigma Quattro et les photos sur le NAS.
+• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Illimité** (par défaut) – rien n'est jamais supprimé automatiquement.\n• **10 à 100 Go** – si le cache dépasse la limite, graineo supprime en arrière-plan, dès que le Mac ne fait rien d'autre, les plus anciens fichiers intermédiaires Foveon et HDR et les aperçus des photos de ce Mac consultés le moins récemment, jusqu'à environ 90 % de la limite.\n\nTout ce qui est dans le cache est compté. Ne sont jamais supprimés : les copies hors ligne et les aperçus des photos d'autres disques, les aperçus développés, les empreintes et les visages ; les aperçus utilisés le plus récemment restent aussi. Les originaux, les retouches et la bibliothèque ne sont pas dans le cache et ne sont jamais touchés.\n\n### Remarque\nLes aperçus supprimés sont recréés au besoin. Cela demande du temps de calcul pendant la navigation, surtout avec Sigma Quattro et les photos sur le NAS.
 Zuletzt entfernt: {a} ({n} Dateien)	Dernière suppression : {a} ({n} fichiers)
 Vorschau-Cache bereinigen: {a} von {b}	Nettoyage du cache d'aperçus : {a} sur {b}
 Vorschau-Cache bereinigen …	Nettoyage du cache d'aperçus…
@@ -3970,7 +3964,7 @@ Offline-Kopien, andere Laufwerke	Copies hors ligne et aperçus d'autres disques
 Vorschau-Cache bereinigen	Nettoyer le cache d'aperçus
 Bereinigen	Nettoyer
 Es gibt nichts zu entfernen.	Il n'y a rien à supprimer.
-Es werden etwa {a} entfernt: die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	Environ {a} seront supprimés : les plus anciens fichiers intermédiaires Foveon et les aperçus des photos de ce Mac consultés le moins récemment. Ils sont recréés au besoin, ce qui demande du temps de calcul pendant la navigation, surtout avec Sigma Quattro. Les originaux, les retouches, les copies hors ligne et les aperçus développés sont conservés.
+Es werden etwa {a} entfernt: die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	Environ {a} seront supprimés : les plus anciens fichiers intermédiaires Foveon et HDR et les aperçus des photos de ce Mac consultés le moins récemment. Ils sont recréés au besoin, ce qui demande du temps de calcul pendant la navigation, surtout avec Sigma Quattro. Les originaux, les retouches, les copies hors ligne et les aperçus développés sont conservés.
 Die Obergrenze wird dadurch nicht erreicht: der Rest ist geschützt oder erst kürzlich benutzt.	La limite ne sera pas atteinte ainsi : le reste est protégé ou a été utilisé récemment.
 Jetzt bereinigen …	Nettoyer maintenant…
 Zuerst eine Obergrenze wählen	Choisissez d'abord une limite
@@ -4089,7 +4083,6 @@ importiert	importé
 GUT	BON
 BRAUCHBAR	UTILISABLE
 UNSICHER	INCERTAIN
-Für sRGB-LUTs (3D, 1D-Kurve oder beides).	Pour les LUT sRGB (3D, courbe 1D ou les deux).
 Gewählten Look als 3D-LUT (.cube) speichern	Enregistrer le look choisi comme LUT 3D (.cube)
 Kein Foto geöffnet	Aucune photo ouverte
 Kein Look gewählt	Aucun look choisi
@@ -4698,6 +4691,16 @@ Kein Etikett	Aucune étiquette
 Copyright	Copyright
 z. B. © 2026 Name	p. ex. © 2026 Nom
 Hinzugefügt wird	Sera ajouté
+nicht verfügbar	non disponible
+Keine neuen Looks	Aucun nouveau look
+Keine Fotos oder Looks erkannt	Aucune photo ni aucun look reconnu
+Keine Looks erkannt	Aucun look reconnu
+{a} hinzufügen?	Ajouter {a} ?
+Wird hinzugefügt …	Ajout en cours…
+Looks ansehen	Voir les looks
+{a} hinzugefügt	{a} ajouté(s)
+Inhalt von „{a}“ · {b}	Contenu de « {a} » · {b}
+Klicke auf einen Ordner, um seine Fotos zu sehen.	Cliquez sur un dossier pour voir ses photos.
 Keine Ordner mit Fotos.	Aucun dossier avec des photos.
 schon in der Bibliothek	déjà dans la bibliothèque
 liegt in einem Ordner der Bibliothek	se trouve dans un dossier de la bibliothèque
@@ -5467,7 +5470,6 @@ Alben aus Apple Fotos bleiben in ihrem Satz	Les albums d’Apple Photos restent 
 In Lightroom: {n} Schritte	Dans Lightroom : {n} étapes
 graineo unterstützen …	Soutenir graineo…
 Fotos einer Serie vergleichen und das beste wählen.	Comparer les photos d’une série et choisir la meilleure.
-• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **Comparaison** – 2 à 4 photos en grand côte à côte ; un double-clic ou Z zoome tous les cadres ensemble à 1:1 sur l’endroit le plus net\n• **Table lumineuse** – toutes les photos de la série ; un clic en met une dans la comparaison\n• **Duel** – deux photos, ← garde celle de gauche, → celle de droite, jusqu’à ce qu’il n’en reste qu’une\n\nLes indications sont relatives à la série : netteté en part de la photo la plus nette, yeux et visages (Apple Vision, macOS seulement), hautes lumières écrêtées, flou de bougé. La suggestion donne sa raison et ne règle rien ; s’il n’y a guère de différence, elle le dit.\n\n### Touches\n↩/Espace choisir la meilleure · ⇧X rejeter le reste · P/X/U/0–5 comme partout · Z zoom · H visages · ⌘↩ triée, suivante · ↓/↑ série suivante/précédente · ⌘Z annuler · Esc retour
 Stapel nicht geändert: {e}	Pile non modifiée : {e}
 Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	Bracketing d’exposition : {n} photos, {k} paliers sur {ev} IL
 Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	Série : {n} photos en {t}, même sujet (similarité {s})
@@ -5568,7 +5570,6 @@ zurück ins Raster	retour à la grille
 Feld 1–4 fokussieren (auch ← →)	activer le cadre 1 à 4 (aussi ← →)
 fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	changer de cadre actif ; en duel : garder la photo de gauche / droite
 Vergleich	Comparaison
-Leuchttisch	Table lumineuse
 Duell	Duel
 2–4 Fotos groß nebeneinander	2 à 4 photos en grand côte à côte
 Alle Fotos der Serie; Klick legt eins in den Vergleich	Toutes les photos de la série ; un clic en met une dans la comparaison
@@ -6449,8 +6450,10 @@ Gesicht „{a}“ benannt	Visage nommé « {a} »
 Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Préréglage « {a} » supprimé – ⌘Z le rétablit
 Rückgängig: Vorgabe „{a}“ gelöscht	Annuler : préréglage « {a} » supprimé
 {a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} photos sur {b} affichées, les autres sont masquées par la source à gauche ou un filtre
-Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	Sur Quattro, la réduction du bruit est déjà appliquée lors de la préparation.
-Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Sur Quattro, la réduction du bruit est appliquée lors de la préparation ; les valeurs enregistrées la désactivent.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung.	En dessous de ISO 400, la réduction du bruit du Quattro fait partie intégrante de la préparation.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung; die gespeicherten Werte schalten sie ab.	En dessous de ISO 400, la réduction du bruit du Quattro fait partie intégrante de la préparation ; les valeurs enregistrées la désactivent.
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet diese Regler aus.	Le traitement Quattro complet est désactivé ; lui seul utilise ces curseurs.
+Der volle Quattro-Weg ist ausgeschaltet; die gespeicherten Werte gelten weiter.	Le traitement Quattro complet est désactivé ; les valeurs enregistrées restent appliquées.
 rechnet {p} %	calcul {p} %
 Modul fehlt	module manquant
 Modul laden …	Charger le module…
@@ -6587,3 +6590,470 @@ Wenn vorhanden	Si existant
 Gain-Map behalten	Conserver la gain map
 HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Conserver la luminosité HDR des photos iPhone ; sRGB uniquement
 Mehr	Plus
+# HDR merge (hdr_ui.rs)
+Mindestens zwei Fotos einer Belichtungsreihe wählen.	Choisissez au moins deux photos d’un bracketing d’exposition.
+Höchstens {n} Fotos.	{n} photos au maximum.
+{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a} : uniquement des photos RAW à capteur Bayer ou X-Trans.
+Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	Les photos proviennent d’appareils différents ou ont des tailles différentes.
+{a} ist nicht erreichbar.	{a} n’est pas accessible.
+{a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b} : la luminosité diffère de {e} EV des données de prise de vue – la lumière a changé ?
+{a} → {b}: zu wenig Überlappung, Belichtung aus den Aufnahmedaten	{a} → {b} : trop peu de recouvrement, exposition d’après les données de prise de vue
+{a} ist um {p} px verschoben – aus der Hand?	{a} est décalée de {p} px – à main levée ?
+Verschiedene Blenden: Schärfentiefe und Vignette unterscheiden sich	Ouvertures différentes : profondeur de champ et vignetage diffèrent
+{a} → {b}: großer Abstand ({e} EV)	{a} → {b} : grand écart ({e} EV)
+{n} Bilder zusammenfügen	Fusionner {n} images
+Referenz	Référence
+{a} – als Referenz wählen	{a} – choisir comme référence
+Vorschau wird berechnet …	Calcul de l’aperçu …
+Gleicht Verschiebung, Drehung und Maßstab zwischen den Aufnahmen aus	Corrige décalage, rotation et échelle entre les prises
+Vorschau nicht möglich: {e}	Aperçu impossible : {e}
+Analysiert Belichtung und Lage …	Analyse de l’exposition et de la position …
+{a} … {b} EV · Ergebnis erscheint oben im Stapel	{a} … {b} EV · le résultat apparaît en haut de la pile
+Zusammenfügen	Fusionner
+HDR {a} {p} % · noch etwa {t}	HDR {a} {p} % · encore environ {t}
+HDR {a} {p} %	HDR {a} {p} %
+HDR fertig · {s} s	HDR terminé · {s} s
+HDR abgebrochen	HDR annulé
+HDR nicht möglich: {e}	HDR impossible : {e}
+HDR zusammenfügen	Fusionner en HDR
+HDR wird berechnet – ⌘Z macht es rückgängig	Calcul du HDR – ⌘Z l’annule
+HDR nicht angelegt: {e}	HDR non créé : {e}
+HDR nicht entfernt: {e}	HDR non supprimé : {e}
+HDR zusammenfügen …	Fusionner en HDR…
+HDR zusammenfügen (Dialog)	Fusionner en HDR (dialogue)
+Rezept fehlt	Recette manquante
+Lineares DNG aus graineos Entwicklung: Kamerawerte ohne Tonkurve, nichts beschnitten, auch Lichter über Weiß bleiben erhalten.	DNG linéaire issu du développement de graineo : valeurs caméra sans courbe tonale, rien n'est écrêté, les hautes lumières au-dessus du blanc sont conservées.
+Erkannte Bewegung zeigen	Afficher le mouvement détecté
+Ergebnis in den Stapel legen	Mettre le résultat dans la pile
+Stichwort für das Ergebnis	Mot-clé du résultat
+leer = keins	vide = aucun
+Nur HDR	HDR seulement
+Der HDR-Filter lässt sich nicht als Regel sichern	Le filtre HDR ne peut pas être enregistré comme règle
+Alle Aufnahmen überall verrechnen (für ruhige Motive)	Fusionner toutes les prises partout (pour les scènes immobiles)
+Bewegte Stellen aus der Referenz, weich überblendet	Zones en mouvement issues de la référence, fondu doux
+Jede Aufnahme einzeln dort ausschließen, wo sie abweicht	Exclure chaque prise là où elle diffère
+Oben im Stapel des Referenzbilds	Au sommet de la pile de la référence
+Eigenes Foto neben den Quellen, ohne Stapel	Photo à part à côté des sources, sans pile
+Färbt die Stellen ein, an denen eine Aufnahme abweicht	Colore les zones où une prise diffère
+Keine Bewegung erkannt	Aucun mouvement détecté
+Nur zusammengefügte Fotos (HDR)	Seulement les photos fusionnées (HDR)
+Bewegung	Mouvement
+Alle Striche löschen	Effacer tous les traits
+Letzten Strich zurück	Annuler le dernier trait
+Malen	Peindre
+Radieren	Gommer
+Mit gedrückter Maustaste über das Bild malen: dort gilt nur das gewählte Quellbild	Peignez sur l'image en maintenant le bouton de la souris : seule la source choisie compte à cet endroit
+Quelle malen	Peindre la source
+{a} malen	Peindre {a}
+HDR nicht geändert: {e}	HDR non modifié : {e}
+ZUSAMMENFÜGEN	FUSIONNER
+Zusammenfügen: Quelle malen, Bewegung	Fusion : peindre la source, mouvement
+Dieses Foto ist kein zusammengefügtes Foto.	Cette photo n'est pas une photo fusionnée.
+Blatt hochkant; Reihen und Spalten werden neu aufgeteilt	Feuille en portrait ; lignes et colonnes sont redistribuées
+Blatt quer; Reihen und Spalten werden neu aufgeteilt	Feuille en paysage ; lignes et colonnes sont redistribuées
+Quelle der HDR-Reihe nicht erreichbar: {a}	Source de la série HDR inaccessible : {a}
+Referenzbild der HDR-Reihe nicht erreichbar	Photo de référence de la série HDR inaccessible
+{a} … {b} EV · Ergebnis erscheint neben den Quellen	{a} … {b} EV · le résultat apparaît à côté des sources
+1 Strich	1 trait
+Pinselgröße (bleibt beim Zoomen auf dem Bildschirm gleich)	Taille du pinceau (reste identique à l’écran lors du zoom)
+Linear	Linéaire
+Fusion	Fusion
+Szenenlinear, die Lichter bleiben über Weiß erhalten (für die eigene Entwicklung)	Linéaire par rapport à la scène, les hautes lumières au-dessus du blanc sont conservées (pour votre propre développement)
+Natürlicher Look: die Belichtungen werden überblendet, der Umfang auf 0 bis 1 verdichtet	Rendu naturel : les expositions sont fondues, la plage est comprimée de 0 à 1
+schon zusammengefügt	déjà fusionnée
+{n} Bilder	{n} images
+{n} Reihen zusammenfügen	Fusionner {n} séries
+Eine Reihe zusammenfügen	Fusionner une série
+Keine Reihe eingeschaltet.	Aucune série activée.
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse oben im Stapel	{a} séries sur {b} · l’une après l’autre, résultats en haut de la pile
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse neben den Quellen	{a} séries sur {b} · l’une après l’autre, résultats à côté des sources
+HDR Reihe {k} von {n} · {a} {p} %	HDR série {k} sur {n} · {a} {p} %
+Alle Reihen zusammenfügen	Fusionner toutes les séries
+{n} Reihen werden berechnet, {f} nicht angelegt – ⌘Z macht alles rückgängig	{n} séries en calcul, {f} non créées – ⌘Z annule tout
+{n} Reihen werden berechnet – ⌘Z macht alles rückgängig	{n} séries en calcul – ⌘Z annule tout
+HDR nicht angelegt	HDR non créé
+Alle Reihen zusammenfügen …	Fusionner toutes les séries…
+In der Auswahl sind keine Belichtungsreihen.	Aucune série d’expositions dans la sélection.
+Glatt	Lissé
+sehr scharf, kann an harten Kanten leicht saumen	très net, peut laisser de légers halos sur les bords durs
+fast so scharf, weniger Säume	presque aussi net, moins de halos
+ruhiger, kaum Säume, mindert Moiré	plus calme, presque pas de halos, réduit le moiré
+sehr glatt, keine Säume, dämpft Moiré und Rauschen	très lisse, sans halos, atténue moiré et bruit
+Lanczos, 3 Lappen (Fensterbreite 3 Pixel je Seite). Der bisherige Standard.	Lanczos, 3 lobes (fenêtre de 3 pixels de chaque côté). L’ancien réglage par défaut.
+Catmull-Rom, kubisch (B 0, C 0,5; Fensterbreite 2). Etwas weniger Überschwingen als Lanczos.	Catmull-Rom, cubique (B 0, C 0,5 ; fenêtre 2). Un peu moins de dépassement que Lanczos.
+Hann-gefenstertes Sinc (Fensterbreite 3), in XnView und ImageMagick „Hanning“.	Sinc fenêtré de Hann (fenêtre 3), nommé « Hanning » dans XnView et ImageMagick.
+Mitchell-Netravali, kubisch (B = C = 1/3; Fensterbreite 2). Kaum Überschwingen.	Mitchell-Netravali, cubique (B = C = 1/3 ; fenêtre 2). Presque aucun dépassement.
+Verkleinerung	Réduction
+SFD {a} {p} % · noch etwa {t}	SFD {a} {p} % · encore environ {t}
+SFD {a} {p} %	SFD {a} {p} %
+AUFNAHME {n}{ev} · nicht das HDR	IMAGE {n}{ev} · pas le HDR
+Vorschau aktuell · volle Auflösung {p} %	Aperçu à jour · pleine résolution {p} %
+Wird zusammengefügt … {p} %	Fusion en cours … {p} %
+Wartet auf die Berechnung …	En attente du calcul …
+Vorschau aktuell · volle Auflösung beim Zoomen	Aperçu à jour · pleine résolution au zoom
+Aktuell · volle Auflösung	À jour · pleine résolution
+Aufnahmen	Images
+{a} · Maustaste halten: nur diese Aufnahme zeigen	{a} · maintenir le bouton : n’afficher que cette image
+Aufnahme nicht benutzen	Ne pas utiliser cette image
+Aufnahme dazunehmen	Ajouter cette image
+Foto aus dem Filmstreifen hierher ziehen	Glisser ici une photo du film
+Mindestens zwei Aufnahmen.	Au moins deux images.
+Geister entfernen	Supprimer les fantômes
+Bereich malen	Peindre une zone
+Über einen Geist malen, dann die Aufnahme für den Bereich wählen	Peindre sur un fantôme, puis choisir l’image pour la zone
+Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])	Taille du pinceau, constante à l’écran au zoom (plus grand : ])
+Neuer Bereich	Nouvelle zone
+Bereich löschen	Supprimer la zone
+Bereich {k} · aus {f}	Zone {k} · de {f}
+Erkannte Bewegung	Mouvement détecté
+Dieses Foto kann keine Aufnahme sein.	Cette photo ne peut pas être une image de la série.
+Die Fotos unterscheiden sich kaum in der Belichtung (weniger als 0,5 EV).	Les photos diffèrent à peine en exposition (moins de 0,5 IL).
+Oben im Stapel der Quellen; aus: eigenes Foto neben den Quellen.	En haut de la pile des sources ; désactivé : photo à part à côté des sources.
+Als Referenz nehmen	Prendre comme référence
+HDR erstellt	HDR créé
+Quellen zeigen	Afficher les sources
+Hinweis schließen	Fermer l’indication
+Das HDR liegt in keinem Stapel.	Le HDR n’est dans aucune pile.
+HDR entfernt, die Quellen bleiben	HDR supprimé, les sources restent
+HDR bearbeiten	Modifier le HDR
+HDR entfernen (Quellen bleiben)	Supprimer le HDR (les sources restent)
+Aus Aufnahme	Depuis l’image
+Die Aufnahmen der Belichtungsreihe, nach Belichtung geordnet.	Les images de la série, dans l’ordre d’exposition.
+• **Haken** – Aufnahme benutzen; ohne Haken bleibt sie gedimmt an ihrem Platz\n• **Stern** – Referenz: ihre Lage, Farbe und Belichtung gelten für das Ergebnis\n• **Maustaste halten** – diese Aufnahme groß zeigen (loslassen = zurück zum HDR)\n• **Foto aus dem Filmstreifen hierher ziehen** – als Aufnahme hinzufügen	• **Coche** – utiliser l’image ; sans coche elle reste estompée à sa place\n• **Étoile** – référence : sa position, sa couleur et son exposition valent pour le résultat\n• **Maintenir le bouton** – afficher cette image en grand (relâcher = retour au HDR)\n• **Glisser une photo du film ici** – l’ajouter comme image
+Zurück zur vorigen Ansicht	Revenir à la vue précédente
+Gesichtet, nächste Serie	Vue, série suivante
+Nächste Serie	Série suivante
+Vorige Serie	Série précédente
+Vergleich: bis zu 4 Fotos groß	Comparer : jusqu’à 4 photos en grand
+Entkoppelt: jedes Feld wird einzeln verschoben	Dissocié : chaque champ se déplace seul
+Gekoppelt: Zoom und Verschieben in allen Feldern gleich (einzeln: ⇧-Ziehen)	Lié : zoom et déplacement identiques dans tous les champs (un seul : ⇧-glisser)
+Ausrichten: Einzel-Versätze zurücksetzen	Aligner : réinitialiser les décalages individuels
+Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	Automatique : portraits sur une rangée, paysages en 2 × 2
+Eine Reihe	Une rangée
+Messen: Rechteck ziehen, Schärfe je Feld	Mesurer : tracer un rectangle, netteté par champ
+Fokussiertes Foto als Referenz festhalten	Garder la photo active comme référence
+Differenz (Prüfhilfe)	Différence (aide au contrôle)
+Gleich gut: beide bleiben	Aussi bonnes : les deux restent
+Letztes Duell zurücknehmen	Annuler le dernier duel
+Fokussiertes Foto als bestes: Markierung „Auswahl“ und Titelfoto	Photo active comme meilleure : marquage « Retenue » et photo de couverture
+Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)	Rejeter le reste : toutes les photos sauf celles retenues (un ⌘Z)
+Gleich gut	Aussi bonnes
+Linkes Foto behalten	Garder la photo de gauche
+Rechtes Foto behalten	Garder la photo de droite
+Linkes Foto behalten (←)	Garder la photo de gauche (←)
+Rechtes Foto behalten (→)	Garder la photo de droite (→)
+Vergleichen: die ausgewählten Fotos bzw. die ganze Serie des aktiven Fotos	Comparer : les photos sélectionnées ou toute la série de la photo active
+Modus Vergleich (bis zu 4 Felder)	Mode comparaison (jusqu’à 4 champs)
+Modus Turnier (Duelle bis Platz 1–3)	Mode tournoi (duels jusqu’aux places 1 à 3)
+Anordnung weiterschalten: Auto · 1 Reihe · 2 × 2	Disposition suivante : auto · 1 rangée · 2 × 2
+Einpassen ↔ 100 % (an Fokuspunkt, Gesicht oder schärfster Stelle)	Ajuster ↔ 100 % (au point de mise au point, sur un visage ou à l’endroit le plus net)
+Leertaste halten	Maintenir la barre d’espace
+100 % an der Maus, solange gehalten	100 % sous le pointeur tant qu’elle est maintenue
+Zoom und Verschieben gekoppelt an/aus	Zoom et déplacement liés activés/désactivés
+ein Feld einzeln verschieben	déplacer un seul champ
+Fokuspunkt der Kamera in allen Feldern	Point de mise au point de l’appareil dans tous les champs
+Kanten zeigen (Fokus-Peaking, gleiche Schwelle in allen Feldern)	Afficher les contours (focus peaking, même seuil dans tous les champs)
+Clipping in allen Feldern	Écrêtage dans tous les champs
+Aufnahme-Zeile (Abweichungen hervorgehoben)	Ligne de prise de vue (écarts mis en évidence)
+Messen: Rechteck ziehen, Schärfewert je Feld	Mesurer : tracer un rectangle, valeur de netteté par champ
+fokussiertes Foto als Referenz festhalten / aufheben	garder / libérer la photo active comme référence
+Blinken: Referenz und Kandidat abwechselnd (nochmal: nebeneinander)	Clignoter : référence et candidate en alternance (à nouveau : côte à côte)
+Wischer zwischen Referenz und Kandidat (nochmal: nebeneinander)	Volet entre référence et candidate (à nouveau : côte à côte)
+Differenzbild zwischen Referenz und Kandidat (nochmal: nebeneinander)	Image de différence entre référence et candidate (à nouveau : côte à côte)
+Feld 1–4 fokussieren	Activer le champ 1 à 4
+fokussiertes Feld bzw. Kandidat wechseln; im Turnier: linkes / rechtes Foto behalten	changer de champ actif ou de candidate ; en tournoi : garder la photo de gauche / droite
+Turnier: gleich gut (beide bleiben)	Tournoi : aussi bonnes (les deux restent)
+Turnier: beide raus	Tournoi : les deux éliminées
+Turnier: letztes Duell zurücknehmen	Tournoi : annuler le dernier duel
+fokussiertes Foto in Entwickeln öffnen	ouvrir la photo active dans Développer
+Vergleichen: die im Filmstreifen ausgewählten Fotos	Comparer : les photos sélectionnées dans le film fixe
+Vergleich beenden (im Turnier: anhalten)	Terminer la comparaison (en tournoi : mettre en pause)
+Erst den Vergleich beenden	Terminer d’abord la comparaison
+Ergebnis übernommen – ⌘Z macht die Bewertung rückgängig	Résultat appliqué – ⌘Z annule la notation
+Erst das beste Foto wählen (↩ oder „Als bestes“)	Choisir d’abord la meilleure photo (↩ ou « Meilleure »)
+Mindestens 2 Fotos auswählen (⌘-Klick)	Sélectionner au moins 2 photos (⌘-clic)
+Serie auswählen und vergleichen	Sélectionner la série et comparer
+Stapel auswählen und vergleichen	Sélectionner la pile et comparer
+Mit diesem Foto vergleichen	Comparer avec cette photo
+Im Filmstreifen weitere Fotos mit ⌘-Klick wählen	Sélectionner d’autres photos dans le film fixe par ⌘-clic
+Als Referenz festhalten	Garder comme référence
+Als bestes	Meilleure
+Aus dem Vergleich nehmen	Retirer de la comparaison
+Auswahl · Titelfoto	Retenue · couverture
+DIFFERENZ	DIFFÉRENCE
+Darstellung gegen die Referenz: Nebeneinander, Blinken (W), Wischer (⇧W), Differenz (⌥W)	Affichage face à la référence : côte à côte, clignoter (W), volet (⇧W), différence (⌥W)
+Duell {a} von etwa {b} · Ziel Platz 1–3	Duel {a} sur environ {b} · objectif places 1 à 3
+ERGEBNIS · {a} Fotos · {b} Duelle	RÉSULTAT · {a} photos · {b} duels
+Erst eine Referenz festhalten (R)	Garder d’abord une référence (R)
+Feld {n}	Champ {n}
+Feldmenü	Menu du champ
+Gekoppelt	Lié
+Im Filmstreifen Fotos mit ⌘-Klick auswählen	Sélectionner des photos dans le film fixe par ⌘-clic
+Im Raster zeigen	Afficher dans la grille
+In Entwickeln öffnen	Ouvrir dans Développer
+KANDIDAT	CANDIDATE
+Klick: Feldmenü	Clic : menu du champ
+Nur ansehen	Seulement voir
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 vier und drei Sterne (ein ⌘Z)	Place 1 retenue et couverture, places 2 et 3 quatre et trois étoiles (un ⌘Z)
+Prüfhilfe	aide au contrôle
+REFERENZ	RÉFÉRENCE
+Referenz aufheben	Libérer la référence
+Schärfe: {a} % des schärfsten Fotos der Auswahl (gemessen an der schärfsten Stelle)	Netteté : {a} % de la photo la plus nette de la sélection (mesurée à l’endroit le plus net)
+Turnier abbrechen: nichts wird gesetzt (anhalten: Esc)	Annuler le tournoi : rien n’est appliqué (pause : Échap)
+Vergleich schließen	Fermer la comparaison
+Wieder gekoppelt	Lier à nouveau
+Zum Vergleichen mindestens 2 Fotos auswählen (⌘-Klick)	Sélectionner au moins 2 photos pour comparer (⌘-clic)
+auf 0 Sterne (4–5 Sterne bleiben)	à 0 étoile (4 à 5 étoiles restent)
+blinkt alle {s} s	clignote toutes les {s} s
+schärfstes	la plus nette
+unverändert	inchangées
+wird bearbeitet	en cours d’édition
+{a} Fotos · {b} raus	{a} photos · {b} éliminées
+{k} – Klick: in den Vergleich (ins fokussierte Feld)	{k} – clic : dans la comparaison (dans le champ actif)
+{k}: Augen zu	{k} : yeux fermés
+{k}: Gesichtsqualität {q}	{k} : qualité du visage {q}
+· {a} ausgewählt · {b} im Vergleich	· {a} sélectionnées · {b} dans la comparaison
+– {n} weitere: {w} (Einstellung „⇧X beim Sichten“)	– {n} autres : {w} (réglage « ⇧X lors du tri »)
+↶ Letztes Duell	↶ Dernier duel
+⌘-Klick im Streifen	⌘-clic dans le film
+Ausgewählte Fotos nebeneinander vergleichen und das beste wählen.	Comparer côte à côte les photos sélectionnées et choisir la meilleure.
+{n} Fotos vergleichen	Comparer {n} photos
+Serie · {n} ähnliche Fotos	Série · {n} photos similaires
+Belichtungsreihe · {n} Fotos	Bracketing d’exposition · {n} photos
+Stapel · {n} Fotos	Pile · {n} photos
+Im Vergleich öffnen	Ouvrir dans la comparaison
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Disposition : auto · 1 rangée · 1 colonne · 2 × 2 · choisie en grand
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Disposition suivante : auto · 1 rangée · 1 colonne · 2 × 2 · choisie en grand
+Automatisch: gleich große Felder, so groß wie möglich	Automatique : champs égaux, aussi grands que possible
+Eine Spalte	Une colonne
+Gewähltes groß, die anderen klein daneben	Choisie en grand, les autres en petit à côté
+Vorschau · Speicher knapp	Aperçu · mémoire faible
+Keine Serien oder Stapel in dieser Ansicht	Aucune série ni pile dans cette vue
+Die Ansicht „Serien“ zeigt je Serie eine Kachel	La vue « Séries » affiche une vignette par série
+Alle Serien aufklappen	Déplier toutes les séries
+Alle Serien zuklappen	Replier toutes les séries
+Turnier abbrechen	Annuler le tournoi
+Füllen	Remplir
+Ganz zeigen	Afficher en entier
+Füllen: jedes Foto füllt sein Feld (Ränder beschnitten) – Klick: ganz zeigen	Remplir : chaque photo remplit son cadre (bords rognés) – clic : afficher en entier
+Ganz zeigen: jedes Foto ganz im Feld – Klick: füllen	Afficher en entier : chaque photo entière dans son cadre – clic : remplir
+Füllen ↔ ganz zeigen: Fotos füllen ihr Feld oder stehen ganz darin	Remplir ↔ afficher en entier : les photos remplissent leur cadre ou y tiennent entières
+HDR nicht gefunden – die Bibliothek wird neu gelesen.	HDR introuvable – la bibliothèque est relue.
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ gezeigt	Le HDR n’est pas dans cette vue – dossier « {a} » affiché
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ ohne Filter gezeigt	Le HDR n’est pas dans cette vue – dossier « {a} » affiché sans filtres
+Diese Fotos sehen nicht nach einer Belichtungsreihe aus. Trotzdem zusammenfügen?	Ces photos ne ressemblent pas à un bracketing d’exposition. Fusionner quand même ?
+Zwischen zwei Aufnahmen liegen {n} Minuten.	Il y a {n} minutes entre deux prises.
+Die Bildinhalte unterscheiden sich deutlich.	Le contenu des images diffère nettement.
+{a} ist eine SFD-Aufnahme: ihre Belichtungen fügt graineo beim Entwickeln selbst zusammen. Das Foto einzeln in Entwickeln öffnen.	{a} est une prise SFD : graineo fusionne lui-même ses expositions au développement. Ouvrir la photo seule dans Développement.
+Die Fotos stammen von verschiedenen Kameras: {a}.	Les photos proviennent d’appareils différents : {a}.
+Die Fotos haben verschiedene Größen: {a}.	Les photos ont des tailles différentes : {a}.
+Aus diesen Aufnahmen gibt es schon ein HDR: {a}.	Il existe déjà un HDR de ces prises : {a}.
+Trotzdem neues HDR	Nouveau HDR quand même
+„{a}“ gehört nicht zur Auswahl. Zusammengefügt werden die {n} ausgewählten Fotos:	« {a} » ne fait pas partie de la sélection. Les {n} photos sélectionnées seront fusionnées :
+HDR nicht möglich	HDR impossible
+SFD-Aufnahme: graineo fügt ihre Belichtungen beim Entwickeln zusammen	Prise SFD : graineo fusionne ses expositions au développement
+Diese Ansicht zeigt jedes Foto einzeln	Cette vue affiche chaque photo séparément
+Nur dieses Foto davon ist in der Ansicht sichtbar	Seule cette photo de la série est visible dans la vue
+Die verglichenen Serien bleiben aufgeklappt, solange der Vergleich offen ist	Les séries comparées restent dépliées tant que la comparaison est ouverte
+Nächste Fotos in die Felder	Photos suivantes dans les champs
+Vorige Fotos in die Felder	Photos précédentes dans les champs
+Felder {a} von {n}	Champs {a} sur {n}
+Die gewählten Aufnahmen gehören schon zum HDR {a} – ein HDR wird nie selbst zur Quelle.	Les prises sélectionnées appartiennent déjà au HDR {a} – un HDR n’est jamais lui-même une source.
+Schon zusammengefügt, wird nicht verwendet: {a}. Aus diesen {n} Aufnahmen ein neues HDR zusammenfügen?	Déjà fusionné, non utilisé : {a}. Fusionner un nouveau HDR à partir de ces {n} prises ?
+Neues HDR	Nouveau HDR
+Schon zusammengefügt, nicht als Quelle verwendet: {a}.	Déjà fusionné, non utilisé comme source : {a}.
+Die ganze Serie vergleichen	Comparer toute la série
+Serie {a} von {b}	Série {a} sur {b}
+Doppelklick auf die Kachel: aufklappen	Double-clic sur la vignette : déplier
+Doppelklick auf das aktive Foto: zuklappen	Double-clic sur la photo active : replier
+wie jetzt	comme maintenant
+Im Turnier gibt es keine Referenz	Le tournoi n’a pas de référence
+Erst ein Foto fokussieren (Klick)	D’abord activer une photo (clic)
+Original offline	Original hors ligne
+Das Original ist nicht erreichbar: das Feld zeigt die Vorschau der Bibliothek	L’original est inaccessible : le champ montre l’aperçu de la bibliothèque
+Zum Entwickeln dieses Feldes fehlt gerade Speicher; es folgt, sobald ein anderes fertig ist	Mémoire insuffisante pour développer ce champ pour l’instant ; il suit dès qu’un autre est prêt
+wird berechnet	calcul en cours
+Das Feld wird mit seinen Einstellungen in voller Qualität entwickelt; bis dahin die Vorschau der Bibliothek	Le champ est développé en pleine qualité avec ses réglages ; d’ici là, l’aperçu de la bibliothèque
+Alle ({n}, je {k})	Toutes ({n}, par {k})
+Alle ({n})	Toutes ({n})
+sucht {d}/{n}	recherche {d}/{n}
+sucht …	recherche…
+wartet	en attente
+Modus Vergleich (Felder nebeneinander)	Mode Comparer (champs côte à côte)
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Disposition suivante : Auto · 1 rangée · 1 colonne · 2 × 2 · Choisie en grand · Toutes
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Disposition : Auto · 1 rangée · 1 colonne · 2 × 2 · Choisie en grand · Toutes
+Vergleich: Fotos in Feldern nebeneinander	Comparer : photos côte à côte dans des champs
+Im Turnier stehen die zwei Fotos immer nebeneinander	Dans le tournoi, les deux photos sont toujours côte à côte
+Bei einem Feld gibt es nichts anzuordnen	Avec un seul champ, rien à disposer
+Gekoppelt wirkt erst ab zwei Feldern	Le couplage agit à partir de deux champs
+Ausrichten: kein Feld ist einzeln verschoben (⇧-Ziehen)	Aligner : aucun champ n’est déplacé seul (⇧-glisser)
+Fokuspunkt: in diesen Dateien nicht gespeichert	Point AF : non enregistré dans ces fichiers
+Messen vergleicht die Schärfe mehrerer Felder – erst zwei Fotos auswählen	Mesurer compare la netteté de plusieurs champs – sélectionner d’abord deux photos
+Gesichterleiste: in diesen Fotos keine Gesichter gefunden	Barre des visages : aucun visage trouvé dans ces photos
+Die Fotos kommen aus der Auswahl im Filmstreifen: ⌘-Klick nimmt eins hinzu oder heraus, Klick tauscht es gegen das fokussierte Feld.\n• **Vergleich** – bis zu 4 große Felder, mit der Anordnung „Alle“ bis zu 8 kleinere; Zoom und Verschieben wirken in allen Feldern gleich, ⇧-Ziehen verschiebt ein Feld einzeln; mehr Fotos blättern ‹ › oben rechts\n• **Turnier** – zwei Fotos je Duell bis Platz 1–3; danach steht die Rangliste in der Anordnung „Alle“ (Platz-Marken 1., 2., 3.), gesetzt wird erst mit „Übernehmen“: Platz 1 wird Auswahl und Titelfoto, alle anderen werden abgelehnt (ein ⌘Z)\n\nDie Hinweise sind relativ zur Auswahl: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts.\n\n### Tasten\n↩ bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wirken auf das fokussierte Feld · Z Zoom · Leertaste halten 100 % an der Maus · L gekoppelt · H Gesichter · ⌘↩ gesichtet, weiter · Esc zurück	Les photos viennent de la sélection du film fixe : ⌘-clic en ajoute ou en retire une, un clic la place dans le champ actif.\n• **Comparer** – jusqu’à 4 grands champs, jusqu’à 8 plus petits avec la disposition « Toutes » ; zoom et déplacement identiques partout, ⇧-glisser déplace un seul champ ; ‹ › en haut à droite fait défiler les autres photos\n• **Tournoi** – deux photos par duel jusqu’aux places 1 à 3 ; ensuite le classement s’affiche dans la disposition « Toutes » (marques de place 1., 2., 3.), rien n’est appliqué avant « Appliquer » : la place 1 devient la sélection et la couverture, toutes les autres sont rejetées (un ⌘Z)\n\nLes indications sont relatives à la sélection : netteté en part de la photo la plus nette, yeux et visages (Apple Vision, macOS uniquement), hautes lumières écrêtées, flou de bougé. La suggestion donne sa raison et n’applique rien.\n\n### Touches\n↩ choisir la meilleure · ⇧X rejeter le reste · P/X/U/0–5 agissent sur le champ actif · Z zoom · maintenir espace 100 % sous le pointeur · L lié · H visages · ⌘↩ vue, suivante · Échap retour
+Mehr Fotos als Felder: die Pfeile blättern, ein Klick im Filmstreifen holt ein Foto ins gewählte Feld, die Anordnung „Alle“ zeigt bis zu 8	Plus de photos que de champs : les flèches font défiler, un clic dans le film place une photo dans le champ choisi, la disposition « Toutes » en montre jusqu’à 8
+Reihe aufklappen	Déplier la série d’expositions
+Reihe zuklappen	Replier la série d’expositions
+Reihe auswählen und vergleichen	Sélectionner et comparer la série d’expositions
+Aus Reihe nehmen	Retirer de la série d’expositions
+Reihe teilen ab hier	Scinder la série d’expositions ici
+Reihe auflösen	Dissoudre la série d’expositions
+Ergebnis des Turniers · {a} Fotos · {b} Duelle	Résultat du tournoi · {a} photos · {b} duels
+Ergebnis verwerfen	Rejeter le résultat
+Ergebnis verwerfen: nichts wird gesetzt	Rejeter le résultat : rien n’est appliqué
+Platz {n} im Turnier – „Übernehmen“ setzt: {w}	Place {n} du tournoi – « Appliquer » définit : {w}
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 unverändert, die übrigen {w} (Einstellung „⇧X beim Sichten“) – ein ⌘Z	Place 1 retenue et photo de couverture, places 2 et 3 inchangées, les autres {w} (réglage « ⇧X lors du tri ») – un ⌘Z
+Platz {n} im Turnier – „Übernehmen“ lässt die Bewertung unverändert	Place {n} du tournoi – « Appliquer » ne change pas sa note
+Einzelbild öffnen (auch Leertaste, D, Doppelklick); auf einer zugeklappten Serie: aufklappen	Ouvrir la photo seule (aussi Espace, D, double-clic) ; sur une série repliée : la déplier
+durch die Fotos der Serien gehen: eine zugeklappte Serie öffnet sich und schließt sich wieder, wenn man sie verlässt	parcourir les photos des séries : une série repliée s’ouvre et se referme quand on la quitte
+vorheriges / nächstes Bild	photo précédente / suivante
+vorheriges / nächstes Bild mit gleichem Zoom, auch in zugeklappte Serien hinein (sie schließen sich wieder, wenn man sie verlässt)	photo précédente / suivante avec le même zoom, aussi dans les séries repliées (elles se referment quand on les quitte)
+Serie/Stapel des aktiven Fotos auf-/zuklappen (Filmstreifen)	déplier/replier la série/pile de la photo active (pellicule)
+zugeklappte Serie im Filmstreifen aufklappen (wie Doppelklick)	déplier une série repliée dans la pellicule (comme un double-clic)
+Rechteck ziehen: Schärfe je Feld	Tracer un rectangle : netteté par champ
+{n} vergleichen	comparer {n}
+Belichtungsreihe über {ev} EV	Bracketing d’exposition sur {ev} EV
+Serie in {t}, gleiches Motiv	Série en {t}, même sujet
+Serie in {t}, nur nach Zeit	Série en {t}, d’après l’heure seulement
+Stapel aus Lightroom	Pile de Lightroom
+Reihe	Bracketing
+virtuell · aus {n} Aufnahmen	virtuelle · à partir de {n} prises
+Ein zusammengefügtes Foto liegt nicht als Datei vor	Une photo fusionnée n’est pas un fichier
+Mit Farbmodus	Avec mode couleur
+Nur Kameramatrix	Matrice caméra seule
+Farbe wie im gewählten Farbmodus der Entwicklung	Couleur comme dans le mode couleur choisi au développement
+Kalibrierte Kamerafarbe ohne den Look des Farbmodus	Couleur caméra calibrée sans le rendu du mode couleur
+Wie stark Lichter und Tiefen ausgeglichen werden (0 % = Referenzaufnahme)	Intensité de l’équilibrage des hautes lumières et des ombres (0 % = vue de référence)
+Wie stark Lichter und Tiefen ausgeglichen werden (setzt Belichtung, Lichter, Tiefen, Weiß, Schwarz)	Intensité de l’équilibrage des hautes lumières et des ombres (règle Exposition, Hautes lumières, Ombres, Blancs, Noirs)
+Tonwerte von Hand geändert: neue Aufnahmen stimmen nicht mehr ab, der Regler stimmt neu ab	Tons modifiés à la main : les nouvelles vues ne les réajustent plus, ce curseur les réajuste
+Bei ISO unter 400 hat diese Kamera keine einstellbare Rauschminderung.	En dessous de ISO 400, cet appareil n’a pas de réduction du bruit réglable.
+Ausgabe: {name}	Sortie : {name}
+Stärke {n} %	Intensité {n} %
+HDR · virtuell	HDR · virtuel
+{a}: bleibt mit dem fertigen Bild erhalten, lässt sich ohne die Quellen aber nicht mehr ändern oder neu berechnen.	{a} : reste avec son image terminée, mais ne peut plus être modifiée ni recalculée sans les sources.
+HDR-Foto aus diesen Aufnahmen	photo HDR issue de ces prises de vue
+HDR-Fotos aus diesen Aufnahmen	photos HDR issues de ces prises de vue
+gemalter Bereich	zone peinte
+gemalte Bereiche	zones peintes
+eigene Entwicklung	développement personnel
+HDR entfernen	Supprimer le HDR
+HDR entfernt, die Quellen bleiben – ⌘Z holt es zurück	HDR supprimé, les sources restent – ⌘Z le rétablit
+HDR-Foto	photo HDR
+HDR-Fotos	photos HDR
+HDR nicht zurückgeholt: {e}	HDR non rétabli : {e}
+„{a}“ entfernen?	Supprimer « {a} » ?
+Die Quellen bleiben. Mit dem HDR verschwinden:	Les sources restent. Disparaissent avec le HDR :
+⌘Z holt es zurück.	⌘Z le rétablit.
+{a} ohne eigene Datei – nichts zu verschieben	{a} sans fichier propre – rien à déplacer
+{a} ohne eigene Datei bleiben, wo sie sind	{a} sans fichier propre restent où elles sont
+HDR-Rezept nicht lesbar – es wird nicht überschrieben	Recette HDR illisible – elle n’est pas écrasée
+HDR-Zwischenspeicher	Fichiers intermédiaires HDR
+HDR-Fotos bleiben; ihr Bild wird beim Öffnen aus den Quellen neu berechnet	Les photos HDR restent ; leur image est recalculée à partir des sources à l’ouverture
+Nicht aktuell – die Berechnung wurde abgebrochen	Pas à jour – le calcul a été annulé
+Die Aufnahmen werden neu berechnet – ändern geht gleich wieder	Les prises de vue sont recalculées – modification possible dans un instant
+{a}: andere Kamera oder Sensorgröße	{a} : autre appareil ou autre taille de capteur
+{n} Aufnahmen: mindestens {m} nötig	{n} prises de vue : au moins {m} nécessaires
+{n} Aufnahmen: höchstens {m} möglich	{n} prises de vue : {m} au maximum
+HDR-Ergebnis fehlt im Cache	Le résultat HDR manque dans le cache
+HDR: Referenzbild nicht als Mosaik lesbar	HDR : l’image de référence n’est pas lisible comme mosaïque
+Gleitkomma- und lineare Formate gibt es nur für RAW-Fotos	Les formats à virgule flottante et linéaires n’existent que pour les photos RAW
+Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)	Ce format d’export n’existe que pour Sigma X3F (ici JPEG, TIFF ou PNG)
+Dieses Foto hat keine Kameramatrix für ein DNG	Cette photo n’a pas de matrice d’appareil pour un DNG
+Keine gültige LUT (Kopf oder Größe)	LUT non valide (en-tête ou taille)
+LUT ist keine Textdatei	La LUT n’est pas un fichier texte
+LUT fehlerhaft: {}	LUT défectueuse : {}
+Look ohne lesbare Farbtabelle	Look sans table de couleurs lisible
+Profil von Adobe (nicht unterstützt)	Profil Adobe (non pris en charge)
+Vorgabe ohne Look-Tabelle (nicht unterstützt)	Préréglage sans table de look (non pris en charge)
+Keine XMP-Datei mit Look	Pas un fichier XMP avec look
+Quelle fehlt: {}	Source manquante : {}
+mindestens zwei Fotos	au moins deux photos
+kein zusammengefügtes Foto	pas une photo assemblée
+HDR-Rezept nicht lesbar: {}	Recette HDR illisible : {}
+{a} → {b}: Belichtung unbekannt (keine Messung, keine Aufnahmedaten) – als gleich hell angenommen	{a} → {b} : exposition inconnue (ni mesure ni données de prise de vue) – supposée identique
+Nicht aktuell – {e}	Pas à jour – {e}
+Quelle fehlt: {a}	Source manquante : {a}
+Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.	La sélection modifiée des prises n’a pas été calculée. La liste montre les prises de l’image.
+Auswahl zurücknehmen	Annuler la sélection
+Das Rezept nimmt wieder die Aufnahmen des gezeigten Bildes; danach lässt sich die Liste wieder ändern	La recette reprend les prises de l’image affichée ; la liste redevient ensuite modifiable
+Die Aufnahmen des gezeigten Bildes sind nicht mehr in der Bibliothek.	Les prises de l’image affichée ne sont plus dans la bibliothèque.
+Der Platz des HDR ist inzwischen von einem anderen Foto belegt	Une autre photo occupe désormais la place du HDR
+Es werden gerade Reihen zusammengefügt – weitere Reihen danach	Des séries sont en cours de fusion – les suivantes après
+Bricht die Berechnung ab; das neue HDR wird wieder entfernt	Arrête le calcul ; le nouveau HDR est de nouveau retiré
+Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	Arrête le calcul ; la photo reste telle qu’elle est affichée
+die Berechnung wurde abgebrochen	le calcul a été annulé
+{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} est une photo Foveon (X3F). Pour le HDR, utilisez les prises multiples de l’appareil (X3I) – elles s’ouvrent directement comme une seule photo – ou des séries RAW d’autres appareils.
+Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Détail du Quattro à partir de 400 ISO : de doux (−3) à fort (+3), 0 = réglage de l’appareil. À juger de préférence à 100 %
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	Le traitement Quattro complet est désactivé ; lui seul tient compte du curseur de détail.
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	Pour les prises multiples (X3I), le détail est fixe ; la netteté Foveon ci-dessus reste active.
+Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	En dessous de 400 ISO, le détail du Quattro est fixe ; la netteté Foveon ci-dessus reste active.
+{a}: Ausrichtung nicht plausibel – wie aufgenommen verwendet	{a} : alignement non plausible – utilisée telle que prise
+{a}: andere Ausrichtung – Hoch- und Querformat lassen sich nicht zusammenfügen	{a} : autre orientation – portrait et paysage ne peuvent pas être fusionnés
+Ein unfertiges HDR vom letzten Mal entfernt – die Quellen sind unverändert	Un HDR inachevé de la dernière fois a été retiré – les sources sont inchangées
+{n} unfertige HDR vom letzten Mal entfernt – die Quellen sind unverändert	{n} HDR inachevés de la dernière fois ont été retirés – les sources sont inchangées
+Interner Fehler beim Zusammenfügen	Erreur interne lors de la fusion
+Wartet – eine andere Berechnung läuft noch	En attente – un autre calcul est encore en cours
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	Pour les prises multiples (X3I), le détail est fixe. « Accentuation supplémentaire », ci-dessus, donne plus de netteté.
+Unter ISO 400 ist das Detail der Quattro fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	En dessous de 400 ISO, le détail du Quattro est fixe. « Accentuation supplémentaire », ci-dessus, donne plus de netteté.
+Die Foveon-Schärfe gibt es nur für Merrill-Fotos. Hier schärft „Zusätzlich schärfen“; bei der Quattro ab ISO 400 auch „Detail“.	La netteté Foveon n’existe que pour les photos Merrill. Ici, « Accentuation supplémentaire » accentue ; pour le Quattro à partir de 400 ISO, « Détail » aussi.
+Die Foveon-Schärfe wirkt nur mit eingeschaltetem Foveon-Detail.	La netteté Foveon n’agit qu’avec le détail Foveon activé.
+Fein	Fin
+Ausrichten (Horizont)	Redresser
+Duelle	duels
+Foto abgelehnt	photo rejetée
+Fotos abgelehnt	photos rejetées
+Turnier übernommen: {a} – ⌘Z nimmt es zurück	Tournoi appliqué : {a} – ⌘Z annule
+Ergebnis des Turniers · {a} · {b}	Résultat du tournoi · {a} · {b}
+Platz 1 wird Auswahl und Titelfoto, alle anderen Fotos des Turniers werden abgelehnt (auch Platz 2 und 3); Sterne bleiben, wie sie sind – ein ⌘Z nimmt alles zurück	La place 1 devient la sélection et la photo de couverture, toutes les autres photos du tournoi sont rejetées (les places 2 et 3 aussi) ; les étoiles restent telles quelles – un ⌘Z annule tout
+Nur für Sigma-Fotos (X3F) in den Formaten TIFF 32 Bit und OpenEXR	Uniquement pour les photos Sigma (X3F) aux formats TIFF 32 bits et OpenEXR
+Nur für die Formate TIFF 32 Bit und OpenEXR	Uniquement pour les formats TIFF 32 bits et OpenEXR
+Quelle nicht lesbar: {}	Source illisible : {}
+HDR ohne eigene Datei – mit „HDR entfernen (Quellen bleiben)“ aus der Bibliothek nehmen	HDR sans fichier propre – retirez-le de la bibliothèque avec « Supprimer le HDR (les sources restent) »
+Quelle nicht erreichbar: {a}. Das Bild bleibt, wie es ist – ändern und neu berechnen geht wieder, wenn sie da ist.	Source inaccessible : {a}. L’image reste telle quelle – modification et recalcul seront de nouveau possibles quand elle sera là.
+{a}: noch nicht in voller Auflösung berechnet – ohne die Quellen bleibt nur die Vorschau. Vorher öffnen und hineinzoomen oder exportieren.	{a} : pas encore calculé en pleine résolution – sans les sources, seul l’aperçu reste. Ouvrez-le et zoomez, ou exportez-le, avant.
+Vorschau aktuell · volle Auflösung abgebrochen	Aperçu à jour · pleine résolution annulée
+HDR: die volle Auflösung wurde nicht berechnet (abgebrochen) – „Neu berechnen“ im Werkzeug „Zusammenfügen“	HDR : la pleine résolution n’a pas été calculée (annulée) – « Recalculer » dans l’outil « Fusionner »
+Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht	Prise de référence inaccessible : correction d’objectif simplifiée
+schnelle Vorschau	aperçu rapide
+Die genaue Rechnung dieses Fotos ist gescheitert: das Feld zeigt die schnelle Vorschau mit mehr Rauschen	Le calcul exact de cette photo a échoué : le champ montre l’aperçu rapide, avec plus de bruit
+Turnier ohne Sieger – nichts gesetzt	Tournoi sans gagnante – rien n’est appliqué
+Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	Tournoi non appliqué : les notes ne peuvent pas être définies ici
+Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	Tournoi appliqué : gagnante retenue – ⌘Z annule
+HDR abgebrochen und entfernt (Quellen bleiben)	HDR annulé et supprimé (les sources restent)
+Lichter-Farbe	Couleur des hautes lumières
+Lichter-Struktur	Structure des hautes lumières
+Lichter neutral, Lichter-Farbe, Lichter-Struktur	Hautes lumières neutres, couleur et structure des hautes lumières
+Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	Couleur des hautes lumières reconstruites : 0 neutre, 50 telle que reconstruite, 100 plus intense (couleurs nettes seulement)
+Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	Détail dans les hautes lumières reconstruites : 0 lisse, 50 tel que reconstruit, 100 triplé
+Nur für Farbe	Couleur uniquement
+Nur für Fotos der Sigma Quattro	Uniquement pour les photos Sigma Quattro
+Dieses Foto hat keine rekonstruierbaren Lichter	Cette photo n’a pas de hautes lumières à reconstruire
+Wird noch vorbereitet …	Préparation en cours …
+Metadaten neu einlesen: {k} von {n}	Relecture des métadonnées : {k} sur {n}
+Metadaten neu einlesen …	Relire les métadonnées…
+{a} gelesen, {m} geändert	{a} lues, {m} modifiées
+, {k} nicht erreichbar	, {k} inaccessibles
+Metadaten werden bereits eingelesen.	Les métadonnées sont déjà en cours de lecture.
+Keine Fotos zum Einlesen.	Aucune photo à lire.
+Metadaten neu einlesen	Relire les métadonnées
+Metadaten neu einlesen · {a}	Relire les métadonnées · {a}
+Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien.	Relit date, appareil, objectif, exposition, lieu, taille et orientation dans les fichiers.
+Neben {a} liegt eine XMP-Begleitdatei.	{a} ont un fichier annexe XMP à côté.
+Bewertung, Stichwörter, Etikett aus XMP	Note, mots-clés, étiquette du XMP
+Ersetzt die Werte der Bibliothek; Entwicklung bleibt.	Remplace les valeurs; le développement reste.
+Dateien bleiben unverändert; {k} macht es rückgängig.	Fichiers inchangés; {k} annule.
+Einlesen	Lire
+Foveon: Lichter	Foveon : hautes lumières
+KI-Entrauschen gibt es nur in Farbe.	Le débruitage IA ne fonctionne qu’en couleur.
+KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	Le débruitage IA ne fonctionne qu’avec la réduction du bruit activée.
+Nur für Merrill und Quattro	Uniquement pour Merrill et Quattro
+Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	Pas de curseurs pour Merrill, la reconstruction agit automatiquement
+Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	Pas de curseurs pour cette photo (ISO élevés), la reconstruction agit automatiquement
+Lichter werden rekonstruiert …	Reconstruction des hautes lumières …
+Lichter werden rekonstruiert … (seit {n} s)	Reconstruction des hautes lumières … ({n} s)
+Merrill: Lichter rekonstruieren	Merrill : reconstruire les hautes lumières
+Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung und Farbe); farbige Lichter bleiben farbig statt weiß. Wirkt automatisch, ohne Regler. Aus: bisheriger Weg	Reconstruit les couches brûlées à partir des couches encore valides (détail et couleur) ; les hautes lumières colorées restent colorées au lieu de blanches. Agit automatiquement, sans curseurs. Désactivé : méthode précédente
+Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	La reconstruction des hautes lumières pour Merrill est désactivée dans les réglages (Développer → « Merrill : reconstruire les hautes lumières »)
+Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	La reconstruction des hautes lumières pour Quattro est désactivée dans les réglages (Développer → « Quattro : reconstruire les hautes lumières »)
+Quattro: Lichter rekonstruieren	Quattro : reconstruire les hautes lumières
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	Gourmand en calcul sur les photos très surexposées (elles s’ouvrent quelques secondes plus lentement). dp, sd et sd H Quattro : reconstruit la couche supérieure brûlée à partir des couches inférieures, avec les curseurs « Couleur des hautes lumières » et « Structure des hautes lumières ». Désactivé : méthode précédente

@@ -781,6 +781,11 @@ impl App {
                         let rendered = self.rendered_for.as_ref().filter(|(i, _)| *i == c.index).map(|(_, s)| s);
                         let id = self.display.preview_id(c.index, rendered).map_or(t.id(), |(id, _)| id);
                         crate::paint_src_quad(&clip, id, full_src, &frame, r, Color32::WHITE);
+                    } else {
+                        // the fast preview is withheld (`preview_hold.rs`): the spinner until the exact base is there –
+                        // never a picture from the rough data
+                        crate::spinner(painter, r.intersect(rect).center(), 6.5, now, 1.0);
+                        loading = true;
                     }
                     if needs_detail {
                         let factor = darkroom_loupe::factor(px_per_img, 1.0, self.darkroom.active && self.darkroom.grain_check && settings.film.is_active(), develop::local::active(&settings));
@@ -813,8 +818,12 @@ impl App {
                         self.panes.revalidate(ps);
                     }
                     if let Some(a) = &alt {
-                        if self.panes.want(ps, now) {
-                            let (previews, cal) = a.as_ref().map_or((c.loaded.previews.clone(), c.loaded.cal.clone()), |a| (a.previews.clone(), a.cal.clone()));
+                        let (previews, cal) = a.as_ref().map_or((&c.loaded.previews, &c.loaded.cal), |a| (&a.previews, &a.cal));
+                        // no pane from a fast preview too rough to be shown: asked again once the exact base is there
+                        if !gave_up && crate::preview_hold::waits(previews, cal, ps) {
+                            loading = true;
+                        } else if self.panes.want(ps, now) {
+                            let (previews, cal) = (previews.clone(), cal.clone());
                             jobs.push(Job::HoverRender { index, previews, cal, settings: ps.clone(), supersede: false });
                         }
                     }
@@ -828,7 +837,7 @@ impl App {
                         }
                         None => {
                             // until the preview is there: the current image dimmed, with a spinner
-                            if let Some(t) = &c.texture {
+                            if let Some(t) = c.texture.as_ref() {
                                 crate::paint_src_quad(&clip, t.id(), full_src, &frame, r, Color32::from_gray(70));
                             }
                             crate::spinner(painter, r.intersect(rect).center(), 6.5, now, 1.0);

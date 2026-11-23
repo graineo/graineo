@@ -10,6 +10,7 @@ graineo-color = { path = "../color" }
 x3f = { path = "../x3f" }
 # Test bench for non-Sigma RAWs (`graineo-dev raw <CR3|RAF|DNG …>`)
 raw = { path = "../raw" }
+hdr = { path = "../hdr" }
 # Developing as in the app (`graineo-dev rawapp`): preview, sliders, Lightroom starting values
 rawdev = { path = "../rawdev" }
 lensprof = { path = "../lensprof" }

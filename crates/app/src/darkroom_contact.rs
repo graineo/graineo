@@ -274,6 +274,8 @@ impl App {
         let Ok(m) = model(&s) else { return };
         let now = ctx.input(|i| i.time);
         let key = cache_key(image, &s, &m);
+        // no row from a fast preview too rough to be shown: asked again once the exact base is there
+        let waits = self.derived_waits(&s);
         let st = &mut self.darkroom.contact;
         if st.form != m.form() {
             st.form = m.form();
@@ -286,7 +288,7 @@ impl App {
         }
         match st.requested {
             Some((k, since)) if k == key => {
-                if now - since >= QUIET_PERIOD && st.computing.is_none() {
+                if now - since >= QUIET_PERIOD && st.computing.is_none() && !waits {
                     st.computing = Some(key);
                     let Some(c) = self.current.as_ref() else { return };
                     let rows: Vec<(usize, Vec<(usize, Settings)>)> = (0..m.rows.len())

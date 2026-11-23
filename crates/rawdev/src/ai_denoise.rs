@@ -78,7 +78,8 @@ impl Caches {
 
 /// Can this document use the stage at all (a RAW decoded by graineo)?
 pub fn applicable(doc: &RawDoc) -> bool {
-    !doc.finished && doc.apple.is_none() && matches!(doc.info.sensor, raw::Sensor::Bayer | raw::Sensor::XTrans | raw::Sensor::Linear)
+    // not for merged photos yet: the network is trained on single frames with white ≈ 1 (a merge reaches far above)
+    !doc.finished && doc.apple.is_none() && doc.merged.is_none() && matches!(doc.info.sensor, raw::Sensor::Bayer | raw::Sensor::XTrans | raw::Sensor::Linear)
 }
 
 /// The loaded network, shared by all documents (≈ 31 MB of weights).

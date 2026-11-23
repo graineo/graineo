@@ -1,7 +1,7 @@
 //! Side columns of the import window: on the left the source (cards, cameras, folders, recent folders), counters and
 //! filters; on the right the operation, target, subfolders, second copy and "apply on import" (collection, develop
 //! preset, keywords, rating, label, copyright). Both have a fixed order: for "Hinzufügen" the target rows and the file
-//! filters keep their place but are not shown (they would do nothing). "Hinzufügen" shows the folders in the middle column instead of the grid ([`folders`]).
+//! filters keep their place but are not shown (they would do nothing). "Hinzufügen" shows the folders in the middle column instead of the grid, with the photos of the chosen folder below them ([`folders`]).
 
 use super::*;
 use library::import_select as sel;
@@ -354,39 +354,207 @@ fn apply_on_import(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, Str
     });
 }
 
+/// Height of a folder row in "Hinzufügen".
+const FOLDER_ROW_H: f32 = 22.0;
+/// Edge of a preview cell below the folder list.
+const PEEK_CELL: f32 = 104.0;
+/// Fixed lines at the bottom of the column (where the folders go).
+const FOOTER_H: f32 = 44.0;
+
+/// The folder after (`down`) or before `current` in the list, staying at the ends; without a current one the first.
+pub(super) fn step_folder(folders: &[PathBuf], current: Option<&Path>, down: bool) -> Option<PathBuf> {
+    let i = current.and_then(|c| folders.iter().position(|p| p == c));
+    let j = match i {
+        None => 0,
+        Some(i) if down => (i + 1).min(folders.len().saturating_sub(1)),
+        Some(i) => i.saturating_sub(1),
+    };
+    folders.get(j).cloned()
+}
+
+/// Cells (photos; RAW+JPEG = one) that lie directly in `folder`, in the order of the grid (day by day, by path).
+pub(super) fn cells_in_folder(imp: &Import, folder: &Path) -> Vec<usize> {
+    imp.days.iter().flat_map(|d| d.cells.iter().copied()).filter(|&ci| imp.cand[imp.cells[ci].members[0]].path.parent() == Some(folder)).collect()
+}
+
 /// "Hinzufügen": the folders that are added (checked per folder; a folder whose photos are all in the library already
-/// starts unchecked), and where they go (inside a root folder, or the source becomes a new one).
+/// starts unchecked) and where they go (inside a root folder, or the source becomes a new one). A click on a row (or
+/// ↑/↓) shows that folder's photos as thumbnails in the fixed area below the list – view only, nothing changes.
 pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
     heading(ui, "Hinzugefügt wird");
     let source = imp.source.clone().unwrap_or_default();
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
-        ui.set_min_size(egui::vec2(ui.available_width(), ui.available_height() - 60.0));
-        egui::ScrollArea::vertical().id_salt("import-ordner").auto_shrink([false, false]).max_height(ui.available_height() - 60.0).show(ui, |ui| {
+    let width = ui.available_width();
+    // fixed split: list on top (about a third), photos of the chosen folder below, two lines at the bottom
+    let total = ui.available_height() - FOOTER_H;
+    let list_h = (total * 0.34).clamp(4.0 * FOLDER_ROW_H + 12.0, 9.0 * FOLDER_ROW_H + 12.0);
+    let peek_h = (total - list_h - 30.0).max(PEEK_CELL);
+    let names: Vec<PathBuf> = imp.folders.iter().map(|(p, _, _)| p.clone()).collect();
+    // ↑/↓ move between the folders (not while a text field has the keys)
+    let ctx = ui.ctx().clone();
+    let mut moved = false;
+    if !names.is_empty() && ctx.memory(|m| m.focused().is_none()) {
+        for (key, down) in [(egui::Key::ArrowDown, true), (egui::Key::ArrowUp, false)] {
+            if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)) {
+                imp.folder_focus = step_folder(&names, imp.folder_focus.as_deref(), down);
+                moved = true;
+            }
+        }
+    }
+    let rel_name = |p: &Path| p.strip_prefix(&source).ok().map(|r| r.display().to_string()).filter(|r| !r.is_empty()).unwrap_or_else(|| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 6)).show(ui, |ui| {
+        ui.set_min_size(egui::vec2(width - 8.0, list_h - 12.0));
+        ui.set_max_width(width - 8.0);
+        egui::ScrollArea::vertical().id_salt("import-ordner").auto_shrink([false, false]).max_height(list_h - 12.0).show(ui, |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
             if imp.folders.is_empty() {
                 small(ui, if imp.scanning { crate::tr("liest die Fotos …") } else { crate::tr("Keine Ordner mit Fotos.") }, lr::TEXT_DIM);
             }
             for (p, n, all_there) in imp.folders.clone() {
-                let rel = p.strip_prefix(&source).ok().map(|r| r.display().to_string()).filter(|r| !r.is_empty()).unwrap_or_else(|| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
-                let mut on = imp.folders_on.get(&p).copied().unwrap_or(false);
-                ui.horizontal(|ui| {
-                    if ui.checkbox(&mut on, rel).changed() {
-                        imp.folders_on.insert(p.clone(), on);
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(egui::RichText::new(dialog::count(n, crate::tr("Foto"), crate::tr("Fotos"))).color(lr::TEXT_DIM));
-                        if all_there {
-                            ui.label(egui::RichText::new(crate::tr("schon in der Bibliothek")).color(Color32::from_rgb(0x8f, 0xc0, 0x8a)));
-                        }
-                    });
-                });
+                let focused = imp.folder_focus.as_ref() == Some(&p);
+                let on = imp.folders_on.get(&p).copied().unwrap_or(false);
+                let (rect, row) = ui.allocate_exact_size(egui::vec2(ui.available_width(), FOLDER_ROW_H), egui::Sense::click());
+                let check = egui::Rect::from_min_size(rect.left_center() + egui::vec2(6.0, -7.5), egui::vec2(15.0, 15.0));
+                let check_r = ui.interact(check.expand(3.0), ui.scope_id().with(("imp-ordner-haken", &p)), egui::Sense::click());
+                let painter = ui.painter();
+                if focused {
+                    painter.rect_filled(rect, 0.0, Color32::from_gray(0x3a));
+                } else if row.hovered() {
+                    painter.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+                }
+                // check (light, not gold: gold is the main button only)
+                painter.rect_stroke(check, 0.0, egui::Stroke::new(1.0, Color32::from_gray(if check_r.hovered() { 0xe0 } else { 0xb0 })), egui::StrokeKind::Inside);
+                if on {
+                    painter.rect_filled(check.shrink(3.5), 0.0, Color32::from_gray(0xe8));
+                }
+                let font = egui::TextStyle::Body.resolve(ui.style());
+                let count = painter.layout_no_wrap(dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")), font.clone(), lr::TEXT_DIM);
+                let mut right = rect.right() - 8.0 - count.size().x;
+                painter.galley(egui::pos2(right, rect.center().y - count.size().y / 2.0), count, lr::TEXT_DIM);
+                if all_there {
+                    let g = painter.layout_no_wrap(crate::tr("schon in der Bibliothek").to_string(), font.clone(), Color32::from_rgb(0x8f, 0xc0, 0x8a));
+                    right -= g.size().x + 10.0;
+                    painter.galley(egui::pos2(right, rect.center().y - g.size().y / 2.0), g, Color32::from_rgb(0x8f, 0xc0, 0x8a));
+                }
+                let color = if focused || row.hovered() { Color32::WHITE } else { lr::TEXT };
+                let name = painter.layout_no_wrap(rel_name(&p), font, color);
+                let clip = egui::Rect::from_min_max(egui::pos2(check.right() + 8.0, rect.top()), egui::pos2(right - 10.0, rect.bottom()));
+                painter.with_clip_rect(clip).galley(egui::pos2(clip.left(), rect.center().y - name.size().y / 2.0), name, color);
+                if check_r.clicked() {
+                    imp.folders_on.insert(p.clone(), !on);
+                } else if row.clicked() {
+                    imp.folder_focus = Some(p.clone());
+                }
+                if focused && moved {
+                    ui.scroll_to_rect(rect, None);
+                }
             }
         });
     });
-    ui.add_space(6.0);
+    ui.add_space(4.0);
+    peek(ui, imp, width, peek_h, &rel_name);
+    ui.add_space(4.0);
     if imp.source_in_library {
         small(ui, crate::tr("liegt in einem Ordner der Bibliothek"), lr::TEXT_DIM);
     } else if imp.source.is_some() {
         small(ui, crate::tr("Neuer Ordner in der Bibliothek:"), lr::TEXT_DIM);
         small(ui, &source.display().to_string(), lr::TEXT);
+    }
+}
+
+/// Photos of the folder chosen in the list, as thumbnails (only the cells in view are read; the import window's
+/// thumbnails, so the import later takes them over). A fixed area: its place and size never change.
+fn peek(ui: &mut egui::Ui, imp: &mut Import, width: f32, height: f32, rel_name: &dyn Fn(&Path) -> String) {
+    let folder = imp.folder_focus.clone();
+    let cells = folder.as_deref().map(|f| cells_in_folder(imp, f)).unwrap_or_default();
+    // head line: which folder, how many photos (one fixed line)
+    ui.allocate_ui_with_layout(egui::vec2(width, 18.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        let t = match &folder {
+            Some(f) => crate::trf!("Inhalt von „{a}“ · {b}", a = rel_name(f), b = dialog::count(cells.len(), crate::tr("Foto"), crate::tr("Fotos"))),
+            None => String::new(),
+        };
+        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate());
+    });
+    let mut wanted: Vec<(PathBuf, String)> = Vec::new();
+    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
+        let (w, h) = (width - 8.0, height - 8.0);
+        ui.set_min_size(egui::vec2(w, h));
+        ui.set_max_width(w);
+        if cells.is_empty() {
+            ui.centered_and_justified(|ui| {
+                let t = if imp.scanning { crate::tr("liest die Fotos …") } else if imp.folders.is_empty() { "" } else { crate::tr("Klicke auf einen Ordner, um seine Fotos zu sehen.") };
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+            });
+            return;
+        }
+        let columns = ((w - 10.0) / PEEK_CELL).floor().max(1.0) as usize;
+        let cell_w = ((w - 10.0) / columns as f32).floor();
+        let cell_h = (cell_w * 0.9).round();
+        let rows = cells.len().div_ceil(columns);
+        let on = folder.as_ref().is_some_and(|f| imp.folders_on.get(f).copied().unwrap_or(false));
+        // a new folder starts at the top
+        let id = ui.scope_id().with(("imp-ordner-inhalt", folder.as_ref()));
+        egui::ScrollArea::vertical().id_salt(id).auto_shrink([false, false]).max_height(h).show_viewport(ui, |ui, viewport| {
+            ui.set_height(rows as f32 * cell_h + 4.0);
+            let origin = ui.min_rect().min;
+            let first = ((viewport.min.y / cell_h).floor().max(0.0)) as usize;
+            let last = ((viewport.max.y / cell_h).ceil() as usize).min(rows);
+            for r in first..last {
+                for c in 0..columns {
+                    let Some(&ci) = cells.get(r * columns + c) else { break };
+                    let rect = egui::Rect::from_min_size(origin + egui::vec2(c as f32 * cell_w, r as f32 * cell_h), egui::vec2(cell_w, cell_h));
+                    wanted.push(peek_cell(ui, imp, ci, rect, on));
+                }
+            }
+        });
+    });
+    // the helpers take the newest request first: requested from the bottom up, the top left cell comes first
+    for (p, f) in wanted.iter().rev() {
+        imp.thumbs.request(p, f);
+    }
+}
+
+/// One preview cell: thumbnail and name; photos already in the library (or of an unchecked folder) dimmed.
+fn peek_cell(ui: &egui::Ui, imp: &Import, ci: usize, rect: egui::Rect, folder_on: bool) -> (PathBuf, String) {
+    let c = &imp.cells[ci];
+    let first = grid::picture_of(imp, c);
+    let (path, format) = (imp.cand[first].path.clone(), imp.cand[first].format.clone());
+    let there = imp.cell_duplicate(c);
+    let p = ui.painter();
+    let inner = rect.shrink(3.0);
+    p.rect_filled(inner, 0.0, Color32::from_gray(0x1a));
+    let image = egui::Rect::from_min_size(inner.min + egui::vec2(4.0, 4.0), egui::vec2(inner.width() - 8.0, inner.height() - 22.0));
+    match imp.thumbs.tex.get(&path) {
+        Some(t) => {
+            let sz = t.size_vec2();
+            let f = (image.width() / sz.x).min(image.height() / sz.y);
+            let tint = if there || !folder_on { Color32::from_gray(120) } else { Color32::WHITE };
+            p.image(t.id(), egui::Rect::from_center_size(image.center(), sz * f), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
+        }
+        None => {
+            p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.0), Color32::from_gray(0x82));
+        }
+    }
+    let color = if there { lr::TEXT_DIM } else { lr::TEXT };
+    let name = p.layout_no_wrap(grid::cell_name(imp, c), egui::FontId::proportional(10.0), color);
+    let clip = egui::Rect::from_min_max(egui::pos2(inner.left() + 4.0, inner.bottom() - 17.0), egui::pos2(inner.right() - 4.0, inner.bottom()));
+    p.with_clip_rect(clip).galley(egui::pos2(inner.left() + 5.0, inner.bottom() - 15.0), name, color);
+    (path, format)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ↑/↓ walk the folder list and stop at its ends; without a chosen folder the first one is taken.
+    #[test]
+    fn step_folder_walks_and_stops_at_the_ends() {
+        let f: Vec<PathBuf> = ["/a", "/a/b", "/c"].iter().map(PathBuf::from).collect();
+        assert_eq!(step_folder(&f, None, true), Some(PathBuf::from("/a")));
+        assert_eq!(step_folder(&f, Some(Path::new("/a")), true), Some(PathBuf::from("/a/b")));
+        assert_eq!(step_folder(&f, Some(Path::new("/c")), true), Some(PathBuf::from("/c")));
+        assert_eq!(step_folder(&f, Some(Path::new("/a/b")), false), Some(PathBuf::from("/a")));
+        assert_eq!(step_folder(&f, Some(Path::new("/a")), false), Some(PathBuf::from("/a")));
+        assert_eq!(step_folder(&f, Some(Path::new("/gone")), false), Some(PathBuf::from("/a")));
+        assert_eq!(step_folder(&[], None, true), None);
     }
 }

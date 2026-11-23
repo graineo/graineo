@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS file (
     width        INTEGER,
     height       INTEGER,
     orientation  INTEGER,                -- EXIF 1–8
-    status       INTEGER NOT NULL DEFAULT 0, -- 0 present, 1 missing, 2 volume missing, 4 deleted/hidden in Apple Photos (not shown)
+    status       INTEGER NOT NULL DEFAULT 0, -- 0 present, 1 missing, 2 volume missing, 3 virtual (merged photo, `crate::merge`), 4 deleted/hidden in Apple Photos (not shown)
     sidecars     TEXT,                   -- Lightroom sidecarExtensions, e.g. 'JPG,xmp'
     lr_id        INTEGER UNIQUE,
     lens         TEXT,
@@ -368,6 +368,18 @@ CREATE TABLE IF NOT EXISTS stack_day_state (
     fingerprint INTEGER NOT NULL,
     algo        INTEGER NOT NULL
 ) WITHOUT ROWID;
+-- merged photos (HDR from an exposure bracket; `crate::merge`; added without a version step: older versions ignore the
+-- table). The result is a `file` row without a file on disk (status 3, pixels in the cache), its sources stay normal
+-- photos and are never changed
+CREATE TABLE IF NOT EXISTS merge (
+    file     INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE, -- the result
+    kind     TEXT NOT NULL,              -- 'hdr'
+    sources  TEXT NOT NULL,              -- JSON: [{"file", "path", "size", "mtime"}] in source order
+    settings TEXT NOT NULL,              -- JSON: merge settings (reference, align)
+    algo     INTEGER NOT NULL,           -- version of the algorithm that computed the result
+    state    TEXT NOT NULL,              -- 'virtual' (no file on disk)
+    created  INTEGER NOT NULL
+);
 -- per-file quality hints for reviewing (regenerable cache)
 CREATE TABLE IF NOT EXISTS image_quality (
     file        INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE,
@@ -1156,16 +1168,28 @@ impl Db {
         crate::collection_order::find_or_create_set(&self.conn, name)
     }
 
+    /// A write transaction that takes the write lock at once (rolled back when dropped without a commit): several
+    /// changes that belong together, all or nothing.
+    pub fn begin_write(&self) -> std::result::Result<rusqlite::Transaction<'_>, String> {
+        rusqlite::Transaction::new_unchecked(&self.conn, rusqlite::TransactionBehavior::Immediate).map_err(|e| e.to_string())
+    }
+
     /// Append images to a plain collection (already contained ones stay). Returns: newly added.
     pub fn add_to_collection(&self, collection: i64, images: &[i64]) -> Result<usize> {
         let tx = self.conn.unchecked_transaction()?;
+        let n = Self::add_to_collection_in(&tx, collection, images)?;
+        tx.commit()?;
+        Ok(n)
+    }
+
+    /// [`Self::add_to_collection`] inside a transaction the caller holds (and commits).
+    pub fn add_to_collection_in(tx: &Connection, collection: i64, images: &[i64]) -> Result<usize> {
         let mut pos: f64 = tx.query_row("SELECT coalesce(max(position), 0) FROM collection_image WHERE collection=?1", [collection], |r| r.get(0))?;
         let mut n = 0;
         for &b in images {
             pos += 1.0;
             n += tx.execute("INSERT OR IGNORE INTO collection_image(collection, image, position) VALUES(?1, ?2, ?3)", params![collection, b, pos])?;
         }
-        tx.commit()?;
         Ok(n)
     }
 

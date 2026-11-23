@@ -1303,7 +1303,7 @@ pub(crate) mod tests {
         for p in files {
             let name = p.file_name().unwrap().to_string_lossy().to_string();
             let format = crate::format_from_extension(&name).unwrap_or("?");
-            if format == "X3F" || format == "VIDEO" {
+            if format == "X3F" || format == "X3I" || format == "VIDEO" {
                 continue;
             }
             let mac = crate::imageio::properties(&p);

@@ -164,12 +164,12 @@ pub fn run(args: &[String]) -> Result<()> {
                             0 => develop::resize::lanczos3_image_crate(i, size),
                             1 => {
                                 pools::set_gpu_allowed(false);
-                                develop::export::apply_output_size(i, size)
+                                develop::export::apply_output_size(i, size, Default::default())
                             }
                             _ => {
                                 pools::set_gpu_allowed(true);
                                 unsafe { std::env::set_var("GRAINEO_RESIZE_GPU", "1") };
-                                let o = develop::export::apply_output_size(i, size);
+                                let o = develop::export::apply_output_size(i, size, Default::default());
                                 unsafe { std::env::remove_var("GRAINEO_RESIZE_GPU") };
                                 o
                             }

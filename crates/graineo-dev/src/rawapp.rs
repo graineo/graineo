@@ -141,7 +141,17 @@ pub fn run(file: &str, args: &[String]) -> Result<()> {
     }
     let (qa, wa, ha) = (doc.orientation, img.width, img.height);
     let img = develop::geometry::apply(img, &s, doc.orientation);
-    develop::export::write_jpeg(&img, Path::new(out), 92)?;
+    if out.ends_with(".ppm") {
+        // 16-bit binary PPM (lossless, trivial to read for pixel comparisons)
+        let mut b = format!("P6\n{} {}\n65535\n", img.width, img.height).into_bytes();
+        b.extend(img.data.iter().flat_map(|v| v.to_be_bytes()));
+        std::fs::write(out, b)?;
+    } else if out.ends_with(".png") {
+        // 16-bit PNG (lossless, for pixel comparisons)
+        image::ImageBuffer::<image::Rgb<u16>, _>::from_raw(img.width as u32, img.height as u32, img.data.clone()).context("image")?.save(out)?;
+    } else {
+        develop::export::write_jpeg(&img, Path::new(out), 92)?;
+    }
     println!(
         "{} · {}×{} (full {}×{}, orientation {qa}) · open {:.0?} · noise/lens preview {:.0?} · sliders {:.0}–{:.0} ms{}",
         raw::camera_display(&doc.info.maker, &doc.info.model),

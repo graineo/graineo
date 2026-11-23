@@ -42,6 +42,10 @@ pub struct ShotInfo {
     /// focal range (min, max) and aperture range (min, max) of the lens
     pub lens_range: Option<[f64; 4]>,
     pub lens_model: Option<String>,
+    /// camera maker (IFD0 Make); `None`: "SIGMA"
+    pub maker: Option<String>,
+    /// EXIF orientation of the samples (1 … 8); `None`: 1
+    pub orientation: Option<u16>,
 }
 
 impl ShotInfo {
@@ -83,6 +87,8 @@ impl ShotInfo {
             exposure_bias: num("EXPCOMP"),
             lens_range,
             lens_model,
+            maker: None,
+            orientation: None,
         }
     }
 
@@ -125,7 +131,9 @@ impl ShotInfo {
         if let Some([f0, f1, a0, a1]) = self.lens_range {
             t.push((42034, Rational(vec![rat(f0), rat(f1), rat(a0), rat(a1)]))); // LensSpecification
         }
-        t.push((42035, Ascii("SIGMA".into()))); // LensMake
+        if self.maker.is_none() {
+            t.push((42035, Ascii("SIGMA".into()))); // LensMake
+        }
         if let Some(l) = &self.lens_model {
             t.push((42036, Ascii(l.clone()))); // LensModel
         }
@@ -246,11 +254,16 @@ struct Encoded {
 /// 16 bit without clipping: scale by the peak (≥ 1) and lift by a black level that keeps the
 /// most negative sample; 32-bit float: unchanged, Deflate with floating-point predictor.
 fn encode(data: &[f32], width: usize, spp: usize, float: bool) -> Encoded {
+    encode_with(data, width, spp, float, tiffw::Compression::Deflate)
+}
+
+/// [`encode`] with the compression of the floating-point samples (16-bit samples are never compressed).
+fn encode_with(data: &[f32], width: usize, spp: usize, float: bool, compression: tiffw::Compression) -> Encoded {
     use rayon::prelude::*;
     let n = |v: u32| vec![v; spp];
     if float {
         let bytes: Vec<u8> = data.par_iter().flat_map_iter(|&v| (if v.is_finite() { v } else { 0.0 }).to_le_bytes()).collect();
-        let (strips, mut tags) = tiffw::strips(&bytes, width, spp, tiffw::Samples::F32, tiffw::Compression::Deflate);
+        let (strips, mut tags) = tiffw::strips(&bytes, width, spp, tiffw::Samples::F32, compression);
         tags.push((258, Short(vec![32; spp])));
         tags.push((339, Short(vec![3; spp]))); // SampleFormat IEEE float
         // BlackLevel 0; WhiteLevel 1.0 (the default for floating point, written explicitly because some
@@ -345,9 +358,9 @@ fn base_tags(width: usize, height: usize, spp: usize, unique: String, meta: &Dng
         (256, Long(vec![width as u32])),
         (257, Long(vec![height as u32])),
         (262, Short(vec![34892])), // LinearRaw
-        (271, Ascii("SIGMA".into())),
+        (271, Ascii(meta.shot.maker.clone().unwrap_or_else(|| "SIGMA".into()))),
         (272, Ascii(meta.shot.model.clone())),
-        (274, Short(vec![1])),
+        (274, Short(vec![meta.shot.orientation.unwrap_or(1)])),
         (277, Short(vec![spp as u16])),
         (284, Short(vec![1])),
         (305, Ascii(crate::export::SOFTWARE.into())),
@@ -459,4 +472,39 @@ mod tests {
         assert_eq!(back, file);
         assert_eq!(&d[off[blocks]..], &[0u8; 12]);
     }
+}
+
+/// Colour description of a camera DNG (any maker): the camera matrices as the raw decoder read them.
+#[derive(Clone, Debug)]
+pub struct CameraColor {
+    /// ColorMatrix (XYZ D50 → camera, row by row) and CalibrationIlluminant (EXIF LightSource code), warmest first;
+    /// one or two entries
+    pub matrices: Vec<([f64; 9], u16)>,
+    /// AsShotNeutral: the camera values of a neutral under the shot's light (green = 1)
+    pub neutral: [f64; 3],
+    /// BaselineExposure in EV
+    pub baseline_exposure: f64,
+}
+
+/// Linear DNG (LinearRaw, three channels, camera space, unclipped) of any camera: the samples are the camera
+/// values **without** white balance (the balance is `neutral`), 32-bit floating point when `meta.options.float`
+/// (values above 1 – the highlight headroom of a merged photo – stay), otherwise 16 bit scaled down by the peak.
+#[allow(clippy::too_many_arguments)]
+pub fn write_camera_dng(data: &[f32], width: usize, height: usize, color: &CameraColor, unique: String, meta: DngMeta, path: &Path) -> std::io::Result<()> {
+    if data.len() != width * height * 3 {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "DNG: ungültige Bildmaße"));
+    }
+    let float = meta.options.float;
+    // uncompressed strips: the decoder of graineo (and others) reads floating-point samples only that way (Deflate
+    // only in tiles)
+    let enc = encode_with(data, width, 3, float, tiffw::Compression::None);
+    let mut tags = base_tags(width, height, 3, unique, &meta, float)?;
+    let m = |x: &[f64; 9]| SRational(x.iter().map(|&v| srat(v)).collect());
+    for (i, (mat, ill)) in color.matrices.iter().take(2).enumerate() {
+        tags.push((if i == 0 { 50721 } else { 50722 }, m(mat))); // ColorMatrix1/2
+        tags.push((if i == 0 { 50778 } else { 50779 }, Short(vec![*ill]))); // CalibrationIlluminant1/2
+    }
+    tags.push((50728, Rational(color.neutral.iter().map(|&v| rat(v)).collect()))); // AsShotNeutral
+    tags.push((50730, SRational(vec![srat(color.baseline_exposure + enc.extra_ev)]))); // BaselineExposure
+    finish(tags, enc, meta, path)
 }

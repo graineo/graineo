@@ -463,3 +463,12 @@ leaves the step out):
   largest layer is used as before, because the colour there is only estimated. `desaturate` now receives the clip
   bits. Smoothstep width, the ¾ clip mask, the target (bottom layer) and the filling step are unchanged. Merrill only;
   results change only in bright coloured highlights.
+
+
+## Merrill highlights: hook for an application reconstruction (November 2026)
+
+- 2026-11-23 (graineo): `float_front.rs` gains `HighlightInput`, `HighlightHook`, `set_highlight_hook` (re-exported by
+  `x3f-sys` and `x3f-core`). `float_front/propagate.rs` (`restore_own`): after cleaning the saturation map, a hook
+  registered by the application may handle the highlights; when it returns `true`, the own steps 2–4 (filling,
+  desaturation) are skipped. Without a registered hook, or when it returns `false`, every result is bit-identical to
+  before.

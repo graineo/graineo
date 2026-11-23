@@ -150,8 +150,8 @@ pub struct Image {
     pub gains: [f32; 3],
     /// capture ISO
     pub iso: f32,
-    /// the grid was binned 2 × 2 (noise model / 4)
-    pub binned: bool,
+    /// the grid was binned: the noise variance of a value is the model's divided by this (1 = not binned)
+    pub noise_div: f32,
     /// white of the raw range in the units of the stage (2^bits − black)
     pub white: f32,
 }
@@ -200,7 +200,7 @@ pub fn denoise(img: &mut [Px], w: usize, h: usize, image: &Image, model: &Model,
     if w < 16 || h < 16 {
         return;
     }
-    let model = if image.binned { model.averaged(4.0) } else { *model };
+    let model = if image.noise_div != 1.0 { model.averaged(image.noise_div) } else { *model };
     let g = image.gains;
     let high = image.iso >= HIGH_ISO;
     let orig: Vec<Px> = img.to_vec();
@@ -501,16 +501,39 @@ fn mix_low(out: &mut [Px], full: &[Px], half: &[Px], orig: &[Px], w: usize, h: u
 /// with weight `exp(−Δ²/s²)`, `s² = s₀ + s₁·v` of the centre value `v` ([`BRIGHTNESS_SCATTER`]), blended with the
 /// unfiltered layer by [`brightness_fraction`].
 pub fn brightness_smooth(top: &mut [f32], w: usize, h: usize, iso: f32) {
-    let fraction = brightness_fraction(iso);
+    brightness_smooth_with(top, w, h, 2, BRIGHTNESS_SCATTER, brightness_fraction(iso), 0.0);
+}
+
+/// [`brightness_smooth`] with window radius `r`, range spread `(s₀, s₁)` and share `fraction` of the filtered layer.
+/// `guide`: share of the 3 × 3 mean in the reference the range weights compare the neighbours with (0 = the centre
+/// value itself); with a share, a centre far outside the noise of its neighbours is smoothed as well (cross range
+/// filter with a partly pre-smoothed guide).
+#[allow(clippy::too_many_arguments)]
+pub fn brightness_smooth_with(top: &mut [f32], w: usize, h: usize, r: usize, scatter: (f32, f32), fraction: f32, guide: f32) {
     if fraction <= 0.0 || w == 0 || h == 0 {
         return;
     }
-    const R: isize = 2;
-    let (s0, s1) = BRIGHTNESS_SCATTER;
+    let fraction = fraction.min(1.0);
+    #[allow(non_snake_case)]
+    let R = r as isize;
+    let (s0, s1) = scatter;
     let src = top.to_vec();
+    let at = |x: isize, y: isize| src[(y.clamp(0, h as isize - 1) as usize) * w + x.clamp(0, w as isize - 1) as usize];
     top.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for (x, o) in row.iter_mut().enumerate() {
-            let c = src[y * w + x];
+            let c0 = src[y * w + x];
+            let c = if guide > 0.0 {
+                let (xi, yi) = (x as isize, y as isize);
+                let mut m = 0.0;
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        m += at(xi + dx, yi + dy);
+                    }
+                }
+                c0 + guide * (m / 9.0 - c0)
+            } else {
+                c0
+            };
             let inv = 1.0 / (s0 + s1 * c.max(0.0));
             let (mut s, mut n) = (0f32, 0f32);
             for dy in -R..=R {
@@ -522,7 +545,7 @@ pub fn brightness_smooth(top: &mut [f32], w: usize, h: usize, iso: f32) {
                     n += wt;
                 }
             }
-            *o = fraction * (s / n) + (1.0 - fraction) * c;
+            *o = fraction * (s / n) + (1.0 - fraction) * c0;
         }
     });
 }
@@ -561,7 +584,7 @@ mod tests {
         let before: Vec<Px> = (0..w * h).map(|_| [300.0 + 40.0 * rnd(), 280.0 + 30.0 * rnd(), 260.0 + 10.0 * rnd()]).collect();
         for iso in [100.0, 6400.0] {
             let mut im = before.clone();
-            let image = Image { gains: [1.2, 1.0, 0.9], iso, binned: false, white: 14336.0 };
+            let image = Image { gains: [1.2, 1.0, 0.9], iso, noise_div: 1.0, white: 14336.0 };
             denoise(&mut im, w, h, &image, &MODEL, &PARAMETER);
             let mean = |v: &[Px], c: usize| v.iter().map(|p| p[c] as f64).sum::<f64>() / v.len() as f64;
             let sd = |v: &[Px], c: usize| {

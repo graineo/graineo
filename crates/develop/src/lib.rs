@@ -36,6 +36,8 @@ pub mod exr;
 pub mod filllight;
 pub mod film;
 pub mod grain_detail;
+pub mod highlight_rebuild;
+pub mod merrill_highlights;
 pub mod geometry;
 pub mod inspect;
 pub mod jxl;
@@ -52,6 +54,9 @@ pub mod quattro_color;
 pub mod quattro_nr;
 pub mod quattro_noise;
 pub mod quattro_grid;
+pub mod quattro_hi;
+pub mod quattro_lce;
+pub mod quattro_speckle;
 pub mod png16;
 pub mod profile;
 pub mod quattro;
@@ -60,6 +65,7 @@ pub mod resize;
 mod resize_gpu;
 pub mod session;
 pub mod settings;
+pub mod sfd;
 pub mod sharpness;
 pub mod sigma_out;
 pub mod spp;
@@ -78,7 +84,7 @@ pub use x3f_core::merrill_new;
 pub use curve::ToneCurve;
 use matrix::Mat3;
 pub use session::Session;
-pub use settings::{Binning, NoiseBrake, Settings, SppKey, View, NR_OFF};
+pub use settings::{Binning, HighlightSliders, NoiseBrake, Settings, SppKey, View, NR_OFF};
 
 /// Linear camera image: three planes, black = 0, sensor saturation = 1.
 #[derive(Clone)]
@@ -228,6 +234,28 @@ impl Rgb16 {
     pub fn to_rgb8(&self) -> Vec<u8> {
         self.data.par_iter().map(|&v| ((v as u32 * 255 + 32767) / 65535) as u8).collect()
     }
+
+    /// [`Self::to_rgb8`] with triangular dither of ±1 step (fixed pattern from the pixel position): smooth, almost
+    /// noise-free gradients (a sky merged from several exposures) show no contour steps on an 8-bit display. The mean
+    /// stays the same.
+    pub fn to_rgb8_dithered(&self) -> Vec<u8> {
+        self.data
+            .par_iter()
+            .enumerate()
+            .map(|(i, &v)| {
+                let hash = |mut x: u32| {
+                    x ^= x >> 16;
+                    x = x.wrapping_mul(0x7feb_352d);
+                    x ^= x >> 15;
+                    x = x.wrapping_mul(0x846c_a68b);
+                    x ^ (x >> 16)
+                };
+                let a = hash(i as u32 * 2 + 1) as f32 / u32::MAX as f32;
+                let b = hash(i as u32 * 2 + 2) as f32 / u32::MAX as f32;
+                (v as f32 * 255.0 / 65535.0 + a - b + 0.5).floor().clamp(0.0, 255.0) as u8
+            })
+            .collect()
+    }
 }
 
 fn srgb_encode(x: f32) -> f32 {
@@ -314,7 +342,10 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
     // Layer mixer: our own layer→RGB matrix replaces Sigma's colour matrix here, ColorDQ
     // is dropped (see [`layers`]); otherwise Sigma's path unchanged.
     // Sigma-Analog: black-and-white film exposed from the layers (see [`analog`]); takes precedence
-    let layer_m = match analog::layer_matrix(cal, s).filter(|_| matches!(mode_out, Out::Scene(_))) {
+    let analog_l = analog::layer_matrix(cal, s).filter(|_| matches!(mode_out, Out::Scene(_)));
+    // brightness reference of the exposure floor (see [`analog::exposure_floor`])
+    let floor_ref = analog_l.map(|_| analog::floor_reference(cal, s).to_f32());
+    let layer_m = match analog_l {
         Some(l) => Some(analog::cam_to_input(cal, s, &l)),
         None => layers::active(s).map(|l| layers::cam_to_rgb(cal, s, l)),
     };
@@ -331,6 +362,9 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
     let presence = s.saturation != 0.0 || s.vibrance != 0.0;
     // SPP fringe correction (hue band desaturation, before colour adjustments)
     let spp_fringe = s.spp_defringe.prepare();
+    // Merrill (data straight from the sensor, not prepared): layers at their clip level glide to neutral
+    // ([`glide_clipped`]); Quattro and Classic handle their highlights while being prepared
+    let clip_glide = !cal.is_prepared() && layer_m.is_none() && analog_l.is_none();
 
     let (mut data, mut scene_data) = out_buffers(lin.width * lin.height * 3, mode_out.float_buffer());
     // Dehaze on the linear sensor values (same as in [`render_counts`])
@@ -371,17 +405,23 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
                 (Some(b), Some(bp)) => b.apply(p, bp, f),
                 _ => [p[0] * f, p[1] * f, p[2] * f],
             };
-            let v = [q[0] * gain[0], q[1] * gain[1], q[2] * gain[2]];
+            let mut v = [q[0] * gain[0], q[1] * gain[1], q[2] * gain[2]];
             if s.monochrome {
                 let l = mono_luma(v, mix, iso, mono_max);
                 out.mono(x, l, &tone, gamma);
                 continue;
+            }
+            if clip_glide {
+                v = glide_clipped([src[x * 3], src[x * 3 + 1], src[x * 3 + 2]], v);
             }
             let mut rgb = [
                 m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
                 m[3] * v[0] + m[4] * v[1] + m[5] * v[2],
                 m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
             ];
+            if let Some(r) = &floor_ref {
+                rgb = [analog::exposure_floor(rgb[0], r[0] * v[0] + r[1] * v[1] + r[2] * v[2]); 3];
+            }
             if let Some(dq) = dq {
                 rgb = dq.apply(rgb);
             }
@@ -499,6 +539,15 @@ fn render_counts_impl(
     };
     let (max_count, mono_max) = (cal.max_count(), if cal.is_prepared() { 65535.0 } else { 32767.0 });
     let gamma = gamma_lut();
+    // Quattro: bright colours beyond the output range are brought into it by desaturating towards white instead of
+    // clipping channels (`highlight_gamut`); the white is the count where the tone curve reaches its top
+    // With the highlight rebuild on (`highlight_rebuild`), the channels clip as in the maker's output: the rebuilt
+    // surfaces are brighter than white in a colour, and the roll-off towards white took exactly that colour (measured
+    // on a blown cyan label against the maker's TIFF: ΔE00 where it stays coloured 12.4 → 3.2); `GRAINEO_QUATTRO_GAMUT=1`
+    // keeps the roll-off
+    let gamut_white = (cal.is_quattro() && !s.monochrome && !matches!(mode_out, Out::Scene(_)) && std::env::var("GRAINEO_QUATTRO_GAMUT").map_or_else(|_| !highlight_rebuild::enabled_quattro(), |v| v != "0"))
+        .then(|| tone_white(&tone, max_count))
+        .filter(|w| *w > 0.0);
     // Monochrome: Sigma multiplies the luminance by the ISO factor (CaptureISO/SensorISO); in the colour path it is part of the matrix
     let iso = cal.iso_gain as f32;
     let inv = mode_matrix.inverse().unwrap_or(Mat3::IDENTITY);
@@ -511,7 +560,10 @@ fn render_counts_impl(
     // Layer mixer: counts back to camera space as for monochrome (inverse of the
     // colour mode matrix, white balance ratio), then our own layer→RGB matrix instead of
     // Sigma's matrix, all in one matrix in place of `remap` (see [`layers`]).
-    let remap = match (analog::layer_matrix(cal, s).filter(|_| matches!(mode_out, Out::Scene(_))), layers::active(s)) {
+    let analog_l = analog::layer_matrix(cal, s).filter(|_| matches!(mode_out, Out::Scene(_)));
+    // brightness reference of the exposure floor (see [`analog::exposure_floor`]), on the same input as `remap`
+    let floor_ref = analog_l.map(|_| analog::floor_reference(cal, s).mul(&Mat3::diag(ratio)).mul(&inv).to_f32());
+    let remap = match (analog_l, layers::active(s)) {
         (Some(l), _) => Some(analog::cam_to_input(cal, s, &l).mul(&Mat3::diag(ratio)).mul(&inv).to_f32()),
         (None, Some(l)) => Some(layers::cam_to_rgb(cal, s, l).mul(&Mat3::diag(ratio)).mul(&inv).to_f32()),
         (None, None) => remap,
@@ -653,11 +705,15 @@ fn render_counts_impl(
                 continue;
             }
             if let Some(m) = &remap {
+                let input = rgb;
                 rgb = [
                     m[0] * rgb[0] + m[1] * rgb[1] + m[2] * rgb[2],
                     m[3] * rgb[0] + m[4] * rgb[1] + m[5] * rgb[2],
                     m[6] * rgb[0] + m[7] * rgb[1] + m[8] * rgb[2],
                 ];
+                if let Some(r) = &floor_ref {
+                    rgb = [analog::exposure_floor(rgb[0], r[0] * input[0] + r[1] * input[1] + r[2] * input[2]); 3];
+                }
             }
             if let Some(fr) = &spp_fringe {
                 rgb = fr.apply(rgb);
@@ -684,6 +740,9 @@ fn render_counts_impl(
                     }
                 }
             }
+            if let Some(w) = gamut_white {
+                rgb = highlight_gamut(rgb, w);
+            }
             out.rgb(x, rgb, &tone, gamma, out_m.as_ref(), max_count);
         }
     });
@@ -702,6 +761,25 @@ fn hc_own_weight(levels: [f32; 3]) -> f32 {
     let i = 1.0 - (1.0 - u) * (1.0 - u);
     i * i
 }
+
+/// Quick pipeline, Merrill: a layer standing at the sensor's clip level carries no colour information any more (the
+/// top layer clips first; with its value too low the colour matrix turns bright foliage into flat full yellow without
+/// any drawing). Such a pixel glides towards the bottom layer, i.e. towards neutral, as the highlight stage of the exact
+/// pipeline does: weight = smoothstep of the brightest layer level `raw` (relative to sensor saturation) between
+/// [`CLIP_GLIDE_START`] and 1, applied to the white-balanced layers `v`. Pixels below the start are returned unchanged.
+#[inline]
+fn glide_clipped(raw: [f32; 3], v: [f32; 3]) -> [f32; 3] {
+    let hi = raw[0].max(raw[1]).max(raw[2]);
+    if hi <= CLIP_GLIDE_START {
+        return v;
+    }
+    let t = ((hi - CLIP_GLIDE_START) / (1.0 - CLIP_GLIDE_START)).min(1.0);
+    let w = t * t * (3.0 - 2.0 * t);
+    v.map(|c| c + w * (v[0] - c))
+}
+
+/// Start of [`glide_clipped`] (layer level relative to sensor saturation).
+const CLIP_GLIDE_START: f32 = 0.85;
 
 /// [`hc_own_weight`]: start and width of the ramp (levels relative to saturation).
 pub const HC_START: f32 = 0.61;
@@ -924,6 +1002,77 @@ impl RowOut<'_> {
     }
 }
 
+/// Smallest count at which the tone curve `tone` reaches its top value (output white), at most `max_count`.
+fn tone_white(tone: &[u16], max_count: f32) -> f32 {
+    let n = (max_count as usize + 1).min(tone.len());
+    let Some(&top) = tone[..n].iter().max() else {
+        return 0.0;
+    };
+    tone[..n].iter().position(|&t| t >= top).map_or(0.0, |i| i as f32)
+}
+
+/// [`highlight_gamut`]: chroma (relative to the largest that fits) from which it is compressed softly.
+const GAMUT_SOFT: f32 = 0.8;
+/// [`highlight_gamut`]: share of white from which the luminance of coloured pixels rolls off towards white.
+const GAMUT_SHOULDER: f32 = 0.9;
+/// From this share of the output white on, [`highlight_gamut`] starts.
+const GAMUT_KNEE: f32 = 0.8;
+
+/// Bright colours that leave the output range (a channel above `white` or below 0, linear RGB counts). Clipping
+/// each channel turns a bright saturated colour into a flat full tone (0/255/255) without any drawing. Instead the
+/// pixel is split into its luminance `y` and its chroma `rgb − y` (hue kept):
+/// - the target luminance follows `y` up to white; for coloured pixels it rolls off softly above [`GAMUT_SHOULDER`]
+///   · `white` towards white (never reaching it), so a colour brighter than white stays a light colour, distinct from
+///   white text on it, and still gets lighter the brighter it is;
+/// - the chroma is compressed softly from [`GAMUT_SOFT`] of the largest that fits on, and then only reduced as far as
+///   the target luminance needs to fit into the output range: the output brightens monotonically with the input
+///   (no plateau where different brightnesses map to one colour, no steps when the input varies slightly);
+/// - the chroma never exceeds that of the clipped pixel (max − min after clipping), so areas that clipping shows
+///   white stay white;
+/// - pixels inside the output range with moderate chroma and neutral pixels up to white are unchanged.
+/// The change fades in with smoothstep between [`GAMUT_KNEE`] · `white` and `white` of the largest channel; darker
+/// pixels are unchanged.
+#[inline]
+fn highlight_gamut(rgb: [f32; 3], white: f32) -> [f32; 3] {
+    let hi = rgb[0].max(rgb[1]).max(rgb[2]);
+    let knee = GAMUT_KNEE * white;
+    if hi <= knee {
+        return rgb;
+    }
+    let soft = |x: f32, a: f32| if x <= a { x } else { a + (1.0 - a) * (1.0 - (-(x - a) / (1.0 - a)).exp()) };
+    let y = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]).max(0.0);
+    let d = rgb.map(|v| v - y);
+    let (d_hi, d_lo) = (d[0].max(d[1]).max(d[2]).max(0.0), d[0].min(d[1]).min(d[2]).min(0.0));
+    let span = d_hi - d_lo;
+    // chroma relative to the largest that fits (1 = touches black and white at once)
+    let r = span / white;
+    if r <= GAMUT_SOFT && rgb.iter().all(|v| (0.0..=white).contains(v)) {
+        return rgb;
+    }
+    let mut k = if r <= GAMUT_SOFT { 1.0 } else { soft(r, GAMUT_SOFT) / r };
+    // target luminance: as is for neutral pixels, with a soft shoulder for coloured ones
+    let l = y / white;
+    let c = (r / 0.25).min(1.0);
+    let g = white * ((1.0 - c) * l.min(1.0) + c * soft(l, GAMUT_SHOULDER));
+    if d_hi > 0.0 {
+        k = k.min((white - g) / d_hi);
+    }
+    if d_lo < 0.0 {
+        k = k.min(g / -d_lo);
+    }
+    // never more colourful than the clipped pixel
+    let clipped = rgb.map(|v| v.clamp(0.0, white));
+    let spread_clipped = clipped[0].max(clipped[1]).max(clipped[2]) - clipped[0].min(clipped[1]).min(clipped[2]);
+    if k * span > spread_clipped {
+        k = spread_clipped / span.max(1e-6);
+    }
+    let k = k.max(0.0);
+    let fitted = d.map(|dc| g + k * dc);
+    let t = ((hi - knee) / (white - knee)).clamp(0.0, 1.0);
+    let t = t * t * (3.0 - 2.0 * t);
+    std::array::from_fn(|c| rgb[c] + t * (fitted[c] - rgb[c]))
+}
+
 /// Saturation (uniform) and vibrance (stronger for pale colours) in the linear
 /// output space, around the Rec. 709 luminance.
 #[inline]
@@ -978,6 +1127,10 @@ pub(crate) fn cached_tone_lut(row: &calib::ToneRow, s: &Settings, mode_contrast:
         row.scale.to_bits(), s.exposure.to_bits(), (s.contrast + mode_contrast).to_bits(), s.shadow.to_bits(),
         s.highlight.to_bits(), s.monochrome as u64, psat.to_bits(), quattro as u64,
     ];
+    if let Some(t) = row.bracket.or_else(sfd::bracket_tone).filter(|_| quattro && !s.monochrome) {
+        // merged bracket: its own tone curve (`sfd`)
+        return sfd::cached_lut(&t, s.exposure, s.contrast + mode_contrast, s.shadow, s.highlight);
+    }
     if let Some((_, lut)) = CACHE.lock().unwrap().iter().find(|(k, _)| *k == key) {
         return lut.clone();
     }
@@ -1092,4 +1245,108 @@ pub fn pick_white_balance(cal: &Calibration, s: &Settings, cam: [f64; 3]) -> Opt
     }
     // Green stays fixed so that brightness hardly changes
     Some(r.map(|v| (v / r[1]) as f32))
+}
+
+#[cfg(test)]
+mod gamut_tests {
+    use super::{highlight_gamut, tone_white};
+
+    const W: f32 = 50_000.0;
+
+    #[test]
+    fn dark_and_fitting_pixels_unchanged() {
+        assert_eq!(highlight_gamut([0.7 * W, 0.2 * W, -0.1 * W], W), [0.7 * W, 0.2 * W, -0.1 * W]);
+        assert_eq!(highlight_gamut([0.9 * W, 0.85 * W, 0.8 * W], W), [0.9 * W, 0.85 * W, 0.8 * W]);
+        // neutral beyond white stays neutral (clipped later as before)
+        let n = highlight_gamut([1.3 * W; 3], W);
+        assert!(n.iter().all(|v| (v - W).abs() < 1.0), "{n:?}");
+    }
+
+    #[test]
+    fn clipped_layer_glides_to_bottom_layer() {
+        let v = [5000.0, 7000.0, 3000.0];
+        // below the start: unchanged (bit for bit)
+        assert_eq!(super::glide_clipped([0.4, 0.85, 0.6], v), v);
+        // at the clip level: all layers at the bottom layer (neutral)
+        assert_eq!(super::glide_clipped([0.4, 0.8, 1.0], v), [5000.0; 3]);
+        // in between: soft and monotone
+        let a = super::glide_clipped([0.4, 0.8, 0.9], v);
+        let b = super::glide_clipped([0.4, 0.8, 0.95], v);
+        assert!(a[1] < v[1] && b[1] < a[1] && b[1] > 5000.0);
+        assert!(a[2] > v[2] && b[2] > a[2] && b[2] < 5000.0);
+        assert_eq!(a[0], 5000.0);
+    }
+
+    #[test]
+    fn bright_saturated_colour_fits_keeps_hue_and_stays_graded() {
+        // bright cyan beyond the output range (red below 0, green and blue above white)
+        let a = highlight_gamut([-0.3 * W, 1.1 * W, 1.6 * W], W);
+        let b = highlight_gamut([-0.3 * W, 1.0 * W, 1.45 * W], W);
+        for p in [a, b] {
+            assert!(p.iter().all(|v| (-1.0..=W + 1.0).contains(v)), "{p:?}");
+            // still cyan: red lowest, blue highest
+            assert!(p[0] < p[1] && p[1] < p[2], "{p:?}");
+        }
+        // different inputs stay different (no flat full tone)
+        assert!((a[0] - b[0]).abs() > 100.0 || (a[1] - b[1]).abs() > 100.0, "{a:?} {b:?}");
+        // far brighter than white: nearly white
+        let c = highlight_gamut([1.0 * W, 3.0 * W, 4.0 * W], W);
+        assert!(c.iter().all(|v| *v > 0.9 * W), "{c:?}");
+    }
+
+    #[test]
+    fn brighter_input_never_gives_a_darker_or_equal_flat_output() {
+        // a cyan and a light blue along increasing exposure: the output keeps getting lighter (no plateau, no steps)
+        for base in [[-0.15, 0.55, 0.8], [0.1, 0.6, 0.75], [0.9, 0.8, -0.05]] {
+            let mut last = -1.0f32;
+            for i in 0..40 {
+                let s = 1.0 + i as f32 * 0.05;
+                let o = highlight_gamut(base.map(|v| v * s * W), W).map(|v| v.clamp(0.0, W));
+                let sum = o[0] + o[1] + o[2];
+                assert!(sum >= last - 1.0, "{base:?} s {s}: {o:?}");
+                // until it is nearly white
+                if s >= 1.4 && s <= 2.4 && sum < 2.95 * W {
+                    assert!(sum > last + 50.0, "plateau at {base:?} s {s}: {o:?}");
+                }
+                last = sum;
+            }
+        }
+    }
+
+    #[test]
+    fn white_of_the_tone_curve() {
+        let tone: Vec<u16> = (0..1000u32).map(|i| (i * 100).min(60_000) as u16).collect();
+        assert_eq!(tone_white(&tone, 999.0), 600.0);
+    }
+}
+
+#[cfg(test)]
+mod dither_tests {
+    use super::Rgb16;
+
+    /// A very flat gradient: without dither long plateaus of one code, with dither short runs and the same mean.
+    #[test]
+    fn dither_breaks_plateaus_and_keeps_the_mean() {
+        let w = 4096;
+        let data: Vec<u16> = (0..w).flat_map(|x| [(40000 + x * 256 / w) as u16; 3]).collect();
+        let img = Rgb16 { width: w, height: 1, data };
+        let runs = |v: &[u8]| {
+            let g: Vec<u8> = v.iter().step_by(3).copied().collect();
+            let mut n = 1usize;
+            let mut cnt = 1usize;
+            for k in 1..g.len() {
+                if g[k] != g[k - 1] {
+                    cnt += 1;
+                }
+                n += 1;
+            }
+            n as f64 / cnt as f64
+        };
+        let plain = img.to_rgb8();
+        let dith = img.to_rgb8_dithered();
+        assert!(runs(&plain) > 500.0, "{}", runs(&plain));
+        assert!(runs(&dith) < 5.0, "{}", runs(&dith));
+        let mean = |v: &[u8]| v.iter().map(|x| *x as f64).sum::<f64>() / v.len() as f64;
+        assert!((mean(&plain) - mean(&dith)).abs() < 0.05);
+    }
 }

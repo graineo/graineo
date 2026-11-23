@@ -56,7 +56,7 @@ fn row(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
 impl crate::App {
     /// The photos of `items` the export writes (the same choice as `export_after_probe`).
     pub(crate) fn export_written(&self, items: &[usize]) -> Vec<usize> {
-        items.iter().copied().filter(|&i| self.entries[i].state == 0 && (self.export_original || crate::image_kind::of(&self.entries[i].path).editable())).collect()
+        items.iter().copied().filter(|&i| (self.entries[i].state == 0 || (!self.export_original && crate::developable_state(self.entries[i].state))) && (self.export_original || crate::image_kind::of(&self.entries[i].path).editable())).collect()
     }
 
     /// The rules as they apply: originals are never overwritten (verified copies), "overwrite" adds a number there.
@@ -466,6 +466,7 @@ impl crate::App {
                 t.color_space = Some(self.export_color_space);
                 t.limit_size = Some(self.export_limit_size);
                 t.size = serde_json::to_value(self.export_size).ok();
+                t.resize = Some(self.export_resize.key().to_string());
                 match templates::save(&dir, &t) {
                     Ok(_) => {
                         self.export_names_ui.templates = None;
@@ -512,6 +513,10 @@ impl crate::App {
             if let Ok(v) = serde_json::to_value(s) {
                 library::settings::set("exportSize", v);
             }
+        }
+        if let Some(f) = t.resize_filter() {
+            self.export_resize = f;
+            library::settings::set("exportResize", serde_json::Value::String(f.key().into()));
         }
         self.export_names_ui.chosen = Some(t.name.clone());
         self.export_names_ui.message.clear();

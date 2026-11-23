@@ -370,14 +370,10 @@ Profildateien werden weder kopiert, verschoben noch gelöscht. Abgeleitete alte 
 Adobe-Ordner automatisch durchsuchen	Adobeフォルダを自動検索
 Jetzt neu suchen	今すぐ再検索
 Keine Looks gefunden	ルックが見つかりません
-Referenzierter Ordner	参照フォルダ
-Ordner entfernen …	フォルダを削除…
 Anzeigen	表示
-{a} Profile · {b} verfügbar	プロファイル{a}件 · {b}件利用可
 Ausgeblendete Profile	非表示のプロファイル
 Wieder anzeigen	再表示
 Wird gelesen …	読み込み中…
-{a} hinzugefügt · {b} bereits vorhanden · {c} übersprungen	{a}件追加 · {b}件は既存 · {c}件スキップ
 Wird gesucht …	検索中…
 Die Vorschau enthält diesen Look nicht. Der Profilverweis bleibt gespeichert.	プレビューにはこのルックが含まれていません。プロファイルの参照は保存されたままです。
 Ohne Look exportieren?	ルックなしで書き出しますか?
@@ -1748,7 +1744,7 @@ Einpassen ({a} %)	全体表示({a} %)
 Begradigt: {a2}°	角度補正済み: {a2}°
 Standard ({default_name})	標準({default_name})
 Freistellen	切り抜き
-Ausrichten	角度補正
+Ausrichten	位置合わせ
 Horizont begradigen (A)	水平を補正 (A)
 Frei	フリー
 Linie	線
@@ -2011,7 +2007,6 @@ Ausschnitt, Winkel, Perspektive, 90°-Drehung	切り抜き範囲、角度、遠�
 Farbsäume	色にじみ
 Rauschreduzierung	ノイズ低減
 Freistellen & Drehen	切り抜き・回転
-graineo enthält keine Filmprofile von Drittanbietern. Es liest Profile, die Sie selbst gekauft und installiert haben. Bitte beachten Sie die Lizenzbedingungen des Anbieters.	graineo にはサードパーティ製のフィルムプロファイルは含まれません。ご自身で購入・インストールしたプロファイルを読み込みます。提供元のライセンス条件をご確認ください。
 Auf dem Mac sind {} frei, nötig sind {} plus {} Reserve.	Macの空き容量は{}です。{}に加えて予備{}が必要です。
 Ordner {} fehlt	フォルダ{}がありません
 Am alten Ort liegt eine andere Datei – nichts überschrieben	元の場所に別のファイルがあります。上書きしていません
@@ -3452,7 +3447,6 @@ Quellen	ソース
 Lookup-Tabellen	ルックアップテーブル
 Profilordner entfernen?	プロファイルフォルダを削除しますか?
 Look-Paket ausblenden?	ルックパックを非表示にしますか?
-Automatisch gefunden	自動検出
 Filmsimulation	フィルムシミュレーション
 Importe	読み込み
 Diagonal	斜め
@@ -3956,7 +3950,7 @@ Tauschen nicht möglich: die Kamera-JPEG lässt sich nicht als Stand der Regler 
 Vergleich: jetzigen Stand als linke Seite festhalten	比較: 現在の状態を左側として保持
 Vergleich: linke und rechte Seite tauschen	比較: 左右を入れ替え
 Begrenzt den Platz, den der Cache auf diesem Mac belegen darf.	このMacでキャッシュが使える容量を制限します。
-• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **無制限**(標準) – 自動で削除されることはありません。\n• **10〜100 GB** – キャッシュが上限を超えると、Macが他の作業をしていないときにバックグラウンドで、最も古いFoveonの中間データと、このMac上の写真のうち最も長く表示されていないプレビューを、上限の約90 %になるまで削除します。\n\nキャッシュ内のすべてが対象として数えられます。他のドライブにある写真のオフラインコピーとプレビュー、現像済みプレビュー、フィンガープリント、顔は削除されません。最近使ったプレビューも残ります。オリジナル、編集内容、ライブラリはキャッシュにはなく、影響を受けません。\n\n### 注意\n削除されたプレビューは必要に応じて再作成されます。ブラウズ中に計算時間がかかります。特にSigma QuattroやNAS上の写真で顕著です。
+• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **無制限**(標準) – 自動で削除されることはありません。\n• **10〜100 GB** – キャッシュが上限を超えると、Macが他の作業をしていないときにバックグラウンドで、最も古いFoveonおよびHDRの中間データと、このMac上の写真のうち最も長く表示されていないプレビューを、上限の約90 %になるまで削除します。\n\nキャッシュ内のすべてが対象として数えられます。他のドライブにある写真のオフラインコピーとプレビュー、現像済みプレビュー、フィンガープリント、顔は削除されません。最近使ったプレビューも残ります。オリジナル、編集内容、ライブラリはキャッシュにはなく、影響を受けません。\n\n### 注意\n削除されたプレビューは必要に応じて再作成されます。ブラウズ中に計算時間がかかります。特にSigma QuattroやNAS上の写真で顕著です。
 Zuletzt entfernt: {a} ({n} Dateien)	前回の削除: {a}（{n} ファイル）
 Vorschau-Cache bereinigen: {a} von {b}	プレビューキャッシュを整理中: {b} 件中 {a} 件
 Vorschau-Cache bereinigen …	プレビューキャッシュを整理中…
@@ -3970,7 +3964,7 @@ Offline-Kopien, andere Laufwerke	オフラインコピーと他のドライブ�
 Vorschau-Cache bereinigen	プレビューキャッシュを整理
 Bereinigen	整理
 Es gibt nichts zu entfernen.	削除するものはありません。
-Es werden etwa {a} entfernt: die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	約{a}を削除します: 最も古いFoveonの中間データと、このMac上の写真のうち最も長く表示されていないプレビュー。必要に応じて再作成されます。ブラウズ中に計算時間がかかります(特にSigma Quattro)。オリジナル、編集内容、オフラインコピー、現像済みプレビューは残ります。
+Es werden etwa {a} entfernt: die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	約{a}を削除します: 最も古いFoveonおよびHDRの中間データと、このMac上の写真のうち最も長く表示されていないプレビュー。必要に応じて再作成されます。ブラウズ中に計算時間がかかります(特にSigma Quattro)。オリジナル、編集内容、オフラインコピー、現像済みプレビューは残ります。
 Die Obergrenze wird dadurch nicht erreicht: der Rest ist geschützt oder erst kürzlich benutzt.	この方法では上限に達しません。残りは保護されているか、最近使われています。
 Jetzt bereinigen …	今すぐ整理…
 Zuerst eine Obergrenze wählen	先に上限を選んでください
@@ -4089,7 +4083,6 @@ importiert	読み込み
 GUT	良好
 BRAUCHBAR	使用可
 UNSICHER	不確か
-Für sRGB-LUTs (3D, 1D-Kurve oder beides).	sRGB LUT用（3D、1Dカーブ、または両方）。
 Gewählten Look als 3D-LUT (.cube) speichern	選択中のルックを3D LUT（.cube）として保存
 Kein Foto geöffnet	写真が開かれていません
 Kein Look gewählt	ルックが選択されていません
@@ -4698,6 +4691,16 @@ Kein Etikett	ラベルなし
 Copyright	著作権
 z. B. © 2026 Name	例：© 2026 名前
 Hinzugefügt wird	追加されるもの
+nicht verfügbar	利用不可
+Keine neuen Looks	新しいルックはありません
+Keine Fotos oder Looks erkannt	写真もルックも認識されませんでした
+Keine Looks erkannt	ルックが認識されませんでした
+{a} hinzufügen?	{a}を追加しますか？
+Wird hinzugefügt …	追加中…
+Looks ansehen	ルックを表示
+{a} hinzugefügt	{a}を追加しました
+Inhalt von „{a}“ · {b}	「{a}」の内容 · {b}
+Klicke auf einen Ordner, um seine Fotos zu sehen.	フォルダをクリックすると写真が表示されます。
 Keine Ordner mit Fotos.	写真のあるフォルダはありません。
 schon in der Bibliothek	ライブラリに既存
 liegt in einem Ordner der Bibliothek	ライブラリのフォルダ内にあります
@@ -5467,7 +5470,6 @@ Alben aus Apple Fotos bleiben in ihrem Satz	Apple 写真のアルバムはその
 In Lightroom: {n} Schritte	Lightroom: {n}ステップ
 graineo unterstützen …	graineo を支援 …
 Fotos einer Serie vergleichen und das beste wählen.	シリーズの写真を比較してベストを選ぶ。
-• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **比較** – 2〜4枚を大きく並べて表示。ダブルクリックまたはZで全フィールドを連動して最もシャープな位置の1:1にズーム\n• **ライトテーブル** – シリーズの全写真。クリックで比較に追加\n• **デュエル** – 2枚を表示。←で左、→で右を残し、1枚になるまで続ける\n\nヒントはシリーズ内の相対値です：最もシャープな写真に対するシャープネス、目と顔（Apple Vision、macOSのみ）、白飛び、ブレ。提案は理由を示し、何も自動で設定しません。差がほとんどない場合はそう表示します。\n\n### キー\n↩/スペース ベストを選択 · ⇧X 残りを除外 · P/X/U/0–5 通常どおり · Z ズーム · H 顔 · ⌘↩ 選別済みにして次へ · ↓/↑ 次/前のシリーズ · ⌘Z 取り消し · Esc 戻る
 Stapel nicht geändert: {e}	スタックは変更されていません: {e}
 Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	露出ブラケット: {n}枚、{ev} EVに{k}段階
 Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	シリーズ: {t}で{n}枚、同じ被写体（類似度 {s}）
@@ -5568,7 +5570,6 @@ zurück ins Raster	グリッドに戻る
 Feld 1–4 fokussieren (auch ← →)	フィールド1〜4にフォーカス（← →も可）
 fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	フォーカスするフィールドを切り替え。デュエルでは左/右の写真を残す
 Vergleich	比較
-Leuchttisch	ライトテーブル
 Duell	デュエル
 2–4 Fotos groß nebeneinander	2〜4枚を大きく並べる
 Alle Fotos der Serie; Klick legt eins in den Vergleich	シリーズの全写真。クリックで比較に追加
@@ -6449,8 +6450,10 @@ Gesicht „{a}“ benannt	顔に「{a}」と名前を付けました
 Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	プリセット「{a}」を削除しました – ⌘Z で戻せます
 Rückgängig: Vorgabe „{a}“ gelöscht	取り消し: プリセット「{a}」の削除
 {a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} / {b} 枚を表示中。残りは左のソースまたはフィルターで非表示です
-Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	Quattro ではノイズ低減は現像の準備段階で既に行われます。
-Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Quattro ではノイズ低減は準備段階で行われます。保存された値はそれをオフにします。
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung.	ISO 400 未満では、Quattro のノイズ低減は準備段階で固定的に行われます。
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung; die gespeicherten Werte schalten sie ab.	ISO 400 未満では、Quattro のノイズ低減は準備段階で固定的に行われます。保存された値はそれをオフにします。
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet diese Regler aus.	Quattro のフル処理がオフになっています。これらのスライダーはフル処理でのみ使われます。
+Der volle Quattro-Weg ist ausgeschaltet; die gespeicherten Werte gelten weiter.	Quattro のフル処理がオフになっています。保存された値は引き続き適用されます。
 rechnet {p} %	計算中 {p} %
 Modul fehlt	モジュールなし
 Modul laden …	モジュールを読み込む…
@@ -6587,3 +6590,470 @@ Wenn vorhanden	既存の場合
 Gain-Map behalten	ゲインマップを保持
 HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	iPhone写真のHDR輝度を保持（sRGBのみ）
 Mehr	その他
+# HDR merge (hdr_ui.rs)
+Mindestens zwei Fotos einer Belichtungsreihe wählen.	露出ブラケットの写真を2枚以上選んでください。
+Höchstens {n} Fotos.	最大 {n} 枚まで。
+{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a}: ベイヤーまたは X-Trans センサーの RAW 写真のみ。
+Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	写真のカメラまたはサイズが異なります。
+{a} ist nicht erreichbar.	{a} にアクセスできません。
+{a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b}: 明るさが撮影データと {e} EV 異なります – 光が変わりましたか？
+{a} → {b}: zu wenig Überlappung, Belichtung aus den Aufnahmedaten	{a} → {b}: 重なりが少ないため撮影データの露出を使用
+{a} ist um {p} px verschoben – aus der Hand?	{a} が {p} px ずれています – 手持ち撮影？
+Verschiedene Blenden: Schärfentiefe und Vignette unterscheiden sich	絞りが異なります: 被写界深度と周辺減光が違います
+{a} → {b}: großer Abstand ({e} EV)	{a} → {b}: 大きな間隔 ({e} EV)
+{n} Bilder zusammenfügen	{n} 枚の画像を合成
+Referenz	基準
+{a} – als Referenz wählen	{a} – 基準にする
+Vorschau wird berechnet …	プレビューを計算中 …
+Gleicht Verschiebung, Drehung und Maßstab zwischen den Aufnahmen aus	撮影間のずれ・回転・倍率を補正します
+Vorschau nicht möglich: {e}	プレビューできません: {e}
+Analysiert Belichtung und Lage …	露出と位置を解析中 …
+{a} … {b} EV · Ergebnis erscheint oben im Stapel	{a} … {b} EV · 結果はスタックの一番上に表示されます
+Zusammenfügen	合成
+HDR {a} {p} % · noch etwa {t}	HDR {a} {p} % · 残り約 {t}
+HDR {a} {p} %	HDR {a} {p} %
+HDR fertig · {s} s	HDR 完了 · {s} 秒
+HDR abgebrochen	HDR を中止しました
+HDR nicht möglich: {e}	HDR できません: {e}
+HDR zusammenfügen	HDR 合成
+HDR wird berechnet – ⌘Z macht es rückgängig	HDR を計算中 – ⌘Z で元に戻せます
+HDR nicht angelegt: {e}	HDR を作成できません: {e}
+HDR nicht entfernt: {e}	HDR を削除できません: {e}
+HDR zusammenfügen …	HDR 合成…
+HDR zusammenfügen (Dialog)	HDR 合成 (ダイアログ)
+Rezept fehlt	レシピがありません
+Lineares DNG aus graineos Entwicklung: Kamerawerte ohne Tonkurve, nichts beschnitten, auch Lichter über Weiß bleiben erhalten.	graineo の現像による リニア DNG: トーンカーブなしのカメラ値。クリップなし、白より上のハイライトも保持されます。
+Erkannte Bewegung zeigen	検出された動きを表示
+Ergebnis in den Stapel legen	結果をスタックに入れる
+Stichwort für das Ergebnis	結果のキーワード
+leer = keins	空 = なし
+Nur HDR	HDR のみ
+Der HDR-Filter lässt sich nicht als Regel sichern	HDR フィルターはルールとして保存できません
+Alle Aufnahmen überall verrechnen (für ruhige Motive)	すべてのカットを全域で合成 (動きのない被写体向け)
+Bewegte Stellen aus der Referenz, weich überblendet	動く部分は基準画像から、なめらかにブレンド
+Jede Aufnahme einzeln dort ausschließen, wo sie abweicht	各カットを差異のある場所で個別に除外
+Oben im Stapel des Referenzbilds	基準画像のスタックの先頭
+Eigenes Foto neben den Quellen, ohne Stapel	ソースの隣の独立した写真 (スタックなし)
+Färbt die Stellen ein, an denen eine Aufnahme abweicht	カットに差異のある部分に色を付けます
+Keine Bewegung erkannt	動きは検出されませんでした
+Nur zusammengefügte Fotos (HDR)	合成された写真のみ (HDR)
+Bewegung	動き
+Alle Striche löschen	すべてのストロークを削除
+Letzten Strich zurück	最後のストロークを戻す
+Malen	ペイント
+Radieren	消去
+Mit gedrückter Maustaste über das Bild malen: dort gilt nur das gewählte Quellbild	マウスボタンを押したまま画像上をなぞると、その部分では選んだソースだけが使われます
+Quelle malen	ソースをペイント
+{a} malen	{a} をペイント
+HDR nicht geändert: {e}	HDR を変更できませんでした: {e}
+ZUSAMMENFÜGEN	合成
+Zusammenfügen: Quelle malen, Bewegung	合成: ソースをペイント、動き
+Dieses Foto ist kein zusammengefügtes Foto.	この写真は合成写真ではありません。
+Blatt hochkant; Reihen und Spalten werden neu aufgeteilt	用紙を縦向きにします。行と列は再配分されます
+Blatt quer; Reihen und Spalten werden neu aufgeteilt	用紙を横向きにします。行と列は再配分されます
+Quelle der HDR-Reihe nicht erreichbar: {a}	HDRブラケットの元写真にアクセスできません: {a}
+Referenzbild der HDR-Reihe nicht erreichbar	HDRブラケットの基準写真にアクセスできません
+{a} … {b} EV · Ergebnis erscheint neben den Quellen	{a} … {b} EV · 結果は元の写真の隣に表示されます
+1 Strich	ストローク1本
+Pinselgröße (bleibt beim Zoomen auf dem Bildschirm gleich)	ブラシサイズ（ズームしても画面上のサイズは変わりません）
+Linear	リニア
+Fusion	フュージョン
+Szenenlinear, die Lichter bleiben über Weiß erhalten (für die eigene Entwicklung)	シーンリニア。白より上のハイライトを保持します（ご自身の現像用）
+Natürlicher Look: die Belichtungen werden überblendet, der Umfang auf 0 bis 1 verdichtet	自然な仕上がり：露出をブレンドし、階調範囲を0〜1に圧縮します
+schon zusammengefügt	統合済み
+{n} Bilder	{n} 枚
+{n} Reihen zusammenfügen	{n} 件のブラケットを合成
+Eine Reihe zusammenfügen	1 件のブラケットを合成
+Keine Reihe eingeschaltet.	オンのブラケットがありません。
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse oben im Stapel	{b} 件中 {a} 件 · 順に処理、結果はスタックの一番上
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse neben den Quellen	{b} 件中 {a} 件 · 順に処理、結果は元写真の隣
+HDR Reihe {k} von {n} · {a} {p} %	HDR ブラケット {k}/{n} · {a} {p} %
+Alle Reihen zusammenfügen	すべてのブラケットを合成
+{n} Reihen werden berechnet, {f} nicht angelegt – ⌘Z macht alles rückgängig	{n} 件を計算中、{f} 件は作成できませんでした – ⌘Z ですべて取り消し
+{n} Reihen werden berechnet – ⌘Z macht alles rückgängig	{n} 件を計算中 – ⌘Z ですべて取り消し
+HDR nicht angelegt	HDR を作成できませんでした
+Alle Reihen zusammenfügen …	すべてのブラケットを合成…
+In der Auswahl sind keine Belichtungsreihen.	選択範囲に露出ブラケットがありません。
+Glatt	なめらか
+sehr scharf, kann an harten Kanten leicht saumen	非常にシャープ。硬いエッジにわずかなハロが出ることがあります
+fast so scharf, weniger Säume	ほぼ同じシャープさでハロが少ない
+ruhiger, kaum Säume, mindert Moiré	穏やかでハロはほとんどなく、モアレを抑えます
+sehr glatt, keine Säume, dämpft Moiré und Rauschen	非常になめらかでハロがなく、モアレとノイズを抑えます
+Lanczos, 3 Lappen (Fensterbreite 3 Pixel je Seite). Der bisherige Standard.	Lanczos、3ローブ(片側3ピクセルの窓)。これまでの標準です。
+Catmull-Rom, kubisch (B 0, C 0,5; Fensterbreite 2). Etwas weniger Überschwingen als Lanczos.	Catmull-Rom、3次(B 0、C 0.5、窓2)。Lanczosよりオーバーシュートがやや少なめです。
+Hann-gefenstertes Sinc (Fensterbreite 3), in XnView und ImageMagick „Hanning“.	Hann窓付きsinc(窓3)。XnViewやImageMagickでは「Hanning」と呼ばれます。
+Mitchell-Netravali, kubisch (B = C = 1/3; Fensterbreite 2). Kaum Überschwingen.	Mitchell-Netravali、3次(B = C = 1/3、窓2)。オーバーシュートはほとんどありません。
+Verkleinerung	縮小
+SFD {a} {p} % · noch etwa {t}	SFD {a} {p} % · 残り約 {t}
+SFD {a} {p} %	SFD {a} {p} %
+AUFNAHME {n}{ev} · nicht das HDR	露出 {n}{ev} · HDRではありません
+Vorschau aktuell · volle Auflösung {p} %	プレビュー最新 · フル解像度 {p} %
+Wird zusammengefügt … {p} %	結合中 … {p} %
+Wartet auf die Berechnung …	計算待ち …
+Vorschau aktuell · volle Auflösung beim Zoomen	プレビュー最新 · 拡大時にフル解像度
+Aktuell · volle Auflösung	最新 · フル解像度
+Aufnahmen	露出
+{a} · Maustaste halten: nur diese Aufnahme zeigen	{a} · マウスボタンを押し続けるとこの露出だけを表示
+Aufnahme nicht benutzen	この露出を使わない
+Aufnahme dazunehmen	この露出を追加
+Foto aus dem Filmstreifen hierher ziehen	フィルムストリップから写真をここへドラッグ
+Mindestens zwei Aufnahmen.	露出は2枚以上必要です。
+Geister entfernen	ゴースト除去
+Bereich malen	範囲を描く
+Über einen Geist malen, dann die Aufnahme für den Bereich wählen	ゴーストの上を描き、その範囲に使う露出を選ぶ
+Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])	ブラシサイズ（ズームしても画面上で一定、拡大: ]）
+Neuer Bereich	新しい範囲
+Bereich löschen	範囲を削除
+Bereich {k} · aus {f}	範囲 {k} · {f} から
+Erkannte Bewegung	検出された動き
+Dieses Foto kann keine Aufnahme sein.	この写真は露出として使えません。
+Die Fotos unterscheiden sich kaum in der Belichtung (weniger als 0,5 EV).	写真の露出差がほとんどありません（0.5 EV未満）。
+Oben im Stapel der Quellen; aus: eigenes Foto neben den Quellen.	ソースのスタックの一番上に。オフ: ソースの横に別の写真として。
+Als Referenz nehmen	基準にする
+HDR erstellt	HDRを作成しました
+Quellen zeigen	ソースを表示
+Hinweis schließen	ヒントを閉じる
+Das HDR liegt in keinem Stapel.	このHDRはスタックに入っていません。
+HDR entfernt, die Quellen bleiben	HDRを削除しました（ソースは残ります）
+HDR bearbeiten	HDRを編集
+HDR entfernen (Quellen bleiben)	HDRを削除（ソースは残す）
+Aus Aufnahme	取得元の露出
+Die Aufnahmen der Belichtungsreihe, nach Belichtung geordnet.	ブラケットの露出を露出順に並べたものです。
+• **Haken** – Aufnahme benutzen; ohne Haken bleibt sie gedimmt an ihrem Platz\n• **Stern** – Referenz: ihre Lage, Farbe und Belichtung gelten für das Ergebnis\n• **Maustaste halten** – diese Aufnahme groß zeigen (loslassen = zurück zum HDR)\n• **Foto aus dem Filmstreifen hierher ziehen** – als Aufnahme hinzufügen	• **チェック** – この露出を使う。外すと同じ位置で薄く表示\n• **星** – 基準: 位置・色・露出が結果に使われる\n• **マウスボタンを押し続ける** – この露出を大きく表示（離すとHDRに戻る）\n• **フィルムストリップから写真をここへドラッグ** – 露出として追加
+Zurück zur vorigen Ansicht	前の表示に戻る
+Gesichtet, nächste Serie	確認済み、次のシリーズへ
+Nächste Serie	次のシリーズ
+Vorige Serie	前のシリーズ
+Vergleich: bis zu 4 Fotos groß	比較：最大4枚を大きく表示
+Entkoppelt: jedes Feld wird einzeln verschoben	連動オフ：各フィールドを個別に移動
+Gekoppelt: Zoom und Verschieben in allen Feldern gleich (einzeln: ⇧-Ziehen)	連動：すべてのフィールドで同じズームと移動（個別：⇧ドラッグ）
+Ausrichten: Einzel-Versätze zurücksetzen	整列：個別のずれをリセット
+Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	自動：縦位置は1列、横位置は2 × 2
+Eine Reihe	1列
+Messen: Rechteck ziehen, Schärfe je Feld	測定：矩形をドラッグ、フィールドごとのシャープネス
+Fokussiertes Foto als Referenz festhalten	フォーカス中の写真を基準として固定
+Differenz (Prüfhilfe)	差分（確認用）
+Gleich gut: beide bleiben	同等：両方残す
+Letztes Duell zurücknehmen	直前の対戦を取り消す
+Fokussiertes Foto als bestes: Markierung „Auswahl“ und Titelfoto	フォーカス中の写真をベストに：「採用」フラグと表紙
+Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)	残りを不採用：採用以外のすべて（⌘Z 1回）
+Gleich gut	同等
+Linkes Foto behalten	左の写真を残す
+Rechtes Foto behalten	右の写真を残す
+Linkes Foto behalten (←)	左の写真を残す (←)
+Rechtes Foto behalten (→)	右の写真を残す (→)
+Vergleichen: die ausgewählten Fotos bzw. die ganze Serie des aktiven Fotos	比較：選択した写真、またはアクティブな写真のシリーズ全体
+Modus Vergleich (bis zu 4 Felder)	比較モード（最大4フィールド）
+Modus Turnier (Duelle bis Platz 1–3)	トーナメントモード（1〜3位まで対戦）
+Anordnung weiterschalten: Auto · 1 Reihe · 2 × 2	配置を切替：自動 · 1列 · 2 × 2
+Einpassen ↔ 100 % (an Fokuspunkt, Gesicht oder schärfster Stelle)	全体表示 ↔ 100 %（フォーカス点、顔、または最もシャープな箇所）
+Leertaste halten	スペースを押し続ける
+100 % an der Maus, solange gehalten	押している間、ポインタ位置で100 %
+Zoom und Verschieben gekoppelt an/aus	ズームと移動の連動 オン/オフ
+ein Feld einzeln verschieben	1つのフィールドだけを移動
+Fokuspunkt der Kamera in allen Feldern	すべてのフィールドにカメラのフォーカス点
+Kanten zeigen (Fokus-Peaking, gleiche Schwelle in allen Feldern)	エッジ表示（フォーカスピーキング、全フィールド同じしきい値）
+Clipping in allen Feldern	すべてのフィールドでクリッピング表示
+Aufnahme-Zeile (Abweichungen hervorgehoben)	撮影情報の行（相違を強調）
+Messen: Rechteck ziehen, Schärfewert je Feld	測定：矩形をドラッグ、フィールドごとのシャープネス値
+fokussiertes Foto als Referenz festhalten / aufheben	フォーカス中の写真を基準に固定／解除
+Blinken: Referenz und Kandidat abwechselnd (nochmal: nebeneinander)	点滅：基準と候補を交互に（もう一度：並べて表示）
+Wischer zwischen Referenz und Kandidat (nochmal: nebeneinander)	基準と候補のワイプ比較（もう一度：並べて表示）
+Differenzbild zwischen Referenz und Kandidat (nochmal: nebeneinander)	基準と候補の差分画像（もう一度：並べて表示）
+Feld 1–4 fokussieren	フィールド1〜4にフォーカス
+fokussiertes Feld bzw. Kandidat wechseln; im Turnier: linkes / rechtes Foto behalten	フォーカスするフィールド／候補を切替；トーナメントでは左／右の写真を残す
+Turnier: gleich gut (beide bleiben)	トーナメント：同等（両方残す）
+Turnier: beide raus	トーナメント：両方除外
+Turnier: letztes Duell zurücknehmen	トーナメント：直前の対戦を取り消す
+fokussiertes Foto in Entwickeln öffnen	フォーカス中の写真を現像で開く
+Vergleichen: die im Filmstreifen ausgewählten Fotos	比較：フィルムストリップで選択した写真
+Vergleich beenden (im Turnier: anhalten)	比較を終了（トーナメント中は一時停止）
+Erst den Vergleich beenden	先に比較を終了してください
+Ergebnis übernommen – ⌘Z macht die Bewertung rückgängig	結果を反映しました – ⌘Zで評価を取り消せます
+Erst das beste Foto wählen (↩ oder „Als bestes“)	先にベストの写真を選んでください（↩ または「ベスト」）
+Mindestens 2 Fotos auswählen (⌘-Klick)	2枚以上選択してください（⌘クリック）
+Serie auswählen und vergleichen	シリーズを選択して比較
+Stapel auswählen und vergleichen	スタックを選択して比較
+Mit diesem Foto vergleichen	この写真と比較
+Im Filmstreifen weitere Fotos mit ⌘-Klick wählen	フィルムストリップで⌘クリックして写真を追加選択
+Als Referenz festhalten	基準として固定
+Als bestes	ベスト
+Aus dem Vergleich nehmen	比較から外す
+Auswahl · Titelfoto	採用 · 表紙
+DIFFERENZ	差分
+Darstellung gegen die Referenz: Nebeneinander, Blinken (W), Wischer (⇧W), Differenz (⌥W)	基準との比較表示：並べて、点滅 (W)、ワイプ (⇧W)、差分 (⌥W)
+Duell {a} von etwa {b} · Ziel Platz 1–3	対戦 {a} / 約 {b} · 目標 1〜3位
+ERGEBNIS · {a} Fotos · {b} Duelle	結果 · {a}枚 · {b}回の対戦
+Erst eine Referenz festhalten (R)	先に基準を固定してください (R)
+Feld {n}	フィールド {n}
+Feldmenü	フィールドメニュー
+Gekoppelt	連動
+Im Filmstreifen Fotos mit ⌘-Klick auswählen	フィルムストリップで⌘クリックして写真を選択
+Im Raster zeigen	グリッドで表示
+In Entwickeln öffnen	現像で開く
+KANDIDAT	候補
+Klick: Feldmenü	クリック：フィールドメニュー
+Nur ansehen	表示のみ
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 vier und drei Sterne (ein ⌘Z)	1位は採用と表紙、2位と3位は星4と星3（⌘Z 1回）
+Prüfhilfe	確認用
+REFERENZ	基準
+Referenz aufheben	基準を解除
+Schärfe: {a} % des schärfsten Fotos der Auswahl (gemessen an der schärfsten Stelle)	シャープネス：選択中で最もシャープな写真の {a} %（最もシャープな箇所で測定）
+Turnier abbrechen: nichts wird gesetzt (anhalten: Esc)	トーナメントを中止：何も設定しません（一時停止：Esc）
+Vergleich schließen	比較を閉じる
+Wieder gekoppelt	再び連動
+Zum Vergleichen mindestens 2 Fotos auswählen (⌘-Klick)	比較するには2枚以上選択してください（⌘クリック）
+auf 0 Sterne (4–5 Sterne bleiben)	星0に（星4〜5はそのまま）
+blinkt alle {s} s	{s}秒ごとに点滅
+schärfstes	最もシャープ
+unverändert	変更なし
+wird bearbeitet	編集中
+{a} Fotos · {b} raus	{a}枚 · {b}枚除外
+{k} – Klick: in den Vergleich (ins fokussierte Feld)	{k} – クリック：比較へ（フォーカス中のフィールドへ）
+{k}: Augen zu	{k}：目を閉じている
+{k}: Gesichtsqualität {q}	{k}：顔の品質 {q}
+· {a} ausgewählt · {b} im Vergleich	· {a}枚選択 · 比較中 {b}枚
+– {n} weitere: {w} (Einstellung „⇧X beim Sichten“)	– 他 {n}枚：{w}（設定「確認時の⇧X」）
+↶ Letztes Duell	↶ 直前の対戦
+⌘-Klick im Streifen	ストリップで⌘クリック
+Ausgewählte Fotos nebeneinander vergleichen und das beste wählen.	選択した写真を並べて比較し、ベストを選びます。
+{n} Fotos vergleichen	{n}枚を比較
+Serie · {n} ähnliche Fotos	シリーズ · 類似写真 {n}枚
+Belichtungsreihe · {n} Fotos	露出ブラケット · {n}枚
+Stapel · {n} Fotos	スタック · {n}枚
+Im Vergleich öffnen	比較で開く
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	配置：自動 · 1列 · 1行 · 2 × 2 · 選択を大きく
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	配置を切替：自動 · 1列 · 1行 · 2 × 2 · 選択を大きく
+Automatisch: gleich große Felder, so groß wie möglich	自動：同じ大きさのフィールドをできるだけ大きく
+Eine Spalte	1行（縦並び）
+Gewähltes groß, die anderen klein daneben	選択した写真を大きく、他は横に小さく
+Vorschau · Speicher knapp	プレビュー · メモリ不足
+Keine Serien oder Stapel in dieser Ansicht	この表示にはシリーズもスタックもありません
+Die Ansicht „Serien“ zeigt je Serie eine Kachel	「シリーズ」表示ではシリーズごとに1枚のタイルを表示します
+Alle Serien aufklappen	すべてのシリーズを展開
+Alle Serien zuklappen	すべてのシリーズを折りたたむ
+Turnier abbrechen	トーナメントを中止
+Füllen	塗りつぶす
+Ganz zeigen	全体を表示
+Füllen: jedes Foto füllt sein Feld (Ränder beschnitten) – Klick: ganz zeigen	塗りつぶし：各写真が枠いっぱいに表示（端は切り取り）– クリック：全体を表示
+Ganz zeigen: jedes Foto ganz im Feld – Klick: füllen	全体を表示：各写真を枠内に全体表示 – クリック：塗りつぶし
+Füllen ↔ ganz zeigen: Fotos füllen ihr Feld oder stehen ganz darin	塗りつぶし ↔ 全体表示：写真を枠いっぱいにするか全体を表示
+HDR nicht gefunden – die Bibliothek wird neu gelesen.	HDR が見つかりません。ライブラリを読み直しています。
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ gezeigt	HDR はこの表示にありません。フォルダ「{a}」を表示します
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ ohne Filter gezeigt	HDR はこの表示にありません。フォルダ「{a}」をフィルタなしで表示します
+Diese Fotos sehen nicht nach einer Belichtungsreihe aus. Trotzdem zusammenfügen?	これらの写真は露出ブラケットには見えません。それでも合成しますか？
+Zwischen zwei Aufnahmen liegen {n} Minuten.	2 枚の撮影の間に {n} 分あります。
+Die Bildinhalte unterscheiden sich deutlich.	画像の内容がはっきり異なります。
+{a} ist eine SFD-Aufnahme: ihre Belichtungen fügt graineo beim Entwickeln selbst zusammen. Das Foto einzeln in Entwickeln öffnen.	{a} は SFD 撮影です。graineo が現像時に露出を自動で合成します。写真を単独で現像で開いてください。
+Die Fotos stammen von verschiedenen Kameras: {a}.	写真のカメラが異なります: {a}。
+Die Fotos haben verschiedene Größen: {a}.	写真のサイズが異なります: {a}。
+Aus diesen Aufnahmen gibt es schon ein HDR: {a}.	これらの撮影からの HDR はすでにあります: {a}。
+Trotzdem neues HDR	それでも新しい HDR
+„{a}“ gehört nicht zur Auswahl. Zusammengefügt werden die {n} ausgewählten Fotos:	「{a}」は選択に含まれていません。選択した {n} 枚の写真を合成します:
+HDR nicht möglich	HDR は不可
+SFD-Aufnahme: graineo fügt ihre Belichtungen beim Entwickeln zusammen	SFD 撮影: graineo が現像時に露出を合成します
+Diese Ansicht zeigt jedes Foto einzeln	この表示では各写真を個別に表示します
+Nur dieses Foto davon ist in der Ansicht sichtbar	この表示で見えているのはこの写真だけです
+Die verglichenen Serien bleiben aufgeklappt, solange der Vergleich offen ist	比較を開いている間、比較中のシリーズは展開されたままです
+Nächste Fotos in die Felder	次の写真をフィールドへ
+Vorige Fotos in die Felder	前の写真をフィールドへ
+Felder {a} von {n}	フィールド {a} / {n}
+Die gewählten Aufnahmen gehören schon zum HDR {a} – ein HDR wird nie selbst zur Quelle.	選択した撮影はすでに HDR {a} に含まれています。HDR 自体がソースになることはありません。
+Schon zusammengefügt, wird nicht verwendet: {a}. Aus diesen {n} Aufnahmen ein neues HDR zusammenfügen?	合成済みのため使用しません: {a}。この {n} 枚の撮影から新しい HDR を合成しますか？
+Neues HDR	新しい HDR
+Schon zusammengefügt, nicht als Quelle verwendet: {a}.	合成済みのためソースとして使用しません: {a}。
+Die ganze Serie vergleichen	シリーズ全体を比較
+Serie {a} von {b}	シリーズ {a} / {b}
+Doppelklick auf die Kachel: aufklappen	タイルをダブルクリック：展開
+Doppelklick auf das aktive Foto: zuklappen	アクティブな写真をダブルクリック：折りたたむ
+wie jetzt	現在と同じ
+Im Turnier gibt es keine Referenz	トーナメントには基準がありません
+Erst ein Foto fokussieren (Klick)	まず写真をフォーカス（クリック）
+Original offline	オリジナルはオフライン
+Das Original ist nicht erreichbar: das Feld zeigt die Vorschau der Bibliothek	オリジナルにアクセスできません：フィールドにはライブラリのプレビューを表示します
+Zum Entwickeln dieses Feldes fehlt gerade Speicher; es folgt, sobald ein anderes fertig ist	このフィールドを現像するメモリが今は足りません。別のフィールドが終わり次第続きます
+wird berechnet	計算中
+Das Feld wird mit seinen Einstellungen in voller Qualität entwickelt; bis dahin die Vorschau der Bibliothek	このフィールドは設定どおりフル品質で現像中です。それまではライブラリのプレビュー
+Alle ({n}, je {k})	すべて（{n}、{k}枚ずつ）
+Alle ({n})	すべて（{n}）
+sucht {d}/{n}	検索中 {d}/{n}
+sucht …	検索中…
+wartet	待機中
+Modus Vergleich (Felder nebeneinander)	比較モード（フィールドを並べて表示）
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	配置を切り替え：自動 · 1行 · 1列 · 2 × 2 · 選択を大きく · すべて
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	配置：自動 · 1行 · 1列 · 2 × 2 · 選択を大きく · すべて
+Vergleich: Fotos in Feldern nebeneinander	比較：写真をフィールドに並べて表示
+Im Turnier stehen die zwei Fotos immer nebeneinander	トーナメントでは2枚の写真が常に並びます
+Bei einem Feld gibt es nichts anzuordnen	フィールドが1つなので配置するものがありません
+Gekoppelt wirkt erst ab zwei Feldern	連動は2つ以上のフィールドで有効です
+Ausrichten: kein Feld ist einzeln verschoben (⇧-Ziehen)	位置合わせ：個別に移動したフィールドはありません（⇧ドラッグ）
+Fokuspunkt: in diesen Dateien nicht gespeichert	フォーカスポイント：これらのファイルには記録されていません
+Messen vergleicht die Schärfe mehrerer Felder – erst zwei Fotos auswählen	測定は複数フィールドのシャープネスを比較します – まず2枚選択してください
+Gesichterleiste: in diesen Fotos keine Gesichter gefunden	顔バー：これらの写真に顔は見つかりませんでした
+Die Fotos kommen aus der Auswahl im Filmstreifen: ⌘-Klick nimmt eins hinzu oder heraus, Klick tauscht es gegen das fokussierte Feld.\n• **Vergleich** – bis zu 4 große Felder, mit der Anordnung „Alle“ bis zu 8 kleinere; Zoom und Verschieben wirken in allen Feldern gleich, ⇧-Ziehen verschiebt ein Feld einzeln; mehr Fotos blättern ‹ › oben rechts\n• **Turnier** – zwei Fotos je Duell bis Platz 1–3; danach steht die Rangliste in der Anordnung „Alle“ (Platz-Marken 1., 2., 3.), gesetzt wird erst mit „Übernehmen“: Platz 1 wird Auswahl und Titelfoto, alle anderen werden abgelehnt (ein ⌘Z)\n\nDie Hinweise sind relativ zur Auswahl: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts.\n\n### Tasten\n↩ bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wirken auf das fokussierte Feld · Z Zoom · Leertaste halten 100 % an der Maus · L gekoppelt · H Gesichter · ⌘↩ gesichtet, weiter · Esc zurück	写真はフィルムストリップの選択から来ます：⌘クリックで追加・除外、クリックでフォーカス中のフィールドと入れ替え。\n• **比較** – 大きなフィールドは最大4つ、配置「すべて」では小さめのフィールドを最大8つ。ズームと移動は全フィールド共通、⇧ドラッグで1フィールドだけ移動。それ以上の写真は右上の ‹ › で切り替え\n• **トーナメント** – 1対戦に2枚、1〜3位まで。その後、順位が配置「すべて」に表示されます（順位マーク 1.、2.、3.）。「適用」まで何も設定しません。適用すると 1 位が採用フラグとカバー写真になり、他はすべて不採用になります（⌘Zで1回）\n\nヒントは選択内での相対値です：最もシャープな写真に対するシャープネス、目と顔（Apple Vision、macOSのみ）、白飛び、ぶれ。提案は理由を示し、何も設定しません。\n\n### キー\n↩ ベストを選択 · ⇧X 残りを不採用 · P/X/U/0–5 はフォーカス中のフィールドに作用 · Z ズーム · スペース長押しでポインタ位置100 % · L 連動 · H 顔 · ⌘↩ 確認済み、次へ · Esc 戻る
+Mehr Fotos als Felder: die Pfeile blättern, ein Klick im Filmstreifen holt ein Foto ins gewählte Feld, die Anordnung „Alle“ zeigt bis zu 8	写真がフィールドより多い場合：矢印でページ送り、フィルムストリップをクリックすると選択中のフィールドに入り、配置「すべて」では最大8枚表示されます
+Reihe aufklappen	ブラケットを展開
+Reihe zuklappen	ブラケットを折りたたむ
+Reihe auswählen und vergleichen	ブラケットを選択して比較
+Aus Reihe nehmen	ブラケットから外す
+Reihe teilen ab hier	ここでブラケットを分割
+Reihe auflösen	ブラケットを解除
+Ergebnis des Turniers · {a} Fotos · {b} Duelle	トーナメントの結果 · {a}枚 · {b}対戦
+Ergebnis verwerfen	結果を破棄
+Ergebnis verwerfen: nichts wird gesetzt	結果を破棄：何も設定しません
+Platz {n} im Turnier – „Übernehmen“ setzt: {w}	トーナメント{n}位 – 「適用」で設定：{w}
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 unverändert, die übrigen {w} (Einstellung „⇧X beim Sichten“) – ein ⌘Z	1位は採用とカバー写真、2位と3位は変更なし、その他は{w}（設定「選別時の⇧X」） – ⌘Zで1回
+Platz {n} im Turnier – „Übernehmen“ lässt die Bewertung unverändert	トーナメント{n}位 – 「適用」で評価は変わりません
+Einzelbild öffnen (auch Leertaste, D, Doppelklick); auf einer zugeklappten Serie: aufklappen	単一写真を開く（スペース、D、ダブルクリックでも）。折りたたまれたシリーズ上では展開
+durch die Fotos der Serien gehen: eine zugeklappte Serie öffnet sich und schließt sich wieder, wenn man sie verlässt	シリーズ内の写真を順に移動：折りたたまれたシリーズは開き、離れると再び閉じます
+vorheriges / nächstes Bild	前 / 次の写真
+vorheriges / nächstes Bild mit gleichem Zoom, auch in zugeklappte Serien hinein (sie schließen sich wieder, wenn man sie verlässt)	同じズームで前 / 次の写真へ。折りたたまれたシリーズの中にも入ります（離れると再び閉じます）
+Serie/Stapel des aktiven Fotos auf-/zuklappen (Filmstreifen)	アクティブな写真のシリーズ/スタックを展開/折りたたむ（フィルムストリップ）
+zugeklappte Serie im Filmstreifen aufklappen (wie Doppelklick)	フィルムストリップで折りたたまれたシリーズを展開（ダブルクリックと同じ）
+Rechteck ziehen: Schärfe je Feld	矩形をドラッグ：フィールドごとのシャープネス
+{n} vergleichen	{n}枚を比較
+Belichtungsreihe über {ev} EV	{ev} EVの露出ブラケット
+Serie in {t}, gleiches Motiv	{t}の連写、同じ被写体
+Serie in {t}, nur nach Zeit	{t}の連写、時刻のみで判定
+Stapel aus Lightroom	Lightroomのスタック
+Reihe	ブラケット
+virtuell · aus {n} Aufnahmen	仮想 · {n}枚の露出から
+Ein zusammengefügtes Foto liegt nicht als Datei vor	合成した写真はファイルとして存在しません
+Mit Farbmodus	カラーモードあり
+Nur Kameramatrix	カメラマトリクスのみ
+Farbe wie im gewählten Farbmodus der Entwicklung	現像で選んだカラーモードの色
+Kalibrierte Kamerafarbe ohne den Look des Farbmodus	カラーモードのルックなしの、校正済みカメラの色
+Wie stark Lichter und Tiefen ausgeglichen werden (0 % = Referenzaufnahme)	ハイライトとシャドウをどれだけ均すか（0 % = 基準のコマ）
+Wie stark Lichter und Tiefen ausgeglichen werden (setzt Belichtung, Lichter, Tiefen, Weiß, Schwarz)	ハイライトとシャドウをどれだけ均すか（露光量・ハイライト・シャドウ・白レベル・黒レベルを設定）
+Tonwerte von Hand geändert: neue Aufnahmen stimmen nicht mehr ab, der Regler stimmt neu ab	トーンが手動で変更されています：コマを変えても再調整しません。このスライダーで再調整します
+Bei ISO unter 400 hat diese Kamera keine einstellbare Rauschminderung.	ISO 400 未満では、このカメラのノイズ低減は調整できません。
+Ausgabe: {name}	出力: {name}
+Stärke {n} %	強さ {n}%
+HDR · virtuell	HDR · 仮想
+{a}: bleibt mit dem fertigen Bild erhalten, lässt sich ohne die Quellen aber nicht mehr ändern oder neu berechnen.	{a}: 完成した画像は残りますが、ソースがないと変更や再計算はできなくなります。
+HDR-Foto aus diesen Aufnahmen	これらの撮影から作成したHDR写真
+HDR-Fotos aus diesen Aufnahmen	これらの撮影から作成したHDR写真
+gemalter Bereich	ペイントした領域
+gemalte Bereiche	ペイントした領域
+eigene Entwicklung	独自の現像
+HDR entfernen	HDRを削除
+HDR entfernt, die Quellen bleiben – ⌘Z holt es zurück	HDRを削除しました（ソースは残ります）– ⌘Zで元に戻せます
+HDR-Foto	HDR写真
+HDR-Fotos	HDR写真
+HDR nicht zurückgeholt: {e}	HDRを元に戻せませんでした: {e}
+„{a}“ entfernen?	「{a}」を削除しますか？
+Die Quellen bleiben. Mit dem HDR verschwinden:	ソースは残ります。HDRとともに失われるもの:
+⌘Z holt es zurück.	⌘Zで元に戻せます。
+{a} ohne eigene Datei – nichts zu verschieben	{a}には独自のファイルがありません – 移動するものはありません
+{a} ohne eigene Datei bleiben, wo sie sind	{a}には独自のファイルがないため、そのまま残ります
+HDR-Rezept nicht lesbar – es wird nicht überschrieben	HDRレシピを読み込めません – 上書きされません
+HDR-Zwischenspeicher	HDRの中間データ
+HDR-Fotos bleiben; ihr Bild wird beim Öffnen aus den Quellen neu berechnet	HDR写真は残ります。画像は開くときにソースから再計算されます
+Nicht aktuell – die Berechnung wurde abgebrochen	最新ではありません – 計算がキャンセルされました
+Die Aufnahmen werden neu berechnet – ändern geht gleich wieder	撮影データを再計算しています – まもなく変更できるようになります
+{a}: andere Kamera oder Sensorgröße	{a}: カメラまたはセンサーサイズが異なります
+{n} Aufnahmen: mindestens {m} nötig	{n}枚: 少なくとも{m}枚必要です
+{n} Aufnahmen: höchstens {m} möglich	{n}枚: 最大{m}枚までです
+HDR-Ergebnis fehlt im Cache	HDRの結果がキャッシュにありません
+HDR: Referenzbild nicht als Mosaik lesbar	HDR: 基準画像をモザイクとして読み込めません
+Gleitkomma- und lineare Formate gibt es nur für RAW-Fotos	浮動小数点形式とリニア形式はRAW写真でのみ使用できます
+Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)	この書き出し形式はSigma X3Fでのみ使用できます（ここではJPEG、TIFF、PNG）
+Dieses Foto hat keine Kameramatrix für ein DNG	この写真にはDNG用のカメラマトリクスがありません
+Keine gültige LUT (Kopf oder Größe)	有効なLUTではありません（ヘッダーまたはサイズ）
+LUT ist keine Textdatei	LUTがテキストファイルではありません
+LUT fehlerhaft: {}	LUTに誤りがあります: {}
+Look ohne lesbare Farbtabelle	読み込めるカラーテーブルのないルック
+Profil von Adobe (nicht unterstützt)	Adobeのプロファイル（非対応）
+Vorgabe ohne Look-Tabelle (nicht unterstützt)	ルックテーブルのないプリセット（非対応）
+Keine XMP-Datei mit Look	ルックを含むXMPファイルではありません
+Quelle fehlt: {}	ソースがありません: {}
+mindestens zwei Fotos	少なくとも2枚の写真
+kein zusammengefügtes Foto	合成写真ではありません
+HDR-Rezept nicht lesbar: {}	HDRレシピを読み込めません: {}
+{a} → {b}: Belichtung unbekannt (keine Messung, keine Aufnahmedaten) – als gleich hell angenommen	{a} → {b}: 露出不明（測定も撮影データもなし）– 同じ明るさとして扱います
+Nicht aktuell – {e}	最新ではありません – {e}
+Quelle fehlt: {a}	ソースがありません: {a}
+Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.	変更したカットの選択は計算されていません。リストは表示中の画像のカットです。
+Auswahl zurücknehmen	選択を元に戻す
+Das Rezept nimmt wieder die Aufnahmen des gezeigten Bildes; danach lässt sich die Liste wieder ändern	レシピを表示中の画像のカットに戻します。その後リストを再び変更できます
+Die Aufnahmen des gezeigten Bildes sind nicht mehr in der Bibliothek.	表示中の画像のカットはライブラリにありません。
+Der Platz des HDR ist inzwischen von einem anderen Foto belegt	HDR の場所は別の写真が使用しています
+Es werden gerade Reihen zusammengefügt – weitere Reihen danach	ブラケットを合成中です。次の合成はその後に
+Bricht die Berechnung ab; das neue HDR wird wieder entfernt	計算を中止します。新しい HDR は再び削除されます
+Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	計算を中止します。写真は表示されている状態のまま残ります
+die Berechnung wurde abgebrochen	計算は中止されました
+{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} は Foveon 写真（X3F）です。HDR にはカメラの多重撮影ファイル（X3I）— そのまま 1 枚の写真として開けます — または他のカメラの RAW ブラケットをお使いください。
+Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Quattro のディテール（ISO 400 以上）：ソフト（−3）から強（+3）まで、0 = カメラの設定。100 % 表示での確認をおすすめします
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	Quattro のフル処理がオフになっています。ディテールスライダーはフル処理でのみ有効です。
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	多重撮影（X3I）ではディテールは固定です。上の Foveon シャープネスは引き続き有効です。
+Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	ISO 400 未満では Quattro のディテールは固定です。上の Foveon シャープネスは引き続き有効です。
+{a}: Ausrichtung nicht plausibel – wie aufgenommen verwendet	{a}: 位置合わせの結果が不自然なため、撮影時のまま使用します
+{a}: andere Ausrichtung – Hoch- und Querformat lassen sich nicht zusammenfügen	{a}: 向きが異なります – 縦位置と横位置は合成できません
+Ein unfertiges HDR vom letzten Mal entfernt – die Quellen sind unverändert	前回未完了だった HDR を 1 枚削除しました – 元の写真はそのままです
+{n} unfertige HDR vom letzten Mal entfernt – die Quellen sind unverändert	前回未完了だった HDR を {n} 枚削除しました – 元の写真はそのままです
+Interner Fehler beim Zusammenfügen	合成中に内部エラーが発生しました
+Wartet – eine andere Berechnung läuft noch	待機中 – 別の計算がまだ実行中です
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	多重撮影（X3I）ではディテールは固定です。さらにシャープにするには上の「追加シャープ」を使います。
+Unter ISO 400 ist das Detail der Quattro fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	ISO 400 未満では Quattro のディテールは固定です。さらにシャープにするには上の「追加シャープ」を使います。
+Die Foveon-Schärfe gibt es nur für Merrill-Fotos. Hier schärft „Zusätzlich schärfen“; bei der Quattro ab ISO 400 auch „Detail“.	Foveon シャープネスは Merrill の写真でのみ使えます。ここでは「追加シャープ」が有効で、Quattro の ISO 400 以上では「ディテール」も使えます。
+Die Foveon-Schärfe wirkt nur mit eingeschaltetem Foveon-Detail.	Foveon シャープネスは Foveon ディテールがオンのときだけ有効です。
+Fein	精細
+Ausrichten (Horizont)	角度補正
+Duelle	対戦
+Foto abgelehnt	枚を不採用
+Fotos abgelehnt	枚を不採用
+Turnier übernommen: {a} – ⌘Z nimmt es zurück	トーナメントを適用：{a} – ⌘Z で取り消し
+Ergebnis des Turniers · {a} · {b}	トーナメントの結果 · {a} · {b}
+Platz 1 wird Auswahl und Titelfoto, alle anderen Fotos des Turniers werden abgelehnt (auch Platz 2 und 3); Sterne bleiben, wie sie sind – ein ⌘Z nimmt alles zurück	1 位は採用フラグとカバー写真になり、トーナメントの他の写真はすべて不採用になります（2 位と 3 位も）。星はそのまま – ⌘Z 1 回ですべて取り消せます
+Nur für Sigma-Fotos (X3F) in den Formaten TIFF 32 Bit und OpenEXR	Sigma の写真（X3F）で、TIFF 32 ビットと OpenEXR 形式のときのみ
+Nur für die Formate TIFF 32 Bit und OpenEXR	TIFF 32 ビットと OpenEXR 形式のときのみ
+Quelle nicht lesbar: {}	ソースを読み込めません: {}
+HDR ohne eigene Datei – mit „HDR entfernen (Quellen bleiben)“ aus der Bibliothek nehmen	独自のファイルを持たないHDRです。「HDRを削除（ソースは残す）」でライブラリから外してください
+Quelle nicht erreichbar: {a}. Das Bild bleibt, wie es ist – ändern und neu berechnen geht wieder, wenn sie da ist.	ソースにアクセスできません: {a}。画像はそのまま残ります。ソースが戻れば変更と再計算ができます。
+{a}: noch nicht in voller Auflösung berechnet – ohne die Quellen bleibt nur die Vorschau. Vorher öffnen und hineinzoomen oder exportieren.	{a}: まだフル解像度で計算されていません。ソースがないとプレビューだけが残ります。先に開いて拡大するか、書き出してください。
+Vorschau aktuell · volle Auflösung abgebrochen	プレビューは最新 · フル解像度はキャンセル
+HDR: die volle Auflösung wurde nicht berechnet (abgebrochen) – „Neu berechnen“ im Werkzeug „Zusammenfügen“	HDR: フル解像度は計算されていません（キャンセル）。ツール「結合」の「再計算」を使ってください
+Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht	基準カットにアクセスできません: レンズ補正は簡易版です
+schnelle Vorschau	高速プレビュー
+Die genaue Rechnung dieses Fotos ist gescheitert: das Feld zeigt die schnelle Vorschau mit mehr Rauschen	この写真の精密な計算に失敗しました。フィールドにはノイズの多い高速プレビューを表示しています
+Turnier ohne Sieger – nichts gesetzt	勝者のいないトーナメント – 何も設定していません
+Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	トーナメントは適用されませんでした：ここでは評価を設定できません
+Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	トーナメントを適用：勝者を採用 – ⌘Z で取り消し
+HDR abgebrochen und entfernt (Quellen bleiben)	HDR を中止して削除しました（元画像は残ります）
+Lichter-Farbe	ハイライトの色
+Lichter-Struktur	ハイライトの構造
+Lichter neutral, Lichter-Farbe, Lichter-Struktur	ハイライトをニュートラルに、ハイライトの色、ハイライトの構造
+Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	再構成したハイライトの色：0 ニュートラル、50 再構成どおり、100 より強く（はっきりした色のみ）
+Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	再構成したハイライトの描写：0 なめらか、50 再構成どおり、100 3倍
+Nur für Farbe	カラーのみ
+Nur für Fotos der Sigma Quattro	Sigma Quattro の写真のみ
+Dieses Foto hat keine rekonstruierbaren Lichter	この写真には再構成できるハイライトがありません
+Wird noch vorbereitet …	準備中 …
+Metadaten neu einlesen: {k} von {n}	メタデータを再読み込み中: {k} / {n}
+Metadaten neu einlesen …	メタデータを再読み込み…
+{a} gelesen, {m} geändert	{a}を読み込み、{m}件を変更
+, {k} nicht erreichbar	、{k}件にアクセスできません
+Metadaten werden bereits eingelesen.	メタデータはすでに読み込み中です。
+Keine Fotos zum Einlesen.	読み込む写真がありません。
+Metadaten neu einlesen	メタデータを再読み込み
+Metadaten neu einlesen · {a}	メタデータを再読み込み · {a}
+Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien.	日時、カメラ、レンズ、露出、場所、サイズ、向きをファイルから再読み込みします。
+Neben {a} liegt eine XMP-Begleitdatei.	{a}の横にXMPサイドカーがあります。
+Bewertung, Stichwörter, Etikett aus XMP	XMPのレーティング・キーワード・ラベル
+Ersetzt die Werte der Bibliothek; Entwicklung bleibt.	ライブラリの値を置き換えます。現像は残ります。
+Dateien bleiben unverändert; {k} macht es rückgängig.	ファイルは変更されません。{k}で元に戻せます。
+Einlesen	読み込む
+Foveon: Lichter	Foveon: ハイライト
+KI-Entrauschen gibt es nur in Farbe.	AIノイズ除去はカラーでのみ使えます。
+KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	AIノイズ除去はノイズ低減がオンのときのみ有効です。
+Nur für Merrill und Quattro	Merrill と Quattro のみ
+Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	Merrill ではスライダーなし、再構成は自動で働きます
+Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	この写真（高 ISO）ではスライダーなし、再構成は自動で働きます
+Lichter werden rekonstruiert …	ハイライトを再構成中 …
+Lichter werden rekonstruiert … (seit {n} s)	ハイライトを再構成中 …（{n} 秒）
+Merrill: Lichter rekonstruieren	Merrill：ハイライトを再構成
+Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung und Farbe); farbige Lichter bleiben farbig statt weiß. Wirkt automatisch, ohne Regler. Aus: bisheriger Weg	飛んだレイヤーをまだ有効なレイヤーから再構成します（ディテールと色）。色付きのハイライトは白にならず色を保ちます。スライダーなしで自動的に働きます。オフ：従来の方法
+Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	Merrillのハイライト再構成は設定でオフです（現像 →「Merrill：ハイライトを再構成」）
+Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	Quattroのハイライト再構成は設定でオフです（現像 →「Quattro：ハイライトを再構成」）
+Quattro: Lichter rekonstruieren	Quattro：ハイライトを再構成
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	強く露出オーバーの写真では計算負荷が高くなります（開くのが数秒遅くなります）。dp、sd、sd H Quattro：飛んだ上層を下層から再構成し、「ハイライトの色」と「ハイライトの構造」スライダーで調整できます。オフ：従来の方法

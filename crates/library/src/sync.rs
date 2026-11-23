@@ -305,7 +305,7 @@ pub fn reconcile_file_read(db: &Db, file: i64, path: &Path, format: &str, raw: b
     for k in &in_file {
         if first_read && !in_db.iter().any(|x| x.name == k.name) {
             db.conn
-                .execute("INSERT INTO image(file, copy, stars, flag, label, rating_time) VALUES(?1,?2,?3,?4,?5,?6)", params![file, k.name, k.stars, k.flag, k.label, mtime])
+                .execute(&format!("INSERT INTO image(id, file, copy, stars, flag, label, rating_time) VALUES({},?1,?2,?3,?4,?5,?6)", crate::merge::NEW_IMAGE_ID), params![file, k.name, k.stars, k.flag, k.label, mtime])
                 .map_err(f)?;
             let id = db.conn.last_insert_rowid();
             set_keywords(db, id, &k.keywords, mtime.unwrap_or(0), false)?;
@@ -361,7 +361,7 @@ pub fn create_copy(db: &Db, image: i64, name: Option<&str>) -> R<i64> {
     let t = crate::now();
     crate::location::note_before_change(db, &[file]);
     db.conn
-        .execute("INSERT INTO image(file, copy, stars, flag, label, rating_time, changed) VALUES(?1,?2,?3,?4,?5,?6,?6)", params![file, name, stars, mark, et, t])
+        .execute(&format!("INSERT INTO image(id, file, copy, stars, flag, label, rating_time, changed) VALUES({},?1,?2,?3,?4,?5,?6,?6)", crate::merge::NEW_IMAGE_ID), params![file, name, stars, mark, et, t])
         .map_err(f)?;
     let id = db.conn.last_insert_rowid();
     let ids = crate::keywords::ids_of(&db.conn, image)?;

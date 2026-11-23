@@ -637,6 +637,12 @@ pub fn rebuild(target: &Path, roots_path: &Path, default_catalog: Option<PathBuf
                     Ok(n) => json!(n),
                     Err(e) => json!({ "error": e }),
                 };
+                // merged photos (HDR) have no file and no sidecar: they exist only in the library as well
+                progress("HDR-Fotos übernehmen …");
+                report["merges"] = match copy_merges(&db, &previous) {
+                    Ok(c) => json!({ "copied": c.copied, "lost": c.lost }),
+                    Err(e) => json!({ "error": e }),
+                };
             }
             Ok(report)
         });
@@ -659,6 +665,11 @@ pub fn rebuild(target: &Path, roots_path: &Path, default_catalog: Option<PathBuf
 
 /// Copy every raster of the library at `previous` (opened read only) into the rebuilt one: also those of photos
 /// outside the library, whose sidecars name them. Returns: copied.
+fn copy_merges(db: &Db, previous: &Path) -> Result<crate::merge::Copied, String> {
+    let src = rusqlite::Connection::open_with_flags(previous, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| format!("{}: {e}", previous.display()))?;
+    crate::merge::copy_from(&src, db)
+}
+
 fn copy_rasters(db: &Db, previous: &Path) -> Result<usize, String> {
     let src = rusqlite::Connection::open_with_flags(previous, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| format!("{}: {e}", previous.display()))?;
     let ids: std::collections::HashSet<String> = match src.prepare("SELECT id FROM mask_raster") {

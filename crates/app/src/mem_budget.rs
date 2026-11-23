@@ -22,6 +22,18 @@ pub fn room(free: Option<u64>, need: u64) -> bool {
 
 /// Room for work ahead now? Logs when not. Work the user waits for never asks: it always runs, the result is the same.
 pub fn room_ahead(what: &str, need: u64) -> bool {
+    // the system already reports memory pressure: nothing ahead. Work ahead under pressure pushed the machine into
+    // swapping, and the window stood still with it (QA 10, H-1: a Sigma base ahead took 143 s instead of 4 s)
+    let pressure = library::platform::memory_pressure();
+    if pressure != Pressure::Normal {
+        static LOGGED: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+        let mut l = LOGGED.lock().unwrap_or_else(|e| e.into_inner());
+        if l.as_deref() != Some(what) {
+            crate::log(&format!("memory: {what} skipped (memory pressure {pressure:?})"));
+            *l = Some(what.to_string());
+        }
+        return false;
+    }
     let free = library::platform::info::memory_available_now();
     let ok = room(free, need);
     if !ok {

@@ -31,7 +31,13 @@ fn e(x: rusqlite::Error) -> String {
 }
 
 /// Version of the grouping: a new version regroups all automatic series that were not touched by the user.
-pub const ALGO: i64 = 1;
+/// 2: exposure brackets without aperture data (manual lenses) are recognized.
+/// 3: frames of the same second in file name order (not import order); brackets whose aperture moves with the
+/// exposure time (program shift, e.g. Panasonic GX7) are brackets; a bracket set by hand on a tripod (aperture and
+/// ISO fixed, steps ≥ 0.7 EV) may take up to [`MANUAL_BRACKET_GAP`] s per frame.
+/// 4: a series never spans folders, a Sigma SFD file (X3I, which holds a bracket itself) never joins single frames;
+/// the cover of an exposure bracket is its middle exposure.
+pub const ALGO: i64 = 4;
 /// Version of the image signature (`image_quality.signature`).
 pub const SIGNATURE_VERSION: i64 = 1;
 /// Length of an image signature in bytes: 8 bytes difference hash + 64 cells × Lab (3 bytes).
@@ -236,12 +242,16 @@ pub struct Item {
     pub iso: Option<i64>,
     /// already rated by the user (picked / stars): preferred as cover of a new series
     pub rank: i32,
+    /// a Sigma SFD file (X3I): it holds a whole bracket itself and is never grouped with single frames
+    pub sfd: bool,
 }
 
 impl Item {
     /// Exposure value at ISO 100 (log2(N²/t) − log2(ISO/100)); `None` without the shooting data.
     pub fn ev(&self) -> Option<f64> {
-        let (n, t) = (self.aperture?, self.exposure?);
+        // without an aperture (a manual or adapted lens writes none) the exposure still counts: the aperture of a
+        // bracket is fixed, so the steps between its frames come from the time and ISO alone
+        let (n, t) = (self.aperture.unwrap_or(1.0), self.exposure?);
         if n <= 0.0 || t <= 0.0 {
             return None;
         }
@@ -338,16 +348,22 @@ struct Link {
 /// Similarity between two files: value and what it came from.
 pub type SimFn<'a> = dyn Fn(i64, i64) -> Option<(f32, Basis)> + 'a;
 
-/// Group the photos of one capture day (any cameras; grouped per camera). `sim(file_a, file_b)` gives the
-/// similarity of two files if known; `never` holds image pairs (smaller id first) that must not be grouped.
+/// Group the photos of one capture day (any cameras; grouped per camera and folder: a series never spans two
+/// folders, and a Sigma SFD file never joins single frames). `sim(file_a, file_b)` gives the similarity of two files
+/// if known; `never` holds image pairs (smaller id first) that must not be grouped.
 pub fn group(items: &[Item], sim: &SimFn, never: &HashSet<(i64, i64)>) -> Vec<Group> {
-    let mut by_camera: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    let mut by_camera: BTreeMap<(&str, i64, bool), Vec<usize>> = BTreeMap::new();
     for (i, it) in items.iter().enumerate() {
-        by_camera.entry(it.camera.as_str()).or_default().push(i);
+        by_camera.entry((it.camera.as_str(), it.folder, it.sfd)).or_default().push(i);
     }
     let mut out = Vec::new();
     for (_, mut idx) in by_camera {
-        idx.sort_by_key(|&i| (items[i].secs, !items[i].raw, items[i].image));
+        // frames of the same second (no sub-seconds stored) in file name order: the order of the camera, not of the
+        // import (the image ids of an import follow whichever file was read first)
+        idx.sort_by(|&a, &b| {
+            let (x, y) = (&items[a], &items[b]);
+            (x.secs, &x.stem, !x.raw, x.image).cmp(&(y.secs, &y.stem, !y.raw, y.image))
+        });
         let links = links(items, &idx);
         for chain in chains(items, &links, sim, never) {
             for part in split_large(items, &links, chain, sim) {
@@ -400,6 +416,38 @@ fn never_with(items: &[Item], links: &[Link], group: &[usize], cand: &Link, neve
     })
 }
 
+/// How much lower the neighbour similarity may be for two frames of an exposure bracket and still join.
+const BRACKET_SIM_SLACK: f32 = 0.25;
+
+/// Seconds between two frames of a bracket set by hand (time dial turned between the shots, tripod, Canon 5D Mark II
+/// "garten": 3–6 s): only with aperture and ISO fixed and steps of at least 0.7 EV.
+const MANUAL_BRACKET_GAP: i64 = 6;
+
+/// Two shots one after the other of a bracket set by hand: same aperture (known) and ISO, exposure at least 0.7 EV
+/// apart, at most [`MANUAL_BRACKET_GAP`] s between them.
+fn manual_bracket_step(a: &Item, b: &Item, gap: i64) -> bool {
+    if gap > MANUAL_BRACKET_GAP || a.aperture.is_none() || !same_aperture(a.aperture, b.aperture) || a.iso != b.iso {
+        return false;
+    }
+    matches!((a.ev(), b.ev()), (Some(ea), Some(eb)) if (ea - eb).abs() >= 0.7)
+}
+
+/// Two shots one after the other of an exposure bracket: same camera and aperture (or an aperture moving with the
+/// exposure time, see [`bracket_apertures`]), exposure at least 0.7 EV apart, at most 3 s between them (a bracket set
+/// by hand: [`manual_bracket_step`]).
+fn bracket_neighbours(a: &Item, b: &Item, gap: i64) -> bool {
+    if a.camera != b.camera {
+        return false;
+    }
+    if gap > 3 {
+        return manual_bracket_step(a, b, gap);
+    }
+    match (bracket_apertures(a, b), a.ev(), b.ev()) {
+        (true, Some(ea), Some(eb)) => (ea - eb).abs() >= 0.7,
+        _ => false,
+    }
+}
+
 /// Time chains split where the subject changes or drifts away (indices into `links`).
 fn chains(items: &[Item], links: &[Link], sim: &SimFn, never: &HashSet<(i64, i64)>) -> Vec<Vec<usize>> {
     let mut out: Vec<Vec<usize>> = Vec::new();
@@ -417,7 +465,10 @@ fn chains(items: &[Item], links: &[Link], sim: &SimFn, never: &HashSet<(i64, i64
                         let in_time = gap <= t.gap || (gap <= t.gap_long && v >= t.long_sim);
                         let first = items[links[cur[0]].rep].file;
                         let drift_ok = cur.len() < 2 || sim(first, lf).is_none_or(|(d, db)| db != b || d >= t.drift);
-                        in_time && v >= t.join && drift_ok
+                        // wide exposure brackets (±3 EV): the darkest and the brightest frame look different, the
+                        // similarity of neighbours alone would cut the bracket into pairs
+                        let wide = bracket_neighbours(&items[p.rep], &items[l.rep], gap) && v >= t.join - BRACKET_SIM_SLACK;
+                        (in_time && v >= t.join && drift_ok) || wide
                     }
                     None => gap <= STRICT_GAP,
                 };
@@ -534,29 +585,69 @@ fn make_group(items: &[Item], links: &[Link], part: &[usize], sim: &SimFn) -> Gr
         }
         None => Kind::Series,
     };
-    // cover: the photo the user already rated best, otherwise the first one
+    // cover: the photo the user already rated best, otherwise the middle exposure of a bracket (its brightest or
+    // darkest frame says little about the scene), otherwise the first one
+    let middle = || {
+        if kind != Kind::Bracket {
+            return None;
+        }
+        let mut by_ev: Vec<(f64, i64)> = reps.iter().filter_map(|it| it.ev().map(|ev| (ev, it.image))).collect();
+        if by_ev.len() != reps.len() {
+            return None;
+        }
+        by_ev.sort_by(|a, b| a.0.total_cmp(&b.0));
+        Some(by_ev[(by_ev.len() - 1) / 2].1)
+    };
     let cover = part
         .iter()
         .flat_map(|&l| links[l].items.iter())
         .map(|&i| &items[i])
         .max_by_key(|it| (it.rank, std::cmp::Reverse(it.secs)))
         .filter(|it| it.rank > 0)
-        .map_or(images[0], |it| it.image);
+        .map(|it| it.image)
+        .or_else(middle)
+        .unwrap_or(images[0]);
     Group { images, kind, reason, cover }
 }
 
-/// Exposure bracket: aperture fixed, every photo at least 0.3 EV away from the one before, at least two distinct
-/// steps spanning ≥ 0.6 EV, all gaps ≤ 2 s. Returns (steps, range in EV).
+/// Same aperture: both known and equal, or both unknown (a lens without electronic contacts writes none; the frames
+/// of one burst share it).
+fn same_aperture(a: Option<f64>, b: Option<f64>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => (x - y).abs() <= 0.05,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// Apertures of two neighbouring frames of a bracket: the same, or both known and the exposure time changing as well
+/// (a bracket in program mode shifts aperture and time together: Panasonic GX7, f/3.2 1/400 → f/2.8 1/250 →
+/// f/2.2 1/200). A change of the aperture alone (time fixed) is no bracket.
+fn bracket_apertures(a: &Item, b: &Item) -> bool {
+    if same_aperture(a.aperture, b.aperture) {
+        return true;
+    }
+    match (a.aperture, b.aperture, a.exposure, b.exposure) {
+        (Some(_), Some(_), Some(ta), Some(tb)) if ta > 0.0 && tb > 0.0 => (ta / tb).log2().abs() >= 0.2,
+        _ => false,
+    }
+}
+
+/// Exposure bracket: aperture fixed (or moving with the time, [`bracket_apertures`]), every photo at least 0.3 EV
+/// away from the one before, at least two distinct steps spanning ≥ 0.6 EV, all gaps ≤ 2 s (a bracket set by hand:
+/// every step a [`manual_bracket_step`]). Returns (steps, range in EV).
 fn bracket(reps: &[&Item], gap_max: i64) -> Option<(u32, f32)> {
-    if gap_max > 2 || reps.len() < 2 {
+    if reps.len() < 2 {
         return None;
     }
-    let n0 = reps[0].aperture?;
+    if gap_max > 2 && !reps.windows(2).all(|w| manual_bracket_step(w[0], w[1], (w[1].secs - w[0].secs).abs())) {
+        return None;
+    }
+    if reps.windows(2).any(|w| !bracket_apertures(w[0], w[1])) {
+        return None;
+    }
     let mut evs = Vec::new();
     for r in reps {
-        if (r.aperture? - n0).abs() > 0.05 {
-            return None;
-        }
         evs.push(r.ev()?);
     }
     if evs.windows(2).any(|w| (w[1] - w[0]).abs() < 0.3) {
@@ -583,6 +674,8 @@ pub struct Stats {
     pub stacks_created: usize,
     pub stacks_removed: usize,
     pub stacks_kept: usize,
+    /// days left for later: shooting data or previews of their photos are not there yet ([`regroup_ready`])
+    pub waiting_days: usize,
     pub ms: u128,
 }
 
@@ -592,6 +685,8 @@ struct DayItems {
     /// files with a signature / with a CLIP vector (part of the fingerprint)
     sig: HashSet<i64>,
     vec: HashSet<i64>,
+    /// some photo's shooting data has not been read yet (`file.exif = 0`): grouping now would split brackets
+    unread: bool,
 }
 
 fn fnv(h: &mut u64, bytes: &[u8]) {
@@ -611,6 +706,9 @@ fn fingerprint(d: &DayItems) -> i64 {
         fnv(&mut h, &i.folder.to_le_bytes());
         fnv(&mut h, i.camera.as_bytes());
         fnv(&mut h, &[d.sig.contains(&i.file) as u8, d.vec.contains(&i.file) as u8]);
+        // the shooting data is read after the import, often after a first grouping: once it is there the day is
+        // grouped again (an exposure bracket is recognized only with it; without, it fell apart into small series)
+        fnv(&mut h, &[i.aperture.is_some() as u8, i.exposure.is_some() as u8]);
     }
     fnv(&mut h, &ALGO.to_le_bytes());
     h as i64
@@ -628,11 +726,11 @@ fn load_days(conn: &Connection) -> R<BTreeMap<String, DayItems>> {
     let mut st = conn
         .prepare(
             "SELECT b.id, d.id, d.folder, d.name, d.format, coalesce(d.camera, ''), d.capture_time, d.aperture, d.time, d.iso,
-                    b.stars + 10 * (b.flag = 1), q.signature IS NOT NULL, v.file IS NOT NULL
+                    b.stars + 10 * (b.flag = 1), q.signature IS NOT NULL, v.file IS NOT NULL, d.exif = 0 AND d.status = 0
              FROM image b JOIN file d ON d.id = b.file
              LEFT JOIN image_quality q ON q.file = d.id
              LEFT JOIN image_vector v ON v.file = d.id
-             WHERE b.copy IS NULL AND d.status <> 4 AND d.capture_time IS NOT NULL AND d.format <> 'VIDEO'",
+             WHERE b.copy IS NULL AND d.status NOT IN (3, 4) AND d.capture_time IS NOT NULL AND d.format <> 'VIDEO'",
         )
         .map_err(e)?;
     let mut days: BTreeMap<String, DayItems> = BTreeMap::new();
@@ -653,6 +751,7 @@ fn load_days(conn: &Connection) -> R<BTreeMap<String, DayItems>> {
             folder: r.get(2).map_err(e)?,
             stem: crate::pairs::stem(&name),
             raw: crate::is_raw(&format),
+            sfd: format == "X3I",
             camera: r.get(5).map_err(e)?,
             secs,
             aperture: r.get(7).map_err(e)?,
@@ -660,7 +759,8 @@ fn load_days(conn: &Connection) -> R<BTreeMap<String, DayItems>> {
             iso: r.get(9).map_err(e)?,
             rank: r.get::<_, i64>(10).map_err(e)? as i32,
         };
-        let d = days.entry(capture[..10].to_string()).or_insert_with(|| DayItems { items: Vec::new(), sig: HashSet::new(), vec: HashSet::new() });
+        let d = days.entry(capture[..10].to_string()).or_insert_with(|| DayItems { items: Vec::new(), sig: HashSet::new(), vec: HashSet::new(), unread: false });
+        d.unread |= r.get::<_, bool>(13).map_err(e)?;
         if r.get::<_, bool>(11).map_err(e)? {
             d.sig.insert(file);
         }
@@ -696,6 +796,25 @@ fn load_similarity_data(conn: &Connection, files: &[i64]) -> R<(HashMap<i64, Vec
         }
     }
     Ok((sigs, vecs))
+}
+
+/// Do neighbouring photos of `files` (in this order) look like frames of one exposure bracket? Each pair is compared
+/// with the similarity the series use (CLIP or image signature), with the slack of wide brackets (the darkest and
+/// the brightest frame look different). `None`: no similarity known for any pair (no signatures yet) – nothing
+/// speaks against it. Reads a few rows, no image is decoded.
+pub fn bracket_alike(conn: &Connection, files: &[i64]) -> R<Option<bool>> {
+    let (sigs, vecs) = load_similarity_data(conn, files)?;
+    let sim = similarity_from(&sigs, &vecs);
+    let mut known = false;
+    for w in files.windows(2) {
+        if let Some((v, b)) = sim(w[0], w[1]) {
+            known = true;
+            if v < thresholds(b).join - BRACKET_SIM_SLACK {
+                return Ok(Some(false));
+            }
+        }
+    }
+    Ok(known.then_some(true))
 }
 
 /// Similarity function over loaded data: CLIP when both files have a vector, otherwise the signature.
@@ -756,8 +875,13 @@ fn write_day(conn: &Connection, day: &str, groups: &[Group], images: &HashSet<i6
     let now = crate::now();
     for g in groups {
         if let Some(id) = by_members.remove(&g.images) {
-            // same photos: keep the stack; refresh the explanation only
-            tx.execute("UPDATE stack SET reason = ?2, kind = ?3, day = ?4, algo = ?5 WHERE id = ?1", params![id, g.reason.to_json(), g.kind.as_str(), day, ALGO]).map_err(e)?;
+            // same photos: keep the stack (its collapsed state); refresh the explanation, and the cover while the
+            // grouping chose it (a new version picks another one: the middle exposure of a bracket)
+            tx.execute(
+                "UPDATE stack SET reason = ?2, kind = ?3, day = ?4, algo = ?5, cover = CASE WHEN coalesce(cover_by, 'auto') = 'auto' THEN ?6 ELSE cover END WHERE id = ?1",
+                params![id, g.reason.to_json(), g.kind.as_str(), day, ALGO, g.cover],
+            )
+            .map_err(e)?;
             old.remove(&id);
             stats.stacks_kept += 1;
             continue;
@@ -790,9 +914,15 @@ fn write_day(conn: &Connection, day: &str, groups: &[Group], images: &HashSet<i6
     tx.commit().map_err(e)
 }
 
-/// Remove stacks with fewer than two photos (photos deleted, taken out). Any origin.
+/// Members of stacks the library shows: photos whose file is not hidden for good (status 4, deleted or hidden in
+/// Apple Photos, never shown in the library).
+const SHOWN_MEMBERS: &str = "SELECT si.stack, si.image FROM stack_image si JOIN image b ON b.id = si.image JOIN file d ON d.id = b.file WHERE d.status <> 4";
+
+/// Remove stacks with fewer than two shown photos (photos deleted, taken out, hidden for good). Any origin, own
+/// stacks too: a stack of one photo has no cover, order or members to fold – it would only put a stack mark on a
+/// single photo (⌘G and the Lightroom import refuse fewer than two photos for the same reason).
 pub fn remove_broken(conn: &Connection) -> R<usize> {
-    conn.execute("DELETE FROM stack WHERE id NOT IN (SELECT stack FROM stack_image GROUP BY stack HAVING count(*) >= 2)", []).map_err(e)
+    conn.execute(&format!("DELETE FROM stack WHERE id NOT IN (SELECT stack FROM ({SHOWN_MEMBERS}) GROUP BY stack HAVING count(*) >= 2)"), []).map_err(e)
 }
 
 /// Group the library: only days whose photos changed since the last run (or all with `force`), one short
@@ -803,6 +933,14 @@ pub fn regroup(db: &Db, force: bool, cancel: &dyn Fn() -> bool) -> R<Stats> {
 
 /// [`regroup`] that tells its progress: capture days looked at, days in total.
 pub fn regroup_with_progress(db: &Db, force: bool, cancel: &dyn Fn() -> bool, progress: &dyn Fn(usize, usize)) -> R<Stats> {
+    regroup_ready(db, force, cancel, progress, None)
+}
+
+/// [`regroup_with_progress`] that leaves days for later whose photos are not complete yet: shooting data not read
+/// (`file.exif = 0`) or a file in `waiting` (its preview, and so its signature, is not there yet). Grouped without
+/// them, a bracket fell apart into pieces (QA 1.5.0-test.5: garden 2 + 2 + 2, sunset 4 + 3 for two minutes after an
+/// import). `None`: group every day as it is (the caller gave up waiting).
+pub fn regroup_ready(db: &Db, force: bool, cancel: &dyn Fn() -> bool, progress: &dyn Fn(usize, usize), waiting: Option<&HashSet<i64>>) -> R<Stats> {
     let t = std::time::Instant::now();
     let conn = &db.conn;
     let days = load_days(conn)?;
@@ -821,6 +959,12 @@ pub fn regroup_with_progress(db: &Db, force: bool, cancel: &dyn Fn() -> bool, pr
         let print = fingerprint(d);
         if !force && known.get(day) == Some(&(print, ALGO)) {
             continue;
+        }
+        if let Some(w) = waiting {
+            if d.unread || d.items.iter().any(|i| w.contains(&i.file)) {
+                stats.waiting_days += 1;
+                continue;
+            }
         }
         let files: Vec<i64> = d.items.iter().map(|i| i.file).collect();
         let images: Vec<i64> = d.items.iter().map(|i| i.image).collect();
@@ -871,7 +1015,7 @@ pub fn files_without_signature(db: &Db) -> Vec<SignatureTask> {
         "SELECT d.id, s.path || o.path || d.name, coalesce(d.size, 0), coalesce(d.mtime, 0), d.orientation
          FROM file d JOIN folder o ON o.id = d.folder JOIN root_folder s ON s.id = o.root
          LEFT JOIN image_quality q ON q.file = d.id
-         WHERE d.capture_time IS NOT NULL AND d.status <> 4 AND d.format <> 'VIDEO' AND q.signature IS NULL
+         WHERE d.capture_time IS NOT NULL AND d.status NOT IN (3, 4) AND d.format <> 'VIDEO' AND q.signature IS NULL
          ORDER BY d.capture_time DESC",
     ) else {
         return Vec::new();
@@ -924,7 +1068,11 @@ impl Stack {
 
 /// All stacks with their members (one query each; ~25,000 rows for a large library, a few milliseconds).
 pub fn load(conn: &Connection) -> R<Vec<Stack>> {
-    let mut st = conn.prepare("SELECT id, kind, origin, cover, cover_by, collapsed, reviewed, reason, day FROM stack").map_err(e)?;
+    // automatic series of an older grouping version are not shown: the next run regroups them (shown until then,
+    // they put photos together the current rules keep apart, QA 1.5.0-test.5: an X3I with the frames of another folder)
+    let mut st = conn
+        .prepare(&format!("SELECT id, kind, origin, cover, cover_by, collapsed, reviewed, reason, day FROM stack WHERE NOT (origin = 'auto' AND reviewed IS NULL AND algo < {ALGO})"))
+        .map_err(e)?;
     let mut stacks: HashMap<i64, Stack> = st
         .query_map([], |r| {
             Ok(Stack {
@@ -944,7 +1092,8 @@ pub fn load(conn: &Connection) -> R<Vec<Stack>> {
         .map(|s| s.map(|s| (s.id, s)))
         .collect::<Result<_, _>>()
         .map_err(e)?;
-    let mut st = conn.prepare("SELECT stack, image FROM stack_image ORDER BY stack, position").map_err(e)?;
+    // members hidden for good are left out: the stack is what the library can show (fewer than two: no stack)
+    let mut st = conn.prepare(&format!("{SHOWN_MEMBERS} ORDER BY si.stack, si.position")).map_err(e)?;
     let mut rows = st.query([]).map_err(e)?;
     while let Some(r) = rows.next().map_err(e)? {
         if let Some(s) = stacks.get_mut(&r.get::<_, i64>(0).map_err(e)?) {
@@ -999,7 +1148,7 @@ pub fn open_count(conn: &Connection) -> i64 {
 // ───────────────────────────────────────────── changes by the user
 
 /// State of one stack before a change, to undo it exactly (⌘Z).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Snapshot {
     /// stacks as they were (row values and members with position and pin); `None` member list = did not exist
     stacks: Vec<(i64, Option<StackRow>)>,
@@ -1009,7 +1158,7 @@ pub struct Snapshot {
     never_added: Vec<(i64, i64)>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 struct StackRow {
     kind: String,
     origin: String,
@@ -1078,8 +1227,14 @@ fn snapshot(conn: &Connection, stacks: &[i64], images: &[i64]) -> R<Snapshot> {
 /// changed or deleted: the old stack comes back under a new id, its photos follow it.
 pub fn restore(db: &Db, c: &Change) -> R<()> {
     let tx = begin(db)?;
+    restore_in(&tx, c)?;
+    tx.commit().map_err(e)
+}
+
+/// [`restore`] inside a transaction the caller holds (and commits).
+pub fn restore_in(tx: &Connection, c: &Change) -> R<()> {
     let same = |id: i64, created: Option<i64>, kind: Option<&str>| -> R<bool> {
-        Ok(read_row(&tx, id)?.is_some_and(|r| created.is_none_or(|t| r.created == t) && kind.is_none_or(|k| r.kind == k)))
+        Ok(read_row(tx, id)?.is_some_and(|r| created.is_none_or(|t| r.created == t) && kind.is_none_or(|k| r.kind == k)))
     };
     for (id, created) in c.created.iter().zip(c.created_at.iter().map(Some).chain(std::iter::repeat(None))) {
         // only the stack this change made (created by the user; an id taken again by the grouping stays)
@@ -1124,11 +1279,11 @@ pub fn restore(db: &Db, c: &Change) -> R<()> {
     for (a, b) in &c.before.never_added {
         tx.execute("DELETE FROM stack_never WHERE a = ?1 AND b = ?2", params![a, b]).map_err(e)?;
     }
-    tx.commit().map_err(e)
+    Ok(())
 }
 
 /// A change to stacks: what is needed to undo it.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Change {
     before: Snapshot,
     /// stacks the change created
@@ -1193,20 +1348,27 @@ fn renumber(tx: &Connection, stack: i64) -> R<()> {
 /// Bundle photos into one own stack (⌘G); `cover` on top, the others in the given order. Photos leave their
 /// previous stacks. Returns the change (for ⌘Z) and the id of the new stack.
 pub fn create(db: &Db, images: &[i64], cover: i64) -> R<(Change, i64)> {
+    let tx = begin(db)?;
+    let r = create_in(&tx, images, cover)?;
+    tx.commit().map_err(e)?;
+    Ok(r)
+}
+
+/// [`create`] inside a transaction the caller holds (and commits).
+pub fn create_in(tx: &Connection, images: &[i64], cover: i64) -> R<(Change, i64)> {
     if images.len() < 2 {
         return Err("mindestens zwei Fotos".into());
     }
-    let tx = begin(db)?;
-    let olds: Vec<i64> = images.iter().filter_map(|&i| stack_of(&tx, i).ok().flatten()).collect::<HashSet<_>>().into_iter().collect();
-    let before = snapshot(&tx, &olds, images)?;
+    let olds: Vec<i64> = images.iter().filter_map(|&i| stack_of(tx, i).ok().flatten()).collect::<HashSet<_>>().into_iter().collect();
+    let before = snapshot(tx, &olds, images)?;
     let mut order: Vec<i64> = vec![cover];
     order.extend(images.iter().copied().filter(|&i| i != cover));
     for i in &order {
         tx.execute("DELETE FROM stack_image WHERE image = ?1", [i]).map_err(e)?;
     }
     for &o in &olds {
-        make_user(&tx, o)?;
-        renumber(&tx, o)?;
+        make_user(tx, o)?;
+        renumber(tx, o)?;
     }
     tx.execute(
         "INSERT INTO stack(kind, origin, cover, cover_by, collapsed, algo, day, created) VALUES('manual', 'user', ?1, 'user', 1, ?2, NULL, ?3)",
@@ -1217,10 +1379,41 @@ pub fn create(db: &Db, images: &[i64], cover: i64) -> R<(Change, i64)> {
     for (p, i) in order.iter().enumerate() {
         tx.execute("INSERT INTO stack_image(image, stack, position, pinned) VALUES(?1, ?2, ?3, 1)", params![i, id, p as i64 + 1]).map_err(e)?;
     }
-    remove_broken(&tx)?;
-    let change = Change::with_created(before, &tx, &[id])?;
-    tx.commit().map_err(e)?;
+    remove_broken(tx)?;
+    let change = Change::with_created(before, tx, &[id])?;
     Ok((change, id))
+}
+
+/// Put `image` on top of an existing stack as its cover (a merged photo joining the bracket of its sources). The stack
+/// keeps its kind (a detected series or bracket stays one) and becomes the user's, so the background grouping leaves
+/// it alone; `image` leaves its previous stack. Returns the change (for ⌘Z).
+pub fn join(db: &Db, stack: i64, image: i64) -> R<Change> {
+    let tx = begin(db)?;
+    let c = join_in(&tx, stack, image)?;
+    tx.commit().map_err(e)?;
+    Ok(c)
+}
+
+/// [`join`] inside a transaction the caller holds (and commits).
+pub fn join_in(tx: &Connection, stack: i64, image: i64) -> R<Change> {
+    if read_row(tx, stack)?.is_none() {
+        return Err("Stapel fehlt".into());
+    }
+    let old = stack_of(tx, image)?.filter(|o| *o != stack);
+    let stacks: Vec<i64> = std::iter::once(stack).chain(old).collect();
+    let before = snapshot(tx, &stacks, &[image])?;
+    tx.execute("DELETE FROM stack_image WHERE image = ?1", [image]).map_err(e)?;
+    if let Some(o) = old {
+        make_user(tx, o)?;
+        renumber(tx, o)?;
+    }
+    make_user(tx, stack)?;
+    tx.execute("UPDATE stack_image SET position = position + 1 WHERE stack = ?1", [stack]).map_err(e)?;
+    tx.execute("INSERT INTO stack_image(image, stack, position, pinned) VALUES(?1, ?2, 1, 1)", params![image, stack]).map_err(e)?;
+    tx.execute("UPDATE stack SET cover = ?2, cover_by = 'user' WHERE id = ?1", params![stack, image]).map_err(e)?;
+    remove_broken(tx)?;
+    let change = Change::with_created(before, tx, &[])?;
+    Ok(change)
 }
 
 /// Dissolve a stack (⇧⌘G): its photos stand alone again and are never grouped together automatically.
@@ -1560,6 +1753,152 @@ mod tests {
         assert_eq!(group(&items, &sim, &HashSet::new())[0].kind, Kind::Series);
     }
 
+    /// QA 1.5.0-test.5: the cover of a bracket is its middle exposure, not the brightest or darkest frame (garden
+    /// bracket: the first frame was nearly white).
+    #[test]
+    fn bracket_cover_is_the_middle_exposure() {
+        let mk = |i: i64, t: f64| Item { aperture: Some(8.0), exposure: Some(t), iso: Some(100), ..it(i, i / 2) };
+        let sim = |_: i64, _: i64| Some((0.95, Basis::Clip));
+        let items = vec![mk(1, 1.0), mk(2, 1.0 / 4.0), mk(3, 1.0 / 15.0), mk(4, 1.0 / 60.0), mk(5, 1.0 / 250.0)];
+        assert_eq!(group(&items, &sim, &HashSet::new())[0].cover, 3);
+        // a photo the user rated still wins
+        let mut items = items;
+        items[4].rank = 3;
+        assert_eq!(group(&items, &sim, &HashSet::new())[0].cover, 5);
+    }
+
+    /// QA 1.5.0-test.5: a Sigma SFD file (X3I, folder 7) and the single frames taken from it (X3F, folder 8) formed
+    /// one series of eight across two folders. A series stays in its folder, and an X3I never joins single frames.
+    #[test]
+    fn series_stay_in_their_folder_and_sfd_alone() {
+        let sim = |_: i64, _: i64| Some((0.95, Basis::Clip));
+        let mut items: Vec<Item> = (1..=4).map(|i| it(i, i)).collect();
+        items[2].folder = 2;
+        items[3].folder = 2;
+        let g = group(&items, &sim, &HashSet::new());
+        let mut v: Vec<Vec<i64>> = g.iter().map(|g| g.images.clone()).collect();
+        v.sort();
+        assert_eq!(v, [vec![1, 2], vec![3, 4]]);
+        // one folder: the X3I stays out of the frames' series
+        let mut items: Vec<Item> = (1..=4).map(|i| it(i, i)).collect();
+        items[0].sfd = true;
+        let g = group(&items, &sim, &HashSet::new());
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].images, [2, 3, 4]);
+    }
+
+    /// A wide bracket (seven frames, 1 EV apart) stays one group although the extreme frames look different;
+    /// 
+    #[test]
+    fn wide_bracket_stays_together() {
+        let mk = |i: i64, t: f64| Item { aperture: Some(4.0), exposure: Some(t), iso: Some(100), ..it(i, i / 2) };
+        let ts = [1.0 / 4000.0, 1.0 / 2000.0, 1.0 / 1000.0, 1.0 / 500.0, 1.0 / 250.0, 1.0 / 125.0, 1.0 / 60.0];
+        let items: Vec<Item> = ts.iter().enumerate().map(|(i, t)| mk(i as i64 + 1, *t)).collect();
+        // neighbours of a wide bracket: similarity 0.75 (below the join threshold 0.88 of the content model)
+        let sim = |_: i64, _: i64| Some((0.75, Basis::Clip));
+        let g = group(&items, &sim, &HashSet::new());
+        assert_eq!(g.len(), 1);
+        assert_eq!(g[0].kind, Kind::Bracket);
+    }
+
+    /// Shooting data that arrives after a first grouping (read in the background after the import) changes the
+    /// day's fingerprint, so the day is grouped again and a bracket no longer stays split into small series.
+    #[test]
+    fn shooting_data_arriving_later_regroups_the_day() {
+        let day = |exp: Option<f64>| DayItems { items: (1..=7).map(|i| Item { aperture: exp.map(|_| 16.0), exposure: exp, ..it(i, 0) }).collect(), sig: HashSet::new(), vec: HashSet::new(), unread: false };
+        assert_ne!(fingerprint(&day(None)), fingerprint(&day(Some(0.5))));
+        // with the data, seven frames of one second (1 EV apart, neighbours alike, the ends not) are one bracket
+        let ts = [1.0 / 60.0, 1.0 / 15.0, 1.0 / 30.0, 1.0 / 8.0, 0.25, 0.5, 1.0];
+        let items: Vec<Item> = ts.iter().enumerate().map(|(i, t)| Item { aperture: Some(16.0), exposure: Some(*t), iso: Some(100), ..it(i as i64 + 1, i as i64 / 5) }).collect();
+        let sim = |a: i64, b: i64| Some((if a.abs_diff(b) <= 1 { 0.65 } else { 0.4 }, Basis::Signature));
+        let g = group(&items, &sim, &HashSet::new());
+        assert_eq!(g.len(), 1, "{:?}", g.iter().map(|g| g.images.len()).collect::<Vec<_>>());
+        assert_eq!(g[0].kind, Kind::Bracket);
+    }
+
+    /// A handheld bracket from a lens without aperture data (Pentax K50, 2 EV steps): the frames look different
+    /// (similarity below the join threshold) and still are one bracket.
+    #[test]
+    fn bracket_without_aperture_data_stays_together() {
+        let ts = [1.0 / 500.0, 1.0 / 125.0, 1.0 / 30.0];
+        let items: Vec<Item> = ts.iter().enumerate().map(|(i, t)| Item { aperture: None, exposure: Some(*t), iso: Some(100), ..it(i as i64 + 1, 0) }).collect();
+        let sim = |a: i64, b: i64| Some((if a.min(b) == 1 { 0.45 } else { 0.62 }, Basis::Signature));
+        let g = group(&items, &sim, &HashSet::new());
+        assert_eq!(g.len(), 1, "{:?}", g.iter().map(|g| g.images.len()).collect::<Vec<_>>());
+        assert_eq!(g[0].kind, Kind::Bracket);
+        // photos with and without aperture data are no bracket
+        assert!(!same_aperture(Some(4.0), None));
+    }
+
+    /// The free bracket "3-fenster-gx7-3er" (Panasonic GX7, three RW2 of one second, imported as _02, _03, _01): the
+    /// camera shifts aperture and time together (f/3.2 1/400, f/2.8 1/250, f/2.2 1/200, ≈ 1 EV apart). Measured
+    /// similarities of the real files (signature / CLIP). One bracket in file name order, whatever the import order.
+    #[test]
+    fn program_shift_bracket_of_one_second_is_one_bracket_in_name_order() {
+        let gx7 = |image: i64, n: u8, aperture: f64, time: f64| Item {
+            image,
+            file: image,
+            folder: 1,
+            stem: format!("fenster-gx7-3er_0{n}"),
+            raw: true,
+            camera: "Panasonic DMC-GX7".into(),
+            secs: 100,
+            aperture: Some(aperture),
+            exposure: Some(time),
+            iso: Some(200),
+            rank: 0,
+            sfd: false,
+        };
+        let items = vec![gx7(107, 2, 2.8, 0.004), gx7(108, 3, 2.2, 0.005), gx7(109, 1, 3.2, 0.0025)];
+        let pair = |a: i64, b: i64| (a.min(b), a.max(b));
+        for (basis, v) in [(Basis::Signature, [0.904f32, 0.779, 0.871]), (Basis::Clip, [0.944, 0.921, 0.981])] {
+            let sim = move |a: i64, b: i64| {
+                Some((
+                    match pair(a, b) {
+                        (107, 109) => v[0],
+                        (108, 109) => v[1],
+                        _ => v[2],
+                    },
+                    basis,
+                ))
+            };
+            let g = group(&items, &sim, &HashSet::new());
+            assert_eq!(sets(&g), vec![vec![109, 107, 108]], "{basis:?}");
+            assert_eq!(g[0].kind, Kind::Bracket, "{basis:?}");
+            assert_eq!(g[0].reason.ev_steps, Some(3));
+            // every import order gives the same group
+            for order in [[0, 1, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]] {
+                let shuffled: Vec<Item> = order.iter().map(|&k| items[k].clone()).collect();
+                assert_eq!(sets(&group(&shuffled, &sim, &HashSet::new())), vec![vec![109, 107, 108]]);
+            }
+        }
+        // a change of the aperture alone (time fixed) is no bracket
+        let fixed: Vec<Item> = [(1, 2.8), (2, 4.0), (3, 5.6)].iter().map(|&(n, a)| gx7(n as i64, n, a, 0.004)).collect();
+        assert_eq!(group(&fixed, &|_, _| Some((0.95, Basis::Clip)), &HashSet::new())[0].kind, Kind::Series);
+    }
+
+    /// "2-garten-5d2-6er" (Canon 5D Mark II on a tripod, f/18, ISO 400, 1 s … 1/1250 s in 2 EV steps, 3–6 s apart,
+    /// the time dial turned by hand): one bracket of six. Measured CLIP similarities of the real files; before, the
+    /// first frame (6 s before the next, similarity 0.83 < 0.88) stayed alone and the rest was a series.
+    #[test]
+    fn bracket_set_by_hand_stays_together() {
+        let shot = |image: i64, secs: i64, time: f64| Item { aperture: Some(18.0), exposure: Some(time), iso: Some(400), raw: true, camera: "Canon EOS 5D Mark II".into(), ..it(image, secs) };
+        let items = vec![shot(1, 0, 1.0), shot(2, 6, 0.2), shot(3, 9, 0.05), shot(4, 12, 0.0125), shot(5, 17, 0.003125), shot(6, 21, 0.0008)];
+        let near = [0.83f32, 0.875, 0.974, 0.96, 0.951];
+        let sim = move |a: i64, b: i64| Some((if a.abs_diff(b) == 1 { near[(a.min(b) - 1) as usize] } else { 0.7 }, Basis::Clip));
+        let g = group(&items, &sim, &HashSet::new());
+        assert_eq!(sets(&g), vec![vec![1, 2, 3, 4, 5, 6]]);
+        assert_eq!(g[0].kind, Kind::Bracket);
+        assert_eq!(g[0].reason.ev_steps, Some(6));
+        // the same frames with the ISO changing are no bracket set by hand
+        let mut other = items.clone();
+        other[1].iso = Some(800);
+        assert_ne!(group(&other, &sim, &HashSet::new())[0].images.len(), 6);
+        // a burst 6 s apart with the same exposure stays a plain series rule (not joined by the bracket slack)
+        let same: Vec<Item> = (1..=3).map(|i| shot(i, i * 6, 0.01)).collect();
+        assert!(group(&same, &|_, _| Some((0.80, Basis::Clip)), &HashSet::new()).is_empty());
+    }
+
     #[test]
     fn cover_prefers_a_rated_photo() {
         let mut items = vec![it(1, 0), it(2, 1), it(3, 2)];
@@ -1633,6 +1972,31 @@ mod tests {
         false
     }
 
+    /// QA 1.5.0-test.5: right after an import brackets showed in pieces until the next start (shooting data and
+    /// previews arrive in the background). A day is grouped once its photos are complete, in the same session.
+    #[test]
+    fn days_wait_for_shooting_data_and_previews() {
+        let db = test_db("waiting");
+        for i in 1..=3 {
+            add(&db, i, &format!("2024-05-11T14:00:0{i}"));
+        }
+        let none = HashSet::new();
+        let s = regroup_ready(&db, false, &never_cancel, &|_, _| {}, Some(&none)).unwrap();
+        assert_eq!((s.waiting_days, s.regrouped_days), (1, 0), "shooting data not read yet");
+        assert!(stacks(&db).is_empty());
+        db.conn.execute("UPDATE file SET exif = 1", []).unwrap();
+        let waiting: HashSet<i64> = [2].into_iter().collect();
+        let s = regroup_ready(&db, false, &never_cancel, &|_, _| {}, Some(&waiting)).unwrap();
+        assert_eq!(s.waiting_days, 1, "a preview is missing");
+        assert!(stacks(&db).is_empty());
+        let s = regroup_ready(&db, false, &never_cancel, &|_, _| {}, Some(&none)).unwrap();
+        assert_eq!((s.waiting_days, s.regrouped_days), (0, 1));
+        assert_eq!(stacks(&db), vec![vec![1, 2, 3]]);
+        // a series of an older grouping version is not shown until the next run regroups it
+        db.conn.execute("UPDATE stack SET algo = ?1", [ALGO - 1]).unwrap();
+        assert!(stacks(&db).is_empty());
+    }
+
     #[test]
     fn regroup_writes_keeps_and_respects_fixed_stacks() {
         let db = test_db("regroup");
@@ -1664,6 +2028,33 @@ mod tests {
         db.conn.execute("DELETE FROM image WHERE id IN (6, 7)", []).unwrap();
         regroup(&db, false, &never_cancel).unwrap();
         assert_eq!(stacks(&db), vec![vec![1, 2]]);
+    }
+
+    /// Found in 1.4.2 ("1/1" on a tile): a stack with only one photo left that the library shows is no stack –
+    /// neither when loading nor after the next grouping run; own stacks too.
+    #[test]
+    fn stacks_with_one_shown_photo_are_dissolved() {
+        let db = test_db("one-left");
+        for i in 1..=6 {
+            add(&db, i, &format!("2024-05-11T14:0{i}:00"));
+        }
+        let (_, own) = create(&db, &[1, 2], 1).unwrap();
+        let (_, hidden) = create(&db, &[3, 4], 3).unwrap();
+        let (_, kept) = create(&db, &[5, 6], 5).unwrap();
+        // photo 2 leaves the library (cascade: its member row goes), photo 4 is hidden for good (Apple Photos)
+        db.conn.execute("DELETE FROM image WHERE id = 2", []).unwrap();
+        db.conn.execute("UPDATE file SET status = 4 WHERE id = 4", []).unwrap();
+        // loading already leaves both out
+        assert_eq!(stacks(&db), vec![vec![5, 6]]);
+        // the next run removes them from the database
+        assert_eq!(remove_broken(&db.conn).unwrap(), 2);
+        assert!(get(&db.conn, own).unwrap().is_none());
+        assert!(get(&db.conn, hidden).unwrap().is_none());
+        assert!(get(&db.conn, kept).unwrap().is_some());
+        // a missing file (status 1) is still a photo of the library: its stack stays
+        db.conn.execute("UPDATE file SET status = 1 WHERE id = 6", []).unwrap();
+        assert_eq!(remove_broken(&db.conn).unwrap(), 0);
+        assert_eq!(stacks(&db), vec![vec![5, 6]]);
     }
 
     #[test]
@@ -1771,5 +2162,29 @@ mod tests {
         assert!(import_lightroom(&db.conn, &[(77, true, vec![2, 1, 3]), (78, true, vec![4, 999])]).is_err());
         assert_eq!(stacks(&db), before);
         assert_eq!(db.conn.query_row("SELECT count(*) FROM stack WHERE lr_id = 78", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+    }
+
+    /// Frames of one bracket (the same picture darker and brighter) look alike; another subject does not; without
+    /// signatures nothing is known.
+    #[test]
+    fn bracket_alike_compares_neighbours() {
+        let db = test_db("bracket-alike");
+        for id in 1..=5 {
+            add(&db, id, "2026-01-01T10:00:00");
+        }
+        let scaled = |f: f32| {
+            let img = pattern(2, 0);
+            RgbImage::from_fn(img.width(), img.height(), |x, y| {
+                let p = img.get_pixel(x, y);
+                image::Rgb([(p[0] as f32 * f).min(255.0) as u8, (p[1] as f32 * f).min(255.0) as u8, (p[2] as f32 * f).min(255.0) as u8])
+            })
+        };
+        save_signature(&db, 1, &signature(&scaled(0.5))).unwrap();
+        save_signature(&db, 2, &signature(&scaled(1.0))).unwrap();
+        save_signature(&db, 3, &signature(&scaled(1.6))).unwrap();
+        save_signature(&db, 4, &signature(&pattern(0, 0))).unwrap();
+        assert_eq!(bracket_alike(&db.conn, &[1, 2, 3]).unwrap(), Some(true), "a bracket of one picture");
+        assert_eq!(bracket_alike(&db.conn, &[1, 2, 4]).unwrap(), Some(false), "another subject in it");
+        assert_eq!(bracket_alike(&db.conn, &[5, 1]).unwrap(), None, "no signature: nothing known");
     }
 }

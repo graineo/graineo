@@ -314,10 +314,18 @@ mod tests {
         std::fs::write(p, out).unwrap();
     }
 
+    /// The lines shown in the cells are one setting of the process (`cell_info::set_for_test`): the tests that set it
+    /// run one after the other (side by side, one test saw the lines of the other and read headers it must not read).
+    fn cell_lines_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// The default order (by capture time) does not read the headers of a viewed folder; only choosing it does.
     #[test]
     fn default_order_reads_nothing_until_chosen() {
         use crate::cell_info::Field;
+        let _lines = cell_lines_lock();
         assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some(), "UI tests need their own data folder");
         let root = std::env::temp_dir().join(format!("graineo-view-exif-default-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
@@ -349,6 +357,7 @@ mod tests {
     /// a folder chosen again has its values at once. Lines off and another order: nothing is read.
     #[test]
     fn viewed_folder_gets_header_data_on_demand() {
+        let _lines = cell_lines_lock();
         use crate::cell_info::Field;
         assert!(crate::env::var_os("GRAINEO_DATA_DIR").is_some(), "UI tests need their own data folder");
         let _lang = crate::menu::i18n::locale::TestLanguage::set(crate::menu::i18n::Language::De);

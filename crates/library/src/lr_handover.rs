@@ -390,7 +390,7 @@ pub fn run_with(
                 for (name, want) in &copy_changes {
                     // a copy of the catalog the library does not know yet becomes one (as the sync did with the sidecar's copies)
                     db.conn
-                        .execute("INSERT INTO image(file, copy) SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM image WHERE file = ?1 AND copy = ?2)", rusqlite::params![f.id, name])
+                        .execute(&format!("INSERT INTO image(id, file, copy) SELECT {}, ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM image WHERE file = ?1 AND copy = ?2)", crate::merge::NEW_IMAGE_ID), rusqlite::params![f.id, name])
                         .map_err(e)?;
                     crate::store::put_lightroom(&db.conn, f.id, Some(name), want).map_err(e)?;
                 }

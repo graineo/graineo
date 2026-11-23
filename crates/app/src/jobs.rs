@@ -200,6 +200,26 @@ pub fn is_damaged(error: &str) -> bool {
     error.starts_with("Datei beschädigt") || error.starts_with(&damaged_head()) || error.contains("invalid Huffman code") || error.contains("truncated entropy stream")
 }
 
+/// [`load`] for an output (a print): a merged photo whose result is not in the cache is merged first – the reference
+/// frame that stands in while the app computes is never the output; when it cannot be merged that is the error.
+pub(crate) fn load_for_output(path: &PathBuf, settings: &Settings, keep_going: impl Fn() -> bool) -> Result<Option<Loaded>, String> {
+    // (an output the user asked for: its full resolution is merged also when that result was cancelled before)
+    let asked = |l: Loaded| {
+        if let Some(m) = l.previews.foreign.as_ref().and_then(|d| d.merged.as_ref()) {
+            m.asked.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        l
+    };
+    let Some(l) = load(path, settings, &keep_going)? else { return Ok(None) };
+    let Some(src) = l.previews.foreign.as_ref().and_then(|d| d.merged.as_ref()).filter(|m| m.pending).map(|m| m.source.clone()) else { return Ok(Some(asked(l))) };
+    drop(l);
+    rawdev::merged::compute_output(&src, true)?;
+    match load(path, settings, &keep_going)? {
+        Some(l) if l.previews.foreign.as_ref().is_some_and(|d| d.stands_in()) => Err(rawdev::doc::MERGE_NOT_READY.into()),
+        other => Ok(other.map(asked)),
+    }
+}
+
 fn load(path: &PathBuf, settings: &Settings, keep_going: impl Fn() -> bool) -> Result<Option<Loaded>, String> {
     use crate::image_kind::ImageKind;
     // Apple Photos, photo cropped or rotated there: Apple's current version (as in the grid; the face boxes refer to it);
@@ -288,7 +308,8 @@ fn load(path: &PathBuf, settings: &Settings, keep_going: impl Fn() -> bool) -> R
         ("Firmware".into(), get("FIRMVERS")),
         ("Seriennummer".into(), get("CAMSERIAL")),
     ];
-    let summary = format!("{} s · f/{} · ISO {} · {} mm", get("SH_DESC"), get("AP_DESC"), get("ISO"), get("FLEQ35MM"));
+    // the real focal length, as the library shows it (QA 1.5.0-test.5: Info said 50 mm, Develop the 35 mm equivalent 66 mm)
+    let summary = format!("{} s · f/{} · ISO {} · {} mm", get("SH_DESC"), get("AP_DESC"), get("ISO"), sigma_focal(p.get("FLENGTH"), p.get("FLEQ35MM"))).de_comma();
     // Initial values from SIGMA Photo Pro (stored in the X3F, no separate settings file)
     let start_values_from_spp = crate::sidecar::from_spp(path);
     if start_values_from_spp {
@@ -803,7 +824,7 @@ fn render_detail_wide(index: usize, session: Option<Arc<Mutex<Session>>>, foreig
                 send(JobResult::RegionFailed { index, superseded: true });
                 return;
             }
-            let rgba = crate::photo_display::rgba_from_encoded(&rgb);
+            let rgba = crate::photo_display::rgba_for(foreign.as_deref(), &rgb);
             drop(rgb);
             // the half level (bilinear) for views below 100 % – without it the crop would be reduced without prefilter
             let (hw, hh, half) = crate::photo_display::half_rgba(w, h, &rgba);
@@ -847,7 +868,7 @@ fn render_detail_wide(index: usize, session: Option<Arc<Mutex<Session>>>, foreig
                 note_full_rendered(origin, generation, &settings);
             }
             let seconds = t.elapsed().as_secs_f32();
-            let rgba = crate::photo_display::rgba_from_encoded(&rgb);
+            let rgba = crate::photo_display::rgba_for(foreign.as_deref(), &rgb);
             drop(rgb);
             let (hw, hh, half) = crate::photo_display::half_rgba(w, h, &rgba);
             let (Some(tiles), Some(half_tiles)) = (crate::photo_display::tiles(w, h, &rgba, max_side, true, false), crate::photo_display::tiles(hw, hh, &half, max_side, false, false)) else {
@@ -989,6 +1010,37 @@ pub(crate) fn previews(session: &Session, settings: &Settings) -> Previews {
     let sensor = Arc::new(sensor);
     let developed = Arc::new(Preview::developed(small, factor, &session.cal, settings));
     Previews { developed, sensor, denoise_key: settings.denoise_key(), spp: None, raw: session.raw_shared(), foreign: None }
+}
+
+/// Renders that are kept or printed (grid previews after a multi-edit, contact print) never start from a fast preview
+/// too rough to be shown (`preview_hold.rs`): for such a photo the exact base is computed first (one at a time, as in
+/// [`Job::Spp`]) and its preview set. Nothing happens for other photos, other views and with the noise reduction off;
+/// if the base fails, the fast preview stays (the best picture there is).
+fn exact_base_if_rough(loaded: &mut Loaded, settings: &Settings) {
+    if !crate::preview_hold::enabled() || !crate::preview_hold::rough_for(&loaded.cal) {
+        return;
+    }
+    exact_base(loaded, settings);
+}
+
+/// Contact print: every Sigma photo is rendered from its exact base (disk cache, computed if missing), like the
+/// developed photo and the printed page – never from the fast own pipeline (yellow blown highlights, noise at high ISO).
+fn exact_base_for_print(loaded: &mut Loaded, settings: &Settings) {
+    exact_base(loaded, settings);
+}
+
+/// Installs the exact base (disk cache or computed) as the photo's preview source; on failure the fast preview stays.
+fn exact_base(loaded: &mut Loaded, settings: &Settings) {
+    let Some(session) = loaded.session.clone() else { return };
+    if loaded.previews.spp.is_some() || settings.view != View::Developed || !Session::uses_spp(settings) {
+        return;
+    }
+    let _gate = pools::gate::SPP_BASE.lock();
+    let Ok(session) = session.lock() else { return };
+    match session.ensure_spp(settings) {
+        Ok(base) => loaded.previews.spp = Some(Arc::new(Preview::from_spp(&base, base.matrix(&session.cal), PREVIEW_EDGE))),
+        Err(e) => crate::log(&format!("{}: exact base failed ({e}), fast preview used", loaded.path.display())),
+    }
 }
 
 /// Classic cameras: Sigma's whole chain runs while the photo opens, so its exact base is ready at once (from the
@@ -1253,7 +1305,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
         Job::Render { index, previews, cal, settings, before } => {
             if let Some(doc) = &previews.foreign {
                 let img = doc.render_preview(&settings);
-                send(JobResult::Rendered { index, settings, before, width: img.width, height: img.height, rgb: img.to_rgb8() });
+                send(JobResult::Rendered { index, settings, before, width: img.width, height: img.height, rgb: rgb8_for(doc, &img) });
                 return;
             }
             if settings.view.is_stage() {
@@ -1293,7 +1345,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
             };
             match outcome {
                 Ok(Some(b)) => {
-                    let rgba = crate::photo_display::rgba_from_encoded(&b.rgb);
+                    let rgba = crate::photo_display::rgba_for(Some(&doc), &b.rgb);
                     let Some(tex) = crate::photo_display::PhotoTex::upload(b.width, b.height, &rgba, region.is_some(), false) else { return };
                     crate::log(&format!("wide-gamut display {index}: preview {}×{} in {:.0} ms", b.width, b.height, t.elapsed().as_secs_f64() * 1000.0));
                     send(JobResult::Wide { index, settings, region, tex: Arc::new(tex) })
@@ -1409,7 +1461,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 return;
             }
             let region = [region[0], region[1], img.width/actual_factor, img.height/actual_factor];
-            send(JobResult::RegionRendered { index, settings, region, factor, width: img.width, height: img.height, rgb: img.to_rgb8() });
+            let rgb = match &foreign {
+                Some(d) => rgb8_for(d, &img),
+                None => img.to_rgb8(),
+            };
+            send(JobResult::RegionRendered { index, settings, region, factor, width: img.width, height: img.height, rgb });
         }
         Job::RenderFull { index, session, foreign, settings, generation, current, edit } => {
             // one at a time, the visible photo first, never superseded (zoom and pan send no new whole image); a
@@ -1480,7 +1536,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
             note_full_rendered(&origin, generation, &settings);
             let seconds = t.elapsed().as_secs_f32();
             let half = half_size(&img);
-            send(JobResult::FullRendered { index, settings, width: img.width, height: img.height, rgb: img.to_rgb8(), half, seconds });
+            let rgb = match &foreign {
+                Some(d) => rgb8_for(d, &img),
+                None => img.to_rgb8(),
+            };
+            send(JobResult::FullRendered { index, settings, width: img.width, height: img.height, rgb, half, seconds });
         }
         Job::RenderDetailWide { index, session, foreign, settings, region, generation, current, edit } => {
             render_detail_wide(index, session, foreign, settings, region, generation, current, edit, send);
@@ -1496,6 +1556,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
             // Only one base at a time: with fast browsing several full computations
             // (≈ 1 GB each) otherwise pile up – superseded ones abort immediately after waiting. The base of the
             // visible photo goes before one computed ahead (intent of the lane: front = visible, ahead = soon).
+            // Test hook (only with GRAINEO_DATA_DIR): GRAINEO_TEST_BASE_DELAY_MS simulates a slow exact base (screenshots
+            // of the time before it arrives, see `preview_hold.rs`)
+            if let Some(ms) = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_TEST_BASE_DELAY_MS").ok()).and_then(|v| v.parse::<u64>().ok()) {
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+            }
             let gate = pools::gate::SPP_BASE.lock();
             if cancel.load(Ordering::SeqCst) {
                 drop(gate);
@@ -1504,7 +1569,8 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 }
                 return;
             }
-            let gpu = pools::gpu_allowed();
+            // Quattro and Classic: the way the full chain takes (`GRAINEO_QUATTRO_GPU=0` computes on the processor)
+            let gpu = if mode.prepared { develop::quattro_hi::gpu::allowed() } else { pools::gpu_allowed() };
             crate::work_step::stage_here(if gpu { crate::tr("Rauschminderung (Grafikkarte)") } else { crate::tr("Rauschminderung (Prozessor)") });
             // computing time without the wait at the gate, for the operating mode's self-measurement (`perf_mode`)
             let probe = crate::perf_mode::Probe::start();
@@ -1665,8 +1731,9 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     return;
                 }
                 let t0 = std::time::Instant::now();
-                let image = match load(path, s, is_current) {
-                    Ok(Some(l)) => {
+                let image = match load_for_output(path, s, is_current) {
+                    Ok(Some(mut l)) => {
+                        exact_base_for_print(&mut l, s);
                         let t1 = std::time::Instant::now();
                         let r = render_cached(&mut StageCache::default(), &l.previews, &l.cal, s, PRINT_EDGE, true);
                         let img = develop::geometry::apply(r.img, s, r.orientation);
@@ -1692,7 +1759,17 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     return;
                 }
                 match load(&path, &s, is_current) {
-                    Ok(Some(l)) => {
+                    // a merged photo that is not computed yet (its reference frame stands in): no picture – the grid
+                    // preview of a merged photo is never made from a single exposure
+                    Ok(Some(l)) if l.previews.foreign.as_ref().is_some_and(|d| d.stands_in()) => send(JobResult::Thumbnail { image, file, rgb: (0, 0, Vec::new()) }),
+                    Ok(Some(mut l)) => {
+                        exact_base_if_rough(&mut l, &s);
+                        // the base failed: no tile from the rough fast preview, the old one stays
+                        if !crate::preview_hold::render_keepable(&l, &s) {
+                            crate::log(&format!("preview after multi-edit {}: no exact base, the tile stays as it is", path.display()));
+                            send(JobResult::Thumbnail { image, file, rgb: (0, 0, Vec::new()) });
+                            continue;
+                        }
                         let edge = library::preview::small() as usize;
                         let r = render_cached(&mut StageCache::default(), &l.previews, &l.cal, &s, edge, true);
                         let img = develop::geometry::apply(r.img, &s, r.orientation);
@@ -1849,7 +1926,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                         continue;
                     }
                 }
-                let taken = std::fs::symlink_metadata(&out).is_ok();
+                // the path of a merged photo without a file (HDR, shown as "<name>-HDR") is never an export target: a
+                // file there would be taken for the photo itself. It counts as taken and is never replaced.
+                let virtual_photo = |p: &std::path::Path| library::merge::is_virtual_path(p);
+                let reserved = virtual_photo(&out);
+                let taken = reserved || std::fs::symlink_metadata(&out).is_ok();
                 if taken && names.collision == crate::export_names::Collision::Skip {
                     skipped += 1;
                     let done = i + 1;
@@ -1859,11 +1940,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 }
                 // "Overwrite" (asked before the export): the existing file is replaced once the new one is finished –
                 // never the original of this photo itself (JPEG/TIFF exported into its own folder).
-                let replace = taken && names.collision == crate::export_names::Collision::Overwrite && !same_file(&out, &path) && !same_file(&out, &source);
+                let replace = taken && !reserved && names.collision == crate::export_names::Collision::Overwrite && !same_file(&out, &path) && !same_file(&out, &source);
                 // Existing files do not belong to the export job: in particular, for JPEG/TIFF in the original folder
                 // the destination can be the original itself. Instead of overwriting, the new file
                 // gets a free name ("Name-2.jpg").
-                let out = match if replace { Ok(out) } else { free_target_name(&out) } {
+                let out = match if replace { Ok(out) } else { free_target_name_where(&out, &virtual_photo) } {
                     Ok(p) => p,
                     Err(reason) => {
                         errors += 1;
@@ -1890,7 +1971,8 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 // Output color space only applies to finished images (JPEG/TIFF); sRGB takes the existing, unchanged path
                 let color_space = if format.is_finished_image() { color_space } else { graineo_color::Space::Srgb };
                 let result = if crate::image_kind::of(&path) != crate::image_kind::ImageKind::Foveon {
-                    rawdev::RawDoc::open_for(&path, &s, &|| true)
+                    // (a merged photo not computed yet is merged first: never its stand-in)
+                    rawdev::RawDoc::open_for_output(&path, &s, &|| true)
                         .and_then(|d| d.ok_or_else(|| "abgebrochen".to_string()))
                         .and_then(|mut doc| {
                             // oriented as on opening (also rotated by hand in Lightroom): crop and rotation refer to it
@@ -2036,7 +2118,7 @@ pub(crate) fn output_source(path: &std::path::Path, settings: Settings, image: i
 /// through a session.
 pub(crate) fn render_for_output(src: &OutputSource, engine: Engine, space: graineo_color::Space) -> Result<develop::Rgb16, String> {
     if crate::image_kind::of(&src.path) != crate::image_kind::ImageKind::Foveon {
-        let mut doc = rawdev::RawDoc::open_for(&src.path, &src.settings, &|| true)?.ok_or_else(|| "abgebrochen".to_string())?;
+        let mut doc = rawdev::RawDoc::open_for_output(&src.path, &src.settings, &|| true)?.ok_or_else(|| "abgebrochen".to_string())?;
         rawdev::lightroom::apply_orientation(&mut doc);
         rawdev::export::render_color(&doc, &src.settings, space)
     } else {
@@ -2062,8 +2144,14 @@ fn publish_side_file(finished: &std::path::Path, desired: &std::path::Path) -> R
 /// Destination path that does not exist yet (not even a broken link): the requested one, otherwise "Name-2", "Name-3" …
 /// Nothing is overwritten or deleted.
 pub(crate) fn free_target_name(out: &std::path::Path) -> Result<PathBuf, String> {
+    free_target_name_where(out, &|_| false)
+}
+
+/// [`free_target_name`] with names that count as taken although no file is there (`reserved`: the path of a merged
+/// photo without a file).
+pub(crate) fn free_target_name_where(out: &std::path::Path, reserved: &dyn Fn(&std::path::Path) -> bool) -> Result<PathBuf, String> {
     let is_free = |p: &std::path::Path| match std::fs::symlink_metadata(p) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(!reserved(p)),
         Err(e) => Err(crate::trf!("Zieldatei nicht prüfbar: {e}", e = e)),
         Ok(_) => Ok(false),
     };
@@ -2188,6 +2276,26 @@ fn export_fields(meta: &crate::sidecar::Meta, options: &develop::export::Options
 }
 
 /// The contact sheet shows the same crop, angle and orientation as the large photo.
+/// Focal length of an X3F/X3I for the summary line: the real one (property FLENGTH, "50" or "50.0"), the 35 mm
+/// equivalent only when that is missing.
+fn sigma_focal(real: Option<&str>, equivalent: Option<&str>) -> String {
+    let tidy = |v: &str| v.trim().parse::<f64>().map_or_else(|_| v.trim().to_string(), |f| if f.fract().abs() < 0.05 { format!("{f:.0}") } else { format!("{f:.1}") });
+    real.filter(|v| !v.trim().is_empty()).or(equivalent.filter(|v| !v.trim().is_empty())).map_or_else(|| "–".to_string(), tidy)
+}
+
+#[cfg(test)]
+mod sigma_focal_tests {
+    #[test]
+    fn the_real_focal_length() {
+        use super::sigma_focal;
+        assert_eq!(sigma_focal(Some("50.0"), Some("66")), "50");
+        assert_eq!(sigma_focal(Some(" 30 "), Some("45")), "30");
+        assert_eq!(sigma_focal(None, Some("66")), "66");
+        assert_eq!(sigma_focal(Some("4.5"), None), "4.5");
+        assert_eq!(sigma_focal(None, None), "–");
+    }
+}
+
 #[cfg(test)]
 fn contact_preview(img: develop::Rgb16, settings: &Settings, orientation: u8) -> (usize, usize, Vec<u8>) {
     let img = develop::geometry::apply(img, settings, orientation);
@@ -2447,6 +2555,19 @@ mod export_safety_tests {
         let refuse = |_: &std::path::Path| Err("no trash".to_string());
         assert_eq!(replace_with_side_file(&side, &target, &refuse).unwrap(), root.join("A-2.jpg"));
         assert_eq!(std::fs::read(&target).unwrap(), b"new");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// The path of a merged photo without a file is never an export target (a linear DNG of "IMG_2-HDR" exported
+    /// into the folder of its sources would land exactly there): the next free name is taken.
+    #[test]
+    fn export_never_lands_on_the_path_of_a_merged_photo() {
+        let root = tmp("zielname-hdr");
+        let target = root.join("IMG_2-HDR.dng");
+        let reserved = |p: &std::path::Path| p.file_name().is_some_and(|n| n == "IMG_2-HDR.dng" || n == "IMG_2-HDR-2.dng");
+        assert_eq!(free_target_name_where(&target, &reserved).unwrap(), root.join("IMG_2-HDR-3.dng"));
+        assert_eq!(free_target_name_where(&root.join("IMG_2-HDR.jpg"), &reserved).unwrap(), root.join("IMG_2-HDR.jpg"));
+        assert_eq!(free_target_name(&target).unwrap(), target);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -2775,6 +2896,114 @@ mod gate_tests {
     use super::*;
     use std::sync::atomic::AtomicBool;
     use std::time::{Duration, Instant};
+
+    /// Stored previews of a high-ISO Quattro photo come from the exact base, never from the rough fast preview
+    /// (`GRAINEO_TEST_QUATTRO_HI` = such a file; skipped without it).
+    #[test]
+    fn stored_preview_of_rough_photo_uses_the_exact_base() {
+        let Some(path) = std::env::var_os("GRAINEO_TEST_QUATTRO_HI").map(PathBuf::from).filter(|p| p.is_file()) else { return };
+        let s = Settings::default();
+        let mut l = load(&path, &s, || true).unwrap().unwrap();
+        assert!(crate::preview_hold::rough_for(&l.cal), "the test file must be a Quattro photo from ISO 400 on");
+        assert!(l.previews.spp.is_none());
+        exact_base_if_rough(&mut l, &s);
+        assert!(l.previews.spp.is_some(), "exact base missing");
+        // noise reduction off: the own pipeline is what was asked for
+        let mut plain = load(&path, &s, || true).unwrap().unwrap();
+        exact_base_if_rough(&mut plain, &Settings { denoise: false, ..Settings::default() });
+        assert!(plain.previews.spp.is_none());
+    }
+
+    /// Measurement behind the rule in `preview_hold.rs` (run by hand, `--ignored --nocapture`): for every X3F below the
+    /// folders in `GRAINEO_MEASURE_ROUGH` (separated by `:`) the colour noise of the fast preview and of the exact
+    /// view (RMS of the chroma against its 5 × 5 mean, 8 bit), their ratio, and – with `GRAINEO_MEASURE_OUT` – both
+    /// pictures side by side (centre crop, 1:1) as PNG.
+    #[test]
+    #[ignore]
+    fn measure_fast_preview_roughness() {
+        let Some(dirs) = std::env::var_os("GRAINEO_MEASURE_ROUGH") else { return };
+        let out = std::env::var_os("GRAINEO_MEASURE_OUT").map(PathBuf::from);
+        let mut files = Vec::new();
+        for d in std::env::split_paths(&dirs) {
+            let mut stack = vec![d];
+            while let Some(d) = stack.pop() {
+                if d.is_file() {
+                    files.push(d);
+                    continue;
+                }
+                for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                    let p = e.path();
+                    if p.is_dir() {
+                        stack.push(p);
+                    } else if p.extension().is_some_and(|x| x.eq_ignore_ascii_case("x3f")) {
+                        files.push(p);
+                    }
+                }
+            }
+        }
+        files.sort();
+        // chroma noise: RMS of Cb/Cr against their 5 × 5 box mean
+        fn chroma_noise(w: usize, h: usize, rgb: &[u8]) -> f64 {
+            let mut c = vec![[0f32; 2]; w * h];
+            for (i, p) in rgb.chunks_exact(3).enumerate() {
+                let (r, g, b) = (p[0] as f32, p[1] as f32, p[2] as f32);
+                let y = 0.299 * r + 0.587 * g + 0.114 * b;
+                c[i] = [b - y, r - y];
+            }
+            let (mut sum, mut n) = (0f64, 0usize);
+            for y in (2..h.saturating_sub(2)).step_by(2) {
+                for x in (2..w.saturating_sub(2)).step_by(2) {
+                    let mut m = [0f32; 2];
+                    for dy in 0..5 {
+                        for dx in 0..5 {
+                            let v = c[(y + dy - 2) * w + x + dx - 2];
+                            m[0] += v[0];
+                            m[1] += v[1];
+                        }
+                    }
+                    let v = c[y * w + x];
+                    let d = [v[0] - m[0] / 25.0, v[1] - m[1] / 25.0];
+                    sum += (d[0] * d[0] + d[1] * d[1]) as f64;
+                    n += 1;
+                }
+            }
+            (sum / n.max(1) as f64).sqrt()
+        }
+        for path in files {
+            let s = Settings::default();
+            let Ok(Some(l)) = load(&path, &s, || true) else { continue };
+            let Some(session) = l.session.clone() else { continue };
+            let iso = crate::preview_hold::capture_iso(&l.cal);
+            let fast = l.previews.developed.render(&l.cal, &s);
+            let exact = match &l.previews.spp {
+                Some(p) => p.render(&l.cal, &s),
+                None => {
+                    let sess = session.lock().unwrap();
+                    let Ok(base) = sess.ensure_spp(&s) else { continue };
+                    Preview::from_spp(&base, base.matrix(&sess.cal), PREVIEW_EDGE).render(&l.cal, &s)
+                }
+            };
+            let (f8, e8) = (fast.to_rgb8(), exact.to_rgb8());
+            let (nf, ne) = (chroma_noise(fast.width, fast.height, &f8), chroma_noise(exact.width, exact.height, &e8));
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            println!("ROUGH\t{:?}\t{iso:.0}\t{nf:.2}\t{ne:.2}\t{:.2}\t{name}", l.cal.model, nf / ne.max(0.01));
+            if let Some(out) = &out {
+                let (cw, ch) = (700.min(fast.width).min(exact.width), 500.min(fast.height).min(exact.height));
+                let mut img = image::RgbImage::new((cw * 2) as u32, ch as u32);
+                for (k, (w, h, d)) in [(fast.width, fast.height, &f8), (exact.width, exact.height, &e8)].into_iter().enumerate() {
+                    let (x0, y0) = ((w - cw) / 2, (h - ch) / 2);
+                    for y in 0..ch {
+                        for x in 0..cw {
+                            let i = ((y0 + y) * w + x0 + x) * 3;
+                            img.put_pixel((k * cw + x) as u32, y as u32, image::Rgb([d[i], d[i + 1], d[i + 2]]));
+                        }
+                    }
+                }
+                let _ = std::fs::create_dir_all(out);
+                let _ = img.save(out.join(format!("{iso:05.0}-{name}.png")));
+            }
+        }
+    }
 
     #[test]
     fn hover_superseded_is_index_bound() {
@@ -3431,5 +3660,15 @@ mod classic_first_picture_tests {
                 t_load.as_secs_f64() * 1e3
             );
         }
+    }
+}
+
+/// 8-bit picture of a developed image for the screen: a merged photo (HDR) is dithered, its smooth, almost noise-free
+/// gradients would otherwise show contour steps on an 8-bit display; every other photo as before.
+fn rgb8_for(doc: &rawdev::RawDoc, img: &develop::Rgb16) -> Vec<u8> {
+    if doc.merged.is_some() && crate::env::var_os("GRAINEO_HDR_NO_DITHER").is_none() {
+        img.to_rgb8_dithered()
+    } else {
+        img.to_rgb8()
     }
 }

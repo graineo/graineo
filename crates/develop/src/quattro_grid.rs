@@ -30,18 +30,29 @@ pub struct RawGrid {
 /// Reads the stored values of `path` (active image area) and converts them: (value − `offset`) / (SensorISO/100)
 /// · `digital[c]` (`unit_scale`).
 pub fn read(path: &std::path::Path, offset: f32, unit_scale: [f32; 3]) -> Result<RawGrid, String> {
+    read_with(path, offset, unit_scale, false)
+}
+
+/// [`read`], optionally with x3fuse-core's repair of listed and detected defective pixels (incl. the focus pixel
+/// rows of the top layer) applied to the stored values (`fix_bad`).
+pub fn read_with(path: &std::path::Path, offset: f32, unit_scale: [f32; 3], fix_bad: bool) -> Result<RawGrid, String> {
+    let r = x3f_core::Reader::open(path).map_err(|e| e.to_string())?;
+    read_reader(r, offset, unit_scale, fix_bad)
+}
+
+/// [`read_with`] on an opened reader (e.g. one frame of an X3I).
+pub fn read_reader(mut r: x3f_core::Reader, offset: f32, unit_scale: [f32; 3], fix_bad: bool) -> Result<RawGrid, String> {
     let err = |e: x3f_core::Error| e.to_string();
-    let mut r = x3f_core::Reader::open(path).map_err(err)?;
     r.load_camf().map_err(err)?;
     r.load_property_list().map_err(err)?;
     r.load_raw().map_err(err)?;
-    let opts = |enc| x3f_core::ProcessOptions { color_encoding: enc, crop: true, fix_bad: false, apply_sgain: Some(false), denoise_intensity: 0, ..Default::default() };
+    let opts = |enc| x3f_core::ProcessOptions { color_encoding: enc, crop: true, fix_bad, apply_sgain: Some(false), denoise_intensity: 0, ..Default::default() };
     let low = r.get_image(&opts(x3f_core::ColorEncoding::Unprocessed)).map_err(err)?;
     let top = r.get_image(&opts(x3f_core::ColorEncoding::Qtop)).map_err(err)?;
     let (gw, gh) = (low.columns as usize, low.rows as usize);
     let (tw, th) = (top.columns as usize, top.rows as usize);
     if tw < 2 * gw || th < 2 * gh || low.channels < 2 {
-        return Err(format!("Quattro-Raster: unerwartete Größen {gw}×{gh} / {tw}×{th}"));
+        return Err(format!("Quattro grid: unexpected sizes {gw}×{gh} / {tw}×{th}"));
     }
     let lc = low.channels as usize;
     let tc = top.channels as usize;

@@ -470,6 +470,7 @@ fn assemble(path: &Path, dev: Arc<AppleDev>, preview: Arc<Stage>) -> RawDoc {
         apple: Some(dev),
         engine_request: None,
         ai: Default::default(),
+        merged: None,
     }
 }
 

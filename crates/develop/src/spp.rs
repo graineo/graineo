@@ -30,6 +30,7 @@ fn color_mode(name: Option<&str>) -> Option<ColorMode> {
 fn open(path: &Path) -> Result<Reader, String> {
     let t = std::time::Instant::now();
     let timing = std::env::var_os("X3F_SPP_TIMING").is_some();
+    crate::merrill_highlights::install();
     let mut r = Reader::open(path).map_err(|e| e.to_string())?;
     let t_open = t.elapsed();
     // The embedded JPEG provides the EXIF colour space, by which the source matrix is chosen (as in SPP).
@@ -208,10 +209,24 @@ fn quattro_working_nr(path: &Path, key: &crate::SppKey, cancel: &std::sync::atom
         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("abgebrochen".into());
         }
-        return Ok(crate::quattro::counts(&q, key.mode.as_deref(), key.binning));
+        return Ok(crate::quattro::counts_hl(&q, key.mode.as_deref(), key.binning, key.highlight));
     }
     let q = crate::quattro::prepared(path)?;
-    // Classic: our noise reduction on top of the result of Sigma's chain
+    // high-ISO path: the sliders move from the preparation's result (see `crate::quattro::counts_with_sliders`)
+    if let Some(lin) = crate::quattro::counts_with_sliders(&q, key.mode.as_deref(), key.binning, key.nr, key.detail) {
+        if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("abgebrochen".into());
+        }
+        return Ok(lin);
+    }
+    // Classic: the chain again with the sliders (they act in its range-based reconstruction)
+    if q.classic.is_some() {
+        let lin = crate::classic_new::sliders::linear(path, &q.cal, q.raw.columns, q.raw.rows, key.nr).ok_or("Classic-Kette mit Reglern nicht verfügbar")?;
+        if cancel.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err("abgebrochen".into());
+        }
+        return Ok(crate::quattro::counts_from_linear(&q, &lin, key.mode.as_deref(), key.binning));
+    }
     let mut lin = match q.classic.as_ref() {
         Some(l) => (**l).clone(),
         None => crate::linearize(&q.raw, &q.cal),

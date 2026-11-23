@@ -370,14 +370,10 @@ Profildateien werden weder kopiert, verschoben noch gelöscht. Abgeleitete alte 
 Adobe-Ordner automatisch durchsuchen	Buscar carpetas de Adobe automáticamente
 Jetzt neu suchen	Buscar de nuevo ahora
 Keine Looks gefunden	No se encontraron looks
-Referenzierter Ordner	Carpeta referenciada
-Ordner entfernen …	Quitar carpeta…
 Anzeigen	Mostrar
-{a} Profile · {b} verfügbar	{a} perfiles · {b} disponibles
 Ausgeblendete Profile	Perfiles ocultos
 Wieder anzeigen	Mostrar de nuevo
 Wird gelesen …	Leyendo…
-{a} hinzugefügt · {b} bereits vorhanden · {c} übersprungen	{a} añadidos · {b} ya existentes · {c} omitidos
 Wird gesucht …	Buscando…
 Die Vorschau enthält diesen Look nicht. Der Profilverweis bleibt gespeichert.	La vista previa no incluye este look. La referencia al perfil se mantiene.
 Ohne Look exportieren?	¿Exportar sin el look?
@@ -1748,7 +1744,7 @@ Einpassen ({a} %)	Ajustar ({a} %)
 Begradigt: {a2}°	Enderezado: {a2}°
 Standard ({default_name})	Predeterminado ({default_name})
 Freistellen	Recorte
-Ausrichten	Enderezar
+Ausrichten	Alinear
 Horizont begradigen (A)	Nivelar el horizonte (A)
 Frei	Libre
 Linie	Línea
@@ -2011,7 +2007,6 @@ Ausschnitt, Winkel, Perspektive, 90°-Drehung	Recorte, ángulo, perspectiva, gir
 Farbsäume	Franjas de color
 Rauschreduzierung	Reducción de ruido
 Freistellen & Drehen	Recorte y giro
-graineo enthält keine Filmprofile von Drittanbietern. Es liest Profile, die Sie selbst gekauft und installiert haben. Bitte beachten Sie die Lizenzbedingungen des Anbieters.	graineo no incluye perfiles de película de terceros. Lee los perfiles que tú mismo has comprado e instalado. Ten en cuenta las condiciones de licencia del proveedor.
 Auf dem Mac sind {} frei, nötig sind {} plus {} Reserve.	En el Mac hay {} libres; se necesitan {} más {} de reserva.
 Ordner {} fehlt	Falta la carpeta {}
 Am alten Ort liegt eine andere Datei – nichts überschrieben	En la ubicación anterior hay otro archivo: no se ha sobrescrito nada
@@ -3452,7 +3447,6 @@ Quellen	Fuentes
 Lookup-Tabellen	Tablas LUT
 Profilordner entfernen?	¿Quitar la carpeta de perfiles?
 Look-Paket ausblenden?	¿Ocultar el paquete de looks?
-Automatisch gefunden	Encontrado automáticamente
 Filmsimulation	Simulación de película
 Importe	Importaciones
 Diagonal	Diagonal
@@ -3956,7 +3950,7 @@ Tauschen nicht möglich: die Kamera-JPEG lässt sich nicht als Stand der Regler 
 Vergleich: jetzigen Stand als linke Seite festhalten	Comparación: fijar el estado actual como lado izquierdo
 Vergleich: linke und rechte Seite tauschen	Comparación: intercambiar los lados izquierdo y derecho
 Begrenzt den Platz, den der Cache auf diesem Mac belegen darf.	Limita el espacio que puede ocupar la caché en este Mac.
-• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Sin límite** (predeterminado) – nunca se elimina nada automáticamente.\n• **10 a 100 GB** – si la caché es mayor, graineo elimina en segundo plano, en cuanto el Mac no hace otra cosa, los datos intermedios de Foveon más antiguos y las vistas previas de fotos de este Mac que llevan más tiempo sin verse, hasta alcanzar aproximadamente el 90 % del límite.\n\nSe cuenta todo lo que hay en la caché. Nunca se eliminan: las copias sin conexión y las vistas previas de fotos de otras unidades, las vistas previas reveladas, las huellas y los rostros; las vistas previas usadas más recientemente también se conservan. Los originales, las ediciones y la biblioteca no están en la caché y nunca se ven afectados.\n\n### Nota\nLas vistas previas eliminadas se crean de nuevo cuando hacen falta. Esto cuesta tiempo de cálculo al explorar, sobre todo con Sigma Quattro y fotos en el NAS.
+• **Unbegrenzt** (Standard) – es wird nie etwas automatisch entfernt.\n• **10 bis 100 GB** – ist der Cache größer, entfernt graineo im Hintergrund, sobald der Mac nichts anderes tut, die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac, bis etwa 90 % der Grenze erreicht sind.\n\nGezählt wird alles im Cache. Nie entfernt werden Offline-Kopien und Vorschauen von Fotos auf anderen Laufwerken, entwickelte Vorschauen, Fingerabdrücke und Gesichter; die zuletzt benutzten Vorschauen bleiben ebenfalls. Originale, Bearbeitungen und die Bibliothek liegen nicht im Cache und sind nie betroffen.\n\n### Hinweis\nEntfernte Vorschauen entstehen bei Bedarf neu. Das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro und Fotos auf dem NAS.	• **Sin límite** (predeterminado) – nunca se elimina nada automáticamente.\n• **10 a 100 GB** – si la caché es mayor, graineo elimina en segundo plano, en cuanto el Mac no hace otra cosa, los datos intermedios de Foveon y HDR más antiguos y las vistas previas de fotos de este Mac que llevan más tiempo sin verse, hasta alcanzar aproximadamente el 90 % del límite.\n\nSe cuenta todo lo que hay en la caché. Nunca se eliminan: las copias sin conexión y las vistas previas de fotos de otras unidades, las vistas previas reveladas, las huellas y los rostros; las vistas previas usadas más recientemente también se conservan. Los originales, las ediciones y la biblioteca no están en la caché y nunca se ven afectados.\n\n### Nota\nLas vistas previas eliminadas se crean de nuevo cuando hacen falta. Esto cuesta tiempo de cálculo al explorar, sobre todo con Sigma Quattro y fotos en el NAS.
 Zuletzt entfernt: {a} ({n} Dateien)	Última eliminación: {a} ({n} archivos)
 Vorschau-Cache bereinigen: {a} von {b}	Limpiando la caché de vistas previas: {a} de {b}
 Vorschau-Cache bereinigen …	Limpiando la caché de vistas previas…
@@ -3970,7 +3964,7 @@ Offline-Kopien, andere Laufwerke	Copias sin conexión y vistas previas de otras 
 Vorschau-Cache bereinigen	Limpiar la caché de vistas previas
 Bereinigen	Limpiar
 Es gibt nichts zu entfernen.	No hay nada que eliminar.
-Es werden etwa {a} entfernt: die ältesten Foveon-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	Se eliminarán unos {a}: los datos intermedios de Foveon más antiguos y las vistas previas de fotos de este Mac que llevan más tiempo sin verse. Se crean de nuevo cuando hacen falta; esto cuesta tiempo de cálculo al explorar, sobre todo con Sigma Quattro. Los originales, las ediciones, las copias sin conexión y las vistas previas reveladas se conservan.
+Es werden etwa {a} entfernt: die ältesten Foveon- und HDR-Zwischenspeicher und die am längsten nicht angesehenen Vorschauen von Fotos auf diesem Mac. Sie werden bei Bedarf neu erzeugt; das kostet beim Blättern Rechenzeit, besonders bei Sigma Quattro. Originale, Bearbeitungen, Offline-Kopien und entwickelte Vorschauen bleiben.	Se eliminarán unos {a}: los datos intermedios de Foveon y HDR más antiguos y las vistas previas de fotos de este Mac que llevan más tiempo sin verse. Se crean de nuevo cuando hacen falta; esto cuesta tiempo de cálculo al explorar, sobre todo con Sigma Quattro. Los originales, las ediciones, las copias sin conexión y las vistas previas reveladas se conservan.
 Die Obergrenze wird dadurch nicht erreicht: der Rest ist geschützt oder erst kürzlich benutzt.	El límite no se alcanzará así: el resto está protegido o se usó hace poco.
 Jetzt bereinigen …	Limpiar ahora…
 Zuerst eine Obergrenze wählen	Elige primero un límite
@@ -4089,7 +4083,6 @@ importiert	importado
 GUT	BUENA
 BRAUCHBAR	UTILIZABLE
 UNSICHER	INCIERTA
-Für sRGB-LUTs (3D, 1D-Kurve oder beides).	Para LUT sRGB (3D, curva 1D o ambas).
 Gewählten Look als 3D-LUT (.cube) speichern	Guardar el look elegido como LUT 3D (.cube)
 Kein Foto geöffnet	Ninguna foto abierta
 Kein Look gewählt	Ningún look elegido
@@ -4698,6 +4691,16 @@ Kein Etikett	Sin etiqueta
 Copyright	Copyright
 z. B. © 2026 Name	p. ej. © 2026 Nombre
 Hinzugefügt wird	Se añadirá
+nicht verfügbar	no disponible
+Keine neuen Looks	Ningún look nuevo
+Keine Fotos oder Looks erkannt	No se han reconocido fotos ni looks
+Keine Looks erkannt	No se han reconocido looks
+{a} hinzufügen?	¿Añadir {a}?
+Wird hinzugefügt …	Añadiendo…
+Looks ansehen	Ver looks
+{a} hinzugefügt	{a} añadido(s)
+Inhalt von „{a}“ · {b}	Contenido de «{a}» · {b}
+Klicke auf einen Ordner, um seine Fotos zu sehen.	Haz clic en una carpeta para ver sus fotos.
 Keine Ordner mit Fotos.	No hay carpetas con fotos.
 schon in der Bibliothek	ya en la biblioteca
 liegt in einem Ordner der Bibliothek	está en una carpeta de la biblioteca
@@ -5467,7 +5470,6 @@ Alben aus Apple Fotos bleiben in ihrem Satz	Los álbumes de Apple Fotos se queda
 In Lightroom: {n} Schritte	En Lightroom: {n} pasos
 graineo unterstützen …	Apoyar graineo…
 Fotos einer Serie vergleichen und das beste wählen.	Comparar las fotos de una serie y elegir la mejor.
-• **Vergleich** – 2–4 Fotos groß nebeneinander; Doppelklick oder Z zoomt alle Felder gekoppelt auf 1:1 an der schärfsten Stelle\n• **Leuchttisch** – alle Fotos der Serie; Klick legt eins in den Vergleich\n• **Duell** – zwei Fotos, ← behält das linke, → das rechte, bis eins übrig ist\n\nDie Hinweise sind relativ zur Serie: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts; bei kaum Unterschied sagt er das.\n\n### Tasten\n↩/Leertaste bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wie überall · Z Zoom · H Gesichter · ⌘↩ gesichtet, weiter · ↓/↑ nächste/vorige Serie · ⌘Z rückgängig · Esc zurück	• **Comparar** – 2–4 fotos grandes una al lado de otra; doble clic o Z amplía todos los campos a la vez a 1:1 en el punto más nítido\n• **Mesa de luz** – todas las fotos de la serie; un clic pone una en la comparación\n• **Duelo** – dos fotos, ← conserva la izquierda, → la derecha, hasta que queda una\n\nLas indicaciones son relativas a la serie: nitidez como parte de la foto más nítida, ojos y caras (Apple Vision, solo macOS), altas luces recortadas, desenfoque de movimiento. La sugerencia da su motivo y no fija nada; si apenas hay diferencia, lo dice.\n\n### Teclas\n↩/Espacio elegir la mejor · ⇧X rechazar el resto · P/X/U/0–5 como siempre · Z zoom · H caras · ⌘↩ revisada, siguiente · ↓/↑ serie siguiente/anterior · ⌘Z deshacer · Esc volver
 Stapel nicht geändert: {e}	Pila no modificada: {e}
 Belichtungsreihe: {n} Fotos, {k} Stufen über {ev} EV	Horquillado de exposición: {n} fotos, {k} pasos en {ev} EV
 Serie: {n} Fotos in {t}, gleiches Motiv (Ähnlichkeit {s})	Serie: {n} fotos en {t}, mismo motivo (similitud {s})
@@ -5568,7 +5570,6 @@ zurück ins Raster	volver a la cuadrícula
 Feld 1–4 fokussieren (auch ← →)	enfocar el campo 1–4 (también ← →)
 fokussiertes Feld wechseln; im Duell: linkes / rechtes Foto behalten	cambiar el campo enfocado; en el duelo: conservar la foto izquierda / derecha
 Vergleich	Comparar
-Leuchttisch	Mesa de luz
 Duell	Duelo
 2–4 Fotos groß nebeneinander	2–4 fotos grandes una al lado de otra
 Alle Fotos der Serie; Klick legt eins in den Vergleich	Todas las fotos de la serie; un clic pone una en la comparación
@@ -6449,8 +6450,10 @@ Gesicht „{a}“ benannt	Cara nombrada «{a}»
 Vorgabe „{a}“ gelöscht – ⌘Z holt sie zurück	Ajuste «{a}» eliminado – ⌘Z lo recupera
 Rückgängig: Vorgabe „{a}“ gelöscht	Deshacer: ajuste «{a}» eliminado
 {a} von {b} Fotos sichtbar, die übrigen blendet die Auswahl links oder ein Filter aus	{a} de {b} fotos visibles, las demás las oculta la fuente de la izquierda o un filtro
-Bei Quattro läuft die Rauschminderung bereits in der Aufbereitung.	En Quattro, la reducción de ruido ya se aplica en la preparación.
-Bei Quattro läuft die Rauschminderung in der Aufbereitung; die gespeicherten Werte schalten sie ab.	En Quattro, la reducción de ruido se aplica en la preparación; los valores guardados la desactivan.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung.	Por debajo de ISO 400, la reducción de ruido de la Quattro es una parte fija de la preparación.
+Unter ISO 400 läuft die Rauschminderung der Quattro fest in der Aufbereitung; die gespeicherten Werte schalten sie ab.	Por debajo de ISO 400, la reducción de ruido de la Quattro es una parte fija de la preparación; los valores guardados la desactivan.
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet diese Regler aus.	El procesado Quattro completo está desactivado; solo él utiliza estos reguladores.
+Der volle Quattro-Weg ist ausgeschaltet; die gespeicherten Werte gelten weiter.	El procesado Quattro completo está desactivado; los valores guardados siguen aplicándose.
 rechnet {p} %	calculando {p} %
 Modul fehlt	falta el módulo
 Modul laden …	Cargar módulo…
@@ -6587,3 +6590,470 @@ Wenn vorhanden	Si ya existe
 Gain-Map behalten	Conservar gain map
 HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB	Conservar el brillo HDR de las fotos de iPhone; solo sRGB
 Mehr	Más
+# HDR merge (hdr_ui.rs)
+Mindestens zwei Fotos einer Belichtungsreihe wählen.	Elige al menos dos fotos de una serie de exposiciones.
+Höchstens {n} Fotos.	Como máximo {n} fotos.
+{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a}: solo fotos RAW con sensor Bayer o X-Trans.
+Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	Las fotos son de cámaras distintas o tienen tamaños distintos.
+{a} ist nicht erreichbar.	{a} no está disponible.
+{a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b}: el brillo difiere {e} EV de los datos de toma – ¿cambió la luz?
+{a} → {b}: zu wenig Überlappung, Belichtung aus den Aufnahmedaten	{a} → {b}: poca superposición, exposición según los datos de toma
+{a} ist um {p} px verschoben – aus der Hand?	{a} está desplazada {p} px – ¿a pulso?
+Verschiedene Blenden: Schärfentiefe und Vignette unterscheiden sich	Aperturas distintas: profundidad de campo y viñeteo difieren
+{a} → {b}: großer Abstand ({e} EV)	{a} → {b}: salto grande ({e} EV)
+{n} Bilder zusammenfügen	Combinar {n} imágenes
+Referenz	Referencia
+{a} – als Referenz wählen	{a} – elegir como referencia
+Vorschau wird berechnet …	Calculando vista previa …
+Gleicht Verschiebung, Drehung und Maßstab zwischen den Aufnahmen aus	Corrige desplazamiento, giro y escala entre las tomas
+Vorschau nicht möglich: {e}	Vista previa no posible: {e}
+Analysiert Belichtung und Lage …	Analizando exposición y posición …
+{a} … {b} EV · Ergebnis erscheint oben im Stapel	{a} … {b} EV · el resultado aparece arriba en la pila
+Zusammenfügen	Combinar
+HDR {a} {p} % · noch etwa {t}	HDR {a} {p} % · faltan unos {t}
+HDR {a} {p} %	HDR {a} {p} %
+HDR fertig · {s} s	HDR listo · {s} s
+HDR abgebrochen	HDR cancelado
+HDR nicht möglich: {e}	HDR no posible: {e}
+HDR zusammenfügen	Combinar en HDR
+HDR wird berechnet – ⌘Z macht es rückgängig	Calculando HDR – ⌘Z lo deshace
+HDR nicht angelegt: {e}	HDR no creado: {e}
+HDR nicht entfernt: {e}	HDR no eliminado: {e}
+HDR zusammenfügen …	Combinar en HDR…
+HDR zusammenfügen (Dialog)	Combinar en HDR (diálogo)
+Rezept fehlt	Falta la receta
+Lineares DNG aus graineos Entwicklung: Kamerawerte ohne Tonkurve, nichts beschnitten, auch Lichter über Weiß bleiben erhalten.	DNG lineal del revelado de graineo: valores de cámara sin curva tonal, nada recortado; se conservan las luces por encima del blanco.
+Erkannte Bewegung zeigen	Mostrar el movimiento detectado
+Ergebnis in den Stapel legen	Poner el resultado en la pila
+Stichwort für das Ergebnis	Palabra clave del resultado
+leer = keins	vacío = ninguna
+Nur HDR	Solo HDR
+Der HDR-Filter lässt sich nicht als Regel sichern	El filtro HDR no se puede guardar como regla
+Alle Aufnahmen überall verrechnen (für ruhige Motive)	Combinar todas las tomas en todas partes (para escenas quietas)
+Bewegte Stellen aus der Referenz, weich überblendet	Zonas en movimiento de la referencia, con transición suave
+Jede Aufnahme einzeln dort ausschließen, wo sie abweicht	Excluir cada toma donde difiera
+Oben im Stapel des Referenzbilds	Arriba en la pila de la referencia
+Eigenes Foto neben den Quellen, ohne Stapel	Foto propia junto a las fuentes, sin pila
+Färbt die Stellen ein, an denen eine Aufnahme abweicht	Colorea las zonas donde una toma difiere
+Keine Bewegung erkannt	No se detectó movimiento
+Nur zusammengefügte Fotos (HDR)	Solo fotos combinadas (HDR)
+Bewegung	Movimiento
+Alle Striche löschen	Borrar todos los trazos
+Letzten Strich zurück	Deshacer el último trazo
+Malen	Pintar
+Radieren	Borrar
+Mit gedrückter Maustaste über das Bild malen: dort gilt nur das gewählte Quellbild	Pinta sobre la imagen con el botón del ratón pulsado: allí solo cuenta la fuente elegida
+Quelle malen	Pintar fuente
+{a} malen	Pintar {a}
+HDR nicht geändert: {e}	HDR no modificado: {e}
+ZUSAMMENFÜGEN	COMBINAR
+Zusammenfügen: Quelle malen, Bewegung	Combinar: pintar fuente, movimiento
+Dieses Foto ist kein zusammengefügtes Foto.	Esta foto no es una foto combinada.
+Blatt hochkant; Reihen und Spalten werden neu aufgeteilt	Hoja vertical; filas y columnas se reparten de nuevo
+Blatt quer; Reihen und Spalten werden neu aufgeteilt	Hoja horizontal; filas y columnas se reparten de nuevo
+Quelle der HDR-Reihe nicht erreichbar: {a}	Fuente de la serie HDR no disponible: {a}
+Referenzbild der HDR-Reihe nicht erreichbar	Foto de referencia de la serie HDR no disponible
+{a} … {b} EV · Ergebnis erscheint neben den Quellen	{a} … {b} EV · el resultado aparece junto a las fuentes
+1 Strich	1 trazo
+Pinselgröße (bleibt beim Zoomen auf dem Bildschirm gleich)	Tamaño del pincel (se mantiene igual en pantalla al hacer zoom)
+Linear	Lineal
+Fusion	Fusión
+Szenenlinear, die Lichter bleiben über Weiß erhalten (für die eigene Entwicklung)	Lineal respecto a la escena, se conservan las altas luces por encima del blanco (para tu propio revelado)
+Natürlicher Look: die Belichtungen werden überblendet, der Umfang auf 0 bis 1 verdichtet	Aspecto natural: las exposiciones se mezclan y el rango se comprime de 0 a 1
+schon zusammengefügt	ya combinada
+{n} Bilder	{n} imágenes
+{n} Reihen zusammenfügen	Combinar {n} series
+Eine Reihe zusammenfügen	Combinar una serie
+Keine Reihe eingeschaltet.	Ninguna serie activada.
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse oben im Stapel	{a} de {b} series · una tras otra, resultados arriba de la pila
+{a} von {b} Reihen · eine nach der anderen, Ergebnisse neben den Quellen	{a} de {b} series · una tras otra, resultados junto a las fuentes
+HDR Reihe {k} von {n} · {a} {p} %	HDR serie {k} de {n} · {a} {p} %
+Alle Reihen zusammenfügen	Combinar todas las series
+{n} Reihen werden berechnet, {f} nicht angelegt – ⌘Z macht alles rückgängig	{n} series en cálculo, {f} no creadas – ⌘Z lo deshace todo
+{n} Reihen werden berechnet – ⌘Z macht alles rückgängig	{n} series en cálculo – ⌘Z lo deshace todo
+HDR nicht angelegt	HDR no creado
+Alle Reihen zusammenfügen …	Combinar todas las series…
+In der Auswahl sind keine Belichtungsreihen.	No hay series de exposiciones en la selección.
+Glatt	Suave
+sehr scharf, kann an harten Kanten leicht saumen	muy nítido, puede dejar leves halos en bordes duros
+fast so scharf, weniger Säume	casi igual de nítido, menos halos
+ruhiger, kaum Säume, mindert Moiré	más tranquilo, casi sin halos, reduce el moiré
+sehr glatt, keine Säume, dämpft Moiré und Rauschen	muy suave, sin halos, atenúa moiré y ruido
+Lanczos, 3 Lappen (Fensterbreite 3 Pixel je Seite). Der bisherige Standard.	Lanczos, 3 lóbulos (ventana de 3 píxeles por lado). El valor anterior.
+Catmull-Rom, kubisch (B 0, C 0,5; Fensterbreite 2). Etwas weniger Überschwingen als Lanczos.	Catmull-Rom, cúbico (B 0, C 0,5; ventana 2). Algo menos de sobreimpulso que Lanczos.
+Hann-gefenstertes Sinc (Fensterbreite 3), in XnView und ImageMagick „Hanning“.	Sinc con ventana de Hann (ventana 3), llamado «Hanning» en XnView e ImageMagick.
+Mitchell-Netravali, kubisch (B = C = 1/3; Fensterbreite 2). Kaum Überschwingen.	Mitchell-Netravali, cúbico (B = C = 1/3; ventana 2). Casi sin sobreimpulso.
+Verkleinerung	Reducción
+SFD {a} {p} % · noch etwa {t}	SFD {a} {p} % · faltan unos {t}
+SFD {a} {p} %	SFD {a} {p} %
+AUFNAHME {n}{ev} · nicht das HDR	TOMA {n}{ev} · no es el HDR
+Vorschau aktuell · volle Auflösung {p} %	Vista previa actual · resolución completa {p} %
+Wird zusammengefügt … {p} %	Combinando … {p} %
+Wartet auf die Berechnung …	Esperando el cálculo …
+Vorschau aktuell · volle Auflösung beim Zoomen	Vista previa actual · resolución completa al ampliar
+Aktuell · volle Auflösung	Actual · resolución completa
+Aufnahmen	Tomas
+{a} · Maustaste halten: nur diese Aufnahme zeigen	{a} · mantener pulsado: mostrar solo esta toma
+Aufnahme nicht benutzen	No usar esta toma
+Aufnahme dazunehmen	Añadir esta toma
+Foto aus dem Filmstreifen hierher ziehen	Arrastra aquí una foto de la tira
+Mindestens zwei Aufnahmen.	Al menos dos tomas.
+Geister entfernen	Eliminar fantasmas
+Bereich malen	Pintar zona
+Über einen Geist malen, dann die Aufnahme für den Bereich wählen	Pinta sobre un fantasma y elige la toma para la zona
+Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])	Tamaño del pincel, igual en pantalla al ampliar (mayor: ])
+Neuer Bereich	Nueva zona
+Bereich löschen	Eliminar zona
+Bereich {k} · aus {f}	Zona {k} · de {f}
+Erkannte Bewegung	Movimiento detectado
+Dieses Foto kann keine Aufnahme sein.	Esta foto no puede ser una toma.
+Die Fotos unterscheiden sich kaum in der Belichtung (weniger als 0,5 EV).	Las fotos apenas difieren en exposición (menos de 0,5 EV).
+Oben im Stapel der Quellen; aus: eigenes Foto neben den Quellen.	Encima de la pila de las fuentes; desactivado: foto propia junto a las fuentes.
+Als Referenz nehmen	Usar como referencia
+HDR erstellt	HDR creado
+Quellen zeigen	Mostrar fuentes
+Hinweis schließen	Cerrar aviso
+Das HDR liegt in keinem Stapel.	El HDR no está en ninguna pila.
+HDR entfernt, die Quellen bleiben	HDR eliminado, las fuentes se conservan
+HDR bearbeiten	Editar HDR
+HDR entfernen (Quellen bleiben)	Eliminar HDR (las fuentes se conservan)
+Aus Aufnahme	De la toma
+Die Aufnahmen der Belichtungsreihe, nach Belichtung geordnet.	Las tomas de la serie, ordenadas por exposición.
+• **Haken** – Aufnahme benutzen; ohne Haken bleibt sie gedimmt an ihrem Platz\n• **Stern** – Referenz: ihre Lage, Farbe und Belichtung gelten für das Ergebnis\n• **Maustaste halten** – diese Aufnahme groß zeigen (loslassen = zurück zum HDR)\n• **Foto aus dem Filmstreifen hierher ziehen** – als Aufnahme hinzufügen	• **Marca** – usar la toma; sin marca queda atenuada en su lugar\n• **Estrella** – referencia: su posición, color y exposición valen para el resultado\n• **Mantener pulsado** – mostrar esta toma en grande (soltar = volver al HDR)\n• **Arrastrar una foto de la tira aquí** – añadirla como toma
+Zurück zur vorigen Ansicht	Volver a la vista anterior
+Gesichtet, nächste Serie	Revisada, siguiente serie
+Nächste Serie	Siguiente serie
+Vorige Serie	Serie anterior
+Vergleich: bis zu 4 Fotos groß	Comparar: hasta 4 fotos en grande
+Entkoppelt: jedes Feld wird einzeln verschoben	Desvinculado: cada campo se desplaza por separado
+Gekoppelt: Zoom und Verschieben in allen Feldern gleich (einzeln: ⇧-Ziehen)	Vinculado: zoom y desplazamiento iguales en todos los campos (uno solo: ⇧-arrastrar)
+Ausrichten: Einzel-Versätze zurücksetzen	Alinear: restablecer los desplazamientos individuales
+Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	Automático: verticales en una fila, horizontales en 2 × 2
+Eine Reihe	Una fila
+Messen: Rechteck ziehen, Schärfe je Feld	Medir: arrastrar un rectángulo, nitidez por campo
+Fokussiertes Foto als Referenz festhalten	Fijar la foto enfocada como referencia
+Differenz (Prüfhilfe)	Diferencia (ayuda de revisión)
+Gleich gut: beide bleiben	Igual de buenas: ambas siguen
+Letztes Duell zurücknehmen	Deshacer el último duelo
+Fokussiertes Foto als bestes: Markierung „Auswahl“ und Titelfoto	Foto enfocada como la mejor: marca «Elegida» y portada
+Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)	Rechazar el resto: todas las fotos salvo las elegidas (un ⌘Z)
+Gleich gut	Igual de buenas
+Linkes Foto behalten	Quedarse con la foto izquierda
+Rechtes Foto behalten	Quedarse con la foto derecha
+Linkes Foto behalten (←)	Quedarse con la foto izquierda (←)
+Rechtes Foto behalten (→)	Quedarse con la foto derecha (→)
+Vergleichen: die ausgewählten Fotos bzw. die ganze Serie des aktiven Fotos	Comparar: las fotos seleccionadas o toda la serie de la foto activa
+Modus Vergleich (bis zu 4 Felder)	Modo comparar (hasta 4 campos)
+Modus Turnier (Duelle bis Platz 1–3)	Modo torneo (duelos hasta los puestos 1–3)
+Anordnung weiterschalten: Auto · 1 Reihe · 2 × 2	Siguiente disposición: auto · 1 fila · 2 × 2
+Einpassen ↔ 100 % (an Fokuspunkt, Gesicht oder schärfster Stelle)	Ajustar ↔ 100 % (en el punto de enfoque, una cara o el punto más nítido)
+Leertaste halten	Mantener la barra espaciadora
+100 % an der Maus, solange gehalten	100 % en el puntero mientras se mantiene
+Zoom und Verschieben gekoppelt an/aus	Zoom y desplazamiento vinculados sí/no
+ein Feld einzeln verschieben	desplazar un solo campo
+Fokuspunkt der Kamera in allen Feldern	Punto de enfoque de la cámara en todos los campos
+Kanten zeigen (Fokus-Peaking, gleiche Schwelle in allen Feldern)	Mostrar bordes (focus peaking, mismo umbral en todos los campos)
+Clipping in allen Feldern	Recorte en todos los campos
+Aufnahme-Zeile (Abweichungen hervorgehoben)	Línea de captura (diferencias resaltadas)
+Messen: Rechteck ziehen, Schärfewert je Feld	Medir: arrastrar un rectángulo, valor de nitidez por campo
+fokussiertes Foto als Referenz festhalten / aufheben	fijar / soltar la foto enfocada como referencia
+Blinken: Referenz und Kandidat abwechselnd (nochmal: nebeneinander)	Parpadeo: referencia y candidata alternadas (otra vez: lado a lado)
+Wischer zwischen Referenz und Kandidat (nochmal: nebeneinander)	Cortinilla entre referencia y candidata (otra vez: lado a lado)
+Differenzbild zwischen Referenz und Kandidat (nochmal: nebeneinander)	Imagen de diferencia entre referencia y candidata (otra vez: lado a lado)
+Feld 1–4 fokussieren	Enfocar el campo 1–4
+fokussiertes Feld bzw. Kandidat wechseln; im Turnier: linkes / rechtes Foto behalten	cambiar el campo enfocado o la candidata; en el torneo: quedarse con la foto izquierda / derecha
+Turnier: gleich gut (beide bleiben)	Torneo: igual de buenas (ambas siguen)
+Turnier: beide raus	Torneo: ambas fuera
+Turnier: letztes Duell zurücknehmen	Torneo: deshacer el último duelo
+fokussiertes Foto in Entwickeln öffnen	abrir la foto enfocada en Revelar
+Vergleichen: die im Filmstreifen ausgewählten Fotos	Comparar: las fotos seleccionadas en la tira
+Vergleich beenden (im Turnier: anhalten)	Terminar la comparación (en el torneo: pausar)
+Erst den Vergleich beenden	Termina primero la comparación
+Ergebnis übernommen – ⌘Z macht die Bewertung rückgängig	Resultado aplicado – ⌘Z deshace la valoración
+Erst das beste Foto wählen (↩ oder „Als bestes“)	Elige primero la mejor foto (↩ o «La mejor»)
+Mindestens 2 Fotos auswählen (⌘-Klick)	Selecciona al menos 2 fotos (⌘-clic)
+Serie auswählen und vergleichen	Seleccionar la serie y comparar
+Stapel auswählen und vergleichen	Seleccionar la pila y comparar
+Mit diesem Foto vergleichen	Comparar con esta foto
+Im Filmstreifen weitere Fotos mit ⌘-Klick wählen	Selecciona más fotos en la tira con ⌘-clic
+Als Referenz festhalten	Fijar como referencia
+Als bestes	La mejor
+Aus dem Vergleich nehmen	Quitar de la comparación
+Auswahl · Titelfoto	Elegida · portada
+DIFFERENZ	DIFERENCIA
+Darstellung gegen die Referenz: Nebeneinander, Blinken (W), Wischer (⇧W), Differenz (⌥W)	Vista frente a la referencia: lado a lado, parpadeo (W), cortinilla (⇧W), diferencia (⌥W)
+Duell {a} von etwa {b} · Ziel Platz 1–3	Duelo {a} de unos {b} · objetivo puestos 1–3
+ERGEBNIS · {a} Fotos · {b} Duelle	RESULTADO · {a} fotos · {b} duelos
+Erst eine Referenz festhalten (R)	Fija primero una referencia (R)
+Feld {n}	Campo {n}
+Feldmenü	Menú del campo
+Gekoppelt	Vinculado
+Im Filmstreifen Fotos mit ⌘-Klick auswählen	Selecciona fotos en la tira con ⌘-clic
+Im Raster zeigen	Mostrar en la cuadrícula
+In Entwickeln öffnen	Abrir en Revelar
+KANDIDAT	CANDIDATA
+Klick: Feldmenü	Clic: menú del campo
+Nur ansehen	Solo ver
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 vier und drei Sterne (ein ⌘Z)	Puesto 1 elegida y portada, puestos 2 y 3 cuatro y tres estrellas (un ⌘Z)
+Prüfhilfe	ayuda de revisión
+REFERENZ	REFERENCIA
+Referenz aufheben	Soltar la referencia
+Schärfe: {a} % des schärfsten Fotos der Auswahl (gemessen an der schärfsten Stelle)	Nitidez: {a} % de la foto más nítida de la selección (medida en el punto más nítido)
+Turnier abbrechen: nichts wird gesetzt (anhalten: Esc)	Cancelar el torneo: no se aplica nada (pausar: Esc)
+Vergleich schließen	Cerrar la comparación
+Wieder gekoppelt	Vincular de nuevo
+Zum Vergleichen mindestens 2 Fotos auswählen (⌘-Klick)	Selecciona al menos 2 fotos para comparar (⌘-clic)
+auf 0 Sterne (4–5 Sterne bleiben)	a 0 estrellas (4–5 estrellas se mantienen)
+blinkt alle {s} s	parpadea cada {s} s
+schärfstes	la más nítida
+unverändert	sin cambios
+wird bearbeitet	en edición
+{a} Fotos · {b} raus	{a} fotos · {b} fuera
+{k} – Klick: in den Vergleich (ins fokussierte Feld)	{k} – clic: a la comparación (al campo enfocado)
+{k}: Augen zu	{k}: ojos cerrados
+{k}: Gesichtsqualität {q}	{k}: calidad del rostro {q}
+· {a} ausgewählt · {b} im Vergleich	· {a} seleccionadas · {b} en la comparación
+– {n} weitere: {w} (Einstellung „⇧X beim Sichten“)	– {n} más: {w} (ajuste «⇧X al revisar»)
+↶ Letztes Duell	↶ Último duelo
+⌘-Klick im Streifen	⌘-clic en la tira
+Ausgewählte Fotos nebeneinander vergleichen und das beste wählen.	Comparar las fotos seleccionadas lado a lado y elegir la mejor.
+{n} Fotos vergleichen	Comparar {n} fotos
+Serie · {n} ähnliche Fotos	Serie · {n} fotos similares
+Belichtungsreihe · {n} Fotos	Horquillado de exposición · {n} fotos
+Stapel · {n} Fotos	Pila · {n} fotos
+Im Vergleich öffnen	Abrir en la comparación
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Disposición: auto · 1 fila · 1 columna · 2 × 2 · elegida grande
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Siguiente disposición: auto · 1 fila · 1 columna · 2 × 2 · elegida grande
+Automatisch: gleich große Felder, so groß wie möglich	Automático: campos iguales, lo más grandes posible
+Eine Spalte	Una columna
+Gewähltes groß, die anderen klein daneben	La elegida grande, las demás pequeñas al lado
+Vorschau · Speicher knapp	Vista previa · poca memoria
+Keine Serien oder Stapel in dieser Ansicht	No hay series ni pilas en esta vista
+Die Ansicht „Serien“ zeigt je Serie eine Kachel	La vista «Series» muestra una miniatura por serie
+Alle Serien aufklappen	Expandir todas las series
+Alle Serien zuklappen	Contraer todas las series
+Turnier abbrechen	Cancelar el torneo
+Füllen	Rellenar
+Ganz zeigen	Mostrar entera
+Füllen: jedes Foto füllt sein Feld (Ränder beschnitten) – Klick: ganz zeigen	Rellenar: cada foto llena su campo (bordes recortados) – clic: mostrar entera
+Ganz zeigen: jedes Foto ganz im Feld – Klick: füllen	Mostrar entera: cada foto completa en su campo – clic: rellenar
+Füllen ↔ ganz zeigen: Fotos füllen ihr Feld oder stehen ganz darin	Rellenar ↔ mostrar entera: las fotos llenan su campo o caben enteras
+HDR nicht gefunden – die Bibliothek wird neu gelesen.	HDR no encontrado: la biblioteca se está leyendo de nuevo.
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ gezeigt	El HDR no está en esta vista: se muestra la carpeta «{a}»
+Das HDR liegt nicht in dieser Ansicht – Ordner „{a}“ ohne Filter gezeigt	El HDR no está en esta vista: se muestra la carpeta «{a}» sin filtros
+Diese Fotos sehen nicht nach einer Belichtungsreihe aus. Trotzdem zusammenfügen?	Estas fotos no parecen una serie de exposiciones. ¿Combinar de todos modos?
+Zwischen zwei Aufnahmen liegen {n} Minuten.	Entre dos tomas hay {n} minutos.
+Die Bildinhalte unterscheiden sich deutlich.	El contenido de las imágenes difiere claramente.
+{a} ist eine SFD-Aufnahme: ihre Belichtungen fügt graineo beim Entwickeln selbst zusammen. Das Foto einzeln in Entwickeln öffnen.	{a} es una toma SFD: graineo fusiona sus exposiciones al revelarla. Abre la foto sola en Revelar.
+Die Fotos stammen von verschiedenen Kameras: {a}.	Las fotos son de cámaras distintas: {a}.
+Die Fotos haben verschiedene Größen: {a}.	Las fotos tienen tamaños distintos: {a}.
+Aus diesen Aufnahmen gibt es schon ein HDR: {a}.	Ya existe un HDR de estas tomas: {a}.
+Trotzdem neues HDR	Nuevo HDR de todos modos
+„{a}“ gehört nicht zur Auswahl. Zusammengefügt werden die {n} ausgewählten Fotos:	«{a}» no forma parte de la selección. Se fusionarán las {n} fotos seleccionadas:
+HDR nicht möglich	HDR no posible
+SFD-Aufnahme: graineo fügt ihre Belichtungen beim Entwickeln zusammen	Toma SFD: graineo fusiona sus exposiciones al revelarla
+Diese Ansicht zeigt jedes Foto einzeln	Esta vista muestra cada foto por separado
+Nur dieses Foto davon ist in der Ansicht sichtbar	Solo esta foto de la serie es visible en la vista
+Die verglichenen Serien bleiben aufgeklappt, solange der Vergleich offen ist	Las series comparadas permanecen desplegadas mientras la comparación esté abierta
+Nächste Fotos in die Felder	Fotos siguientes en los campos
+Vorige Fotos in die Felder	Fotos anteriores en los campos
+Felder {a} von {n}	Campos {a} de {n}
+Die gewählten Aufnahmen gehören schon zum HDR {a} – ein HDR wird nie selbst zur Quelle.	Las tomas seleccionadas ya pertenecen al HDR {a}: un HDR nunca es fuente.
+Schon zusammengefügt, wird nicht verwendet: {a}. Aus diesen {n} Aufnahmen ein neues HDR zusammenfügen?	Ya fusionado, no se usa: {a}. ¿Fusionar un HDR nuevo con estas {n} tomas?
+Neues HDR	Nuevo HDR
+Schon zusammengefügt, nicht als Quelle verwendet: {a}.	Ya fusionado, no se usa como fuente: {a}.
+Die ganze Serie vergleichen	Comparar toda la serie
+Serie {a} von {b}	Serie {a} de {b}
+Doppelklick auf die Kachel: aufklappen	Doble clic en la miniatura: desplegar
+Doppelklick auf das aktive Foto: zuklappen	Doble clic en la foto activa: plegar
+wie jetzt	como ahora
+Im Turnier gibt es keine Referenz	El torneo no tiene referencia
+Erst ein Foto fokussieren (Klick)	Primero enfocar una foto (clic)
+Original offline	Original sin conexión
+Das Original ist nicht erreichbar: das Feld zeigt die Vorschau der Bibliothek	No se puede acceder al original: el campo muestra la vista previa de la biblioteca
+Zum Entwickeln dieses Feldes fehlt gerade Speicher; es folgt, sobald ein anderes fertig ist	Ahora falta memoria para revelar este campo; seguirá en cuanto otro esté listo
+wird berechnet	calculando
+Das Feld wird mit seinen Einstellungen in voller Qualität entwickelt; bis dahin die Vorschau der Bibliothek	El campo se revela con sus ajustes en calidad completa; hasta entonces, la vista previa de la biblioteca
+Alle ({n}, je {k})	Todas ({n}, {k} por página)
+Alle ({n})	Todas ({n})
+sucht {d}/{n}	buscando {d}/{n}
+sucht …	buscando…
+wartet	esperando
+Modus Vergleich (Felder nebeneinander)	Modo Comparar (campos uno junto a otro)
+Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Siguiente disposición: Auto · 1 fila · 1 columna · 2 × 2 · Elegida grande · Todas
+Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß · Alle	Disposición: Auto · 1 fila · 1 columna · 2 × 2 · Elegida grande · Todas
+Vergleich: Fotos in Feldern nebeneinander	Comparar: fotos en campos uno junto a otro
+Im Turnier stehen die zwei Fotos immer nebeneinander	En el torneo las dos fotos están siempre una junto a otra
+Bei einem Feld gibt es nichts anzuordnen	Con un solo campo no hay nada que disponer
+Gekoppelt wirkt erst ab zwei Feldern	El acoplamiento actúa a partir de dos campos
+Ausrichten: kein Feld ist einzeln verschoben (⇧-Ziehen)	Alinear: ningún campo está desplazado por separado (⇧-arrastrar)
+Fokuspunkt: in diesen Dateien nicht gespeichert	Punto de enfoque: no guardado en estos archivos
+Messen vergleicht die Schärfe mehrerer Felder – erst zwei Fotos auswählen	Medir compara la nitidez de varios campos: primero seleccionar dos fotos
+Gesichterleiste: in diesen Fotos keine Gesichter gefunden	Barra de caras: no se encontraron caras en estas fotos
+Die Fotos kommen aus der Auswahl im Filmstreifen: ⌘-Klick nimmt eins hinzu oder heraus, Klick tauscht es gegen das fokussierte Feld.\n• **Vergleich** – bis zu 4 große Felder, mit der Anordnung „Alle“ bis zu 8 kleinere; Zoom und Verschieben wirken in allen Feldern gleich, ⇧-Ziehen verschiebt ein Feld einzeln; mehr Fotos blättern ‹ › oben rechts\n• **Turnier** – zwei Fotos je Duell bis Platz 1–3; danach steht die Rangliste in der Anordnung „Alle“ (Platz-Marken 1., 2., 3.), gesetzt wird erst mit „Übernehmen“: Platz 1 wird Auswahl und Titelfoto, alle anderen werden abgelehnt (ein ⌘Z)\n\nDie Hinweise sind relativ zur Auswahl: Schärfe als Anteil des schärfsten Fotos, Augen und Gesichter (Apple Vision, nur macOS), abgeschnittene Lichter, Bewegungsunschärfe. Der Vorschlag nennt seinen Grund und setzt nichts.\n\n### Tasten\n↩ bestes wählen · ⇧X Rest ablehnen · P/X/U/0–5 wirken auf das fokussierte Feld · Z Zoom · Leertaste halten 100 % an der Maus · L gekoppelt · H Gesichter · ⌘↩ gesichtet, weiter · Esc zurück	Las fotos vienen de la selección de la tira: ⌘-clic añade o quita una, un clic la pone en el campo enfocado.\n• **Comparar** – hasta 4 campos grandes, hasta 8 más pequeños con la disposición «Todas»; zoom y desplazamiento iguales en todos, ⇧-arrastrar desplaza un solo campo; ‹ › arriba a la derecha pasa a las demás fotos\n• **Torneo** – dos fotos por duelo hasta los puestos 1–3; después la clasificación aparece en la disposición «Todas» (marcas de puesto 1., 2., 3.), no se aplica nada hasta «Aplicar»: el puesto 1 queda como selección y portada, todas las demás se rechazan (un ⌘Z)\n\nLas indicaciones son relativas a la selección: nitidez como parte de la foto más nítida, ojos y rostros (Apple Vision, solo macOS), luces recortadas, desenfoque de movimiento. La sugerencia da su motivo y no aplica nada.\n\n### Teclas\n↩ elegir la mejor · ⇧X rechazar el resto · P/X/U/0–5 actúan en el campo enfocado · Z zoom · mantener espacio 100 % en el puntero · L vinculado · H rostros · ⌘↩ revisada, siguiente · Esc volver
+Mehr Fotos als Felder: die Pfeile blättern, ein Klick im Filmstreifen holt ein Foto ins gewählte Feld, die Anordnung „Alle“ zeigt bis zu 8	Más fotos que campos: las flechas pasan página, un clic en la tira lleva una foto al campo elegido, la disposición «Todas» muestra hasta 8
+Reihe aufklappen	Desplegar horquillado
+Reihe zuklappen	Plegar horquillado
+Reihe auswählen und vergleichen	Seleccionar y comparar horquillado
+Aus Reihe nehmen	Quitar del horquillado
+Reihe teilen ab hier	Dividir horquillado aquí
+Reihe auflösen	Disolver horquillado
+Ergebnis des Turniers · {a} Fotos · {b} Duelle	Resultado del torneo · {a} fotos · {b} duelos
+Ergebnis verwerfen	Descartar resultado
+Ergebnis verwerfen: nichts wird gesetzt	Descartar resultado: no se aplica nada
+Platz {n} im Turnier – „Übernehmen“ setzt: {w}	Puesto {n} del torneo – «Aplicar» establece: {w}
+Platz 1 Auswahl und Titelfoto, Platz 2 und 3 unverändert, die übrigen {w} (Einstellung „⇧X beim Sichten“) – ein ⌘Z	Puesto 1 selección y foto de portada, puestos 2 y 3 sin cambios, las demás {w} (ajuste «⇧X al revisar») – un ⌘Z
+Platz {n} im Turnier – „Übernehmen“ lässt die Bewertung unverändert	Puesto {n} del torneo – «Aplicar» no cambia su valoración
+Einzelbild öffnen (auch Leertaste, D, Doppelklick); auf einer zugeklappten Serie: aufklappen	Abrir foto individual (también Espacio, D, doble clic); en una serie plegada: desplegarla
+durch die Fotos der Serien gehen: eine zugeklappte Serie öffnet sich und schließt sich wieder, wenn man sie verlässt	recorrer las fotos de las series: una serie plegada se abre y se vuelve a cerrar al salir de ella
+vorheriges / nächstes Bild	foto anterior / siguiente
+vorheriges / nächstes Bild mit gleichem Zoom, auch in zugeklappte Serien hinein (sie schließen sich wieder, wenn man sie verlässt)	foto anterior / siguiente con el mismo zoom, también dentro de series plegadas (se vuelven a cerrar al salir)
+Serie/Stapel des aktiven Fotos auf-/zuklappen (Filmstreifen)	desplegar/plegar la serie/pila de la foto activa (tira de película)
+zugeklappte Serie im Filmstreifen aufklappen (wie Doppelklick)	desplegar una serie plegada en la tira de película (como doble clic)
+Rechteck ziehen: Schärfe je Feld	Arrastrar un rectángulo: nitidez por campo
+{n} vergleichen	comparar {n}
+Belichtungsreihe über {ev} EV	Horquillado de exposición de {ev} EV
+Serie in {t}, gleiches Motiv	Serie en {t}, mismo motivo
+Serie in {t}, nur nach Zeit	Serie en {t}, solo por tiempo
+Stapel aus Lightroom	Pila de Lightroom
+Reihe	Horquillado
+virtuell · aus {n} Aufnahmen	virtual · de {n} tomas
+Ein zusammengefügtes Foto liegt nicht als Datei vor	Una foto combinada no es un archivo
+Mit Farbmodus	Con modo de color
+Nur Kameramatrix	Solo matriz de cámara
+Farbe wie im gewählten Farbmodus der Entwicklung	Color como en el modo de color elegido en el revelado
+Kalibrierte Kamerafarbe ohne den Look des Farbmodus	Color de cámara calibrado sin el aspecto del modo de color
+Wie stark Lichter und Tiefen ausgeglichen werden (0 % = Referenzaufnahme)	Cuánto se equilibran las luces y las sombras (0 % = toma de referencia)
+Wie stark Lichter und Tiefen ausgeglichen werden (setzt Belichtung, Lichter, Tiefen, Weiß, Schwarz)	Cuánto se equilibran las luces y las sombras (ajusta Exposición, Iluminaciones, Sombras, Blancos, Negros)
+Tonwerte von Hand geändert: neue Aufnahmen stimmen nicht mehr ab, der Regler stimmt neu ab	Tonos cambiados a mano: las nuevas tomas ya no los reajustan; este control los reajusta
+Bei ISO unter 400 hat diese Kamera keine einstellbare Rauschminderung.	Por debajo de ISO 400, esta cámara no tiene reducción de ruido ajustable.
+Ausgabe: {name}	Salida: {name}
+Stärke {n} %	Cantidad {n} %
+HDR · virtuell	HDR · virtual
+{a}: bleibt mit dem fertigen Bild erhalten, lässt sich ohne die Quellen aber nicht mehr ändern oder neu berechnen.	{a}: se conserva con su imagen terminada, pero sin las fuentes ya no se puede modificar ni volver a calcular.
+HDR-Foto aus diesen Aufnahmen	foto HDR creada a partir de estas tomas
+HDR-Fotos aus diesen Aufnahmen	fotos HDR creadas a partir de estas tomas
+gemalter Bereich	área pintada
+gemalte Bereiche	áreas pintadas
+eigene Entwicklung	revelado propio
+HDR entfernen	Eliminar HDR
+HDR entfernt, die Quellen bleiben – ⌘Z holt es zurück	HDR eliminado, las fuentes se conservan – ⌘Z lo recupera
+HDR-Foto	foto HDR
+HDR-Fotos	fotos HDR
+HDR nicht zurückgeholt: {e}	HDR no recuperado: {e}
+„{a}“ entfernen?	¿Eliminar «{a}»?
+Die Quellen bleiben. Mit dem HDR verschwinden:	Las fuentes se conservan. Con el HDR desaparecen:
+⌘Z holt es zurück.	⌘Z lo recupera.
+{a} ohne eigene Datei – nichts zu verschieben	{a} sin archivo propio – nada que mover
+{a} ohne eigene Datei bleiben, wo sie sind	{a} sin archivo propio se quedan donde están
+HDR-Rezept nicht lesbar – es wird nicht überschrieben	La receta HDR no se puede leer – no se sobrescribe
+HDR-Zwischenspeicher	Datos intermedios de HDR
+HDR-Fotos bleiben; ihr Bild wird beim Öffnen aus den Quellen neu berechnet	Las fotos HDR se conservan; su imagen se vuelve a calcular a partir de las fuentes al abrirlas
+Nicht aktuell – die Berechnung wurde abgebrochen	No actualizado: el cálculo se canceló
+Die Aufnahmen werden neu berechnet – ändern geht gleich wieder	Las tomas se están recalculando: enseguida se pueden volver a cambiar
+{a}: andere Kamera oder Sensorgröße	{a}: otra cámara u otro tamaño de sensor
+{n} Aufnahmen: mindestens {m} nötig	{n} tomas: se necesitan al menos {m}
+{n} Aufnahmen: höchstens {m} möglich	{n} tomas: {m} como máximo
+HDR-Ergebnis fehlt im Cache	Falta el resultado HDR en la caché
+HDR: Referenzbild nicht als Mosaik lesbar	HDR: la imagen de referencia no se puede leer como mosaico
+Gleitkomma- und lineare Formate gibt es nur für RAW-Fotos	Los formatos de coma flotante y lineales solo existen para fotos RAW
+Dieses Exportformat gibt es nur für Sigma-X3F (hier JPEG, TIFF oder PNG)	Este formato de exportación solo existe para Sigma X3F (aquí JPEG, TIFF o PNG)
+Dieses Foto hat keine Kameramatrix für ein DNG	Esta foto no tiene matriz de cámara para un DNG
+Keine gültige LUT (Kopf oder Größe)	LUT no válida (cabecera o tamaño)
+LUT ist keine Textdatei	La LUT no es un archivo de texto
+LUT fehlerhaft: {}	LUT defectuosa: {}
+Look ohne lesbare Farbtabelle	Look sin tabla de color legible
+Profil von Adobe (nicht unterstützt)	Perfil de Adobe (no compatible)
+Vorgabe ohne Look-Tabelle (nicht unterstützt)	Ajuste sin tabla de look (no compatible)
+Keine XMP-Datei mit Look	No es un archivo XMP con look
+Quelle fehlt: {}	Falta la fuente: {}
+mindestens zwei Fotos	al menos dos fotos
+kein zusammengefügtes Foto	no es una foto combinada
+HDR-Rezept nicht lesbar: {}	La receta HDR no se puede leer: {}
+{a} → {b}: Belichtung unbekannt (keine Messung, keine Aufnahmedaten) – als gleich hell angenommen	{a} → {b}: exposición desconocida (sin medición ni datos de toma) – se supone igual de clara
+Nicht aktuell – {e}	No actualizado: {e}
+Quelle fehlt: {a}	Falta la fuente: {a}
+Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.	La selección modificada de tomas no se ha calculado. La lista muestra las tomas de la imagen.
+Auswahl zurücknehmen	Deshacer selección
+Das Rezept nimmt wieder die Aufnahmen des gezeigten Bildes; danach lässt sich die Liste wieder ändern	La receta vuelve a usar las tomas de la imagen mostrada; después la lista se puede cambiar de nuevo
+Die Aufnahmen des gezeigten Bildes sind nicht mehr in der Bibliothek.	Las tomas de la imagen mostrada ya no están en la biblioteca.
+Der Platz des HDR ist inzwischen von einem anderen Foto belegt	Otra foto ocupa ahora el lugar del HDR
+Es werden gerade Reihen zusammengefügt – weitere Reihen danach	Se están combinando series ahora mismo: las siguientes, después
+Bricht die Berechnung ab; das neue HDR wird wieder entfernt	Detiene el cálculo; el nuevo HDR se vuelve a quitar
+Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	Detiene el cálculo; la foto queda como se muestra
+die Berechnung wurde abgebrochen	el cálculo se canceló
+{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} es una foto Foveon (X3F). Para HDR sirven las tomas múltiples de la cámara (X3I) –se abren directamente como una sola foto– y las series RAW de otras cámaras.
+Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Detalle de la Quattro a partir de ISO 400: de suave (−3) a fuerte (+3), 0 = ajuste de la cámara. Se aprecia mejor al 100 %
+Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	La ruta Quattro completa está desactivada; solo ella evalúa el regulador de detalle.
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	En las tomas múltiples (X3I) el detalle es fijo; la nitidez Foveon de arriba sigue actuando.
+Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	Por debajo de ISO 400 el detalle de la Quattro es fijo; la nitidez Foveon de arriba sigue actuando.
+{a}: Ausrichtung nicht plausibel – wie aufgenommen verwendet	{a}: alineación no plausible – se usa tal como se tomó
+{a}: andere Ausrichtung – Hoch- und Querformat lassen sich nicht zusammenfügen	{a}: otra orientación – no se pueden combinar vertical y horizontal
+Ein unfertiges HDR vom letzten Mal entfernt – die Quellen sind unverändert	Se quitó un HDR sin terminar de la última vez: los originales no han cambiado
+{n} unfertige HDR vom letzten Mal entfernt – die Quellen sind unverändert	Se quitaron {n} HDR sin terminar de la última vez: los originales no han cambiado
+Interner Fehler beim Zusammenfügen	Error interno al combinar
+Wartet – eine andere Berechnung läuft noch	En espera: todavía hay otro cálculo en curso
+Bei Mehrfachaufnahmen (X3I) ist das Detail fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	En las tomas múltiples (X3I) el detalle es fijo. «Enfoque adicional», arriba, da más nitidez.
+Unter ISO 400 ist das Detail der Quattro fest. Mehr Schärfe gibt „Zusätzlich schärfen“ oben.	Por debajo de ISO 400 el detalle de la Quattro es fijo. «Enfoque adicional», arriba, da más nitidez.
+Die Foveon-Schärfe gibt es nur für Merrill-Fotos. Hier schärft „Zusätzlich schärfen“; bei der Quattro ab ISO 400 auch „Detail“.	La nitidez Foveon solo existe para fotos Merrill. Aquí enfoca «Enfoque adicional»; en la Quattro a partir de ISO 400 también «Detalle».
+Die Foveon-Schärfe wirkt nur mit eingeschaltetem Foveon-Detail.	La nitidez Foveon solo actúa con el detalle Foveon activado.
+Fein	Fino
+Ausrichten (Horizont)	Enderezar
+Duelle	duelos
+Foto abgelehnt	foto rechazada
+Fotos abgelehnt	fotos rechazadas
+Turnier übernommen: {a} – ⌘Z nimmt es zurück	Torneo aplicado: {a} – ⌘Z lo deshace
+Ergebnis des Turniers · {a} · {b}	Resultado del torneo · {a} · {b}
+Platz 1 wird Auswahl und Titelfoto, alle anderen Fotos des Turniers werden abgelehnt (auch Platz 2 und 3); Sterne bleiben, wie sie sind – ein ⌘Z nimmt alles zurück	El puesto 1 queda como selección y portada, todas las demás fotos del torneo se rechazan (también los puestos 2 y 3); las estrellas no cambian – un ⌘Z lo deshace todo
+Nur für Sigma-Fotos (X3F) in den Formaten TIFF 32 Bit und OpenEXR	Solo para fotos Sigma (X3F) en los formatos TIFF de 32 bits y OpenEXR
+Nur für die Formate TIFF 32 Bit und OpenEXR	Solo para los formatos TIFF de 32 bits y OpenEXR
+Quelle nicht lesbar: {}	No se puede leer la fuente: {}
+HDR ohne eigene Datei – mit „HDR entfernen (Quellen bleiben)“ aus der Bibliothek nehmen	HDR sin archivo propio: quítalo de la biblioteca con «Quitar HDR (las fuentes se conservan)»
+Quelle nicht erreichbar: {a}. Das Bild bleibt, wie es ist – ändern und neu berechnen geht wieder, wenn sie da ist.	Fuente no accesible: {a}. La imagen se queda como está; se podrá modificar y recalcular cuando vuelva a estar disponible.
+{a}: noch nicht in voller Auflösung berechnet – ohne die Quellen bleibt nur die Vorschau. Vorher öffnen und hineinzoomen oder exportieren.	{a}: aún no calculado a resolución completa; sin las fuentes solo queda la vista previa. Ábrelo y amplía, o expórtalo, antes.
+Vorschau aktuell · volle Auflösung abgebrochen	Vista previa actual · resolución completa cancelada
+HDR: die volle Auflösung wurde nicht berechnet (abgebrochen) – „Neu berechnen“ im Werkzeug „Zusammenfügen“	HDR: la resolución completa no se calculó (cancelada); «Recalcular» en la herramienta «Combinar»
+Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht	Toma de referencia no accesible: corrección de objetivo simplificada
+schnelle Vorschau	vista previa rápida
+Die genaue Rechnung dieses Fotos ist gescheitert: das Feld zeigt die schnelle Vorschau mit mehr Rauschen	El cálculo exacto de esta foto ha fallado: el campo muestra la vista previa rápida, con más ruido
+Turnier ohne Sieger – nichts gesetzt	Torneo sin ganadora – no se ha aplicado nada
+Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	Torneo no aplicado: aquí no se pueden establecer valoraciones
+Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	Torneo aplicado: ganadora seleccionada – ⌘Z lo deshace
+HDR abgebrochen und entfernt (Quellen bleiben)	HDR cancelado y eliminado (las fuentes se conservan)
+Lichter-Farbe	Color de iluminaciones
+Lichter-Struktur	Estructura de iluminaciones
+Lichter neutral, Lichter-Farbe, Lichter-Struktur	Iluminaciones neutras, color de iluminaciones, estructura de iluminaciones
+Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	Color de las iluminaciones reconstruidas: 0 neutro, 50 tal como se reconstruyen, 100 más intenso (solo colores claros)
+Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	Detalle en las iluminaciones reconstruidas: 0 liso, 50 tal como se reconstruye, 100 triple
+Nur für Farbe	Solo en color
+Nur für Fotos der Sigma Quattro	Solo para fotos de Sigma Quattro
+Dieses Foto hat keine rekonstruierbaren Lichter	Esta foto no tiene iluminaciones que reconstruir
+Wird noch vorbereitet …	Aún en preparación …
+Metadaten neu einlesen: {k} von {n}	Releyendo metadatos: {k} de {n}
+Metadaten neu einlesen …	Volver a leer metadatos…
+{a} gelesen, {m} geändert	{a} leídas, {m} cambiadas
+, {k} nicht erreichbar	, {k} no accesibles
+Metadaten werden bereits eingelesen.	Los metadatos ya se están leyendo.
+Keine Fotos zum Einlesen.	No hay fotos para leer.
+Metadaten neu einlesen	Volver a leer metadatos
+Metadaten neu einlesen · {a}	Volver a leer metadatos · {a}
+Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien.	Vuelve a leer fecha, cámara, objetivo, exposición, lugar, tamaño y orientación de los archivos.
+Neben {a} liegt eine XMP-Begleitdatei.	{a} tienen un archivo XMP adjunto al lado.
+Bewertung, Stichwörter, Etikett aus XMP	Valoración, palabras clave, etiqueta del XMP
+Ersetzt die Werte der Bibliothek; Entwicklung bleibt.	Sustituye los valores; el revelado se mantiene.
+Dateien bleiben unverändert; {k} macht es rückgängig.	Los archivos no cambian; {k} lo deshace.
+Einlesen	Leer
+Foveon: Lichter	Foveon: iluminaciones
+KI-Entrauschen gibt es nur in Farbe.	La reducción de ruido con IA solo funciona en color.
+KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	La reducción de ruido con IA solo funciona con la reducción de ruido activada.
+Nur für Merrill und Quattro	Solo para Merrill y Quattro
+Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	Sin reguladores en Merrill, la reconstrucción actúa automáticamente
+Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	Sin reguladores en esta foto (ISO alto), la reconstrucción actúa automáticamente
+Lichter werden rekonstruiert …	Reconstruyendo las altas luces …
+Lichter werden rekonstruiert … (seit {n} s)	Reconstruyendo las altas luces … ({n} s)
+Merrill: Lichter rekonstruieren	Merrill: reconstruir iluminaciones
+Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung und Farbe); farbige Lichter bleiben farbig statt weiß. Wirkt automatisch, ohne Regler. Aus: bisheriger Weg	Reconstruye las capas quemadas a partir de las capas aún válidas (detalle y color); las luces de color siguen siendo de color en lugar de blancas. Actúa automáticamente, sin reguladores. Desactivado: método anterior
+Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	La reconstrucción de iluminaciones para Merrill está desactivada en los ajustes (Revelar → «Merrill: reconstruir iluminaciones»)
+Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	La reconstrucción de iluminaciones para Quattro está desactivada en los ajustes (Revelar → «Quattro: reconstruir iluminaciones»)
+Quattro: Lichter rekonstruieren	Quattro: reconstruir iluminaciones
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	Cálculo intensivo en fotos muy sobreexpuestas (tardan unos segundos más en abrirse). dp, sd y sd H Quattro: reconstruye la capa superior quemada a partir de las inferiores, con los reguladores «Color de iluminaciones» y «Estructura de iluminaciones». Desactivado: método anterior

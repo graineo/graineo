@@ -384,6 +384,42 @@ fn xt_v5(@builtin(global_invocation_id) g: vec3<u32>) {
     e[k * nn() + u32(i)] = s;
 }
 
+// part of the mosaic (buffer b) below 0 at (gx, gy), mean-demosaiced: own colour exactly, other colours the mean of
+// the same colour in 3×3 (5×5 if the pattern has none there), only samples inside the image
+fn xt_negative(gx: i32, gy: i32, w: i32, h: i32) -> vec3<f32> {
+    var r = vec3<f32>(0.0);
+    let own = fcol(gy, gx);
+    let inner = gx >= 2 && gy >= 2 && gx + 2 < w && gy + 2 < h;
+    for (var c = 0; c < 3; c++) {
+        if (c == own) {
+            r[c] = min(b[u32(gy * w + gx)], 0.0);
+            continue;
+        }
+        var rad = 1;
+        var found = false;
+        for (var dy = -1; dy <= 1; dy++) {
+            for (var dx = -1; dx <= 1; dx++) {
+                if (fcol(gy + dy, gx + dx) == c) { found = true; }
+            }
+        }
+        if (!found) { rad = 2; }
+        var s = 0.0;
+        var n = 0.0;
+        for (var dy = -rad; dy <= rad; dy++) {
+            for (var dx = -rad; dx <= rad; dx++) {
+                if (fcol(gy + dy, gx + dx) != c) { continue; }
+                let xx = gx + dx;
+                let yy = gy + dy;
+                if (!inner && (xx < 0 || yy < 0 || xx >= w || yy >= h)) { continue; }
+                s += min(b[u32(yy * w + xx)], 0.0);
+                n += 1.0;
+            }
+        }
+        if (s < 0.0) { r[c] = s / n; }
+    }
+    return r;
+}
+
 // ---- 10. Average the most homogeneous directions → output (only pixels of the strip, inside the image) ----
 @compute @workgroup_size(32, 8)
 fn xt_fertig(@builtin(global_invocation_id) g: vec3<u32>) {
@@ -417,7 +453,9 @@ fn xt_fertig(@builtin(global_invocation_id) g: vec3<u32>) {
             cnt += 1.0;
         }
     }
-    let o = max(avg / cnt, vec3<f32>(0.0));
+    // the interpolation saw the mosaic clipped at 0: add the negative part back linearly (raw::add_negative_part,
+    // same neighbours and order), no clipping at 0
+    let o = avg / cnt + xt_negative(gx, gy, w, i32(p[3]));
     let oi = u32(gy * w + gx) * 3u;
     f[oi] = o.x;
     f[oi + 1u] = o.y;

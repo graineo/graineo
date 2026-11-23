@@ -9,6 +9,7 @@
 //!   exporting ([`RawDoc::full_stage`]); [`RawDoc::release_memory`] releases it when switching images.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use develop::look::Geo;
@@ -287,6 +288,88 @@ pub struct RawDoc {
     pub engine_request: Option<String>,
     /// neural denoising of this photo ([`crate::ai_denoise`]), computed once at full resolution
     pub(crate) ai: crate::ai_denoise::Caches,
+    /// merged photo (HDR): the pixels come from the merge, camera data from the reference frame ([`crate::merged`])
+    pub merged: Option<Arc<Merged>>,
+}
+
+/// Version of [`CameraData`] (a file of another version is not read).
+const CAMERA_DATA_VERSION: u32 = 1;
+
+/// What the development of a merged photo takes from its reference frame beyond the pixels: sensor and colour data,
+/// shooting data, looks. Stored beside every computed result (`<key>-camera.json`), so that the result opens and
+/// exports when the reference file is gone. Not stored: what only the file itself can give (the lens correction
+/// data of the camera, DNG profile tables).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CameraData {
+    version: u32,
+    format: String,
+    maker: String,
+    model: String,
+    mode: String,
+    width: usize,
+    height: usize,
+    channels: usize,
+    bits: usize,
+    xtrans: bool,
+    cfa: String,
+    cfa_size: (usize, usize),
+    black: Vec<f32>,
+    black_pattern: (usize, usize, usize),
+    white: Vec<f32>,
+    wb: Option<[f32; 3]>,
+    matrix: Option<(String, [[f32; 3]; 3])>,
+    matrix_illuminants: Vec<String>,
+    orientation: u16,
+    active: Option<[usize; 4]>,
+    crop: Option<[usize; 4]>,
+    baseline_exposure: f32,
+    iso: Option<u32>,
+    exposure_time: Option<f32>,
+    aperture: Option<f32>,
+    focal_length: Option<f32>,
+    distance: Option<f32>,
+    lens_maker: Option<String>,
+    lens: Option<String>,
+    lens_db: Option<String>,
+    capture_date: Option<String>,
+    serial_number: Option<String>,
+    calibration: Vec<(f32, M3, Option<M3>)>,
+    analog_balance: Option<[f32; 3]>,
+    fuji_dr: Option<u16>,
+    full_size: [usize; 2],
+    style: Option<(String, String, String)>,
+    auto_look: Option<String>,
+    learn_key: Option<String>,
+    as_shot: (f32, f32),
+    base_ev: f32,
+    lr_offset: f32,
+    cam_xyz_shot: M3,
+    info_rows: Vec<(String, String)>,
+    summary: String,
+}
+
+impl CameraData {
+    /// Is this a file of the version this build reads?
+    pub(crate) fn readable(&self) -> bool {
+        self.version == CAMERA_DATA_VERSION
+    }
+}
+
+/// The merge behind a merged document.
+#[derive(Debug)]
+pub struct Merged {
+    pub source: crate::merged::MergedSource,
+    pub meta: crate::merged::Meta,
+    /// the reference frame is not there: the camera data comes from the cache ([`CameraData`]) and only what the cache
+    /// holds can be shown – nothing is merged anew, the lens correction of the file is not available
+    pub offline: bool,
+    /// the document was opened for an output the user asked for (export, print, copy): its full resolution is merged
+    /// also when the user cancelled that result before. The document on screen is not: what it needs by itself (the
+    /// sharp picture, previews) never starts a merge the user stopped.
+    pub asked: std::sync::atomic::AtomicBool,
+    /// the merge is not computed yet: the pixels are those of the reference frame until it is there (the app starts
+    /// the computation and puts the result in place)
+    pub pending: bool,
 }
 
 pub(crate) fn quarters(o: u16) -> u8 {
@@ -417,7 +500,31 @@ fn info_for_image(path: &Path, w: usize, h: usize, o: u32) -> raw::Info {
     }
 }
 
+/// Error text of an output of a merged photo whose result is not there and cannot be computed.
+pub const MERGE_NOT_READY: &str = "HDR-Ergebnis fehlt im Cache";
+
+/// The document for an output: `first` as opened; when it stands in for something still to be computed
+/// (`pending` names it) that is computed and the document opened again. A document still pending after that is an
+/// error, never the output.
+fn settle_for_output<D, P>(first: Option<D>, pending: impl Fn(&D) -> Option<P>, compute: impl FnOnce(&P) -> Result<(), String>, reopen: impl FnOnce() -> Result<Option<D>, String>) -> Result<Option<D>, String> {
+    let Some(doc) = first else { return Ok(None) };
+    let Some(p) = pending(&doc) else { return Ok(Some(doc)) };
+    drop(doc);
+    compute(&p)?;
+    match reopen()? {
+        Some(d) if pending(&d).is_some() => Err(MERGE_NOT_READY.into()),
+        other => Ok(other),
+    }
+}
+
 impl RawDoc {
+    /// Is this the document of a merged photo whose result is not there yet – the reference frame standing in while
+    /// the app computes the merge? Its pixels are a single exposure: they may be shown while waiting, but are never
+    /// stored or handed out as a picture of the merged photo (grid and large previews, copies, the remote view).
+    pub fn stands_in(&self) -> bool {
+        self.merged.as_ref().is_some_and(|m| m.pending)
+    }
+
     /// Open: decode, preview, white balance values, picture style. `keep_going`: abort while browsing. Automatic
     /// engine (graineo, Apple only for files graineo cannot decode); see [`Self::open_for`].
     pub fn open(path: &Path, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
@@ -436,7 +543,33 @@ impl RawDoc {
         Ok(Some(doc))
     }
 
+    /// Open for an output (export, print): like [`Self::open_for`], but a merged photo whose result is not in the cache
+    /// is merged first (blocking, from its sources) – the reference frame that stands in while the app computes is
+    /// never the output. When the merge cannot be computed the error says so.
+    pub fn open_for_output(path: &Path, s: &Settings, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
+        let open = || Self::open_for(path, s, keep_going);
+        let doc = settle_for_output(
+            open()?,
+            |d| d.merged.as_ref().filter(|m| m.pending).map(|m| m.source.clone()),
+            // (through the app's one entrance for merges: never beside another merge)
+            |src| crate::merged::compute_output(src, true).map(|_| ()),
+            open,
+        )?;
+        if let Some(m) = doc.as_ref().and_then(|d| d.merged.as_ref()) {
+            m.asked.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        Ok(doc)
+    }
+
     fn open_engine(path: &Path, s: &Settings, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
+        // a merged photo has no file of its own (library file without a file on disk): the recipe decides, not the
+        // disk – a file that got onto its path (an export into the folder of the sources) is never taken for it.
+        // The library is asked only for a path that is not there or carries the name of a merged photo.
+        if !path.exists() || library::merge::has_merge_name(path) {
+            if let Some(src) = crate::merged::lookup(path) {
+                return Self::open_merged(path, src, keep_going);
+            }
+        }
         if is_image(path) {
             return Self::open_image(path).map(Some);
         }
@@ -537,6 +670,7 @@ impl RawDoc {
             apple: None,
             engine_request: None,
             ai: Default::default(),
+            merged: None,
         }))
     }
 
@@ -586,7 +720,249 @@ impl RawDoc {
             apple: None,
             engine_request: None,
             ai: Default::default(),
+            merged: None,
         })
+    }
+
+    /// Open a merged photo ([`crate::merged`]): the reference RAW for camera, colour, looks and lens; the pixels from the
+    /// merge (cache, computed again from the sources when the cache is gone).
+    fn open_merged(path: &Path, src: crate::merged::MergedSource, keep_going: &dyn Fn() -> bool) -> Result<Option<RawDoc>, String> {
+        let reference = src.reference();
+        let cached = crate::merged::read_meta(&src.key).and_then(|m| Some((m, crate::merged::read_preview(&src.key)?)));
+        // the reference as an ordinary RAW: camera data, white balance, looks, lens. When it is not there (the source
+        // was deleted, its drive is not connected) a result in the cache still opens, with the camera data stored
+        // beside it – the finished picture does not depend on its sources.
+        let opened = if reference.is_file() { Self::open_engine(&reference, &Settings::default(), keep_going) } else { Err(format!("{}: Quelle fehlt", reference.display())) };
+        let (mut doc, offline) = match opened {
+            Ok(Some(d)) => (d, false),
+            Ok(None) => return Ok(None),
+            Err(e) => match cached.as_ref().and_then(|_| crate::merged::read_camera(&src.key)) {
+                Some(c) => (Self::from_camera(c, &reference), true),
+                None => return Err(e),
+            },
+        };
+        if doc.apple.is_some() || doc.finished {
+            return Err("HDR: Referenzbild nicht als Mosaik lesbar".into());
+        }
+        let Some((meta, pv)) = cached else {
+            // not computed yet (a merge just started, or the cache is gone): the reference stands in, never a wait here;
+            // the app computes the merge and puts it in place (`hdr_live.rs`)
+            let meta = crate::merged::Meta { summary: hdr::Summary { reference: crate::merged::reference_index(src.settings.reference, || None, src.sources.len()), ev: Vec::new(), shift: Vec::new(), warnings: Vec::new() }, headroom: 1.0, algo: hdr::ALGO_VERSION, pattern: [[1; 6]; 6], base: None };
+            doc.path = path.to_path_buf();
+            doc.logical_path = path.to_path_buf();
+            doc.summary = merged_summary(&doc.summary, src.sources.len());
+            doc.merged = Some(Arc::new(Merged { source: src, meta, pending: true, offline: false, asked: Default::default() }));
+            return Ok(Some(doc));
+        };
+        if !offline {
+            // (kept beside the result for the day the reference is gone)
+            crate::merged::write_camera(&src.key, &doc.camera_data());
+        }
+        let profile = crate::merged::profile(&meta, &doc.info, pv.noise, pv.w, doc.full_size[0]);
+        let wb = doc.info.wb.unwrap_or([1.0; 3]);
+        doc.auto_neutral = auto_neutral(&pv.px, wb).unwrap_or(doc.auto_neutral);
+        doc.preview = Arc::new(Stage::new(pv.px, pv.w, pv.h, Some(profile)));
+        doc.path = path.to_path_buf();
+        doc.logical_path = path.to_path_buf();
+        doc.summary = merged_summary(&doc.summary, src.sources.len());
+        doc.merged = Some(Arc::new(Merged { source: src, meta, pending: false, offline, asked: Default::default() }));
+        Ok(Some(doc))
+    }
+
+    /// What a merged photo needs of its reference frame beyond the pixels (see [`CameraData`]).
+    pub(crate) fn camera_data(&self) -> CameraData {
+        let i = &self.info;
+        let region = |r: &raw::Region| [r.x, r.y, r.w, r.h];
+        CameraData {
+            version: CAMERA_DATA_VERSION,
+            format: i.format.clone(),
+            maker: i.maker.clone(),
+            model: i.model.clone(),
+            mode: i.mode.clone(),
+            width: i.width,
+            height: i.height,
+            channels: i.channels,
+            bits: i.bits,
+            xtrans: i.sensor == raw::Sensor::XTrans,
+            cfa: i.cfa.clone(),
+            cfa_size: i.cfa_size,
+            black: i.black.clone(),
+            black_pattern: i.black_pattern,
+            white: i.white.clone(),
+            wb: i.wb,
+            matrix: i.matrix.clone(),
+            matrix_illuminants: i.matrix_illuminants.clone(),
+            orientation: i.orientation,
+            active: i.active.as_ref().map(region),
+            crop: i.crop.as_ref().map(region),
+            baseline_exposure: i.baseline_exposure,
+            iso: i.exif.iso,
+            exposure_time: i.exif.exposure_time,
+            aperture: i.exif.aperture,
+            focal_length: i.exif.focal_length,
+            distance: i.exif.distance,
+            lens_maker: i.exif.lens_maker.clone(),
+            lens: i.exif.lens.clone(),
+            lens_db: i.exif.lens_db.clone(),
+            capture_date: i.exif.capture_date.clone(),
+            serial_number: i.exif.serial_number.clone(),
+            calibration: i.calibration.iter().map(|c| (c.kelvin, c.color, c.forward)).collect(),
+            analog_balance: i.analog_balance,
+            fuji_dr: i.fuji_dr,
+            full_size: self.full_size,
+            style: self.picture_style.as_ref().map(|p| (p.maker.clone(), p.model.clone(), p.style.clone())),
+            auto_look: self.auto_look.clone(),
+            learn_key: self.learn_key.clone(),
+            as_shot: self.as_shot,
+            base_ev: self.base_ev,
+            lr_offset: self.lr_offset,
+            cam_xyz_shot: self.cam_xyz_shot,
+            info_rows: self.info_rows.clone(),
+            summary: self.summary.clone(),
+        }
+    }
+
+    /// A document without a file from stored camera data: for a merged photo whose reference frame is gone. The
+    /// pixels are set by the caller.
+    fn from_camera(c: CameraData, reference: &Path) -> RawDoc {
+        let region = |r: [usize; 4]| raw::Region { x: r[0], y: r[1], w: r[2], h: r[3] };
+        let info = raw::Info {
+            format: c.format,
+            maker: c.maker,
+            model: c.model,
+            mode: c.mode,
+            width: c.width,
+            height: c.height,
+            channels: c.channels,
+            bits: c.bits,
+            sensor: if c.xtrans { raw::Sensor::XTrans } else { raw::Sensor::Bayer },
+            cfa: c.cfa,
+            cfa_size: c.cfa_size,
+            black: c.black,
+            black_pattern: c.black_pattern,
+            white: c.white,
+            wb: c.wb,
+            matrix: c.matrix,
+            matrix_illuminants: c.matrix_illuminants,
+            orientation: c.orientation,
+            active: c.active.map(region),
+            crop: c.crop.map(region),
+            fuji_rotated: false,
+            baseline_exposure: c.baseline_exposure,
+            dng_profile: Vec::new(),
+            exif: raw::Exif {
+                iso: c.iso,
+                exposure_time: c.exposure_time,
+                aperture: c.aperture,
+                focal_length: c.focal_length,
+                distance: c.distance,
+                lens_maker: c.lens_maker,
+                lens: c.lens,
+                lens_db: c.lens_db,
+                capture_date: c.capture_date,
+                serial_number: c.serial_number,
+            },
+            corrections: Vec::new(),
+            calibration: c.calibration.into_iter().map(|(kelvin, color, forward)| color::Calibration { kelvin, color, forward }).collect(),
+            analog_balance: c.analog_balance,
+            fuji_dr: c.fuji_dr,
+        };
+        let wb = info.wb.unwrap_or([1.0; 3]);
+        let std_look = raw::development::camera_look(&info.maker, &info.model).map(|l| Arc::new(raw::development::LookLut::new(&l)));
+        let looks: Vec<String> = crate::looks::names_for_camera(&raw::picture_style::camera_short(&info.maker, &info.model));
+        RawDoc {
+            path: reference.to_path_buf(),
+            logical_path: reference.to_path_buf(),
+            orientation: quarters(info.orientation),
+            full_size: c.full_size,
+            preview: Arc::new(Stage::new(Vec::new(), 0, 0, None)),
+            picture_style: c.style.map(|(maker, model, style)| raw::picture_style::PictureStyle { maker, model, style, details: Vec::new() }),
+            auto_look: c.auto_look,
+            learn_key: c.learn_key,
+            plain: Default::default(),
+            looks,
+            as_shot: c.as_shot,
+            auto_neutral: [wb[1] / wb[0], 1.0, wb[1] / wb[2]],
+            base_ev: c.base_ev,
+            lr_offset: c.lr_offset,
+            cam_xyz_shot: c.cam_xyz_shot,
+            std_look,
+            info_rows: c.info_rows,
+            summary: c.summary,
+            finished: false,
+            hdr: None,
+            file: Mutex::new(None),
+            full: Mutex::new(None),
+            full_detail: Mutex::new(None),
+            full_busy: Mutex::new(()),
+            preview_detail: Mutex::new(Vec::new()),
+            correction: Mutex::new(None),
+            looks_cache: Mutex::new(Vec::new()),
+            matched: Mutex::new(None),
+            apple: None,
+            engine_request: None,
+            ai: Default::default(),
+            merged: None,
+            info,
+        }
+    }
+
+    /// The same merged photo with other pixels (a change of its recipe): camera data, looks and orientation stay, the
+    /// stages of the old pixels go. `full`: the full resolution, when it is there already (otherwise it is read from
+    /// the cache or computed when needed).
+    /// `preview`: `None` keeps the preview of this document (only the full resolution is new).
+    pub fn with_merged(&self, preview: Option<&hdr::Merged>, full: Option<&hdr::Merged>, source: crate::merged::MergedSource, meta: crate::merged::Meta) -> RawDoc {
+        let wb = self.info.wb.unwrap_or([1.0; 3]);
+        let stage = preview.map(|p| {
+            let prof = crate::merged::profile(&meta, &self.info, p.noise, p.w, self.full_size[0]);
+            Arc::new(Stage::new(p.px.clone(), p.w, p.h, Some(prof)))
+        });
+        let full = full.map(|f| {
+            let prof = crate::merged::profile(&meta, &self.info, f.noise, f.w, f.w);
+            Arc::new(Stage::new(f.px.clone(), f.w, f.h, Some(prof)))
+        });
+        RawDoc {
+            path: self.path.clone(),
+            logical_path: self.logical_path.clone(),
+            info: self.info.clone(),
+            orientation: self.orientation,
+            full_size: self.full_size,
+            preview: stage.unwrap_or_else(|| self.preview.clone()),
+            picture_style: self.picture_style.clone(),
+            auto_look: self.auto_look.clone(),
+            learn_key: self.learn_key.clone(),
+            plain: std::sync::atomic::AtomicBool::new(self.plain.load(std::sync::atomic::Ordering::Relaxed)),
+            looks: self.looks.clone(),
+            as_shot: self.as_shot,
+            auto_neutral: preview.and_then(|p| auto_neutral(&p.px, wb)).unwrap_or(self.auto_neutral),
+            base_ev: self.base_ev,
+            lr_offset: self.lr_offset,
+            cam_xyz_shot: self.cam_xyz_shot,
+            std_look: self.std_look.clone(),
+            info_rows: self.info_rows.clone(),
+            summary: merged_summary(&self.summary, source.sources.len()),
+            finished: self.finished,
+            hdr: None,
+            file: Mutex::new(None),
+            full: Mutex::new(full),
+            full_detail: Mutex::new(None),
+            full_busy: Mutex::new(()),
+            preview_detail: Mutex::new(if preview.is_none() { self.preview_detail.lock().unwrap_or_else(|e| e.into_inner()).clone() } else { Vec::new() }),
+            correction: Mutex::new(None),
+            looks_cache: Mutex::new(self.looks_cache.lock().unwrap_or_else(|e| e.into_inner()).clone()),
+            matched: Mutex::new(self.matched.lock().unwrap_or_else(|e| e.into_inner()).clone()),
+            apple: None,
+            engine_request: self.engine_request.clone(),
+            ai: Default::default(),
+            merged: Some(Arc::new(Merged { source, meta, pending: false, offline: self.merged.as_ref().is_some_and(|m| m.offline), asked: std::sync::atomic::AtomicBool::new(self.merged.as_ref().is_some_and(|m| m.asked.load(std::sync::atomic::Ordering::Relaxed))) })),
+        }
+    }
+
+    /// Clip level of the stage for the capture sharpening (pixels at or above it are left alone): the white of the
+    /// file, for a merged photo the white of its darkest frame.
+    fn sharpen_clip(&self) -> f32 {
+        let wb = self.info.wb.unwrap_or([1.0; 3]);
+        0.95 * wb[1].min(wb[0]).min(wb[2]) * self.merged.as_ref().map_or(1.0, |m| m.meta.headroom.max(1.0))
     }
 
     /// Was this document opened for the engine the settings call for (`RawAdjust::engine`)? If not, the app opens the
@@ -718,7 +1094,8 @@ impl RawDoc {
         }
         let res = key.lens.and_then(|(d, v, ca)| {
             let o = LensOptions { distortion: d as f32 / 100.0, vignette: v as f32 / 100.0, lateral_ca: ca, backup_enabled: false, pinned: pin_text(key.pin), ..Default::default() };
-            if self.finished || self.apple.is_some() {
+            // (a merged photo whose reference file is gone: the lens data of the file is not there, lensfun stands in)
+            if self.finished || self.apple.is_some() || self.merged.as_ref().is_some_and(|m| m.offline) {
                 let i = &self.info;
                 return raw::lens::lensfun_img(&i.maker, &i.model, i.exif.lens.as_deref(), i.exif.focal_length, i.exif.aperture, self.full_size[0], self.full_size[1], &o).map(|k| Arc::new(k.0));
             }
@@ -813,7 +1190,9 @@ impl RawDoc {
         }
         let mut g = self.file.lock().unwrap();
         if g.is_none() {
-            *g = raw::RawFile::open(&self.path).ok();
+            // merged photo: the reference frame (camera data, lens profile)
+            let p = self.merged.as_ref().map_or_else(|| self.path.clone(), |m| m.source.reference());
+            *g = raw::RawFile::open(&p).ok();
         }
         Some(g)
     }
@@ -830,14 +1209,13 @@ impl RawDoc {
         let (w, h) = (base.w, base.h);
         // full resolution: all three steps on the GPU (CPU remains reference and fallback)
         if full {
-            let wb = self.info.wb.unwrap_or([1.0; 3]);
             let sch = raw::sharpness::Sharpness::default();
             let corr_opt = if key.lens.is_some() { self.correction(key).0 } else { None };
             let fits = corr_opt.as_ref().is_none_or(|k| (k.width, k.height) == (w, h));
             let grid = corr_opt.as_ref().filter(|_| fits).map(|k| k.grid(lens_grid_step()));
             let job = crate::gpu::Job {
                 noise: base.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-                sharpen: (!self.finished).then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, 0.95 * wb[1].min(wb[0]).min(wb[2]))),
+                sharpen: (!self.finished).then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
                 lens: grid.as_ref(),
             };
             if let Some(px) = fits.then(|| crate::gpu::detail(&base.px, w, h, &job)).flatten() {
@@ -854,8 +1232,7 @@ impl RawDoc {
         }
         if full && !self.finished {
             let _t = crate::timings::Stage::new("CPU Schärfe");
-            let wb = self.info.wb.unwrap_or([1.0; 3]);
-            raw::sharpness::apply(&mut px, w, h, &raw::sharpness::Sharpness::default(), 0.95 * wb[1].min(wb[0]).min(wb[2]));
+            raw::sharpness::apply(&mut px, w, h, &raw::sharpness::Sharpness::default(), self.sharpen_clip());
             lap_time("Grundschärfe");
         }
         if key.lens.is_some() {
@@ -946,6 +1323,27 @@ impl RawDoc {
         let _busy = self.full_busy.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(v) = self.full.lock().unwrap().as_ref() {
             return Ok(v.clone());
+        }
+        // (a merge not computed yet shows its reference: the full resolution is the reference's as well)
+        if let Some(m) = self.merged.as_ref().filter(|m| !m.pending) {
+            let key = &m.source.key;
+            let asked = m.asked.load(std::sync::atomic::Ordering::Relaxed);
+            if !crate::merged::cached(key) {
+                crate::merged::compute_output(&m.source, asked)?;
+            }
+            let r = match crate::merged::read_full(key) {
+                Some(r) => r,
+                // the file is there and does not read (damaged): computed again, once
+                None => {
+                    crate::merged::forget_full(key);
+                    crate::merged::compute_output(&m.source, asked)?;
+                    crate::merged::read_full(key).ok_or(MERGE_NOT_READY)?
+                }
+            };
+            let profile = crate::merged::profile(&m.meta, &self.info, r.noise, r.w, r.w);
+            let st = Arc::new(Stage::new(r.px, r.w, r.h, Some(profile)));
+            *self.full.lock().unwrap() = Some(st.clone());
+            return Ok(st);
         }
         if self.finished {
             let (w, h, px, _) = library::imageio::linear_full(&self.path).ok_or("Bild nicht lesbar")?;
@@ -1216,14 +1614,14 @@ impl RawDoc {
         }
         let key = self.detail_key(s);
         // X-Trans: mosaic directly to the GPU (demosaic, detail, output without a detour via the CPU)
-        if self.info.sensor == raw::Sensor::XTrans && key.ai == 0 && std::env::var("GRAINEO_GPU_DEMOSAIC").as_deref() != Ok("0") {
+        // (not for a merged photo: its pixels are not the file's mosaic)
+        if self.info.sensor == raw::Sensor::XTrans && key.ai == 0 && self.merged.is_none() && std::env::var("GRAINEO_GPU_DEMOSAIC").as_deref() != Ok("0") {
             if let Some(img) = self.render_full_gpu_mosaic(s, se, key)? {
                 return Ok(Some(img));
             }
         }
         let b = self.full_base_for(s)?;
         let (w, h) = (b.w, b.h);
-        let wb = self.info.wb.unwrap_or([1.0; 3]);
         let sch = raw::sharpness::Sharpness::default();
         let corr_opt = if key.lens.is_some() { self.correction(key).0 } else { None };
         if !corr_opt.as_ref().is_none_or(|k| (k.width, k.height) == (w, h)) {
@@ -1232,7 +1630,7 @@ impl RawDoc {
         let grid = corr_opt.as_ref().map(|k| k.grid(lens_grid_step()));
         let job = crate::gpu::Job {
             noise: b.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, 0.95 * wb[1].min(wb[0]).min(wb[2]))),
+            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
             lens: grid.as_ref(),
         };
         let Some(mut out_data) = crate::render::Params::new(self, se).gpu_data(self.lum()) else { return Ok(None) };
@@ -1273,7 +1671,6 @@ impl RawDoc {
         }
         let Some(m) = b.mosaic.as_ref() else { return Ok(None) };
         let (w, h) = (b.width, b.height);
-        let wb = self.info.wb.unwrap_or([1.0; 3]);
         let sch = raw::sharpness::Sharpness::default();
         let corr_opt = if key.lens.is_some() { self.correction(key).0 } else { None };
         if !corr_opt.as_ref().is_none_or(|k| (k.width, k.height) == (w, h)) {
@@ -1282,7 +1679,7 @@ impl RawDoc {
         let grid = corr_opt.as_ref().map(|k| k.grid(lens_grid_step()));
         let job = crate::gpu::Job {
             noise: b.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, 0.95 * wb[1].min(wb[0]).min(wb[2]))),
+            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
             lens: grid.as_ref(),
         };
         let Some(mut out_data) = crate::render::Params::new(self, se).gpu_data(self.lum()) else { return Ok(None) };
@@ -1354,6 +1751,15 @@ impl RawDoc {
         Some(f)
     }
 
+    /// Automatic tone of a merged photo with linear output ([`hdr_auto_values`] at `strength`):
+    /// `[exposure, highlights, shadows, whites, blacks]`, measured with the base exposure the photo is rendered with.
+    pub fn auto_tone_hdr(&self, s: &Settings, strength: f32) -> Option<[f32; 5]> {
+        let lum = self.lum();
+        let g = self.base_ev_for(s).exp2();
+        let mut y: Vec<f32> = self.preview.px.iter().step_by(7).map(|p| (lum[0] * p[0] + lum[1] * p[1] + lum[2] * p[2]) * g).collect();
+        hdr_auto_values(&mut y).map(|v| hdr_auto_scaled(v, strength))
+    }
+
     /// Automatic tone: exposure such that the mean luminance lies as in a
     /// balanced shot; highlights/shadows with a lot of contrast. Returns: changed?
     pub fn auto_tone(&self, s: &mut Settings) -> bool {
@@ -1384,6 +1790,53 @@ impl RawDoc {
     }
 }
 
+/// Automatic tone of a linear merge (HDR) at full strength, from the luminance `y` of its preview after the base
+/// exposure (1 = white of the tone curve): `[exposure, highlights, shadows, whites, blacks]`.
+/// - exposure: the log mean of the middle 80 % to a balanced middle grey (as "Auto");
+/// - highlights: the 99.5 % highlight brought down to just above white (the slider lowers bright surroundings by up
+///   to 1.5 EV), what is left over goes to whites (up to 1.1 EV more), beyond that to a lower exposure (up to 2 EV);
+/// - shadows: the 2 % shadow lifted to about −4 EV under middle grey and the 10 % shadow to about −2.4 EV (up to
+///   1.6 EV); blacks a little down by a quarter
+///   of the shadow lift, so the deepest blacks stay black and the picture does not turn grey.
+///
+/// `None` with too few pixels.
+pub fn hdr_auto_values(y: &mut [f32]) -> Option<[f32; 5]> {
+    if y.len() < 100 {
+        return None;
+    }
+    y.sort_by(|a, b| a.total_cmp(b));
+    let q = |f: f32| y[((y.len() - 1) as f32 * f) as usize].max(1e-6);
+    let (lo, hi) = (y.len() / 10, y.len() * 9 / 10);
+    let mean = (y[lo..hi].iter().map(|v| v.max(1e-6).ln()).sum::<f32>() / (hi - lo) as f32).exp();
+    let mut ev = (0.16 / mean).log2().clamp(-2.5, 2.5);
+    let bright = q(0.995) * ev.exp2();
+    let need_hi = (bright.log2() - 0.5).max(0.0);
+    let highlights = -(need_hi / 1.5).min(1.0);
+    let rest = (need_hi - 1.5).max(0.0);
+    let whites = -(rest / 1.1).min(1.0);
+    // more range than highlights and whites can take (a linear merge can hold 3 EV and more over white): the rest
+    // comes off the exposure (at most 2 EV), the shadows below take it back
+    ev -= (rest - 1.1).clamp(0.0, 2.0);
+    // the deepest 2 % to about −4 EV under middle grey, the darkest 10 % (a ground in shadow) to about −2.4 EV
+    let need_lo = (0.01 / (q(0.02) * ev.exp2())).log2().max((0.03 / (q(0.1) * ev.exp2())).log2()).max(0.0);
+    let shadows = (need_lo / 1.6).min(1.0);
+    let blacks = -0.25 * shadows;
+    Some([ev, highlights, shadows, whites, blacks])
+}
+
+/// [`hdr_auto_values`] at `strength` (0 … 1, 0 = all neutral): every value scaled, rounded to the slider steps
+/// (exposure 0.05 EV, the others 1 %).
+pub fn hdr_auto_scaled(full: [f32; 5], strength: f32) -> [f32; 5] {
+    let k = strength.clamp(0.0, 1.0);
+    let mut v = full.map(|x| x * k);
+    v[0] = (v[0] * 20.0).round() / 20.0;
+    for x in v.iter_mut().skip(1) {
+        *x = (*x * 100.0).round() / 100.0;
+    }
+    // no "-0" in the sliders
+    v.map(|x| if x == 0.0 { 0.0 } else { x })
+}
+
 /// Automatic white balance: gray world over the mid luminances (without blown and
 /// very dark areas), weighted towards weakly saturated pixels. Returns: camera neutral.
 fn auto_neutral(px: &[[f32; 3]], wb: [f32; 3]) -> Option<[f32; 3]> {
@@ -1409,14 +1862,19 @@ fn auto_neutral(px: &[[f32; 3]], wb: [f32; 3]) -> Option<[f32; 3]> {
 
 fn info_texts(i: &raw::Info, style: Option<&raw::picture_style::PictureStyle>, as_shot: (f32, f32)) -> (Vec<(String, String)>, String) {
     let e = &i.exif;
-    let lap_time = e.exposure_time.map(|z| if z >= 1.0 { format!("{z:.1} s").replace(".0 s", " s") } else { format!("1/{:.0} s", 1.0 / z) }).unwrap_or_else(|| "–".into());
-    let aperture = e.aperture.map(|b| format!("f/{b:.1}").replace(".0", "")).unwrap_or_else(|| "–".into());
-    let iso = e.iso.map(|v| format!("ISO {v}")).unwrap_or_else(|| "–".into());
-    let bw = e.focal_length.map(|b| format!("{b:.0} mm")).unwrap_or_else(|| "–".into());
+    // a value of 0 is "unknown" (manual lenses report aperture 0): left out, never "f/0"
+    let lap_time_v = e.exposure_time.filter(|z| *z > 0.0).map(|z| if z >= 1.0 { format!("{z:.1} s").replace(".0 s", " s") } else { format!("1/{:.0} s", 1.0 / z) });
+    let aperture_v = e.aperture.filter(|b| *b > 0.0).map(|b| format!("f/{b:.1}").replace(".0", ""));
+    let iso_v = e.iso.filter(|v| *v > 0).map(|v| format!("ISO {v}"));
+    let bw_v = e.focal_length.filter(|b| *b > 0.0).map(|b| format!("{b:.0} mm"));
+    let summary = [&lap_time_v, &aperture_v, &iso_v, &bw_v].iter().filter_map(|v| v.as_deref()).collect::<Vec<_>>().join(" · ");
+    let exposure = [&lap_time_v, &aperture_v, &iso_v].iter().filter_map(|v| v.as_deref()).collect::<Vec<_>>().join(" · ");
+    let exposure = if exposure.is_empty() { "–".to_string() } else { exposure };
+    let bw = bw_v.unwrap_or_else(|| "–".into());
     let mut rows = vec![
         ("Kamera".to_string(), raw::camera_display(&i.maker, &i.model)),
         ("Aufnahme".into(), e.capture_date.clone().unwrap_or_else(|| "–".into())),
-        ("Belichtung".into(), format!("{lap_time} · {aperture} · {iso}")),
+        ("Belichtung".into(), exposure),
         ("Brennweite".into(), bw.clone()),
         ("Objektiv".into(), e.lens.clone().or_else(|| e.lens_db.clone()).unwrap_or_else(|| "–".into())),
         ("Weißabgleich".into(), format!("{:.0} K · Tönung {:+.0}", as_shot.0, as_shot.1)),
@@ -1434,7 +1892,7 @@ fn info_texts(i: &raw::Info, style: Option<&raw::picture_style::PictureStyle>, a
     if let Some(s) = &e.serial_number {
         rows.push(("Seriennummer".into(), s.clone()));
     }
-    (rows, format!("{lap_time} · {aperture} · {iso} · {bw}"))
+    (rows, summary)
 }
 
 /// Rectangle from a 16-bit image.
@@ -1456,6 +1914,58 @@ pub mod apple;
 /// Spacing of the lens correction grid on the GPU in pixels (8; `GRAINEO_LENS_GRID=n` for measurements).
 fn lens_grid_step() -> usize {
     std::env::var("GRAINEO_LENS_GRID").ok().and_then(|v| v.parse().ok()).filter(|v| *v >= 1).unwrap_or(8)
+}
+
+/// The summary line of a merged photo: "HDR · <frames> · <summary of the reference>". An existing "HDR · n · " prefix
+/// is replaced (QA 1.5.0-test.5: after a frame was left out the line still said "HDR · 7").
+fn merged_summary(summary: &str, frames: usize) -> String {
+    let rest = summary.strip_prefix("HDR · ").and_then(|s| s.split_once(" · ")).filter(|(n, _)| n.parse::<usize>().is_ok()).map_or(summary, |(_, r)| r);
+    format!("HDR · {frames} · {rest}")
+}
+
+#[cfg(test)]
+mod merged_summary_tests {
+    #[test]
+    fn frame_count_follows_the_sources() {
+        assert_eq!(super::merged_summary("1/20 s · f/18", 7), "HDR · 7 · 1/20 s · f/18");
+        assert_eq!(super::merged_summary("HDR · 7 · 1/20 s · f/18", 6), "HDR · 6 · 1/20 s · f/18");
+        assert_eq!(super::merged_summary("", 3), "HDR · 3 · ");
+    }
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// An output never takes the stand-in of a merge that is not computed: the merge is computed and the photo opened
+    /// again; when it still is not there the output fails with a reason. Ordinary photos are opened once.
+    #[test]
+    fn output_waits_for_the_merge_or_fails() {
+        #[derive(Debug, PartialEq)]
+        struct Doc(&'static str, bool);
+        let pending = |d: &Doc| d.1.then_some(d.0);
+        // an ordinary photo, a merge from the cache: taken as opened, nothing computed
+        let computed = Cell::new(0);
+        let compute = |_: &&str| {
+            computed.set(computed.get() + 1);
+            Ok(())
+        };
+        let r = settle_for_output(Some(Doc("photo", false)), pending, compute, || panic!("not opened twice"));
+        assert_eq!((r, computed.get()), (Ok(Some(Doc("photo", false))), 0));
+        // the stand-in: computed, then the merge itself
+        let r = settle_for_output(Some(Doc("reference", true)), pending, compute, || Ok(Some(Doc("merge", false))));
+        assert_eq!((r, computed.get()), (Ok(Some(Doc("merge", false))), 1));
+        // the merge cannot be computed (a source is missing): the reason, no output
+        let r = settle_for_output(Some(Doc("reference", true)), pending, |_| Err("Quelle fehlt: a.CR2".into()), || panic!("not opened again"));
+        assert_eq!(r, Err("Quelle fehlt: a.CR2".to_string()));
+        // computed, but still not there (the cache could not be written): an error, never the stand-in
+        let r = settle_for_output(Some(Doc("reference", true)), pending, |_| Ok(()), || Ok(Some(Doc("reference", true))));
+        assert_eq!(r, Err(MERGE_NOT_READY.to_string()));
+        // opening was cancelled
+        let r = settle_for_output(None::<Doc>, pending, |_| Ok(()), || panic!());
+        assert_eq!(r, Ok(None));
+    }
 }
 
 #[cfg(test)]
@@ -1480,6 +1990,34 @@ mod profile_scale_tests {
                 assert!((q / e - 1.0).abs() < 0.2, "channel {c} level {l}: exact {e}, reduced {q}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod hdr_auto_tests {
+    use super::*;
+
+    /// A wide scene (shadows 8 EV under white, highlights 4 EV over it): full strength pulls the highlights down and
+    /// lifts the shadows; the strength scales every value, 0 is neutral.
+    #[test]
+    fn hdr_automatic_scales_with_strength() {
+        let mut y: Vec<f32> = (0..2000).map(|i| (-8.0 + 12.0 * i as f32 / 1999.0).exp2() * 0.5).collect();
+        let full = hdr_auto_values(&mut y).unwrap();
+        assert!(full[1] < -0.5, "highlights down: {full:?}");
+        assert!(full[2] > 0.2, "shadows up: {full:?}");
+        assert!(full[4] <= 0.0, "blacks never lifted: {full:?}");
+        assert_eq!(hdr_auto_scaled(full, 0.0), [0.0; 5], "0 % is off");
+        let half = hdr_auto_scaled(full, 0.5);
+        let one = hdr_auto_scaled(full, 1.0);
+        for i in 0..5 {
+            assert!((half[i] - full[i] / 2.0).abs() <= 0.026, "{i}: {half:?} {full:?}");
+            assert!((one[i] - full[i]).abs() <= 0.026, "{i}: {one:?} {full:?}");
+        }
+        // a scene that fits (no highlights over white, no deep shadows) gets no highlights/shadows
+        let mut flat: Vec<f32> = (0..2000).map(|i| 0.05 + 0.4 * i as f32 / 1999.0).collect();
+        let f = hdr_auto_values(&mut flat).unwrap();
+        assert_eq!((f[1], f[2], f[3]), (0.0, 0.0, 0.0), "{f:?}");
+        assert!(hdr_auto_values(&mut [0.5; 10]).is_none());
     }
 }
 

@@ -875,6 +875,8 @@ impl App {
         if let Some(h) = hover_test(&groups, &s) {
             hovered = h;
         }
+        // never a hover preview from a fast preview too rough to be shown
+        let hovered = hovered.filter(|h| !self.derived_waits(h));
         match hovered {
             Some(h) => {
                 self.film_hover_left = None;

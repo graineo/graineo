@@ -43,7 +43,7 @@ struct Item {
 /// the stems of its RAWs (for "a RAW beside it": before 0.108 every photo cloned the whole listing and went through
 /// all names – quadratic per folder, minutes for a flat folder of 20 000 photos).
 #[derive(Default)]
-struct Listings(HashMap<PathBuf, Option<Listing>>);
+pub(crate) struct Listings(HashMap<PathBuf, Option<Listing>>);
 
 struct Listing {
     names: HashSet<String>,
@@ -109,6 +109,17 @@ fn read_listed(it: &Item, dir: &Path, listing: Option<&Listing>) -> (bool, Optio
             Some(Content { result: (ReadResult::Ok(w), m), develop: crate::xmp::develop_from_text(&text), lightroom: crate::xmp::lightroom_from_text(&text).for_image(&it.path) }),
         ),
     }
+}
+
+/// Rating, label and keywords of the sidecar beside a photo, for "Metadaten neu einlesen" (`crate::metadata_reread`).
+/// Outer `None`: the folder could not be listed; inner `None`: no readable sidecar.
+pub(crate) fn sidecar_values(path: &Path, format: &str, lists: &mut Listings) -> Option<Option<crate::xmp::Values>> {
+    let it = Item { id: 0, path: path.to_path_buf(), format: format.to_string() };
+    let (_, c) = read_one(&it, lists)?;
+    Some(c.and_then(|c| match c.result.0 {
+        ReadResult::Ok(w) => Some(w),
+        _ => None,
+    }))
 }
 
 /// What was taken over from one sidecar (field groups).

@@ -176,8 +176,8 @@ impl App {
         }
         // people view: only stars, flags, labels and B (on the chosen face's photo); arrows, ↩ … belong to the view
         let people = self.in_people();
-        // series review: arrows, ⇧X and ↩ belong to the view; rating keys apply to the focused photo
-        let review = self.in_grid() && self.lib.review_open();
+        // comparison: arrows, ⇧X and ↩ belong to the view; rating keys apply to the focused photo
+        let review = self.lib.compare_open();
         let raster = self.in_grid();
         let loupe = self.lib.loupe;
         // Crop: X rotates the aspect, digits stay free → only the old paths there
@@ -205,6 +205,15 @@ impl App {
             match k {
                 egui::Key::ArrowLeft | egui::Key::ArrowRight | egui::Key::ArrowUp | egui::Key::ArrowDown => {
                     let prefill = matches!(k, egui::Key::ArrowRight | egui::Key::ArrowDown);
+                    let horizontal = matches!(k, egui::Key::ArrowLeft | egui::Key::ArrowRight);
+                    // ⌥←/→: through the photos of the series too, a collapsed one opens for it (library_series.rs);
+                    // in Develop with the zoom kept
+                    if m.alt && !m.shift && horizontal && self.lib.series_step(prefill) {
+                        if !raster {
+                            self.strip_follow_lib = Some(true);
+                        }
+                        continue;
+                    }
                     if raster {
                         let step = if matches!(k, egui::Key::ArrowUp | egui::Key::ArrowDown) { self.lib.column_count() as isize } else { 1 };
                         let d = if prefill { step } else { -step };
@@ -235,10 +244,9 @@ impl App {
         if self.in_people() {
             return self.lib.people_focus().into_iter().collect();
         }
-        if self.in_grid() {
-            if let Some(f) = self.lib.review_focus() {
-                return vec![f];
-            }
+        // comparison (library and Develop): the focused field
+        if let Some(f) = self.lib.compare_focus() {
+            return vec![f];
         }
         let active = self.lib.active_image().or_else(|| self.active_entry().and_then(|i| self.entries.get(i)).map(|e| e.image));
         let Some(active) = active else { return Vec::new() };

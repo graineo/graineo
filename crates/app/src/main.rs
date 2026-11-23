@@ -12,6 +12,8 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod highlight_ui;
+mod edit_marks;
 mod detail_filter;
 mod print_job;
 mod print_dialog;
@@ -22,6 +24,7 @@ mod series_job;
 mod style_scan;
 mod support;
 mod spp_accept;
+mod preview_hold;
 mod start_migration;
 mod backup_view_ui;
 mod workspace;
@@ -84,6 +87,7 @@ mod darkroom_shelf;
 mod film_previews;
 mod darkroom_dodge;
 mod media_library;
+mod navigator;
 mod zoom;
 mod brand;
 mod camf_view;
@@ -107,6 +111,12 @@ mod lr;
 mod presets;
 mod raw_app;
 mod ai_denoise_ui;
+mod hdr_auto;
+mod hdr_paint;
+mod hdr_batch;
+mod rough_views;
+mod hdr_live;
+mod hdr_ui;
 mod mask_list_ui;
 mod mask_parts;
 mod masks_ui;
@@ -136,6 +146,9 @@ mod video_ui;
 mod film_profiles_ui;
 mod film_look;
 mod compare_view;
+// Photo comparison in the centre of the library and of Develop (state, drawing)
+mod photo_compare;
+mod photo_compare_ui;
 mod apple_raw;
 #[cfg(test)] mod ui_test;
 #[cfg(test)] mod list_switch_test;
@@ -314,20 +327,81 @@ fn single_instance_or_exit() {
                     std::process::exit(0);
                 }
             }
+            // test and automatic runs (own data folder, a run that ends by itself, a screenshot run) never wait in a
+            // message nobody will answer
+            let unattended = ["GRAINEO_DATA_DIR", "GRAINEO_QUIT", "GRAINEO_SCREENSHOT"].iter().any(|v| crate::env::var_os(v).is_some());
+            if unattended {
+                std::process::exit(1);
+            }
             let folder = db.parent().map(|p| p.display().to_string()).unwrap_or_default();
-            let _ = rfd::MessageDialog::new()
-                .set_level(rfd::MessageLevel::Warning)
-                .set_title("graineo")
-                .set_description(crate::trf!(
-                    "graineo läuft bereits mit dieser Bibliothek.\n\nZwei Fenster auf dieselbe Bibliothek könnten sich gegenseitig Änderungen überschreiben. Bitte das bereits geöffnete graineo verwenden.\n\nBibliothek: {folder}",
-                    folder = folder
-                ))
-                .set_buttons(rfd::MessageButtons::Ok)
-                .show();
+            let text = crate::trf!(
+                "graineo läuft bereits mit dieser Bibliothek.\n\nZwei Fenster auf dieselbe Bibliothek könnten sich gegenseitig Änderungen überschreiben. Bitte das bereits geöffnete graineo verwenden.\n\nBibliothek: {folder}",
+                folder = folder
+            );
+            second_instance_note(&text, SECOND_INSTANCE_NOTE_S);
             std::process::exit(1);
         }
         // never block the first start because of a lock problem (e.g. a file system without locks)
         Err(e) => log(&format!("instance lock not available, starting anyway: {e}")),
+    }
+}
+
+/// The note of a second start with the same library. It never keeps the process alive for long: the note closes by
+/// itself after [`SECOND_INSTANCE_NOTE_S`] seconds when nobody answers it (it can lie behind other windows, and the
+/// process waited there for minutes – QA 9), and the process ends either way.
+#[cfg(target_os = "macos")]
+fn second_instance_note(text: &str, seconds: f64) {
+    use std::ffi::c_void;
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithBytes(alloc: *const c_void, bytes: *const u8, len: isize, encoding: u32, external: u8) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
+        fn CFUserNotificationDisplayAlert(timeout: f64, flags: usize, icon: *const c_void, sound: *const c_void, localization: *const c_void, header: *const c_void, message: *const c_void, default_button: *const c_void, alternate: *const c_void, other: *const c_void, response: *mut usize) -> i32;
+    }
+    const UTF8: u32 = 0x0800_0100;
+    /// kCFUserNotificationCautionAlertLevel
+    const CAUTION: usize = 2;
+    // SAFETY: plain CoreFoundation calls with strings created and released here; the alert call blocks until the
+    // note is answered or the timeout has passed.
+    unsafe {
+        let cf = |s: &str| CFStringCreateWithBytes(std::ptr::null(), s.as_ptr(), s.len() as isize, UTF8, 0);
+        let (header, message) = (cf("graineo"), cf(text));
+        let mut response = 0usize;
+        CFUserNotificationDisplayAlert(seconds, CAUTION, std::ptr::null(), std::ptr::null(), std::ptr::null(), header, message, std::ptr::null(), std::ptr::null(), std::ptr::null(), &mut response);
+        for s in [header, message] {
+            if !s.is_null() {
+                CFRelease(s);
+            }
+        }
+    }
+}
+
+/// Other systems: the system's message box on a helper thread; the process ends when it is answered, at the latest
+/// after [`SECOND_INSTANCE_NOTE_S`] seconds.
+#[cfg(not(target_os = "macos"))]
+fn second_instance_note(text: &str, seconds: f64) {
+    let text = text.to_string();
+    let (done, wait) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = rfd::MessageDialog::new().set_level(rfd::MessageLevel::Warning).set_title("graineo").set_description(text).set_buttons(rfd::MessageButtons::Ok).show();
+        let _ = done.send(());
+    });
+    let _ = wait.recv_timeout(std::time::Duration::from_secs_f64(seconds));
+}
+
+/// How long the note of a second start stays without an answer.
+const SECOND_INSTANCE_NOTE_S: f64 = 60.0;
+
+#[cfg(all(test, target_os = "macos"))]
+mod second_instance_tests {
+    /// The note never keeps the process waiting beyond its time (run by hand: it shows a system note for two seconds).
+    #[test]
+    #[ignore]
+    fn note_closes_by_itself() {
+        let t = std::time::Instant::now();
+        super::second_instance_note("graineo test: this note closes by itself after two seconds.", 2.0);
+        let s = t.elapsed().as_secs_f64();
+        assert!((1.5..6.0).contains(&s), "returned after {s:.1} s");
     }
 }
 
@@ -342,6 +416,12 @@ fn note_damage(loaded: &Loaded) {
         Some(d) => photo_state::set(path, photo_state::damaged(d)),
         None => photo_state::clear(path, photo_state::Kind::Damaged),
     }
+}
+
+/// Can a photo in this library state be developed: its file is there, or it is a merged photo (HDR) whose pixels come
+/// from its sources and the cache (`library::merge`).
+pub(crate) fn developable_state(state: u8) -> bool {
+    state == 0 || state as i64 == library::merge::STATUS_VIRTUAL
 }
 
 pub(crate) fn state_message(state: u8) -> String {
@@ -407,6 +487,9 @@ struct Current {
     /// Full resolution (tiled textures, image region x/y/w/h, settings): a crop around the visible part or – once
     /// rendered – the whole image, from which every zoom and pan is drawn until the settings change
     detail: Option<(DetailTex, [usize; 4], Settings)>,
+    /// the sharp image of the pixels before a merged photo got new ones (`hdr_live.rs`): drawn below until `detail` is
+    /// there again, so a change never shows the blurry preview at 100 %
+    detail_prev: Option<(DetailTex, [usize; 4], Settings)>,
     /// 100 % view in the darkroom comparison: crop of the left side at full resolution
     detail_left: Option<(TextureHandle, [usize; 4], Settings)>,
     /// 100 % view: crop at full resolution for the preset or film currently hovered
@@ -502,6 +585,14 @@ struct App {
     detail_blocked_until: f64,
     /// Colour mode for which an SPP base is currently being computed
     spp_pending: Option<develop::SppKey>,
+    /// Photo for which the withheld fast preview was logged (once per wait)
+    held_logged: Option<usize>,
+    /// The last finished picture of a photo that is opened again with another size (binning): it stays on screen
+    /// until the first render of the new session (see `preview_hold.rs`)
+    kept_view: Option<(PathBuf, TextureHandle)>,
+    /// Photo whose embedded camera picture stands in while its fast preview is withheld and nothing else is there
+    /// (opened from a folder, no stored preview); see `preview_hold.rs`
+    hold_jpeg: Option<usize>,
     /// SPP lens profile per file (name, `None` = none) – for "Lens corrections"
     lens_profiles: std::collections::HashMap<PathBuf, Option<String>>,
     spp_cancel: Arc<AtomicBool>,
@@ -530,6 +621,15 @@ struct App {
     turn_ops: u64,
     /// ⇧+arrow in the filmstrip: anchor and moving end (entry indices)
     strip_ext: Option<(usize, usize)>,
+    /// filmstrip: the photo of the last single click and whether it was active before it (a double click on the photo
+    /// that was already active closes its series)
+    strip_click_was: Option<(i64, bool)>,
+    /// Develop: the library changed its active photo for the strip (⌥←/→ into a series, S, ↩, a stack closed): open
+    /// it once the new list is there; the value: keep the zoom
+    strip_follow_lib: Option<bool>,
+    /// filmstrip cells of the last frame: photo and left edge in the visible strip (a stack opened or closed stays
+    /// where it stood)
+    strip_seen: Vec<(i64, f32)>,
     /// bring this filmstrip cell into view (moving end of a ⇧+arrow selection)
     strip_follow: Option<usize>,
     /// Darkroom (dunkelkammer.rs)
@@ -583,6 +683,7 @@ struct App {
     export_as_print: bool,
     /// Limit the size on export (JPEG/TIFF) and to which size
     export_limit_size: bool,
+    export_resize: develop::resize::ResizeFilter,
     export_size: develop::export::OutputSize,
     delete_jpegs: bool,
     /// Before/after side by side (Y)
@@ -596,6 +697,8 @@ struct App {
     apple: apple_raw::AppleView,
     /// Look comparison (switch "Compare" in "Film & Look")
     look_compare: compare_view::LookCompare,
+    /// the app's part of the photo comparison (crops at full resolution, view), photo_compare_ui.rs
+    cmp: photo_compare_ui::CompareView,
     show_clipping: bool,
     /// Face frames in single view; cache: (image, time, faces)
     show_faces: bool,
@@ -744,6 +847,8 @@ struct App {
     /// Photo (image ID) the filmstrip was last aligned to; the ID rather than the position,
     /// so that a rebuild of the list (different position, same photo) does not jump again
     strip_active: Option<i64>,
+    /// the compared photos and the list the filmstrip last brought into view for them (see `filmstrip`)
+    strip_compared: u64,
     /// last seen source change of the library (filmstrip then goes to the start)
     strip_source: u64,
     /// Height of the filmstrip panel (dragged at its top edge, remembered as `filmstripHeight`)
@@ -852,6 +957,8 @@ struct App {
     thumbnails_valid: Arc<std::sync::atomic::AtomicU64>,
     /// Photos whose preview should be re-rendered after a multi-image edit (image ID)
     thumbnails_pending: std::collections::BTreeSet<i64>,
+    /// The one-off of `drop_rough_views_once` is done or not needed
+    rough_views_checked: bool,
     /// last render result that arrived while dragging (index, settings, width, height, RGB): thumbnail/preview on release
     pending_thumb: Option<(usize, Settings, usize, usize, Vec<u8>)>,
     /// wide-gamut render still to start for the last result that arrived while dragging (index, settings): started on
@@ -870,6 +977,8 @@ impl App {
     /// The app on an egui context; `hwnd`: main window on Windows (menu bar). Separate from [`App::new`] because the
     /// start screen (`start_migration`) builds the app only after the library has been converted.
     fn new_in(ctx: &egui::Context, hwnd: Option<isize>) -> Self {
+        // merges an export, a print or zooming in needs take the same entrance as the merge jobs
+        hdr_ui::install();
         if !cfg!(test) {
             dock_open::setup(ctx);
         }
@@ -883,6 +992,7 @@ impl App {
         prefs::apply_scale(ctx);
         binning_ui::init();
         prefs::apply_gpu_setting(); // "Grafikkarte verwenden"
+        highlight_ui::apply_setting();
         let worker = Worker::new(ctx.clone());
         let mut app = Self {
             egui_ctx: ctx.clone(),
@@ -906,6 +1016,9 @@ impl App {
             detail_pending: false,
             detail_blocked_until: 0.0,
             spp_pending: None,
+            kept_view: None,
+            held_logged: None,
+            hold_jpeg: None,
             lens_profiles: Default::default(),
             spp_due: None,
             spp_settle: None,
@@ -923,6 +1036,9 @@ impl App {
             turn_undo: Default::default(),
             turn_ops: 0,
             strip_ext: None,
+            strip_click_was: None,
+            strip_follow_lib: None,
+            strip_seen: Vec::new(),
             strip_follow: None,
             darkroom: darkroom::State::default(),
             committed: None,
@@ -951,6 +1067,7 @@ impl App {
             export_options: serde_json::from_value(library::settings::value("exportOptions")).unwrap_or_default(),
             export_as_print: false,
             export_limit_size: library::settings::value("exportLimitSize").as_bool().unwrap_or(false),
+            export_resize: library::settings::value("exportResize").as_str().and_then(develop::resize::ResizeFilter::from_key).unwrap_or_default(),
             export_size: develop::export::OutputSize::from_json(library::settings::value("exportSize")).unwrap_or(develop::export::OutputSize::LongEdge(2048)),
             delete_jpegs: true,
             compare: false,
@@ -959,6 +1076,7 @@ impl App {
             panes: Default::default(),
             apple: Default::default(),
             look_compare: Default::default(),
+            cmp: Default::default(),
             show_clipping: false,
             show_faces: crate::env::var_os("GRAINEO_FACES").is_some(),
             show_focus: crate::env::var_os("GRAINEO_FOCUS").is_some(),
@@ -1013,6 +1131,7 @@ impl App {
             favorites: film_look::load_favorites(),
             strip_scroll: 0.0,
             strip_active: None,
+            strip_compared: 0,
             strip_source: 0,
             strip_height: library::settings::value("filmstripHeight").as_f64().map_or(filmstrip_layout::PANEL_DEFAULT, |h| (h as f32).clamp(filmstrip_layout::PANEL_MIN, filmstrip_layout::PANEL_MAX)),
             strip_layout: None,
@@ -1117,6 +1236,7 @@ impl App {
             multi: Default::default(),
             thumbnails_valid: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             thumbnails_pending: std::collections::BTreeSet::new(),
+            rough_views_checked: false,
             pending_thumb: None,
             pending_wide: None,
             thumbnails_running: std::collections::BTreeSet::new(),
@@ -1255,6 +1375,7 @@ impl App {
             Ok("masks") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Masks); }
             Ok("retouch") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Retouch); }
             Ok("versions") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Versions); }
+            Ok("merge") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Merge); }
             Ok("presets") => { app.tab = Tab::Develop; app.tool_open = Some(workspace::ToolTab::Presets); }
             Ok("loupe") => {
                 app.tab = Tab::Library;
@@ -1371,6 +1492,8 @@ impl App {
         if force || snapshot != self.source_version {
             let _t = frame_watch::section("develop list");
             self.source_version = snapshot;
+            // "edited" marks of the photos not loaded in this session (read in the background)
+            edit_marks::refresh(&self.egui_ctx);
             let list = self.lib.list();
             let alt = std::mem::take(&mut self.entries);
             let mut alt_pos: HashMap<i64, usize> = alt.iter().enumerate().map(|(i, e)| (e.image, i)).collect();
@@ -1381,9 +1504,11 @@ impl App {
                 .enumerate()
                 .map(|(i, q)| {
                     let meta = sidecar::Meta { rating: q.stars, flag: sidecar::Flag::from_i8(q.flag), label: q.label };
+                    // a merged photo is shown without ".dng" (it is no file; the extension comes with the export)
+                    let shown = library::merge::shown_name(&q.name, q.state as i64);
                     let display = match &q.copy {
-                        Some(k) => format!("{} · {k}", q.name),
-                        None => q.name.clone(),
+                        Some(k) => format!("{shown} · {k}"),
+                        None => shown,
                     };
                     if let Some(old) = alt_pos.remove(&q.image).and_then(|k| {
                         new_from_old.insert(k, i);
@@ -1410,6 +1535,10 @@ impl App {
                     }
                 })
                 .collect();
+            // photos loaded in this session that left the list keep their "edited" mark for when they come back
+            for e in alt_entries.iter().flatten().filter(|e| e.loaded) {
+                edit_marks::note(e.file, e.copy.as_deref(), binning_ui::edited(&e.settings).then(|| e.settings.film.is_active()));
+            }
             // Update indices (image, cache, history); discard what was lost
             let map = |i: usize| new_from_old.get(&i).copied();
             // Indices shifted or images dropped: new list state for running jobs
@@ -1501,7 +1630,7 @@ impl App {
         }
         // shared image source: the library shows the same active image
         self.lib.set_active(self.entries[index].image);
-        if !image_kind::of(&self.entries[index].path).editable() || self.entries[index].state != 0 {
+        if !image_kind::of(&self.entries[index].path).editable() || !developable_state(self.entries[index].state) {
             // not developable (JPEG, video …) or unreachable: thumbnail stays
             if let Some(old) = self.current.take() {
                 self.cache.retain(|(i, _)| *i != old.index);
@@ -1517,6 +1646,10 @@ impl App {
         }
         self.not_developable = None;
         self.damaged = None;
+        if self.kept_view.as_ref().is_some_and(|(p, _)| *p != self.entries[index].path) {
+            self.kept_view = None;
+        }
+        self.hold_jpeg = None;
         log(&format!("select {index}"));
         self.selected_at = Some((index, self.now()));
         self.browse.switched(self.now());
@@ -1659,6 +1792,11 @@ impl App {
         if pressure == library::platform::Pressure::Normal {
             return;
         }
+        // a Sigma base computed ahead (≈ 1 GB, minutes when the system swaps) gives way at once (QA 10, H-1)
+        if let Some((i, cancel)) = self.spp_prefetching.take() {
+            cancel.store(true, Ordering::SeqCst);
+            log(&format!("memory pressure {pressure:?}: Sigma base ahead of {i} cancelled"));
+        }
         let Some(cur) = self.current.as_ref().map(|c| c.index) else { return };
         let cached: Vec<usize> = self.cache.iter().map(|(i, _)| *i).collect();
         let drop = mem_budget::cache_to_drop(pressure, &cached, cur);
@@ -1682,14 +1820,20 @@ impl App {
 
     /// Limit the cache to the nearest neighbours of the target.
     fn trim_cache(&mut self, target: usize) {
-        while self.cache.len() > perf_mode::plan().cache_limit {
-            let far = self
+        // the photos of the comparison stay (photo_compare_ui.rs, at most four)
+        let keep = self.cmp.pool.clone();
+        let limit = perf_mode::plan().cache_limit.max(keep.len());
+        while self.cache.len() > limit {
+            let Some(far) = self
                 .cache
                 .iter()
                 .enumerate()
+                .filter(|(_, (i, _))| !keep.contains(i))
                 .max_by_key(|(_, (i, _))| i.abs_diff(target))
                 .map(|(pos, _)| pos)
-                .unwrap();
+            else {
+                break;
+            };
             self.cache.remove(far);
         }
     }
@@ -1743,6 +1887,7 @@ impl App {
             wave_tex: None,
             clip_tex: None,
             detail: None,
+            detail_prev: None,
             detail_left: None,
             detail_hover: None,
             detail_grain: None,
@@ -1898,6 +2043,9 @@ impl App {
                 (Some(t), false) => t.set(img, TextureOptions::LINEAR),
                 (None, _) => c.texture = Some(ctx.load_texture("preview", img, TextureOptions::LINEAR)),
             }
+            // the first render of a photo opened again takes the place of the picture kept for it
+            self.kept_view = None;
+            self.hold_jpeg = None;
             // HDR gain map: developed image × map as photo texture (in the background)
             match c.loaded.previews.foreign.as_ref().and_then(|d| d.hdr.clone()) {
                 Some(k) => self.display.new_hdr_preview(ctx, index, settings.clone(), width, height, rgb.clone(), k),
@@ -1938,6 +2086,14 @@ impl App {
     /// only; saved on release via [`Self::thumb_from_render`]).
     fn live_thumb(&mut self, ctx: &egui::Context, index: usize, settings: &Settings, width: usize, height: usize, rgb: &[u8]) {
         let Some(c) = self.current.as_ref().filter(|c| c.index == index && self.entries.get(index).is_some_and(|e| e.path == c.loaded.path)) else { return };
+        // (never the reference frame standing in for a merged photo that is not computed yet)
+        if c.loaded.previews.foreign.as_ref().is_some_and(|d| d.stands_in()) {
+            return;
+        }
+        // (never a render from a fast preview too rough to be shown, see `thumb_from_render`)
+        if !preview_hold::render_keepable(&c.loaded, settings) {
+            return;
+        }
         let [fw, fh] = c.loaded.full_size;
         let frame = Frame::from_settings(settings, fw, fh, c.loaded.cal.orientation);
         let small = frame_thumb(rgb, width, height, &frame, 512);
@@ -1959,13 +2115,23 @@ impl App {
         if index >= self.entries.len() || self.current.as_ref().is_none_or(|c| c.index != index || c.loaded.path != self.entries[index].path) {
             return;
         }
+        // A Sigma photo at high ISO rendered without its exact base (the base failed or was given up, or the
+        // comparison switch shows the fast preview): that unreduced picture is never kept – no filmstrip thumbnail,
+        // no grid tile, no placeholder for the next opening. What was there before stays (the camera's picture).
+        if self.current.as_ref().is_some_and(|c| !preview_hold::render_keepable(&c.loaded, settings)) {
+            log(&format!("render {index}: from the fast preview of a high-ISO photo, not kept as tile or placeholder"));
+            return;
+        }
         let image = self.entries[index].image;
         let mut job = ThumbJob { index, image, path: self.entries[index].path.clone(), generation: 0, frame: None, store: None, rgb: rgb.to_vec(), width, height };
         if let Some(c) = self.current.as_ref().filter(|c| c.index == index) {
             let [fw, fh] = c.loaded.full_size;
             job.frame = Some(Frame::from_settings(settings, fw, fh, c.loaded.cal.orientation));
+            // a merged photo that is not computed yet shows its reference frame: that picture is never kept as the
+            // photo's (placeholder for the next opening, grid preview) – the merge brings its own
+            let stands_in = c.loaded.previews.foreign.as_ref().is_some_and(|d| d.stands_in());
             // remember the last seen development: placeholder for the next opening
-            if self.developed_stored.as_ref().is_none_or(|(b, s)| *b != image || s != settings) {
+            if !stands_in && self.developed_stored.as_ref().is_none_or(|(b, s)| *b != image || s != settings) {
                 let e = &self.entries[index];
                 let fingerprint = browse::expected(settings, e.stored, &e.path, e.copy.as_deref());
                 job.store = Some((settings.clone(), fingerprint, e.copy.is_none()));
@@ -2070,6 +2236,7 @@ impl App {
                 t.elapsed()
             ));
             c.detail = Some((tex, [0, 0, width, height], settings));
+            c.detail_prev = None;
         }
     }
 
@@ -2131,6 +2298,10 @@ impl App {
                     }
                     if stale {
                         log(&format!("result of an old list state discarded ({epoch} < {latest})"));
+                        // the comparison waits for this base: it asks again at once
+                        if matches!(r, JobResult::SppReady { prefetch: true, .. } | JobResult::SppFailed { prefetch: true, .. }) {
+                            self.compare_base_lost();
+                        }
                         continue;
                     }
                 }
@@ -2156,6 +2327,9 @@ impl App {
                             if prefetch && self.spp_prefetching.as_ref().is_some_and(|(i, _)| *i == ix) {
                                 self.spp_prefetching = None;
                             }
+                            if prefetch {
+                                self.compare_base_lost();
+                            }
                             continue;
                         }
                         JobResult::SppCounts { .. } => {
@@ -2170,6 +2344,11 @@ impl App {
                             continue;
                         }
                         r @ (JobResult::RegionFailed { .. } | JobResult::FullFailed { .. }) => r,
+                        // a field of the comparison asks again
+                        JobResult::HoverRendered { index, .. } => {
+                            self.compare_develop_dropped(index);
+                            continue;
+                        }
                         _ => continue,
                     };
                 }
@@ -2187,7 +2366,7 @@ impl App {
                     if self.loading == Some(index) {
                         self.loading = None;
                         self.show(index, loaded);
-                    } else if prefetch && self.current.as_ref().is_some_and(|c| c.index != index) {
+                    } else if prefetch && (self.current.as_ref().is_some_and(|c| c.index != index) || self.cmp.pool.contains(&index)) {
                         if !self.cache.iter().any(|(i, _)| *i == index) {
                             self.cache.push((index, loaded));
                             let target = self.current.as_ref().map_or(index, |c| c.index);
@@ -2220,6 +2399,7 @@ impl App {
                             self.cache.push((old.index, old.loaded));
                         }
                         self.not_developable = Some(index);
+                        self.kept_view = None;
                         // damaged Sigma file: the badge says so, the camera's preview stays visible
                         self.damaged = jobs::is_damaged(&error).then_some(index);
                     }
@@ -2320,6 +2500,7 @@ impl App {
                     if k.desired.as_ref().is_some_and(|v|v.0==key){match data{Ok(v)=>{k.data=v;k.error=None;},Err(e)=>k.error=Some(e)}k.ready=Some(key);}
                 }
                 JobResult::FilmProbe { key, image, seconds } => self.darkroom.probe_light.outcome(ctx,key,image,seconds),
+                JobResult::RegionFailed { index, superseded } if self.compare_region_failed(ctx, index, superseded) => {}
                 JobResult::RegionFailed { superseded, .. } => {
                     self.detail_pending = false;
                     self.panes.detail_failed();
@@ -2357,6 +2538,7 @@ impl App {
                         ctx.request_repaint_after(std::time::Duration::from_millis(50));
                     }
                 }
+                JobResult::RegionRendered { index, settings, region, width, height, rgb, .. } if self.compare_take_region(ctx, index, &settings, region, width, height, &rgb) => {}
                 JobResult::RegionRendered { index, settings, region, width, height, rgb, factor } => {
                     self.detail_pending = false;
                     let is_left = self.darkroom.active && self.darkroom.compare.left_settings(&self.entries[index].settings).as_ref() == Some(&settings);
@@ -2412,6 +2594,7 @@ impl App {
                             self.spp_prefetching = None;
                         }
                         log(&format!("spp precomputed {index} in {seconds:.1}s"));
+                        self.compare_base_done(index, false);
                         let is_current = self.current.as_ref().is_some_and(|c| c.index == index);
                         if !is_current {
                             if let Some((_, l)) = self.cache.iter_mut().find(|(i, _)| *i == index).filter(|_| fits) {
@@ -2487,6 +2670,11 @@ impl App {
                         if self.spp_prefetching.as_ref().is_some_and(|(i, _)| *i == index) {
                             self.spp_prefetching = None;
                         }
+                    }
+                    // the comparison's field of this photo falls back to the fast preview (a cancelled base is no
+                    // failure: it is asked for again)
+                    self.compare_base_done(index, error != "abgebrochen");
+                    if prefetch {
                         if self.current.as_ref().is_none_or(|c| c.index != index) {
                             continue;
                         }
@@ -2577,6 +2765,9 @@ impl App {
                     self.film_previews.receive(ctx, index, key, thumbs, end, background);
                 }
                 JobResult::HoverSuperseded { index, settings } => {
+                    if self.entries.get(index).is_some() && self.compare_settings_of(index) == settings {
+                        self.compare_develop_dropped(index);
+                    }
                     // replaced by a newer hover (the newest one is still on its way: `hover_preset` stays) or crashed
                     if self.stress.as_ref().is_some_and(|s| s.hover_enabled()) {
                         stress::HOVER_SUPERSEDED.fetch_add(1, Ordering::Relaxed);
@@ -2589,6 +2780,7 @@ impl App {
                         }
                     }
                 }
+                JobResult::HoverRendered { index, settings, width, height, rgb } if self.compare_take_developed(ctx, index, &settings, width, height, &rgb) => {}
                 JobResult::HoverRendered { index, settings, width, height, rgb } => {
                     if self.stress.as_ref().is_some_and(|s| s.hover_enabled()) {
                         stress::HOVER_RENDERED.fetch_add(1, Ordering::Relaxed);
@@ -2701,7 +2893,10 @@ impl App {
                     let settings = self.entries[i].settings.clone();
                     let need = (doc.full_size[0] * doc.full_size[1]) as u64 * mem_budget::FULL_BYTES_PER_PIXEL;
                     // ahead only with room in memory; zooming prepares it anyway (the same result)
-                    if !doc.full_ready(&settings) && crate::env::var_os("GRAINEO_NO_FULL_AHEAD").is_none() && mem_budget::room_ahead("full resolution ahead", need) {
+                    // (never for a merged photo whose full resolution is not in the cache: that would merge it, unasked –
+                    // also right after the user cancelled just that; it is merged when it is zoomed in or exported)
+                    let merge_needed = doc.merged.as_ref().is_some_and(|m| !m.pending && !rawdev::merged::cached(&m.source.key));
+                    if !merge_needed && !doc.full_ready(&settings) && crate::env::var_os("GRAINEO_NO_FULL_AHEAD").is_none() && mem_budget::room_ahead("full resolution ahead", need) {
                         log(&format!("full resolution ahead {i}"));
                         self.worker.send(Job::PrepareFull { index: i, doc, settings, generation: self.open_generation.load(Ordering::SeqCst), current: self.open_generation.clone() });
                     }
@@ -2911,6 +3106,16 @@ impl App {
         if self.preparing || self.rendering {
             return;
         }
+        // high ISO without its exact base: the fast preview is too rough to be shown, the picture on screen stays
+        // until the base is there (see `preview_hold.rs`)
+        if self.holds_fast_preview(c, &s) {
+            if self.held_logged != Some(c.index) {
+                self.held_logged = Some(c.index);
+                log(&format!("render {}: fast preview withheld (high ISO), waiting for the exact base", c.index));
+            }
+            return;
+        }
+        self.held_logged = None;
         if let (Some(session), true) = (c.loaded.session.clone(), c.loaded.previews.denoise_key != s.denoise_key() && s.view == View::Developed) {
             self.preparing = true;
             self.worker.send(Job::Prepare { index: c.index, session, settings: s });
@@ -2933,6 +3138,19 @@ impl App {
                 before: false,
             });
         }
+    }
+
+    /// Is the render from the fast preview withheld for the photo on screen with these settings (high ISO, exact base
+    /// on its way)? See `preview_hold.rs`.
+    fn holds_fast_preview(&self, c: &Current, s: &Settings) -> bool {
+        preview_hold::enabled() && c.loaded.session.is_some() && c.loaded.previews.foreign.is_none() && preview_hold::hold(preview_hold::state(&c.loaded.previews, &c.loaded.cal, s, self.refine_retries >= 2))
+    }
+
+    /// Do pictures derived from the photo on screen (film and preset tiles, hover and comparison previews, contact
+    /// rows) wait with these settings? They wait like the main picture while its fast preview is withheld: none of
+    /// them is ever made from the rough data; each asks again in a later frame.
+    pub(crate) fn derived_waits(&self, s: &Settings) -> bool {
+        self.current.as_ref().is_some_and(|c| self.holds_fast_preview(c, s))
     }
 
     /// Compute Sigma's exact base for the current image in the background.
@@ -3032,7 +3250,7 @@ impl App {
         }
         self.ensure_entry(n);
         let e = &self.entries[n];
-        if image_kind::of(&e.path).editable() && e.state == 0 {
+        if image_kind::of(&e.path).editable() && developable_state(e.state) {
             self.preload_running.push(n);
             self.worker.send(Job::Prefetch { index: n, path: e.path.clone(), settings: e.settings.clone(), cancel: self.preload_cancel.clone() });
         }
@@ -3048,8 +3266,10 @@ impl App {
 
     /// Cancel all preloads of neighbours except those for which `keep` holds.
     fn cancel_prefetches(&mut self, keep: impl Fn(usize) -> bool) {
+        // the photos of the comparison keep loading
+        let pool = self.cmp.pool.clone();
         self.prefetch_flags.retain(|(n, flag)| {
-            let k = keep(*n);
+            let k = keep(*n) || pool.contains(n);
             if !k {
                 flag.store(true, Ordering::SeqCst);
             }
@@ -3072,7 +3292,7 @@ impl App {
             if self.preload_running.contains(&n) {
                 return; // one preload at a time; this one reports back and continues the chain
             }
-            if !self.cache.iter().any(|(c, _)| *c == n) && image_kind::of(&self.entries[n].path).editable() && self.entries[n].state == 0 {
+            if !self.cache.iter().any(|(c, _)| *c == n) && image_kind::of(&self.entries[n].path).editable() && developable_state(self.entries[n].state) {
                 if !mem_budget::room_ahead("preloading the neighbour", mem_budget::OPEN_BYTES) {
                     return;
                 }
@@ -3247,6 +3467,7 @@ impl App {
                 let mut st = self.entries[i].settings.clone();
                 // The size limit only applies to finished images (JPEG/TIFF), DNG stays at full resolution
                 st.output_size = (self.export_limit_size && self.export_format.is_finished_image()).then_some(self.export_size);
+                st.output_filter = self.export_resize;
                 tone_eq_ui::without_mask(&mut st);
                 (self.entries[i].path.clone(), st, self.entries[i].image, self.entries[i].meta.clone())
             })
@@ -3306,10 +3527,13 @@ impl App {
                 self.committed = Some((index, now.clone()));
             }
         }
+        let from = self.history.cursor_of(&key);
         if let Some(target) = self.history.undo(&key, index, &now, redo) {
             let view = self.entries[index].settings.view;
             self.entries[index].settings = Settings { view, ..target.clone() };
             self.committed = Some((index, target));
+            // merged photo: strength and output of its recipe follow the step
+            hdr_auto::history_moved(from);
         }
     }
 
@@ -3429,7 +3653,19 @@ impl App {
             Lightroom => library_ui::request_lightroom(),
             Export => self.open_export(),
             VirtualCopy => self.create_virtual_copy(None),
-            StackReview | StackGroup | StackDissolve | StackToggleAll => {
+            MergeHdr => self.open_hdr(),
+            RereadMetadata => {
+                let mut a = Vec::new();
+                self.lib.reread_metadata(ctx, &mut a);
+                self.library_actions(a);
+            }
+            // ⇧S and the menu entry: as the button "all series" wherever the filmstrip or the grid shows the list
+            // (no switch to the grid); where it does nothing the status line says why
+            StackToggleAll => {
+                let a = self.lib.stack_menu_command(library_ui::StackMenu::ToggleAll);
+                self.library_actions(a);
+            }
+            StackReview | StackGroup | StackDissolve => {
                 // series and stacks live in the grid: from a single view the grid comes first
                 if !self.in_grid() {
                     self.to_grid();
@@ -3579,6 +3815,10 @@ impl App {
                 proof::toggle_warning();
                 ctx.request_repaint();
             }
+            Navigator => {
+                navigator::toggle();
+                ctx.request_repaint();
+            }
             ProofFull | ProofSrgb | ProofP3 | ProofAdobe | ProofProPhoto => {
                 if let Some(p) = cmd.proof() {
                     proof::set(p);
@@ -3593,7 +3833,7 @@ impl App {
     fn apply_to_all(&mut self) {
         let Some(cur) = self.current.as_ref().map(|c| c.index) else { return };
         let s = develop::Settings { view: View::Developed, ..self.entries[cur].settings.clone() };
-        let targets: Vec<usize> = (0..self.entries.len()).filter(|&i| i != cur && image_kind::of(&self.entries[i].path).editable() && self.entries[i].state == 0).collect();
+        let targets: Vec<usize> = (0..self.entries.len()).filter(|&i| i != cur && image_kind::of(&self.entries[i].path).editable() && developable_state(self.entries[i].state)).collect();
         let cmd = history::Command::new(history::Hint::sync(&self.entries[cur].name, None));
         self.settings_command(&targets, cmd, move |_| s.clone());
     }
@@ -3675,6 +3915,7 @@ impl App {
             self.show_shortcuts = !self.show_shortcuts;
         }
         if shortcuts::pressed(ctx, "export") { self.open_export(); }
+        if shortcuts::pressed(ctx, "merge_hdr") { self.open_hdr(); }
         if self.current.is_some() && self.tab == Tab::Develop {
             if shortcuts::pressed(ctx, "snapshot") { self.take_snapshot(); }
             if shortcuts::pressed(ctx, "swap_sides") && self.compare_kind().is_some() { self.swap_sides(); }
@@ -3695,6 +3936,18 @@ impl App {
         // A: straighten (draw a line along the horizon), also from within the image
         if !shift && pressed(egui::Key::A) && self.current.is_some() {
             self.open_geo_tool(align::GeoTool::Align);
+        }
+        // the filmstrip's stacks (library_series.rs): S opens / closes the active photo's stack, ↩ opens a collapsed
+        // one (the keyboard's double click); ↩ does nothing else here outside the crop
+        if self.crop_mode.is_none() && !self.lib.compare_open() {
+            if shortcuts::pressed(ctx, "stack_toggle_single") {
+                let a = self.lib.toggle_active_stack();
+                self.library_actions(a);
+                self.strip_follow_lib = Some(false);
+            }
+            if shortcuts::pressed(ctx, "stack_open_enter") && self.lib.enter_expand() {
+                self.strip_follow_lib = Some(false);
+            }
         }
         if self.crop_mode.is_some() {
             if pressed(egui::Key::Enter) {
@@ -3830,6 +4083,28 @@ impl App {
             self.lib.set_selection(self.entries[head].image, &[self.entries[head].image]);
             self.strip_follow = Some(head);
             self.select(head, keep_view);
+        }
+    }
+
+    /// Develop: after a stack command the library may have another active photo (the cover of a closed stack, the
+    /// member a ⌥ step went to): open it once the new list is in the strip.
+    fn follow_lib_active(&mut self) {
+        let Some(keep_view) = self.strip_follow_lib else { return };
+        if self.lib.list_pending() {
+            return;
+        }
+        self.strip_follow_lib = None;
+        if self.in_grid() {
+            return;
+        }
+        let Some(a) = self.lib.active_image() else { return };
+        let now = self.loading.or(self.current.as_ref().map(|c| c.index)).and_then(|i| self.entries.get(i)).map(|e| e.image);
+        if now == Some(a) {
+            return;
+        }
+        if let Some(k) = self.entries.iter().position(|e| e.image == a) {
+            self.entries.iter_mut().for_each(|e| e.selected = false);
+            self.select(k, keep_view);
         }
     }
 
@@ -4121,7 +4396,7 @@ impl eframe::App for App {
         test_image::native_keys(ctx); // Test hook: GRAINEO_NATIVE_KEYS (macOS menu shortcuts)
         test_image::log_keys(raw_input);
         // Photos (or folders with photos) dropped on the window open the import; otherwise
-        // folders and .xmp/.cube count as film profiles
+        // looks (valid .cube LUTs, look profiles) are offered for the look list
         let dropped: Vec<PathBuf> = raw_input.dropped_files.iter().map(|f| f.path().to_path_buf()).collect();
         // the lens assistant (step "Aufnahmen") takes a drop for itself (lens_wizard.rs)
         if lens_wizard::take_dropped(&dropped) {
@@ -4131,8 +4406,9 @@ impl eframe::App for App {
         if !dropped.is_empty() && self.lib.import_store(ctx, &dropped) {
             raw_input.dropped_files.clear();
         }
-        let profile: Vec<_> = raw_input.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| p.is_dir() || p.extension().is_some_and(|e| e.eq_ignore_ascii_case("xmp") || e.eq_ignore_ascii_case("cube"))).collect();
-        if !profile.is_empty() { film_profiles_ui::store(ctx, profile); raw_input.dropped_files.clear(); }
+        // the rest: looks are checked in the background and added only after asking (never the settings by themselves)
+        let rest: Vec<PathBuf> = raw_input.dropped_files.drain(..).map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect();
+        film_profiles_ui::dropped(ctx, rest);
         // Rating keys that are later taken from the events must not
         // leave an old click job either.
         if raw_input.events.iter().any(|e| matches!(e, egui::Event::Key { pressed: true, .. })) {
@@ -4285,6 +4561,9 @@ impl eframe::App for App {
         self.sensor_raw_update(&ctx);
         self.apple_update(&ctx);
         if !dialog_open {
+            // the comparison first: it takes the keys it handles (photo_compare_ui.rs)
+            self.compare_keys(&ctx);
+            self.compare_entry_keys(&ctx);
             self.sensor_shortcuts(&ctx);
             self.shortcuts_ordered(&ctx);
         } else if self.in_people() && !ctx.memory(|m| m.top_modal_layer().is_some()) {
@@ -4292,6 +4571,12 @@ impl eframe::App for App {
             self.shortcuts_ordered(&ctx);
         }
         let grid_shortcuts = self.in_grid() && !self.lib.import_open() && !ctx.egui_wants_keyboard_input() && !dialog_open;
+        // ⇧S everywhere the grid or the filmstrip shows the list (grid, loupe, comparison, Develop, darkroom), as the
+        // button "all series"; where it does nothing (view "Serien", no stacks) the status line says why
+        if !self.lib.import_open() && !ctx.egui_wants_keyboard_input() && !dialog_open && shortcuts::pressed(&ctx, "stack_toggle_all") {
+            let a = self.lib.stack_menu_command(library_ui::StackMenu::ToggleAll);
+            self.library_actions(a);
+        }
         self.lib.can_paste = self.clipboard.is_some();
         if !self.copy_dialog {
             self.copy_from = None;
@@ -4301,6 +4586,8 @@ impl eframe::App for App {
             self.lib.prepare(&ctx, grid_shortcuts)
         };
         self.library_actions(a);
+        // the comparison wished for (button above the grid, N, context menu, series)
+        self.compare_requests();
         // "Not in the library" is a list of folders, not photos: chosen in a single-image view it opens in the
         // library (otherwise the centre only said "no image open")
         if !self.in_grid() && self.lib.not_in_catalog_view() {
@@ -4311,9 +4598,10 @@ impl eframe::App for App {
         // no longer follows every search result – it stalled typing and the fade-in. Keys, menu commands and actions
         // of the grid and leaving it (workspace.rs) bring it up to date first.
         // (with the Edit tool open in the grid the active photo is developed: there it follows as before)
-        if !self.in_grid() || (self.tool_tab.editing() && self.show_right) {
+        if !self.in_grid() || (self.tool_tab.editing() && self.show_right) || self.lib.compare_open() {
             self.sync_source(false);
         }
+        self.follow_lib_active();
         self.restore_view();
         self.stress_step(&ctx);
         self.relieve_memory(&ctx);
@@ -4371,6 +4659,7 @@ impl eframe::App for App {
         {
             let tool = (!self.in_grid() && self.show_right && !self.darkroom_active()).then(|| self.tool_rail_active());
             retouch_ui::set_panel_open(&ctx, tool == Some(workspace::ToolTab::Retouch), tool == Some(workspace::ToolTab::Masks));
+            hdr_paint::set_open(&ctx, tool == Some(workspace::ToolTab::Merge) && self.merge_info().is_some());
         }
         if !self.lib.import_open() && self.tab != Tab::Library && !dialog_open {
             self.shortcuts(&ctx);
@@ -4422,8 +4711,10 @@ impl eframe::App for App {
         self.take_status(ui.ctx());
         self.remember_module();
         let raster = self.in_grid();
-        // Filmstrip only in single view (in the grid the centre already shows all images)
-        if edges && !raster {
+        // Filmstrip only in single view (in the grid the centre already shows all images); the comparison in the
+        // library has it too (it is the selection)
+        let no_strip = raster && !self.lib.compare_open();
+        if edges && !no_strip {
             let (show, peek) = (self.show_filmstrip, self.peek[1]);
             if edge_strip(ui, "edge-bottom", Edge::Bottom, show || peek) {
                 self.show_filmstrip = !show;
@@ -4438,9 +4729,9 @@ impl eframe::App for App {
                 self.show_filmstrip = !shown;
             }
         }
-        let strip_shown = !raster && (self.show_filmstrip || self.peek[1]) && !(darkroom && self.darkroom.image_only);
+        let strip_shown = !no_strip && (self.show_filmstrip || self.peek[1]) && !(darkroom && self.darkroom.image_only);
         let t_strip = lr::slide(&ctx, "filmstrip", strip_shown);
-        if !raster && t_strip > 0.001 && t_strip < 0.999 {
+        if !no_strip && t_strip > 0.001 && t_strip < 0.999 {
             egui::Panel::bottom("filmstrip-gleiten").resizable(false).exact_size(self.strip_height * t_strip).frame(egui::Frame::side_top_panel(ui.style())).show(ui, |_| {});
         } else if strip_shown {
             // Height adjustable by dragging the top edge, from a narrow row of photos (about 48 pt) to large
@@ -4599,7 +4890,9 @@ impl eframe::App for App {
         // also while the image is still loading (or cannot be developed): the bar stays in its place, so the image area keeps
         // its height and the picture does not jump when the RAW arrives
         let toolbar_image = self.loading.or(self.current.as_ref().map(|c| c.index)).or(self.not_developable);
-        if self.show_toolbar && !full && !raster && !(darkroom && self.darkroom.image_only) && toolbar_image.is_some() {
+        // the comparison has its tools in the same bar, in the library too (photo_compare_ui.rs)
+        let comparing = self.compare_shown();
+        if (comparing && !full) || (self.show_toolbar && !full && !raster && !(darkroom && self.darkroom.image_only) && toolbar_image.is_some()) {
             egui::Panel::bottom("toolbar").resizable(false).frame(egui::Frame::new().fill(lr::PANEL).inner_margin(egui::Margin::symmetric(10, 5))).show(ui, |ui| self.toolbar(ui));
         }
         // Sensor view (Bayer/X-Trans): operated in the "Sensor" tray of the tool rail, nothing above or below the image
@@ -4610,7 +4903,12 @@ impl eframe::App for App {
                 Some((self.entries.get(c.index)?.image, t.clone()))
             });
             let mut actions = Vec::new();
-            egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| actions = self.lib.grid_center(ui));
+            if self.lib.compare_open() && !self.in_people() {
+                // the comparison instead of the grid (photo_compare_ui.rs)
+                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| self.compare_center(ui));
+            } else {
+                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| actions = self.lib.grid_center(ui));
+            }
             self.library_actions(actions);
             let a = self.lib.after(&ctx);
             self.library_actions(a);
@@ -4624,6 +4922,9 @@ impl eframe::App for App {
             ctx.content_rect()
         } else if self.grid {
             egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg).inner_margin(8.0)).show(ui, |ui| self.grid_view(ui)).response.rect
+        } else if self.compare_in_develop() && !full {
+            // the comparison instead of the single image (photo_compare_ui.rs)
+            egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| self.compare_center(ui)).response.rect
         } else {
             egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg)).show(ui, |ui| self.viewer(ui)).response.rect
         };
@@ -4674,6 +4975,8 @@ impl eframe::App for App {
         if self.show_export {
             self.export_dialog(&ctx);
         }
+        // "HDR zusammenfügen …": dialog, finished previews and results of the merge jobs (hdr_ui.rs)
+        self.hdr_step(&ctx);
         // folder chosen for a waiting export, "overwrite?" (export_naming_ui.rs)
         self.export_naming_step(&ctx);
         if self.confirm_delete {
@@ -4681,6 +4984,7 @@ impl eframe::App for App {
         } else {
             self.delete_info = None;
         }
+        self.drop_rough_views_once();
         preview_repair::maybe_start(&self.lib);
         sigma_refresh::maybe_start(&self.lib);
         sigma_refresh::maybe_start_learned(&self.lib);
@@ -4898,7 +5202,8 @@ impl App {
         if let Some(i) = delete_own {
             delete = Some(i);
         }
-        // Request a preview as soon as another preset is hovered
+        // Request a preview as soon as another preset is hovered (never from a fast preview too rough to be shown)
+        let hovered = hovered.filter(|h| !self.derived_waits(h));
         match hovered {
             Some(h) => {
                 if self.hover_preset.as_ref() != Some(&h) {
@@ -4931,15 +5236,19 @@ impl App {
     /// Left part of the filmstrip header: source, count, delete rejected, selection.
     fn strip_header_left(&mut self, ui: &mut egui::Ui, library: bool, n: usize, sel: &[usize]) {
         // The "Nicht in der Bibliothek" overview has folders, not photos of the list
+        // a series compared as a whole: the strip holds only its members, its header says so ("Reihe · 8 Bilder")
+        let title = self.compare_shown().then(|| self.lib.compare_series_word()).flatten().map_or_else(|| self.lib.source_title(), str::to_string);
         let count = if let Some(t) = self.lib.not_in_catalog_strip() {
             t
         } else if n == 1 {
-            crate::menu::i18n::fill_names(crate::tr("{a} · 1 Bild"), &[("a", &self.lib.source_title())])
+            crate::menu::i18n::fill_names(crate::tr("{a} · 1 Bild"), &[("a", &title)])
         } else {
-            crate::menu::i18n::fill_names(crate::tr("{a} · {b} Bilder"), &[("a", &self.lib.source_title()), ("b", &n.to_string())])
+            crate::menu::i18n::fill_names(crate::tr("{a} · {b} Bilder"), &[("a", &title), ("b", &n.to_string())])
         };
         ui.add(egui::Label::new(egui::RichText::new(count).small()).truncate());
-        if !library {
+        if let Some(t) = self.compare_strip_note() {
+            ui.label(egui::RichText::new(t).small());
+        } else if !library {
             let rejected = self.entries.iter().filter(|e| e.meta.flag == sidecar::Flag::Reject).count();
             if rejected > 0 && n < 5000 && ui.small_button(crate::trf!("{rejected} abgelehnte löschen …", rejected = rejected)).clicked() {
                 self.confirm_delete = true;
@@ -4973,7 +5282,8 @@ impl App {
         let n = self.entries.len();
         let sel = self.selection();
         let active = if library {
-            self.lib.active_image().and_then(|b| self.entries.iter().position(|e| e.image == b))
+            // the active photo hidden in a collapsed stack: the stack's cell stands for it
+            self.lib.active_image().map(|b| self.lib.tile_for(b)).and_then(|b| self.entries.iter().position(|e| e.image == b))
         } else {
             self.loading.or(self.current.as_ref().map(|c| c.index)).or(self.not_developable)
         };
@@ -4996,6 +5306,10 @@ impl App {
             }
             let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, filmstrip_layout::HEADER_H), egui::Sense::hover());
             lr::paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0)), lr::Icon::Funnel, if f != 0 { Color32::WHITE } else { lr::TEXT_DIM });
+            // expand / collapse all series (⇧S), the same button as above the grid (library_series.rs)
+            if library_ui::series_all_button(ui, self.lib.series_all(), 26.0, filmstrip_layout::HEADER_H - 2.0) {
+                self.lib.series_all_click();
+            }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.spacing_mut().button_padding.y = 1.0;
                 self.strip_header_left(ui, library, n, &sel);
@@ -5051,12 +5365,50 @@ impl App {
         // keep the active image in view (after switching), centred, never past the end of the strip; also after
         // a change of view (library ↔ Develop) or a new list, where the same photo can sit elsewhere
         let moved = filmstrip_layout::view_or_list_changed(ui.ctx(), library, self.source_version);
+        // a stack opened or closed (double click, number, S, ⇧S, ↩, ⌥←/→): the stack stays where it stood in the
+        // visible strip instead of the active photo being centred
+        if moved && self.lib.take_strip_keep() {
+            if let Some(a) = active {
+                let image = self.entries[a].image;
+                let key = self.lib.stack_key(image);
+                let in_group = |b: i64| if key.is_some() { self.lib.stack_key(b) == key } else { b == image };
+                let before = self.strip_seen.iter().filter(|(b, _)| in_group(*b)).map(|(_, x)| *x).reduce(f32::min);
+                let now = self.entries.iter().position(|e| in_group(e.image));
+                if let (Some(x), Some(i)) = (before, now) {
+                    offset = filmstrip_layout::keep_at(&layout, i, x, view_w);
+                    self.strip_active = Some(image);
+                    jumped = true;
+                }
+            }
+        }
         if let Some(a) = active {
             let image = self.entries[a].image;
-            if self.strip_active != Some(image) || moved {
+            if self.strip_active != Some(image) || moved && !jumped {
                 self.strip_active = Some(image);
                 offset = layout.bring_into_view(a, offset, view_w);
                 jumped = true;
+            }
+        }
+        // comparing: after a new list (a series opened in the strip) the compared photos come into view together,
+        // the middle one centred (QA: the 7th of seven was cut off at the edge)
+        let images = if self.compare_shown() { self.lib.compare.as_ref().map(|c| c.images.clone()).unwrap_or_default() } else { Vec::new() };
+        let compared_key = {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            (&images, self.source_version, n).hash(&mut h);
+            h.finish()
+        };
+        if !images.is_empty() && compared_key != self.strip_compared {
+            self.strip_compared = compared_key;
+            let at: Vec<usize> = self.entries.iter().enumerate().filter(|(_, e)| images.contains(&e.image)).map(|(i, _)| i).collect();
+            if let (Some(&a), Some(&b)) = (at.first(), at.last()) {
+                let (left, right) = (layout.x(a), layout.x(b) + layout.width(b));
+                if left < offset || right > offset + view_w {
+                    // centre the span (when it is wider than the strip, its start stays in view)
+                    let max = (layout.total() - view_w).max(0.0);
+                    offset = ((left + right - view_w) / 2.0).min(left).clamp(0.0, max);
+                    jumped = true;
+                }
             }
         }
         // ⇧+arrow: the moving end of the selection stays in view
@@ -5074,14 +5426,33 @@ impl App {
         let mut wanted: Vec<i64> = Vec::new();
         let mut context: Option<(usize, crate::library_ui::Menu)> = None;
         let mut quick_click: Option<usize> = None;
+        let mut number_click: Option<i64> = None;
+        let mut double: Option<usize> = None;
+        let mut seen: Vec<(i64, f32)> = Vec::new();
+        let mut number_hit = false;
+        let mut menu_toggle: Option<i64> = None;
         // cells whose shape the first thumbnail corrects (unknown or rotated dimensions, crop): once per photo
         let mut checked: Vec<usize> = Vec::new();
         let mut learned: Vec<(usize, f32)> = Vec::new();
         let pad = filmstrip_layout::PAD;
         // with a multiple selection the unselected thumbnails recede a little (three steps: active, selected, receding)
-        let multi = self.entries.iter().filter(|e| e.selected).count() >= 2;
+        // while comparing in the library the strip shows the grid's selection (it is the comparison's source)
+        let lib_sel: std::collections::HashSet<i64> = if library && self.compare_shown() { self.lib.target_images().into_iter().collect() } else { Default::default() };
+        let multi = self.entries.iter().filter(|e| e.selected || lib_sel.contains(&e.image)).count() >= 2;
         // the strip keeps its own band below the cells for the bar (filmstrip_layout::SCROLLBAR), no extra one
         ui.spacing_mut().scroll.floating_allocated_width = 0.0;
+        // position display: a very faint track shows the whole strip, the handle (a little more visible than in lists,
+        // since the band is only a few points high) the visible part; thin, widens under the pointer, no gold
+        {
+            let s = &mut ui.spacing_mut().scroll;
+            s.floating_width = 3.0;
+            s.dormant_background_opacity = 0.07;
+            s.active_background_opacity = 0.10;
+            s.interact_background_opacity = 0.14;
+            s.dormant_handle_opacity = 0.40;
+            s.active_handle_opacity = 0.55;
+            s.interact_handle_opacity = 0.70;
+        }
         let strip = area.show_viewport(ui, |ui, vp| {
             let h = ui.available_height();
             ui.set_min_size(egui::vec2(layout.total(), h));
@@ -5091,14 +5462,16 @@ impl App {
                 let r = egui::Rect::from_min_size(origin + egui::vec2(layout.x(i), 0.0), egui::vec2(layout.width(i), cell_h));
                 let resp = ui.interact(r, ui.scope_id().with(("strip", i)), egui::Sense::click_and_drag());
                 let e = &self.entries[i];
+                seen.push((e.image, layout.x(i) - vp.min.x));
                 let is_active = active == Some(i);
+                let picked = e.selected || lib_sel.contains(&e.image);
                 // Selection as a ring with a gap to the photo, so it does not merge with the picture
-                let fill = if resp.hovered() && !is_active && !e.selected { Color32::from_gray(0x3c) } else { Color32::TRANSPARENT };
-                let recede = multi && !is_active && !e.selected && !resp.hovered();
+                let fill = if resp.hovered() && !is_active && !picked { Color32::from_gray(0x3c) } else { Color32::TRANSPARENT };
+                let recede = multi && !is_active && !picked && !resp.hovered();
                 ui.painter().rect_filled(r, 0.0, fill);
                 if is_active {
                     ui.painter().rect_stroke(r.expand(1.0), 0.0, egui::Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Inside);
-                } else if e.selected {
+                } else if picked {
                     ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xc6)), egui::StrokeKind::Inside);
                     if self.strip_ext.is_some_and(|(anchor, head)| active == Some(anchor) && head == i) {
                         ui.painter().line_segment([r.left_bottom() + egui::vec2(3.0, -2.0), r.right_bottom() + egui::vec2(-3.0, -2.0)], egui::Stroke::new(2.0, Color32::from_gray(0xb0)));
@@ -5133,8 +5506,49 @@ impl App {
                             Color32::WHITE
                         };
                         library_turn::paint_image(ui.painter(), t.id(), ir, quarters, tint);
-                        if thumb_h >= 64.0 && e.loaded && binning_ui::edited(&e.settings) {
-                            lr::edit_badge_film(ui.painter(), ir.right_bottom(), e.settings.film.is_active());
+                        // merged photo (HDR): the same mark as in the grid
+                        if e.state as i64 == library::merge::STATUS_VIRTUAL && thumb_h >= 40.0 {
+                            hdr_live::paint_mark(ui.painter(), ir);
+                        }
+                        if let Some(note) = library_ui::virtual_note(e.file, e.state as i64).filter(|_| resp.hovered()) {
+                            lr::hover_tip(ui, &resp, &format!("{} · {note}", e.name));
+                        }
+                        // not loaded in this session: from the stored settings of the library (`edit_marks`)
+                        let edited_film = if e.loaded { binning_ui::edited(&e.settings).then(|| e.settings.film.is_active()) } else { edit_marks::get(e.file, e.copy.as_deref()) };
+                        let edited = thumb_h >= 64.0 && edited_film.is_some();
+                        // the series number always sits at the same corner (3 pt from the cell edge); other marks in
+                        // that corner (edited) stand above it
+                        let strip_mark = if thumb_h >= 40.0 { self.lib.strip_mark(e.image) } else { None };
+                        if edited {
+                            let above = if strip_mark.is_some() { 21.0 } else { 0.0 };
+                            lr::edit_badge_film(ui.painter(), ir.right_bottom() - egui::vec2(0.0, above), edited_film.unwrap_or(false));
+                        }
+                        // place in its series ("2/5"; collapsed "5"), as on the grid tile: in the comparison the members of
+                        // the compared series stand open here, the number says which photo of the series it is
+                        // From a cell height that leaves room for it the number is a button as on the grid tile (open /
+                        // close; greyed with the reason while the comparison holds the series open); a click on it
+                        // keeps the photo selected. Smaller cells only show it.
+                        if thumb_h >= 40.0 {
+                            if let Some(m) = strip_mark {
+                                let button = thumb_h >= STRIP_NUMBER_BUTTON_H;
+                                let corner = ir.right_bottom() - egui::vec2(3.0, 3.0);
+                                let nr = library_ui::strip_number_rect(ui.painter(), corner, &m.text, button);
+                                if button {
+                                    // greyed: the click is taken all the same (it must not reach the cell and swap the
+                                    // photo into a field of the comparison, QA 1.5.0-test.7)
+                                    let nresp = ui.interact(nr, ui.scope_id().with(("strip-number", e.image)), egui::Sense::click());
+                                    if nresp.clicked() || nresp.double_clicked() {
+                                        number_hit = true;
+                                    }
+                                    library_ui::paint_strip_number(ui.painter(), nr, &m.text, m.usable && nresp.hovered(), !m.usable);
+                                    lr::hover_tip(ui, &nresp, &m.tip);
+                                    if m.usable && nresp.clicked() {
+                                        number_click = Some(e.image);
+                                    }
+                                } else {
+                                    library_ui::paint_strip_number(ui.painter(), nr, &m.text, false, false);
+                                }
+                            }
                         }
                         // quick collection: plaque at the top right, only when in it (hover offers an empty ring for adding);
                         // a click toggles it like the circle in the grid
@@ -5181,12 +5595,25 @@ impl App {
                         lr::paint_flag(ui.painter(), egui::pos2(r.right() - pad - 7.0, y), 12.0, f, true, text);
                     }
                 }
+                // marks of the comparison (in it, reference, tournament)
+                self.compare_strip_mark(ui.painter(), r, e.image);
+                if resp.double_clicked() && !cmd && !shift {
+                    double = Some(i);
+                } else if resp.clicked() && !cmd && !shift {
+                    self.strip_click_was = Some((e.image, is_active));
+                }
                 if resp.clicked() {
                     clicked = Some(i);
                 }
                 let present = e.state == 0;
                 let (image, file) = (e.image, e.file);
+                let small = thumb_h < STRIP_NUMBER_BUTTON_H;
                 resp.context_menu(|ui| {
+                    // a cell too small for the number button: open / close its stack first in the menu
+                    if small && self.lib.strip_toggle_menu(ui, image) {
+                        menu_toggle = Some(image);
+                        ui.close();
+                    }
                     if let Some(m) = self.lib.photo_menu_for(ui, image, present) {
                         context = Some((i, m));
                     }
@@ -5200,6 +5627,7 @@ impl App {
             }
         });
         filmstrip_layout::remember_area(ui.ctx(), strip.id);
+        self.strip_seen = seen;
         let mut scroll = strip.state.clamped_offset().x;
         for i in checked {
             self.entries[i].aspect_checked = true;
@@ -5231,11 +5659,41 @@ impl App {
             }
             clicked = None;
         }
-        if !wanted.is_empty() && !library {
+        if number_hit {
+            // a click on the number (also a greyed one) never reaches the cell
+            clicked = None;
+            double = None;
+        }
+        if let Some(image) = number_click.or(menu_toggle) {
+            // the number is its own button: the photo selected stays (Develop: after closing, the cover opens)
+            let actions = self.lib.strip_mark_click(image);
+            self.library_actions(actions);
+            self.strip_follow_lib = Some(false);
+            clicked = None;
+        }
+        if !wanted.is_empty() && (!library || self.compare_shown()) {
             self.lib.request_thumbnails(&wanted);
         }
+        if let Some(i) = double {
+            // double click: a collapsed series opens; on the photo that was already
+            // active its open series closes. The click before it has selected the photo already.
+            let image = self.entries[i].image;
+            let was_active = self.strip_click_was.is_some_and(|(b, a)| b == image && a);
+            self.strip_click_was = None;
+            if let Some(active) = self.lib.strip_double_click(image, was_active) {
+                clicked = None;
+                // Develop: the photo left in the strip (the cover after closing) is opened
+                if !library && self.current.as_ref().is_none_or(|c| self.entries[c.index].image != active) {
+                    if let Some(k) = self.entries.iter().position(|e| e.image == active) {
+                        self.select(k, false);
+                    }
+                }
+            }
+        }
         if let Some(i) = clicked {
-            if library {
+            if self.compare_strip_click(i, cmd, shift) {
+                // the comparison took it (photo_compare_ui.rs)
+            } else if library {
                 self.lib.set_active(self.entries[i].image);
             } else {
                 let vis = self.visible();
@@ -5357,8 +5815,9 @@ impl App {
                         if f != 0 {
                             lr::paint_flag(&p, inner.right_bottom() + egui::vec2(-15.0, -15.0), 15.0, f, true, Color32::from_gray(0xe8));
                         }
-                        if binning_ui::edited(&e.settings) {
-                            lr::edit_badge_film(&p, inner.right_top() + egui::vec2(-4.0, 22.0), e.settings.film.is_active());
+                        let edited_film = if e.loaded { binning_ui::edited(&e.settings).then(|| e.settings.film.is_active()) } else { edit_marks::get(e.file, e.copy.as_deref()) };
+                        if let Some(film) = edited_film {
+                            lr::edit_badge_film(&p, inner.right_top() + egui::vec2(-4.0, 22.0), film);
                         }
                         if resp.hovered() || active {
                             let measure = crate::cell_label::measurer(&p, 10.5);
@@ -5471,7 +5930,13 @@ impl App {
                     // preset hovered: effect directly in the large image
                     Some(t)
                 } else {
-                    c.texture.as_ref()
+                    // no render yet because the fast preview is withheld (`preview_hold.rs`): the last finished
+                    // picture of this photo (opened again with another size), else the camera's embedded picture
+                    // where nothing else can stand in
+                    c.texture
+                        .as_ref()
+                        .or_else(|| self.kept_view.as_ref().filter(|(p, _)| *p == c.loaded.path).map(|(_, t)| t))
+                        .or_else(|| c.camera_jpeg.as_ref().filter(|_| self.hold_jpeg == Some(c.index)))
                 }
             }
             _ => None,
@@ -5495,6 +5960,10 @@ impl App {
             let fallback_kind = shown.and_then(|i| {
                 let (thumb, image) = (self.entries.get(i)?.thumb.clone(), self.entries[i].image);
                 let e = &self.entries[i];
+                // opened again with another size (binning): the last finished picture stays while the photo loads
+                if let Some((_, t)) = self.kept_view.as_ref().filter(|(p, _)| *p == e.path) {
+                    return Some((t.clone(), KEPT_VIEW));
+                }
                 let (path, copy, stored, settings) = (e.path.clone(), e.copy.clone(), e.stored, e.settings.clone());
                 let expected = self.browse.expected(i, &settings, stored, &path, copy.as_deref());
                 // the large preview (offline copy) first: it shows the development, sharp up to its level; virtual
@@ -5549,7 +6018,19 @@ impl App {
                 let since = self.selected_at.filter(|(s, _)| *s == i).map(|(_, t)| now - t);
                 self.browse.log_view(i, kind, t.id(), since);
             }
+            let kept = fallback_kind.as_ref().is_some_and(|(_, k)| *k == KEPT_VIEW);
             let fallback = fallback_kind.map(|(t, _)| t);
+            // the fast preview is withheld and nothing can stand in (opened from a folder, no stored preview): ask
+            // for the camera's embedded picture once; it is drawn like the photo (orientation, crop)
+            if fallback.is_none() && self.loading.is_none() {
+                if let Some(c) = self.current.as_ref().filter(|c| self.hold_jpeg != Some(c.index) && self.holds_fast_preview(c, &self.entries[c.index].settings)) {
+                    let index = c.index;
+                    self.hold_jpeg = Some(index);
+                    if c.camera_jpeg.is_none() {
+                        self.worker.send(Job::CameraJpeg { index, path: self.entries[index].path.clone() });
+                    }
+                }
+            }
             // Video: Apple's player as a layer above the image area, our own control bar below it
             if let Some(e) = self.not_developable.filter(|_| self.loading.is_none()).and_then(|i| self.entries.get(i)).filter(|e| e.format == "VIDEO" && e.state == 0) {
                 let path = e.path.clone();
@@ -5577,6 +6058,7 @@ impl App {
             let text = match self.not_developable.filter(|_| self.loading.is_none()).and_then(|i| self.entries.get(i)) {
                 Some(_) if self.damaged.is_some() && self.damaged == self.not_developable => crate::tr("Datei beschädigt – Vorschau aus der Kamera").to_string(),
                 Some(e) if e.state != 0 && self.lib.work_running() => crate::tr("Bibliothek wird gerade abgeglichen …").to_string(),
+                Some(e) if e.state as i64 == library::merge::STATUS_VIRTUAL => photo_state::merged_open_error(&e.path).unwrap_or_else(|| state_message(e.state)),
                 Some(e) if e.state != 0 => state_message(e.state),
                 Some(e) => photo_state::unsupported_text(&e.path).unwrap_or_else(|| crate::trf!("{a} – lässt sich hier nicht entwickeln", a = e.format)),
                 None => crate::tr("Wird geladen …").to_string(),
@@ -5604,7 +6086,8 @@ impl App {
                             return;
                         }
                     }
-                    painter.image(thumb.id(), rect, full_uv, Color32::from_gray(200));
+                    // a stand-in is dimmed; the photo's own last picture keeps its brightness (no flicker)
+                    painter.image(thumb.id(), rect, full_uv, if kept { Color32::WHITE } else { Color32::from_gray(200) });
                     let loading_only = self.not_developable.filter(|_| self.loading.is_none()).is_none();
                     if loading_only {
                         // still loading: the same quiet spinner as for full resolution, no words
@@ -5880,6 +6363,12 @@ impl App {
         if holding.is_none() && self.browse.hold.as_ref().is_some_and(|(i, _, _)| *i == c.index) {
             self.browse.hold = None;
         }
+        // merged photo: a single exposure held down in the tool "Zusammenfügen" is shown instead (hdr_paint.rs)
+        let peek = match (self.merge_info(), c.loaded.previews.foreign.as_ref()) {
+            (Some(mi), Some(doc)) => hdr_paint::peek_texture(ui.ctx(), doc, &mi, &self.entries[c.index].settings),
+            _ => None,
+        };
+        let holding = holding.filter(|_| peek.is_none());
         match (holding.as_ref(), self.crop_mode.map(|_| Frame::from_settings(&self.entries[c.index].settings, fw_px, fh_px, c.loaded.cal.orientation).angle)) {
             (Some(t), _) => {
                 clipped.image(t.id(), rect, full_uv, image_tint);
@@ -5895,7 +6384,7 @@ impl App {
                         paint_src_quad(&clipped, tex_id, full_src, &frame, rect, image_tint.gamma_multiply(a));
                         ui.ctx().request_repaint();
                     }
-                    None => paint_src_quad(&clipped, tex_id, full_src, &frame, rect, image_tint),
+                    None => paint_src_quad(&clipped, peek.unwrap_or(tex_id), full_src, &frame, rect, image_tint),
                 }
             }
         }
@@ -5931,7 +6420,18 @@ impl App {
         let display_scale = rect.width() * ui.ctx().pixels_per_point() / frame.w.max(1.0);
         let screen_px_per_image_px = display_scale;
         // Pipeline inspection stays with the preview (rather blurry than extra load)
-        let needs_detail = !self.show_camera_jpeg && self.crop_mode.is_none() && !settings.view.is_stage() && self.zoom > 1.05 && screen_px_per_image_px > preview_res * 1.1;
+        let zoomed_in = !self.show_camera_jpeg && self.crop_mode.is_none() && !settings.view.is_stage() && self.zoom > 1.05 && screen_px_per_image_px > preview_res * 1.1;
+        // merged photo, a single exposure held: its sharp crop (rendered ahead for every frame while the view rests)
+        if zoomed_in {
+            if let (Some(mi), Some(doc)) = (self.merge_info(), c.loaded.previews.foreign.as_ref()) {
+                let region = hdr_paint::visible_region(rect, avail, &frame, [fw_px, fh_px]);
+                let resting = now - self.view_changed_at > 0.4 && !self.detail_pending;
+                if let Some((t, r)) = hdr_paint::peek_detail(ui.ctx(), doc, &mi, settings, region, [fw_px, fh_px], resting) {
+                    paint_src_quad(&clipped, t, [r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32], &frame, rect, image_tint);
+                }
+            }
+        }
+        let needs_detail = zoomed_in && peek.is_none();
         let mut detail_loading = false;
         // Full resolution only from Sigma's base if the image uses it: without it the
         // crop would have to re-render the whole image with our own processing – for seconds
@@ -5992,6 +6492,11 @@ impl App {
                     }
                 }
             } else {
+                if let Some((dtex, _, ds)) = c.detail_prev.as_ref().filter(|(_, r, ds)| ds == settings && c.detail.as_ref().is_none_or(|(_, dr, dds)| dds != settings || !contains(*dr, *r))) {
+                    if ds == settings {
+                        dtex.paint(&clipped, &frame, rect, image_tint, display_scale);
+                    }
+                }
                 if let Some((dtex, _, ds)) = &c.detail {
                     if ds == settings {
                         dtex.paint(&clipped, &frame, rect, image_tint, display_scale);
@@ -6380,8 +6885,17 @@ impl App {
             let index=self.current.as_ref().unwrap().index;
             masks_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut self.entries[index].settings.local,index);
             { let st = &mut self.entries[index].settings; retouch_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut st.spots,&mut st.red_eyes,index); remove_ui::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mut st.removals); }
+            if let Some(mi) = self.merge_info() { hdr_paint::overlay(ui,&resp,&painter,rect,&frame,[fw_px as f32,fh_px as f32],&mi,avail); }
         }
-
+        // Navigator: the whole photo small at the bottom right while it is larger than the view (navigator.rs)
+        let nav = navigator::View { view: avail, image: rect, offset, allowed: self.crop_mode.is_none() && !self.darkroom_covers_image(), interactive: click_free };
+        if let Some(pan) = navigator::show(ui, &nav, |p, r, tint| paint_src_quad(p, peek.unwrap_or(tex_id), full_src, &frame, r, tint)) {
+            if pan != self.pan {
+                self.pan = pan;
+                self.view_changed_at = now;
+                ui.ctx().request_repaint();
+            }
+        }
     }
 
     fn controls(&mut self, ui: &mut egui::Ui) {
@@ -6613,6 +7127,8 @@ impl App {
                 ui.horizontal(|ui| {
                     reset_tone = lr::group_label(ui, "Tonwert");
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // keep clear of the overlaid scroll bar at the right edge
+                        ui.add_space(8.0);
                         let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
                         let auto = ui.add(b);
                         if auto.clicked() {
@@ -6689,7 +7205,7 @@ impl App {
         // Colour casts: corrective, therefore right after the basic settings and before the creative tone curve
         // (in the processing they also act before the curve). Collapsed by default.
         // (only the Sigma path has neutral highlights; other cameras have no colour-cast section)
-        let casts_changed = s.highlight_neutralize != d.highlight_neutralize;
+        let casts_changed = s.highlight_neutralize != d.highlight_neutralize || s.highlight_colour != d.highlight_colour || s.highlight_structure != d.highlight_structure;
         let reset_casts = foreign.is_none() && lr::section_switch(ui, "Farbstiche", crate::env::var_os("GRAINEO_CASTS_OPEN").is_some(), casts_changed, &mut bp.casts, |ui| {
             ui.add_enabled_ui(!s.monochrome, |ui| {
                 let mut hn = s.highlight_neutralize as f64;
@@ -6697,9 +7213,12 @@ impl App {
                     s.highlight_neutralize = hn as f32;
                 }
             });
+            crate::highlight_ui::sliders(ui, s, &lens_path);
         });
         if reset_casts {
             s.highlight_neutralize = d.highlight_neutralize;
+            s.highlight_colour = d.highlight_colour;
+            s.highlight_structure = d.highlight_structure;
         }
 
         // Tone equalizer: exposure per brightness zone (all cameras), before the creative tone curve
@@ -7050,7 +7569,7 @@ impl App {
             s.raw.lens_profile = d.raw.lens_profile.clone();
         }
 
-        let nr_changed = s.denoise != d.denoise || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
+        let nr_changed = s.denoise != d.denoise || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.quattro_detail != d.quattro_detail || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
             || s.raw.nr_luma != d.raw.nr_luma || s.raw.nr_luma_detail != d.raw.nr_luma_detail || s.raw.nr_color != d.raw.nr_color || s.raw.nr_color_detail != d.raw.nr_color_detail || s.raw.false_color != d.raw.false_color || s.raw.ai_denoise != d.raw.ai_denoise;
         let raw_nr = foreign.as_ref().map(|doc| doc.preview.profile.is_some());
         let reset_nr = lr::section_reset(ui, "Details", true, nr_changed, |ui| {
@@ -7058,7 +7577,7 @@ impl App {
                 s.sharpen = 0.0;
                 s.sigma_sharpness = 0.0;
             }
-            ui.add_enabled_ui(sigma_sharp_ok, |ui| {
+            let sharp_row = ui.add_enabled_ui(sigma_sharp_ok, |ui| {
                 if raw_nr.is_some() {
                     return;
                 }
@@ -7067,6 +7586,12 @@ impl App {
                     s.sigma_sharpness = v as f32;
                 }
             });
+            if !sigma_sharp_ok && raw_nr.is_none() {
+                // greyed out: say why (binning_ui.rs)
+                let r = ui.interact(sharp_row.response.rect, ui.id().with("sigma-sharpness-locked"), egui::Sense::hover());
+                // below the row, as every tooltip (QA 11; it names "Zusätzlich schärfen", which it covers only while hovered)
+                lr::hover_tip(ui, &r, binning_ui::sigma_sharpness_locked_tip(binning_cal.is_prepared()));
+            }
             if raw_nr.is_none() {
                 ui.label(egui::RichText::new(crate::tr("Zusätzlich schärfen")).small().color(lr::TEXT_DIM));
             }
@@ -7095,17 +7620,25 @@ impl App {
                     ui.checkbox(&mut s.denoise, crate::tr("Foveon-Detail"));
                     help::info(ui, "sigma-detail", "Foveon-Detail", &help::SIGMA_DETAIL);
                 });
-                // Quattro: the noise reduction already runs in the preparation; the sliders only switch it off
-                // (see `binning_ui::noise_sliders_locked`). Greyed out, the stored values stay and still apply.
-                let locked = binning_ui::noise_sliders_locked(Some(binning_cal.model));
-                let sliders = ui.add_enabled_ui(s.denoise && !locked, |ui| {
+                // Quattro: adjustable from capture ISO 400 on (full chain); below it the noise reduction runs in the
+                // preparation (see `binning_ui::noise_sliders_locked`). Greyed out, the stored values stay and still apply.
+                let locked = binning_ui::noise_sliders_locked(&binning_cal, &lens_path);
+                // Classic below ISO 400: no adjustable noise reduction in the processing (greyed out, with the reason)
+                let classic_low = binning_ui::classic_noise_locked(binning_cal.model, binning_cal.iso);
+                let sliders = ui.add_enabled_ui(s.denoise && locked.is_none() && !classic_low, |ui| {
                     lr::slider(ui, "Luminanz", &mut s.nr_luma, 0.0..=1.0, 0.5, 0.25);
                     lr::slider(ui, "Farbe", &mut s.nr_chroma, 0.0..=1.0, 0.5, 0.25);
                 });
-                if locked {
+                if locked.is_some() || classic_low {
                     let r = ui.interact(sliders.response.rect, ui.id().with("nr-locked"), egui::Sense::hover());
-                    lr::hover_tip(ui, &r, binning_ui::noise_locked_tip(s.nr_luma != 0.5 || s.nr_chroma != 0.5));
+                    let tip = match locked {
+                        Some(lock) if !classic_low => binning_ui::noise_locked_tip(lock, s.nr_luma != 0.5 || s.nr_chroma != 0.5),
+                        _ => binning_ui::CLASSIC_NOISE_TIP,
+                    };
+                    lr::hover_tip(ui, &r, tip);
                 }
+                // Quattro: detail step of the chain from capture ISO 400 on (binning_ui.rs)
+                binning_ui::detail_slider(ui, &binning_cal, &lens_path, s);
                 // Quattro at high ISO: binning per photo (binning_ui.rs)
                 binning_ui::switch(ui, &binning_cal, s);
                 // neural denoising after Sigma's noise reduction (ai_denoise_ui.rs)
@@ -7120,6 +7653,7 @@ impl App {
             s.denoise = d.denoise;
             s.nr_luma = d.nr_luma;
             s.nr_chroma = d.nr_chroma;
+            s.quattro_detail = d.quattro_detail;
             s.binning = binning_default;
             s.raw.nr_luma = d.raw.nr_luma;
             s.raw.nr_luma_detail = d.raw.nr_luma_detail;
@@ -7210,6 +7744,10 @@ impl App {
     /// 10 px between groups) and the same order: flags before stars.
     fn toolbar(&mut self, ui: &mut egui::Ui) {
         use lr::Cell;
+        if self.compare_shown() {
+            self.compare_toolbar(ui);
+            return;
+        }
         use toolbar_plan::{Group, GAP};
         let Some(i) = self.loading.or(self.current.as_ref().map(|c| c.index)).or(self.not_developable).filter(|&i| i < self.entries.len()) else { return };
         // view, rotation and zoom need the loaded image: dimmed until it is there (same places)
@@ -7250,14 +7788,19 @@ impl App {
         let mut widths: Vec<(&'static str, f32)> = Vec::new();
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;
-            let view = if darkroom_comparing || self.compare { 1 } else if self.show_before { 2 } else if self.show_camera_jpeg { 3 } else { 0 };
+            let comparing_photos = self.compare_in_develop();
+            let view = if comparing_photos { 4 } else if darkroom_comparing || self.compare { 1 } else if self.show_before { 2 } else if self.show_camera_jpeg { 3 } else { 0 };
             let left = if loaded { self.before_pane().1.label } else { crate::tr("Standardentwicklung").to_string() };
             let key = |k: &str| crate::shortcuts::display(k);
-            let tips = [crate::tr("Aktuell").to_string(), format!("{left} | {} ({})", crate::tr("Aktuell"), key("compare")), format!("{left} ({})", key("before")), lr::with_shortcut("Kamera-JPEG", "camera_jpeg")];
-            let cells: Vec<_> = [lr::Icon::Image, lr::Icon::SplitH, lr::Icon::Before, lr::Icon::Camera]
+            // fifth cell: the photo comparison (photo_compare_ui.rs), from 2 photos selected in the filmstrip
+            let can_compare = comparing_photos || self.selection().len() >= 2;
+            let compare_tip = if comparing_photos { lr::with_shortcut("Vergleich beenden", "compare_open") } else if can_compare { lr::with_shortcut("Mit den gewählten Fotos vergleichen", "compare_open") } else { crate::tr("Im Filmstreifen weitere Fotos mit ⌘-Klick wählen").to_string() };
+            let tips = [crate::tr("Aktuell").to_string(), format!("{left} | {} ({})", crate::tr("Aktuell"), key("compare")), format!("{left} ({})", key("before")), lr::with_shortcut("Kamera-JPEG", "camera_jpeg"), compare_tip];
+            let icons: &[lr::Icon] = if darkroom { &[lr::Icon::Image, lr::Icon::SplitH, lr::Icon::Before, lr::Icon::Camera] } else { &[lr::Icon::Image, lr::Icon::SplitH, lr::Icon::Before, lr::Icon::Camera, lr::Icon::SquaresFour] };
+            let cells: Vec<_> = icons
                 .iter()
                 .enumerate()
-                .map(|(n, ic)| (Cell::Symbol(*ic, lr::TEXT), n == view, tips[n].as_str()))
+                .map(|(n, ic)| (Cell::Symbol(*ic, if n == 4 && !can_compare { Color32::from_gray(0x60) } else { lr::TEXT }), n == view, tips[n].as_str()))
                 .collect();
             let view_click = if has(Group::View) {
                 let r = ui.add_enabled_ui(loaded, |ui| {
@@ -7271,7 +7814,16 @@ impl App {
             } else {
                 None
             };
-            if let Some(v) = view_click {
+            if view_click == Some(4) {
+                if comparing_photos {
+                    self.compare_close_back();
+                } else if can_compare {
+                    self.compare_open_with(Default::default());
+                }
+            } else if let Some(v) = view_click {
+                if comparing_photos {
+                    self.compare_close();
+                }
                 if darkroom && (v == 1) != darkroom_comparing {
                     self.darkroom_choose_view(1);
                 }
@@ -7536,6 +8088,13 @@ impl App {
     /// Zoom in the toolbar: − / percent menu / + (as in x3fuse). The percentages
     /// refer to 100 % = 1 image pixel per screen pixel.
     fn zoom_menu(&mut self, ui: &mut egui::Ui) {
+        let comparing = self.compare_shown();
+        self.zoom_menu_in(ui, comparing);
+    }
+
+    /// The zoom group; `comparing`: the comparison's own toolbar draws it (it holds the comparison taken out of the
+    /// library meanwhile, so `compare_shown()` would say no – QA 5: "100 %" while every field was being computed).
+    pub(crate) fn zoom_menu_in(&mut self, ui: &mut egui::Ui, comparing: bool) {
         use lr::Cell;
         let o = self.one_to_one.max(1e-3);
         let pct = self.zoom / o * 100.0;
@@ -7570,7 +8129,8 @@ impl App {
         if !self.zoom_compact {
             ui.add_space(-6.0);
         }
-        let label = zoom_label(self.zoom <= 1.001, fit_pct, pct);
+        // the comparison: fitted, the focused field's own scale ("–" while it is being computed)
+        let label = if comparing && self.zoom <= 1.001 { self.cmp.fit_pct.map_or_else(|| "– %".to_string(), |p| format!("{p:.0} %")) } else { zoom_label(self.zoom <= 1.001, fit_pct, pct) };
         ui.scope(|ui| {
             lr::field_style(ui);
             let r = egui::ComboBox::from_id_salt("zoom-menu").selected_text(label).width(if self.zoom_narrow { NARROW_ZOOM_W - 12.0 } else { zoom_field_width(ui) }).show_ui(ui, |ui| {
@@ -7951,13 +8511,16 @@ impl App {
         let path = self.entries[index].path.clone();
         let key = film_previews::state_key(&path, settings);
         let now = ui.input(|i| i.time);
+        // no tile from a fast preview too rough to be shown: nothing is asked for until the exact base is there
+        let hold = self.holds_fast_preview(c, settings);
+        let (requested, fill): (&[String], &[String]) = if hold { (&[], &[]) } else { (requested, fill) };
         let plan = self.film_previews.plan(index, &path, key, requested, fill, now);
         for (modes, background) in [(plan.front, false), (plan.back, true)] {
             if !modes.is_empty() {
                 self.worker.send(Job::FilmThumbs { index, previews: c.loaded.previews.clone(), cal: c.loaded.cal.clone(), settings: settings.clone(), key, modes, valid: self.film_previews.valid(), background });
             }
         }
-        if plan.busy {
+        if plan.busy || hold {
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
         }
         self.film_previews.shown()
@@ -8001,7 +8564,8 @@ impl App {
             let tools = [GeoTool::Crop, GeoTool::Align, GeoTool::Perspective];
             let items = [
                 (lr::Icon::Crop, crate::tr("Freistellen"), crate::tr("Ausschnitt und Format (R)")),
-                (lr::Icon::Ruler, crate::tr("Ausrichten"), crate::tr("Horizont begradigen (A)")),
+                // "Ausrichten" alone means aligning exposures or fields elsewhere ("Align"); here it is the horizon
+                (lr::Icon::Ruler, crate::menu::i18n::german_or("Ausrichten", crate::tr("Ausrichten (Horizont)")), crate::tr("Horizont begradigen (A)")),
                 (lr::Icon::Perspective, crate::tr("Perspektive"), crate::tr("Stürzende Linien entzerren")),
             ];
             let selected = active.then(|| tools.iter().position(|t| *t == tool)).flatten();
@@ -8849,6 +9413,9 @@ impl DetailTex {
     }
 }
 
+/// Kind of placeholder in the viewer: the last finished picture of the photo itself (see `App::kept_view`).
+const KEPT_VIEW: &str = "kept";
+
 /// Small loading spinner without text, `alpha` 0…1. Two-tone so it stays visible on any image: a very faint dark disc,
 /// a dark halo (slightly wider) under the ring and the turning arc, the arc itself light.
 /// Quiet spinner at the top left of the image area (state slot 0: loading, 1: Sigma refinement): appears only after 300 ms
@@ -8881,6 +9448,9 @@ fn quiet_spinner(state: &mut (f32, f64, Option<f64>), ctx: &egui::Context, paint
         }
     }
 }
+
+/// Filmstrip cell height from which a series number is a button (smaller cells only show it).
+const STRIP_NUMBER_BUTTON_H: f32 = 56.0;
 
 fn spinner(painter: &egui::Painter, center: egui::Pos2, radius: f32, now: f64, alpha: f32) {
     let dark = |a: f32| Color32::from_black_alpha((255.0 * a * alpha) as u8);
@@ -9082,6 +9652,7 @@ fn badge_alpha(painter: &egui::Painter, area: egui::Rect, text: &str, progress: 
     let size = galley.size() + pad * 2.0 + egui::vec2(0.0, bar);
     let min = area.right_bottom() - size - egui::vec2(12.0, 12.0);
     let rect = egui::Rect::from_min_size(min, size);
+    navigator::note_corner(painter.ctx(), rect);
     painter.rect_filled(rect, 0.0, Color32::from_black_alpha((165.0 * alpha) as u8));
     painter.galley(rect.min + pad, galley, Color32::WHITE);
     if let Some(p) = progress {

@@ -48,6 +48,8 @@ film-f64 = ["spektrafilm-core/precision-f64"]
 
 [dev-dependencies]
 serde_json = "1"
+# only for the examples (resize_study decodes JPEG and writes PNG)
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 # reference decoder for the JPEG XL tests (already in the tree through rawler)
 jxl-oxide = { version = "=0.12.6", features = ["moxcms"] }
 tiff = "0.9"

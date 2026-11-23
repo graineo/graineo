@@ -95,7 +95,7 @@ impl App {
             .into_iter()
             .filter(|&i| i != main)
             .filter(|&i| {
-                let ok = self.entries.get(i).is_some_and(|e| crate::image_kind::of(&e.path).editable() && e.state == 0);
+                let ok = self.entries.get(i).is_some_and(|e| crate::image_kind::of(&e.path).editable() && crate::developable_state(e.state));
                 if !ok {
                     skipped += 1;
                 }
@@ -191,7 +191,7 @@ impl App {
     /// undoable with ⌘Z in every view.
     pub(crate) fn reset_command(&mut self) {
         let Some(i) = self.main_photo().or(self.current.as_ref().map(|c| c.index)) else { return };
-        if !self.entries.get(i).is_some_and(|e| crate::image_kind::of(&e.path).editable() && e.state == 0) {
+        if !self.entries.get(i).is_some_and(|e| crate::image_kind::of(&e.path).editable() && crate::developable_state(e.state)) {
             return;
         }
         let path = self.entries[i].path.clone();

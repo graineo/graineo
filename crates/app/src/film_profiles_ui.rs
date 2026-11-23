@@ -30,6 +30,10 @@ enum Question {
 }
 static QUESTION: Mutex<Option<Question>> = Mutex::new(None);
 
+#[path = "look_drop.rs"]
+mod look_drop;
+pub use look_drop::dropped;
+
 fn work(ctx: &egui::Context, f: impl FnOnce(&Storage) -> Report + Send + 'static) {
     {
         let mut lock = STATE.lock().unwrap_or_else(|e| e.into_inner());
@@ -97,13 +101,6 @@ pub fn add_folder(ctx: &egui::Context) {
     let title = crate::tr("Profilordner hinzufügen").to_string();
     crate::file_dialog::folder(ctx, FOLDER_DIALOG, move |d| d.set_title(title));
 }
-pub fn store(ctx: &egui::Context, paths: Vec<PathBuf>) {
-    if paths.is_empty() {
-        return;
-    }
-    manage();
-    work(ctx, move |a| a.add_folder(&paths));
-}
 pub fn hide(ctx: &egui::Context, id: String) {
     work(ctx, move |a| outcome(a.show_profile(&id, false)));
 }
@@ -121,6 +118,7 @@ fn outcome(r: Result<(), String>) -> Report {
 /// Once per frame: changes to the source list invalidate previews.
 pub fn frame(ctx: &egui::Context) -> bool {
     let _ = snapshot(ctx);
+    look_drop::frame(ctx);
     if let Some(p) = crate::file_dialog::fetch(FOLDER_DIALOG) {
         work(ctx, move |a| a.add_folder(&p));
     }
@@ -186,21 +184,10 @@ pub fn frame(ctx: &egui::Context) -> bool {
 pub fn settings(ui: &mut egui::Ui) {
     let s = snapshot(ui.ctx());
     lr::group_label(ui, "Looks");
-    ui.add(
-        egui::Label::new(
-            egui::RichText::new(crate::tr(film_profile::NOTICE))
-                .small()
-                .color(lr::TEXT_DIM),
-        )
-        .wrap(),
-    );
-    ui.add_space(8.0);
+    ui.add_space(4.0);
     ui.add_enabled_ui(!s.running, |ui| {
         let mut discover = s.options.discover;
-        if ui
-            .checkbox(&mut discover, crate::tr("Adobe-Ordner automatisch durchsuchen"))
-            .changed()
-        {
+        if ui.checkbox(&mut discover, crate::tr("Adobe-Ordner automatisch durchsuchen")).changed() {
             work(ui.ctx(), move |a| {
                 let mut o = a.options();
                 o.discover = discover;
@@ -219,88 +206,48 @@ pub fn settings(ui: &mut egui::Ui) {
         if s.loaded && s.packages.is_empty() {
             ui.label(crate::tr("Keine Looks gefunden"));
         }
+        // one row per source: path (full path as tooltip), state only when it says something, remove
         for (path, available, automatic) in &s.folder {
-            egui::Frame::new()
-                .fill(lr::PANEL_DARK)
-                .inner_margin(8.0)
-                .corner_radius(0.0)
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.add(
-                        egui::Label::new(
-                            egui::RichText::new(path.display().to_string()).color(if *available {
-                                lr::TEXT
-                            } else {
-                                lr::TEXT_DIM
-                            }),
-                        )
-                        .wrap(),
-                    );
-                    ui.horizontal(|ui| {
-                        ui.label(if !available {
-                            crate::tr("Nicht verfügbar")
-                        } else if *automatic {
-                            crate::tr("Automatisch gefunden")
-                        } else {
-                            crate::tr("Referenzierter Ordner")
-                        });
-                        if !automatic && ui.button(crate::tr("Ordner entfernen …")).clicked() {
-                            *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Folder(path.clone()));
-                        }
-                    });
-                });
-        }
-        for package in &s.packages {
-            egui::Frame::new()
-                .fill(lr::PANEL_DARK)
-                .inner_margin(10.0)
-                .corner_radius(0.0)
-                .show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        let mut visible = package.visible;
-                        if ui.checkbox(&mut visible, crate::tr("Anzeigen")).changed() {
-                            let name = package.name.clone();
-                            if visible {
-                                work(ui.ctx(), move |a| outcome(a.show_package(&name, true)));
-                            } else {
-                                *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Package(name));
-                            }
-                        }
-                        ui.label(egui::RichText::new(&package.name).strong().color(
-                            if package.available > 0 {
-                                lr::TEXT
-                            } else {
-                                lr::TEXT_DIM
-                            },
-                        ));
-                    });
-                    ui.label(crate::trf!("{a} Profile · {b} verfügbar", a = package.count, b = package.available));
-                    ui.horizontal(|ui| {
-                        if ui.button(crate::tr("Im Finder zeigen")).clicked() {
-                            if let Some(p) = package.folders.first() {
-                                crate::system::show(p);
-                            }
-                        }
-                    });
-                    if package.name == "Lookup-Tabellen" {
-                        ui.add(
-                            egui::Label::new(
-                                egui::RichText::new(
-                                    crate::tr("Für sRGB-LUTs (3D, 1D-Kurve oder beides)."),
-                                )
-                                .small()
-                                .color(lr::TEXT_DIM),
-                            )
-                            .wrap(),
-                        );
+            row(ui, |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !automatic && ui.small_button(crate::tr("Entfernen …")).clicked() {
+                        *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Folder(path.clone()));
                     }
-                    ui.collapsing(crate::tr("Quellen"), |ui| {
-                        for p in &package.folders {
-                            ui.add(egui::Label::new(p.display().to_string()).wrap());
-                        }
+                    let state = if !available {
+                        crate::tr("nicht verfügbar")
+                    } else if *automatic {
+                        crate::tr("automatisch")
+                    } else {
+                        ""
+                    };
+                    if !state.is_empty() {
+                        ui.label(egui::RichText::new(state).small().color(lr::TEXT_DIM));
+                    }
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        let r = ui.add(egui::Label::new(egui::RichText::new(path.display().to_string()).color(if *available { lr::TEXT } else { lr::TEXT_DIM })).truncate());
+                        lr::hover_tip(ui, &r, &path.display().to_string());
                     });
                 });
+            });
+        }
+        // one row per package: shown, name, count, Finder
+        for package in &s.packages {
+            row(ui, |ui| {
+                let mut visible = package.visible;
+                let name = egui::RichText::new(&package.name).color(if package.available > 0 { lr::TEXT } else { lr::TEXT_DIM });
+                if ui.checkbox(&mut visible, name).changed() {
+                    let name = package.name.clone();
+                    if visible {
+                        work(ui.ctx(), move |a| outcome(a.show_package(&name, true)));
+                    } else {
+                        *QUESTION.lock().unwrap_or_else(|e| e.into_inner()) = Some(Question::Package(name));
+                    }
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let n = if package.available == package.count { dialog::number(package.count) } else { crate::trf!("{a} von {b}", a = package.available, b = package.count) };
+                    ui.label(egui::RichText::new(n).color(lr::TEXT_DIM));
+                });
+            });
         }
         if !s.options.hidden_profiles.is_empty() {
             ui.collapsing(crate::tr("Ausgeblendete Profile"), |ui| {
@@ -308,12 +255,7 @@ pub fn settings(ui: &mut egui::Ui) {
                 ids.sort();
                 for id in ids {
                     ui.horizontal(|ui| {
-                        ui.label(
-                            s.profile
-                                .iter()
-                                .find(|(u, _)| u == id)
-                                .map_or(id.as_str(), |(_, n)| n.as_str()),
-                        );
+                        ui.label(s.profile.iter().find(|(u, _)| u == id).map_or(id.as_str(), |(_, n)| n.as_str()));
                         if ui.button(crate::tr("Wieder anzeigen")).clicked() {
                             let id = id.clone();
                             work(ui.ctx(), move |a| outcome(a.show_profile(&id, true)));
@@ -323,31 +265,23 @@ pub fn settings(ui: &mut egui::Ui) {
             });
         }
     });
-    // A fixed status slot, also during a scan.
+    // a fixed slot: says when the sources are being read
     ui.add_space(6.0);
-    let text = if s.running {
-        crate::tr("Wird gelesen …").into()
-    } else if let Some(b) = &s.report {
-        crate::trf!("{a} hinzugefügt · {b} bereits vorhanden · {c} übersprungen", a = b.imported, b = b.existing, c = b.skipped)
-    } else {
-        crate::tr("Wird gesucht …").into()
-    };
-    ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM));
-    if let Some(b) = &s.report {
-        if !b.messages.is_empty() {
-            ui.collapsing("Details", |ui| {
-                for m in &b.messages {
-                    ui.add(egui::Label::new(m).wrap());
-                }
-            });
-        }
-    }
+    ui.label(egui::RichText::new(if s.running { crate::tr("Wird gelesen …") } else { "" }).small().color(lr::TEXT_DIM));
+}
+
+/// A framed row of the look settings (same look for sources and packages).
+fn row(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(8, 5)).corner_radius(0.0).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(add);
+    });
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn empty_state_has_folder_link_and_hint() {
+    fn empty_state_has_folder_link() {
         let ctx = eframe::egui::Context::default();
         let output = crate::ui_test::run(&ctx, Default::default(), |ui| {
             super::settings(ui);
@@ -361,8 +295,6 @@ mod tests {
             })
             .collect();
         assert!(texts.iter().any(|t| t.contains("Ordner hinzufügen")));
-        assert!(texts.iter().any(|t| t.contains("graineo enthält")));
-        assert!(raw::film_profile::NOTICE.contains("graineo enthält keine Filmprofile"));
     }
 }
 

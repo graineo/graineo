@@ -121,6 +121,25 @@ pub fn get(path: &Path) -> Vec<Notice> {
     v
 }
 
+/// Why a merged photo (HDR) cannot be opened, named concretely ("Quelle fehlt: A.NEF, B.NEF" from the merge): the text
+/// for the image and the edit panel. `None` when no open failure is remembered for the photo.
+pub fn merged_open_error(path: &Path) -> Option<String> {
+    let notices = get(path);
+    let n = notices.iter().find(|n| n.kind == Kind::OpenFailed)?;
+    let Spec::OpenFailed(error) = &n.spec else { return None };
+    Some(match error.strip_prefix("Quelle fehlt: ") {
+        Some(names) => {
+            // short enough for the line in the image: the first two names and how many more
+            let all: Vec<&str> = names.split(", ").collect();
+            let shown = if all.len() > 2 { format!("{}, {} … +{}", all[0], all[1], all.len() - 2) } else { names.to_string() };
+            crate::trf!("Quelle der HDR-Reihe nicht erreichbar: {a}", a = shown)
+        }
+        None if error.starts_with(rawdev::merged::UNREADABLE) => crate::tr("HDR-Rezept nicht lesbar – es wird nicht überschrieben").to_string(),
+        None if error.ends_with(": Quelle fehlt") => crate::tr("Referenzbild der HDR-Reihe nicht erreichbar").to_string(),
+        None => crate::menu::i18n::tr_msg(error).to_string(),
+    })
+}
+
 /// Damaged Sigma file, partly rescued (see `develop::damaged`).
 pub fn damaged(d: &develop::damaged::Damage) -> Notice {
     let pct = ((d.intact * 100.0).round() as i64).to_string();

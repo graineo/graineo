@@ -1,0 +1,16 @@
+[package]
+name = "hdr"
+description = "Merging exposure brackets of RAW files into one linear high-dynamic-range image"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+raw = { path = "../raw" }
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# half-float storage of merged results (MIT/Apache-2.0)
+half = "2"
+# compression of the stored result (zlib/deflate)
+flate2 = "1"

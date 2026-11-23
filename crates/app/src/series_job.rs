@@ -21,6 +21,14 @@ use library::preview::{self, Cache};
 
 /// Stacks changed in the library (the grid reloads them when this moves).
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+/// Shooting data the job read into the library (the grid reloads its rows when this moves: sorting by capture time,
+/// info panel).
+static ROWS: AtomicU64 = AtomicU64::new(0);
+
+/// Moves when the job wrote shooting data into the library.
+pub fn rows_generation() -> u64 {
+    ROWS.load(Ordering::Relaxed)
+}
 /// Signatures still to compute (shown in the activity list while the job works on them).
 static MISSING: AtomicUsize = AtomicUsize::new(0);
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -78,6 +86,41 @@ pub fn passed() -> bool {
     PASSED.load(Ordering::Relaxed)
 }
 
+/// What the row "Serien" shows its state from: detection switched on, phase, done, total, a whole pass made, the
+/// computer saving power.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RowState {
+    pub enabled: bool,
+    pub phase: Phase,
+    pub done: usize,
+    pub total: usize,
+    pub passed: bool,
+    pub low_power: bool,
+}
+
+/// The state of the detection right now, for the row "Serien". It is process-wide (the job, the setting, the power
+/// state); a test that draws the row fixes it for its own thread with [`fix_row_state`], so other tests that run
+/// the detection or change these states at the same time cannot change what it sees.
+pub fn row_state() -> RowState {
+    #[cfg(test)]
+    if let Some(fixed) = FIXED_ROW_STATE.with(|f| f.get()) {
+        return fixed;
+    }
+    let (phase, done, total) = progress();
+    RowState { enabled: enabled(), phase, done, total, passed: passed(), low_power: crate::perf_mode::power() == crate::perf_mode::Power::LowPower }
+}
+
+#[cfg(test)]
+thread_local! {
+    static FIXED_ROW_STATE: std::cell::Cell<Option<RowState>> = const { std::cell::Cell::new(None) };
+}
+
+/// Tests: [`row_state`] answers `state` on this thread from now on (`None`: the real state again).
+#[cfg(test)]
+pub fn fix_row_state(state: Option<RowState>) {
+    FIXED_ROW_STATE.with(|f| f.set(state));
+}
+
 /// Test hook `GRAINEO_SERIES_SLOW_MS=<ms>` (only with `GRAINEO_DATA_DIR`): extra wait per photo and per day, so the
 /// progress of the search can be seen in screenshots of a small test library.
 fn test_slow() {
@@ -105,6 +148,12 @@ fn wake() -> &'static Wake {
 
 /// Wait this long after the last poke (a sync reloads several times in a row).
 const SETTLE: Duration = Duration::from_secs(3);
+/// Days left waiting for shooting data or previews: the job looks again after this time.
+const WAIT_AGAIN: Duration = Duration::from_secs(10);
+/// Passes without any progress after which waiting days are grouped as they are (about two minutes).
+const WAIT_ROUNDS: usize = 10;
+/// Passes in a row that left days waiting without any progress.
+static STALLED: AtomicUsize = AtomicUsize::new(0);
 /// Pause per signature: the job never takes a core for long (fans).
 const PAUSE: Duration = Duration::from_millis(4);
 
@@ -158,6 +207,8 @@ pub fn status() -> Option<String> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct EmptyState {
     pub short: String,
+    /// a few characters for the number column of the row "Serien" ("sucht 19/27", "keine", "aus")
+    pub count: String,
     pub title: String,
     pub tip: String,
 }
@@ -201,7 +252,17 @@ pub fn empty_state(enabled: bool, phase: Phase, done: usize, total: usize, passe
         }
     };
     let tip = [why.as_str(), how.as_str()].iter().filter(|t| !t.is_empty()).copied().collect::<Vec<_>>().join("\n");
-    EmptyState { short, title, tip }
+    let count = if !enabled {
+        crate::tr("aus").to_string()
+    } else {
+        match phase {
+            Phase::WaitIndex => crate::tr("wartet").to_string(),
+            Phase::Signatures | Phase::Grouping if total > 0 => crate::trf!("sucht {d}/{n}", d = done, n = total),
+            Phase::Idle if passed => crate::tr("keine").to_string(),
+            _ => crate::tr("sucht …").to_string(),
+        }
+    };
+    EmptyState { short, count, title, tip }
 }
 
 /// Start the thread (once; later calls do nothing).
@@ -283,6 +344,8 @@ fn pass(db: &Db, cache: &Cache) -> Result<bool, String> {
     let todo = library::series::files_without_signature(db);
     let small = preview::small();
     let mut done = 0usize;
+    // files whose preview is not there yet: their days wait (grouped without signatures, brackets fell apart)
+    let mut waiting: std::collections::HashSet<i64> = std::collections::HashSet::new();
     MISSING.store(todo.len(), Ordering::Relaxed);
     set_phase(Phase::Signatures, 0, todo.len());
     for (k, task) in todo.iter().enumerate() {
@@ -300,14 +363,46 @@ fn pass(db: &Db, cache: &Cache) -> Result<bool, String> {
             done += 1;
             // Low Power Mode: ten times the pause (the job takes longer, the computer stays cool)
             std::thread::sleep(if throttled() { PAUSE * 10 } else { PAUSE });
+        } else {
+            waiting.insert(task.file);
         }
         MISSING.store(todo.len() - k - 1, Ordering::Relaxed);
     }
     set_phase(Phase::Grouping, 0, 0);
-    let stats = library::series::regroup_with_progress(db, false, &cancelled, &|d, n| {
+    // shooting data not read yet (right after an import the sync that reads it may not run – QA 1.5.0-test.5: the
+    // series stayed in pieces until the next start): read it here, as the sync does, before grouping
+    let unread: i64 = db.conn.query_row("SELECT count(*) FROM file WHERE exif = 0 AND status = 0 AND format <> 'VIDEO'", [], |r| r.get(0)).unwrap_or(0);
+    if unread > 0 && !cancelled() {
+        match library::exif::backfill(db, 5_000, &CANCEL) {
+            Ok(n) if n > 0 => {
+                crate::log(&format!("series: shooting data of {n} photos read before grouping"));
+                ROWS.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(_) => {}
+            Err(e) => crate::log(&format!("series: reading shooting data failed: {e}")),
+        }
+    }
+    // days whose photos are not complete wait (shooting data, previews) – but not for ever: after
+    // [`WAIT_ROUNDS`] passes without any progress they are grouped as they are
+    let give_up = STALLED.load(Ordering::Relaxed) >= WAIT_ROUNDS;
+    let stats = library::series::regroup_ready(db, false, &cancelled, &|d, n| {
         set_phase(Phase::Grouping, d, n);
         test_slow();
-    })?;
+    }, (!give_up).then_some(&waiting))?;
+    if stats.waiting_days > 0 && !cancelled() {
+        if done == 0 && stats.regrouped_days == 0 {
+            STALLED.fetch_add(1, Ordering::Relaxed);
+        } else {
+            STALLED.store(0, Ordering::Relaxed);
+        }
+        // look again in a while, in this session (the previews and shooting data come in the background)
+        let _ = std::thread::Builder::new().name("serien-warten".into()).spawn(|| {
+            std::thread::sleep(WAIT_AGAIN);
+            poke();
+        });
+    } else {
+        STALLED.store(0, Ordering::Relaxed);
+    }
     // quality hints for the members of stacks (preview ≤ 1024 px, faces with Vision on macOS)
     let todo = library::series_quality::stack_files_without_quality(db);
     MISSING.store(todo.len(), Ordering::Relaxed);

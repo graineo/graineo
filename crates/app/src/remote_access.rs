@@ -220,7 +220,9 @@ impl AppHooks {
                 return Ok(d.clone());
             }
         }
-        let mut doc = rawdev::RawDoc::open_for(path, s, &|| true)?.ok_or("abgebrochen")?;
+        // (a merged photo whose result is not in the cache is merged first: the browser never gets its reference frame
+        // as the picture of the merged photo)
+        let mut doc = rawdev::RawDoc::open_for_output(path, s, &|| true)?.ok_or("abgebrochen")?;
         // oriented as on opening (the settings refer to it)
         rawdev::lightroom::apply_orientation(&mut doc);
         let d = Arc::new(doc);

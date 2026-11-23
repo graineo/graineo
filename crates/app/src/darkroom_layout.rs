@@ -361,6 +361,10 @@ impl App {
         }
         let mut wanted = self.entries[index].settings.clone();
         wanted.film = film;
+        // never a hover preview from a fast preview too rough to be shown
+        if self.derived_waits(&wanted) {
+            return;
+        }
         self.hover_preset = Some(wanted.clone());
         self.darkroom.recipes.look_hover = true;
         // the job on its way counts as done when its image has arrived (or it has been lost for a while)

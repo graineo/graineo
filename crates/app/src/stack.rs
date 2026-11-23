@@ -161,6 +161,10 @@ fn render_one(a: &RerenderTask, cache: &preview::Cache) -> Result<bool, String> 
         return Ok(false);
     }
     let mut doc = rawdev::RawDoc::open(&a.path, &|| true)?.ok_or("abgebrochen")?;
+    // a merged photo that is not computed yet shows its reference frame: never stored as its preview
+    if doc.stands_in() {
+        return Ok(false);
+    }
     rawdev::lightroom::apply_orientation(&mut doc);
     let s = match rawdev::lightroom::initial_settings(&doc) {
         Some(s) => s,

@@ -2,9 +2,53 @@
 # spphash = Sigma base (`graineo-dev spphash`); color/mono = image data from `graineo-dev develop … --spp --baseline [--mono]`.
 # Own shots and free files (raw.pixls.us, CC0). As of 0.107 (one development path, 2026-11-13; new Classic path D for all Classic cameras, 2026-11-14).
 # 1.0.1: Quattro changed (highlights keep their hue: neutralised by the lowest layer); Merrill and Classic unchanged.
+# 1.5: Quattro colour changed in bright saturated colours beyond the output range (soft gamut compression instead of
+# clipping each channel; sdQ_SDIM0260, dp0q _SDI0263, dp2q SDIM4388: < 0.01 % of pixels change); spphash and Merrill/Classic unchanged.
+# 1.5 (QA): the compression brightens monotonically with the input (no plateau of one colour, no steps); same three files.
+# 1.5 (Quattro noise): capture ISO 400–3200 on the new high-ISO path (outlier repair of the stored values, first stage
+# on their grid, own brightness smoothing of the top layer): sdQ_SDIM0461 (ISO 400) and sdQ_SDQ_0604 (ISO 800) change
+# on purpose; Quattro ISO ≤ 200 and ≥ 6400, Merrill and Classic unchanged.
 # Disk cache: when checksums change, the base changes – increase COMPUTE_PATH_VERSION (crates/develop/src/diskcache.rs) and
 # write its value and the digest the test `reference_values_carry_the_compute_path_version` names here.
-# compute-path-version: 9 digest: 7a79c2b93294833e
+# 21.11.2026 (claude/quattro-nr2): Quattro high-ISO path with the maker's outlier repair, grid brightness share and
+# from ISO 6400 on (unbinned): sdQ_SDIM0461 (ISO 400, spphash and color) and sdQ_SDQ_0604 (ISO 800, spphash; the binned
+# color output keeps its previous path) change; Merrill, Classic and Quattro ISO <= 200 unchanged.
+# 21.11.2026 (claude/quattro-nr3): Quattro from capture ISO 400 on through the full chain of the maker's software
+# (measured against the maker's exports: flat colour, noise, blotches, edges closer on all test files):
+# sdQ_SDIM0461 (ISO 400) and sdQ_SDQ_0604 (ISO 800, now also the binned color output) change, spphash and color;
+# Merrill, Classic and Quattro ISO <= 200 unchanged.
+# 21.11.2026 (claude/no-bdata): log-domain detail scaling (r^s) for the residual gain and colour gate, highlight pixels
+# of the dp Quattro replaced from the same layer only; Quattro from capture ISO 400 on: sdQ_SDIM0461 and sdQ_SDQ_0604
+# (spphash and color) change (flat colour dE00 against the maker's exports unchanged within 0.01); Merrill, Classic and
+# Quattro ISO <= 200 unchanged.
+# 21.11.2026 (claude/classic-regler): Classic highlights (clipping level also found for small clipped lights, fade from
+# 0.8 of it) and SD9 (replacement coring amplitude; exposure time of the automatic white balance from SHUTTER, else 1 s):
+# the DP1s archive files 2033/2036/2037/2038/2041/2042 and SD9 change on purpose (against the maker's exports: SD9 mean ΔE00
+# 1.15 → 0.52, DP1s 2041 0.087 → 0.066, 2042 p99.9 4.2 → 2.7, 2033 0.120 → 0.126); Merrill, Quattro and the other
+# Classic files of this list unchanged.
+# 21.11.2026 (claude/quattro-gpu): dp Quattro highlight pixels from capture ISO 400 on corrected by the layer's own
+# response and kept within the range of the same-layer neighbours; no file of this list changes (dp Quattro >= 400 only in
+# the local list), the disk cache version goes up.
+# 22.11.2026 (claude/hp-mean): dp Quattro highlight pixels back to the simple replacement (means of the same layer's
+# neighbours) as the default; the other method only by switch. No checksum of this list changes (dp Quattro >= 400 only in
+# the local list); the disk cache version goes up.
+# 22.11.2026 (claude/quattro-clean): the Quattro chain from capture ISO 400 on written anew from its specification
+# (develop::quattro_hi; same steps, other order of rounding, and the outermost 5 pixels of the image are now developed
+# like the rest instead of staying dark): sdQ_SDIM0461 (ISO 400) and sdQ_SDQ_0604 (ISO 800) change, spphash and color
+# (against the previous output: flat colour dE00 of 16 px blocks 0.000-0.008 per file; against the maker's exports
+# unchanged within 0.001); Merrill, Classic and Quattro ISO <= 200 unchanged.
+# 22.11.2026 (claude/x3i-spots): sd Quattro H (digital gain per layer): grid cells with a clipped top pixel, and the
+# cells around them, neutral (coloured 2 x 2 blocks at specular highlights); merged SFD bracket (X3I): first stage at the
+# level of the base exposure, layers stored scaled, clipped highlights neutral at the measured saturation, focus pixel
+# lattice at the right column. No checksum of this list changes (sd Quattro H and X3I only in the local list); the disk
+# cache version goes up.
+# 22.11.2026 (claude/quattro-detail): Quattro binned by 4 (sd Quattro / sd Quattro H at ISO 6400) keeps the full
+# binned width and the sd Quattro binned by 3 its last row (the pooled grid was cut to whole grid blocks and a multiple
+# of 4: smaller than the session, whose base was discarded); new detail slider (its middle is the result so far). No checksum of this list changes (binning by 3 and 4 only in the local list); the disk cache version goes up.
+# 22.11.2026 (claude/quattro-detail2): Quattro detail steps away from the middle, capture ISO 400 to below 800: the
+# local contrast follows the step (measured against the maker's exports of all seven steps). The middle is unchanged,
+# no checksum of this list changes; the disk cache version goes up (bases stored with a detail step differ).
+# compute-path-version: 23 digest: 791417e82e35aca4
 
 # Merrill
 spphash DP2M5418.X3F eec84657f928a2db
@@ -15,26 +59,26 @@ color DP2M5412.X3F e40c4d81c364dbbb
 mono DP2M5412.X3F b5c5d7542e447f34
 # Quattro
 spphash archiv_sdQ_SDIM0260.X3F ba78baf5ec5bb5f7
-spphash archiv_sdQ_SDIM0461.X3F a3d7dcc99946b645
-spphash archiv_sdQ_SDQ_0604.X3F e1ae68e3835ef21c
+spphash archiv_sdQ_SDIM0461.X3F be431f39e0b38c49
+spphash archiv_sdQ_SDQ_0604.X3F 704e0b158947a4f3
 spphash dp0q_pixls__SDI0263.X3F 862f6e41e59d51af
 spphash dp2q_SDIM4388.X3F 5de24251736f7fe1
-color archiv_sdQ_SDIM0260.X3F 024e26c914a70453
-color archiv_sdQ_SDIM0461.X3F 30de196485277135
-color archiv_sdQ_SDQ_0604.X3F 5c48431cc8b28416
-color dp0q_pixls__SDI0263.X3F cb475ab05e307eda
-color dp2q_SDIM4388.X3F 0ed2805ee7bd0daa
+color archiv_sdQ_SDIM0260.X3F 11f63ad6684fd749
+color archiv_sdQ_SDIM0461.X3F 9fa3e32bbf4b0ee6
+color archiv_sdQ_SDQ_0604.X3F f854490813c5e6a5
+color dp0q_pixls__SDI0263.X3F 099270c1438fadfa
+color dp2q_SDIM4388.X3F 87538cef067043ff
 # older Foveon cameras (Classic)
-color archiv_DP1s_SDIM2033.X3F da4b7934b99e7ee6
-color archiv_DP1s_SDIM2036.X3F adcf8a5c3c3daef7
-color archiv_DP1s_SDIM2037.X3F 59b909a3faabc7bc
-color archiv_DP1s_SDIM2038.X3F e7ed0a5f4a0277f9
+color archiv_DP1s_SDIM2033.X3F 8b72e0a74da2e1d7
+color archiv_DP1s_SDIM2036.X3F 8a1f4f4540bcaea8
+color archiv_DP1s_SDIM2037.X3F 3ee3eb6037508177
+color archiv_DP1s_SDIM2038.X3F 3e9846d08e2c2e1a
 color archiv_DP1s_SDIM2039.X3F d026971522454aa6
-color archiv_DP1s_SDIM2041.X3F 6e3a230ff8cc8e75
-color archiv_DP1s_SDIM2042.X3F 3bf5daa94f9f251e
+color archiv_DP1s_SDIM2041.X3F 03fca184d440b5d6
+color archiv_DP1s_SDIM2042.X3F 98150fe4a56a179b
 color dp1_pixls_RAW_SIGMA_DP1.X3F b92c18fb0f4e451b
 color pixls_RAW_SIGMA_DP1S.X3F b1efc44821be0dc7
 color sd10_pixls_RAW_SIGMA_SD10.X3F 386377d6caa8c6b0
 color sd14_pixls_20120818-SDIM4579.X3F f126b70b7af8fb2d
 color sd15_pixls__SDI5651.X3F 464dec303daa0a14
-color sd9_pixls_RAW_SIGMA_SD9_SRGB.X3F ce245ecfc1c9268d
+color sd9_pixls_RAW_SIGMA_SD9_SRGB.X3F 53ade61cbe8222ec

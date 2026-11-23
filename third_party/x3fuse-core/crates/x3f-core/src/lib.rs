@@ -38,6 +38,8 @@ use x3f_sys as sys;
 pub use x3f_sys::MergeFrame;
 /// graineo addition: test switch for the alternative Merrill parts.
 pub use x3f_sys::merrill_new;
+// graineo addition: highlight reconstruction registered by the application
+pub use x3f_sys::{set_highlight_hook, HighlightHook, HighlightInput};
 /// graineo addition: diagnostics of the SPP GPU noise reduction.
 pub use x3f_sys::{
     spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, SppCaCorrection, SppNoiseSliders, SppPrepared, SppWorking,

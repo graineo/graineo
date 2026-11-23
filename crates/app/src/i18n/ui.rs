@@ -96,6 +96,12 @@ impl DeComma for str {
     }
 }
 
+/// One German word with two meanings: `de` is shown in German, `other` – the translation of a longer key that names
+/// the meaning, e.g. `tr("Ausrichten (Horizont)")` – in every other language.
+pub fn german_or<'a>(de: &'a str, other: &'a str) -> &'a str {
+    if language() == Language::De { de } else { other }
+}
+
 /// Text in the selected language. German: unchanged. English: the dictionary, otherwise the German text.
 pub fn tr<'a>(de: &'a str) -> &'a str {
     let lang = language();
