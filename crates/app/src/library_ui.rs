@@ -1665,7 +1665,7 @@ impl LibraryView {
             self.date_row(ui, "", crate::tr("Ohne Datum").into(), self.without_date, 0, false);
         }
         if tree.is_empty() && self.without_date == 0 && !self.first_loading() {
-            ui.label(egui::RichText::new(crate::tr("Noch keine Fotos")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Noch keine Fotos")).color(lr::TEXT_DIM()));
         }
         self.date_tree = tree;
     }
@@ -2139,7 +2139,7 @@ impl LibraryView {
         // the lens by name (the X3F details name only the focal and aperture range: those stay below)
         let lens = z.lens.clone().or_else(|| from_file("Objektiv").filter(|o| !o.contains("mm · f/")));
         if let Some(o) = lens {
-            rows.push((crate::tr("Objektiv"), o));
+            rows.push((crate::tr("Objektiv"), crate::cell_info::lens_label(&o)));
         }
         // merged photo: time and ISO of its reference frame where its own row has none
         let merged = z.status as i64 == library::merge::STATUS_VIRTUAL;
@@ -3592,14 +3592,14 @@ impl LibraryView {
             let pts = if o { vec![c + egui::vec2(-3.5, -2.0), c + egui::vec2(3.5, -2.0), c + egui::vec2(0.0, 2.5)] } else { vec![c + egui::vec2(-2.0, -3.5), c + egui::vec2(2.5, 0.0), c + egui::vec2(-2.0, 3.5)] };
             painter.add(egui::Shape::convex_polygon(pts, if over_triangle { Color32::WHITE } else { Color32::from_gray(0x8a) }, egui::Stroke::NONE));
         }
-        let color = if dimmed { Color32::from_gray(0x8c) } else if active || resp.hovered() { Color32::WHITE } else { lr::TEXT };
+        let color = if dimmed { Color32::from_gray(0x8c) } else if active || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
         let font = egui::TextStyle::Body.resolve(ui.style());
         let right_free = 52.0;
         // symbol (special rows only) in the marker column of the rows – where the other sections show the triangle of
         // a folder –, so its left edge keeps the same indent as their content; the names follow flush
         let tx = if let Some(icon) = icon {
             let r = egui::Rect::from_min_size(egui::pos2(x0, rect.center().y - 7.0), egui::vec2(14.0, 14.0));
-            lr::paint_icon(ui.painter(), r, icon, if active { color } else { lr::TEXT_DIM });
+            lr::paint_icon(ui.painter(), r, icon, if active { color } else { lr::TEXT_DIM() });
             x0 + 20.0
         } else {
             x0 + 14.0
@@ -3609,7 +3609,7 @@ impl LibraryView {
         let painter = ui.painter_at(egui::Rect::from_min_max(egui::pos2(tx, rect.top()), egui::pos2(tx + max_w.max(10.0), rect.bottom())));
         painter.galley(egui::pos2(tx, rect.center().y - galley.size().y / 2.0), galley, color);
         if let Some(t) = right {
-            ui.painter().text(rect.right_center() - egui::vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, t, egui::TextStyle::Small.resolve(ui.style()), lr::TEXT_DIM);
+            ui.painter().text(rect.right_center() - egui::vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, t, egui::TextStyle::Small.resolve(ui.style()), lr::TEXT_DIM());
         }
         let click = resp.clicked();
         (click && !over_triangle, click && over_triangle, resp)
@@ -3746,7 +3746,7 @@ impl LibraryView {
                     self.folder_node(ui, k, 0, !reachable);
                 }
                 if self.root_rows.is_empty() && !self.first_loading() {
-                    ui.label(egui::RichText::new(crate::tr("Noch keine Ordner")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch keine Ordner")).color(lr::TEXT_DIM()));
                 }
             });
             self.add_folder_button(ui, folders_top, folders_right);
@@ -3891,9 +3891,9 @@ impl LibraryView {
         let Some(reason) = self.viewed_listing.as_ref().and_then(|l| l.empty_reason()) else { return };
         ui.add_space(36.0);
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Keine Fotos in diesem Ordner")).size(16.0).color(lr::TEXT));
+            ui.label(egui::RichText::new(crate::tr("Keine Fotos in diesem Ordner")).size(16.0).color(lr::TEXT()));
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(reason).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(reason).color(lr::TEXT_DIM()));
         });
     }
 
@@ -3932,7 +3932,7 @@ impl LibraryView {
         ui.add_space(48.0);
         ui.vertical_centered(|ui| {
             // "Willkommen bei" and the name as the word mark (brand font, aperture in the "o"), never in the UI font
-            ui.label(egui::RichText::new(crate::tr("Willkommen bei")).size(14.0).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Willkommen bei")).size(14.0).color(lr::TEXT_DIM()));
             ui.add_space(2.0);
             match crate::brand::wordmark(ui.ctx()) {
                 Some(t) => {
@@ -3944,7 +3944,7 @@ impl LibraryView {
                 }
             }
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(crate::tr("Wie möchtest du anfangen?")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Wie möchtest du anfangen?")).color(lr::TEXT_DIM()));
         });
         ui.add_space(18.0);
         let tiles = [
@@ -3968,11 +3968,11 @@ impl LibraryView {
                 // titles stay in the light text colour; the symbol in the app's blue marks the tile as clickable, on
                 // hover a blue frame and a slightly lighter ground (the Apple Photos line stays the only blue text)
                 p.rect_filled(rect, 0.0, if hot { Color32::from_gray(0x2a) } else { lr::GROUP_FILL });
-                p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, if hot { lr::BLUE } else { lr::FIELD_STROKE }), egui::StrokeKind::Inside);
+                p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, if hot { lr::BLUE } else { lr::FIELD_STROKE() }), egui::StrokeKind::Inside);
                 let inner = rect.shrink2(egui::vec2(14.0, 14.0));
                 lr::paint_icon(p, egui::Rect::from_min_size(inner.min, egui::vec2(22.0, 22.0)), *icon, lr::BLUE_TEXT);
                 let mut y = inner.min.y + 32.0;
-                for (text, font, color) in [(*title, lr::semibold(13.0), lr::TEXT), (*line, egui::FontId::proportional(lr::UI_SIZE), lr::TEXT_DIM), (*hint, egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM)] {
+                for (text, font, color) in [(*title, lr::semibold(13.0), lr::TEXT()), (*line, egui::FontId::proportional(lr::UI_SIZE), lr::TEXT_DIM()), (*hint, egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM())] {
                     let g = p.layout(text.to_string(), font, color, inner.width());
                     let gh = g.size().y;
                     p.galley(egui::pos2(inner.min.x, y), g, color);
@@ -3994,7 +3994,7 @@ impl LibraryView {
         }
         ui.add_space(16.0);
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Ordner und Fotos kannst du auch hierher ziehen.")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Ordner und Fotos kannst du auch hierher ziehen.")).small().color(lr::TEXT_DIM()));
             // Apple Photos: a quiet line, no tile; asking for access only after the click (in the settings)
             #[cfg(target_os = "macos")]
             {
@@ -4144,7 +4144,7 @@ impl LibraryView {
                 ui.add_space(4.0);
                 Self::set_choice(ui, "smart-collection-set", &sets, &mut self.smart_parent);
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(crate::tr("Regel")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Regel")).small().color(lr::TEXT_DIM()));
                 crate::dialog::chip(ui, &search_text);
             },
             crate::dialog::Buttons::confirm(crate::tr("Sichern"), name_ok),
@@ -4305,7 +4305,7 @@ impl LibraryView {
             // only the notice that previews are paused for lack of space (the progress is shown at the top in the title bar)
             if self.generator.as_ref().is_some_and(|e| e.cache().paused()) {
                 let w = (ui.available_width() * 0.4).clamp(60.0, 230.0);
-                ui.add_sized([w, 18.0], egui::Label::new(egui::RichText::new(crate::tr("Vorschauen pausiert: wenig Platz")).small().color(lr::TEXT_DIM)).truncate());
+                ui.add_sized([w, 18.0], egui::Label::new(egui::RichText::new(crate::tr("Vorschauen pausiert: wenig Platz")).small().color(lr::TEXT_DIM())).truncate());
             }
             if matches!(self.source, Source::Missing) && !self.visible.is_empty() && ui.add(egui::Button::new(egui::RichText::new(crate::tr("Einträge entfernen …")).small())).clicked() {
                 self.missing_confirm = true;
@@ -4609,9 +4609,9 @@ impl LibraryView {
                     ui.painter().rect_filled(gr, 0.0, lr::IMAGE_BG);
                     ui.painter().galley(gr.min + egui::vec2(6.0, 6.0), g, Color32::from_gray(0xc8));
                     if self.visible.len() > n1 {
-                        ui.painter().text(egui::pos2(r.left() + 16.0, y + 22.0), egui::Align2::LEFT_TOP, crate::trf!("{a} Fotos nach Bild- und Beschreibungsinhalt, ohne passendes Wort", a = self.visible.len() - n1), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+                        ui.painter().text(egui::pos2(r.left() + 16.0, y + 22.0), egui::Align2::LEFT_TOP, crate::trf!("{a} Fotos nach Bild- und Beschreibungsinhalt, ohne passendes Wort", a = self.visible.len() - n1), egui::FontId::proportional(10.5), lr::TEXT_DIM());
                     } else {
-                        ui.painter().text(egui::pos2(r.left() + 16.0, y + 22.0), egui::Align2::LEFT_TOP, crate::tr("Keine ausreichend ähnlichen Fotos"), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+                        ui.painter().text(egui::pos2(r.left() + 16.0, y + 22.0), egui::Align2::LEFT_TOP, crate::tr("Keine ausreichend ähnlichen Fotos"), egui::FontId::proportional(10.5), lr::TEXT_DIM());
                     }
                     let (changed, released) = crate::semantic_ui::strictness_slider(ui, r, y + 28.0, &mut self.sem_view.strict);
                     if changed {
@@ -5114,7 +5114,7 @@ impl LibraryView {
             ui.set_max_width(ui.available_width().min(w));
             let Some(&i) = self.active.and_then(|a| self.index.get(&a)) else {
                 lr::section(ui, "Metadaten", true, |ui| {
-                    ui.label(egui::RichText::new(crate::tr("Kein Foto gewählt")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Kein Foto gewählt")).color(lr::TEXT_DIM()));
                 });
                 return;
             };
@@ -5123,7 +5123,7 @@ impl LibraryView {
             let locked = z.folder == VIEW_FOLDER && !view_folder_sidecars();
             lr::section(ui, "Bewertung", true, |ui| {
                 if locked {
-                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(RATING_REFUSED)).small().color(lr::TEXT_DIM)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(RATING_REFUSED)).small().color(lr::TEXT_DIM())).wrap());
                 }
                 ui.add_enabled_ui(!locked, |ui| {
                 ui.horizontal(|ui| {
@@ -5204,7 +5204,7 @@ impl LibraryView {
                                 ui.add_space(6.0);
                             }
                             if n == 1 {
-                                ui.label(egui::RichText::new(crate::tr("Sensor")).small().color(lr::TEXT_DIM));
+                                ui.label(egui::RichText::new(crate::tr("Sensor")).small().color(lr::TEXT_DIM()));
                             }
                             first = false;
                             for (k, v) in group {
@@ -5230,7 +5230,7 @@ impl LibraryView {
             lr::section(ui, "KI", true, |ui| {
                 match &ai {
                     None => {
-                        ui.label(egui::RichText::new(crate::tr("Keine KI-Beschreibung")).color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(crate::tr("Keine KI-Beschreibung")).color(lr::TEXT_DIM()));
                     }
                     Some(k) => {
                         let q = k.quality.map_or("–", |q| ["Ausschuss", "mittel", "gut"][q as usize % 3]);
@@ -5247,7 +5247,7 @@ impl LibraryView {
                             search_word = Some(w);
                         }
                         if k.nonsense {
-                            ui.label(egui::RichText::new(crate::tr("KI-Beschreibung als unsicher markiert")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("KI-Beschreibung als unsicher markiert")).small().color(lr::TEXT_DIM()));
                         }
                         ui.label(egui::RichText::new(k.model.clone().unwrap_or_default()).small().color(Color32::from_gray(0x9a)));
                     }
@@ -5268,17 +5268,17 @@ impl LibraryView {
                     Some(SimilarState::Load) => {
                         ui.horizontal_wrapped(|ui| {
                             ui.add(egui::Spinner::new().size(11.0));
-                            ui.label(egui::RichText::new(crate::tr("Bildvektoren werden geladen …")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Bildvektoren werden geladen …")).small().color(lr::TEXT_DIM()));
                         });
                     }
                     Some(SimilarState::Computing) => {
                         ui.horizontal_wrapped(|ui| {
                             ui.add(egui::Spinner::new().size(11.0));
-                            ui.label(egui::RichText::new(crate::tr("Bildvektor für dieses Foto wird berechnet …")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Bildvektor für dieses Foto wird berechnet …")).small().color(lr::TEXT_DIM()));
                         });
                     }
                     Some(SimilarState::Error(e)) => {
-                        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&e)).small().color(lr::TEXT_DIM)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&e)).small().color(lr::TEXT_DIM())).wrap());
                     }
                     None => {}
                 }
@@ -5300,7 +5300,7 @@ impl LibraryView {
                         match g.status.as_str() {
                             "confirmed" => {
                                 // name as a link: click searches all photos of this person
-                                let r = lr::link_text(ui, egui::RichText::new(&g.name), lr::TEXT);
+                                let r = lr::link_text(ui, egui::RichText::new(&g.name), lr::TEXT());
                                 if r.clicked() {
                                     person_search = Some(g.name.clone());
                                 }
@@ -5308,7 +5308,7 @@ impl LibraryView {
                             "suggested" => {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.label(egui::RichText::new(crate::trf!("Vorschlag: {a}", a = g.name)).color(Color32::from_rgb(0xe0, 0xc2, 0x4a)));
-                                    ui.label(egui::RichText::new(format!("{:.2}", g.confidence)).small().color(lr::TEXT_DIM));
+                                    ui.label(egui::RichText::new(format!("{:.2}", g.confidence)).small().color(lr::TEXT_DIM()));
                                     if ui.small_button(crate::tr("Ja")).clicked() {
                                         suggestion_answer = Some((g.id, true));
                                     }
@@ -5321,7 +5321,7 @@ impl LibraryView {
                         }
                     }
                     if without > 0 {
-                        ui.label(egui::RichText::new(crate::trf!("{a} Gesichter ohne Namen", a = without)).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(crate::trf!("{a} Gesichter ohne Namen", a = without)).small().color(lr::TEXT_DIM()));
                     }
                 });
             }
@@ -5342,15 +5342,15 @@ impl LibraryView {
             let kw_refused = self.needs_library(&self.target()) || view_folder_guard::viewed(z.image);
             lr::section(ui, "Stichwörter", true, |ui| {
                 if kw_refused {
-                    ui.label(egui::RichText::new(crate::tr(view_folder_guard::NEEDS_LIBRARY)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr(view_folder_guard::NEEDS_LIBRARY)).small().color(lr::TEXT_DIM()));
                     ui.disable();
                 }
                 let n = self.target().len();
                 if n > 1 {
-                    ui.label(egui::RichText::new(crate::trf!("Änderungen gelten für {n} Fotos", n = n)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::trf!("Änderungen gelten für {n} Fotos", n = n)).small().color(lr::TEXT_DIM()));
                 }
                 if keywords.is_empty() && ai_kw.is_empty() {
-                    ui.label(egui::RichText::new(crate::tr("Keine")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Keine")).color(lr::TEXT_DIM()));
                 }
                 // keyword chips with × to remove; keywords that are also words of the AI description come
                 // after them, dimmed (a keyword added here that the AI also named must not disappear)
@@ -5406,7 +5406,7 @@ impl LibraryView {
                     }
                 }
                 if same_name > 1 && self.kw_pick == 0 {
-                    ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es mehrfach – bitte wählen", a = self.kw_input.trim())).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es mehrfach – bitte wählen", a = self.kw_input.trim())).small().color(lr::TEXT_DIM()));
                 }
                 for (n, (kid, path)) in suggestions.iter().enumerate() {
                     if lr::list_item(ui, &path.replace('|', " › "), self.kw_pick == n + 1).clicked() {
@@ -5501,7 +5501,7 @@ impl LibraryView {
             }
             lr::section(ui, "Sammlungen", false, |ui| {
                 if collections.is_empty() {
-                    ui.label(egui::RichText::new(crate::tr("Keine")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Keine")).color(lr::TEXT_DIM()));
                 }
                 for s in collections {
                     ui.label(s);
@@ -5882,7 +5882,7 @@ impl LibraryView {
                         }
                     });
                     dialog::hint(ui, crate::tr("Importieren geht erst mit einem lesbaren Katalog. Wähle einen anderen oder prüfe ihn erneut."));
-                    egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM)).id_salt("lr-fehler").default_open(false).show(ui, |ui| {
+                    egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM())).id_salt("lr-fehler").default_open(false).show(ui, |ui| {
                         dialog::hint(ui, e);
                     });
                 } else {
@@ -5945,7 +5945,7 @@ impl LibraryView {
                     ui.add_space(4.0);
                     ui.add_enabled_ui(!lr_running, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(crate::tr("Sammlungssatz")).color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Sammlungssatz")).color(lr::TEXT_DIM()));
                             let r = crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut set_name).hint_text(crate::tr("leer: ganz oben")).desired_width(240.0));
                             lr::hover_tip(ui, &r, "Die Sammlungen aus Lightroom kommen in diesen Sammlungssatz");
                         });
@@ -5986,7 +5986,7 @@ impl LibraryView {
                     if let Some(n) = i["catalog_version"].as_i64().filter(|_| i["newer_format"] == true) {
                         dialog::warning(ui, &newer_format_text(n));
                     }
-                    egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM)).id_salt("lr-details").default_open(false).show(ui, |ui| {
+                    egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Details")).small().color(lr::TEXT_DIM())).id_salt("lr-details").default_open(false).show(ui, |ui| {
                         report_table(ui, v);
                         if ui.button(crate::tr("Bericht im Finder zeigen")).clicked() {
                             show_report = true;
@@ -6135,9 +6135,9 @@ impl LibraryView {
 fn lr_section_head(ui: &mut egui::Ui, title: &str, help: Option<(&str, &crate::help::Card)>) {
     ui.add_space(2.0);
     ui.horizontal(|ui| {
-        let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM);
+        let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM());
         let (r, _) = ui.allocate_exact_size(g.size(), egui::Sense::hover());
-        ui.painter().galley(r.min, g, lr::TEXT_DIM);
+        ui.painter().galley(r.min, g, lr::TEXT_DIM());
         if let Some((salt, card)) = help {
             crate::help::info(ui, salt, title, card);
         }
@@ -6160,7 +6160,7 @@ fn lr_status_row(ui: &mut egui::Ui, verdict: Option<crate::dialog::Verdict>, tex
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             right(ui);
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(text)).color(lr::TEXT)).truncate());
+                ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(text)).color(lr::TEXT())).truncate());
             });
         });
     });
@@ -6203,7 +6203,7 @@ fn lr_progress(ui: &mut egui::Ui, fraction: Option<f32>, message: &str, cancella
             }
         });
         let share = fraction.map(|f| format!(" · {} %", (f * 100.0).floor() as u32)).unwrap_or_default();
-        ui.add(egui::Label::new(egui::RichText::new(format!("{}{share}", crate::menu::i18n::tr_msg(message))).small().color(lr::TEXT_DIM)).truncate());
+        ui.add(egui::Label::new(egui::RichText::new(format!("{}{share}", crate::menu::i18n::tr_msg(message))).small().color(lr::TEXT_DIM())).truncate());
     });
 }
 
@@ -6309,7 +6309,7 @@ fn report_table(ui: &mut egui::Ui, v: &serde_json::Value) {
     let value_width = (ui.available_width() - 190.0).max(160.0);
     egui::Grid::new("lr-bericht").num_columns(2).spacing([16.0, 3.0]).max_col_width(value_width).striped(true).show(ui, |ui| {
         let mut row = |k: &str, w: String| {
-            ui.label(egui::RichText::new(k).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(k).color(lr::TEXT_DIM()));
             ui.add(egui::Label::new(w).wrap());
             ui.end_row();
         };
@@ -6442,7 +6442,7 @@ fn highlighted(ui: &mut egui::Ui, text: &str, words: &[String]) {
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = ui.available_width();
     let mut pos = 0;
-    let normal = egui::TextFormat { font_id: font.clone(), color: lr::TEXT, ..Default::default() };
+    let normal = egui::TextFormat { font_id: font.clone(), color: lr::TEXT(), ..Default::default() };
     let mark = egui::TextFormat { font_id: font, color: Color32::BLACK, background: Color32::from_rgb(0xe0, 0xc2, 0x4a), ..Default::default() };
     for (a, e) in search::highlight(text, words) {
         job.append(&text[pos..a], 0.0, normal.clone());
@@ -6459,10 +6459,10 @@ fn chips_row(ui: &mut egui::Ui, words: &[String]) -> Option<String> {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
         for w in words {
-            let g = ui.painter().layout_no_wrap(w.clone(), egui::FontId::proportional(10.5), lr::TEXT);
+            let g = ui.painter().layout_no_wrap(w.clone(), egui::FontId::proportional(10.5), lr::TEXT());
             let (r, resp) = ui.allocate_exact_size(g.size() + egui::vec2(14.0, 6.0), egui::Sense::click());
             ui.painter().rect_filled(r, 0.0, if resp.hovered() { Color32::from_gray(0x50) } else { Color32::from_gray(0x33) });
-            ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, if resp.hovered() { Color32::WHITE } else { lr::TEXT });
+            ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, if resp.hovered() { Color32::WHITE } else { lr::TEXT() });
             if resp.clicked() {
                 clicked = Some(w.clone());
             }
@@ -6513,13 +6513,9 @@ pub fn thousands(n: usize) -> String {
     out
 }
 
-/// "2024-05-11T14:03:22" → "11.05.2024 14:03"
+/// "2024-05-11T14:03:22" → "11.05.2024 14:03" (in the UI language's date format)
 fn capture_date(a: &str) -> String {
-    if a.len() >= 16 {
-        format!("{}.{}.{} {}", &a[8..10], &a[5..7], &a[0..4], &a[11..16])
-    } else {
-        a.to_string()
-    }
+    crate::cell_info::capture_text(a, crate::menu::i18n::language()).unwrap_or_else(|| a.to_string())
 }
 
 
@@ -6680,14 +6676,14 @@ fn save_kw_sets(s: &[(String, Vec<String>)]) {
 
 /// Chip with × (remove keyword). Returns: × clicked.
 fn chip_remove(ui: &mut egui::Ui, text: &str, dim: bool) -> bool {
-    let colour = if dim { lr::TEXT_DIM } else { lr::TEXT };
+    let colour = if dim { lr::TEXT_DIM() } else { lr::TEXT() };
     let g = ui.painter().layout_no_wrap(text.to_string(), egui::FontId::proportional(10.5), colour);
     let (r, _) = ui.allocate_exact_size(g.size() + egui::vec2(24.0, 6.0), egui::Sense::hover());
     let cross = egui::Rect::from_center_size(egui::pos2(r.right() - 9.0, r.center().y), egui::vec2(14.0, 14.0));
     let resp = ui.interact(cross, ui.scope_id().with(("sw-chip", text)), egui::Sense::click());
     ui.painter().rect_filled(r, 0.0, if dim { Color32::from_gray(0x26) } else { Color32::from_gray(0x33) });
     ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, colour);
-    ui.painter().text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+    ui.painter().text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
     resp.clicked()
 }
 
@@ -6999,7 +6995,7 @@ impl LibraryView {
                         1 => {
                             ui.horizontal(|ui| {
                                 crate::lr::text_field(ui, egui::DragValue::new(hours).range(-48..=48).clamp_existing_to_range(false).suffix(" h"));
-                                ui.label(egui::RichText::new(crate::tr("z. B. für eine andere Zeitzone")).small().color(lr::TEXT_DIM));
+                                ui.label(egui::RichText::new(crate::tr("z. B. für eine andere Zeitzone")).small().color(lr::TEXT_DIM()));
                             });
                         }
                         _ => dialog::hint(ui, crate::tr("Korrigierte Fotos bekommen wieder die Zeit der Kamera.")),
@@ -7013,7 +7009,7 @@ impl LibraryView {
                     for z in rows.iter() {
                         ui.horizontal(|ui| {
                             ui.add_space(16.0);
-                            ui.add(egui::Label::new(egui::RichText::new(z.as_str()).color(lr::TEXT_DIM)).wrap());
+                            ui.add(egui::Label::new(egui::RichText::new(z.as_str()).color(lr::TEXT_DIM())).wrap());
                         });
                     }
                 }

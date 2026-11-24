@@ -46,7 +46,10 @@ fn weekday(tag: &str) -> Option<usize> {
 pub(super) fn day_label(tag: &str) -> String {
     const NAMES: [&str; 7] = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
     let date = match (tag.get(..4), tag.get(5..7), tag.get(8..10)) {
-        (Some(y), Some(m), Some(d)) => format!("{d}.{m}.{y}"),
+        (Some(y), Some(m), Some(d)) => match (y.parse(), m.parse(), d.parse()) {
+            (Ok(y), Ok(m), Ok(d)) => crate::menu::i18n::format::date(crate::menu::i18n::language(), y, m, d).unwrap_or_else(|| tag.to_string()),
+            _ => tag.to_string(),
+        },
         _ => tag.to_string(),
     };
     match weekday(tag) {
@@ -109,7 +112,7 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
                 } else {
                     if camera::enabled() { crate::tr("Karte einlegen, Kamera anschließen oder einen Ordner wählen.") } else { crate::tr("Karte einlegen oder einen Ordner wählen.") }.to_string()
                 };
-                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM()));
             });
         });
         return;
@@ -243,7 +246,7 @@ fn day_head(ui: &mut egui::Ui, imp: &Import, d: usize, cells: &[usize], rect: eg
     }
     let bytes: u64 = cells.iter().flat_map(|&ci| imp.filter.files(&imp.cand, &imp.cells[ci].members)).map(|i| imp.cand[i].size).sum();
     let t = format!("{} · {} · {}", day_label(&imp.days[d].tag).to_uppercase(), dialog::count(cells.len(), crate::tr("Foto"), crate::tr("Fotos")), dialog::size(bytes));
-    p.text(check.right_center() + egui::vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, t, lr::semibold(11.5), lr::TEXT);
+    p.text(check.right_center() + egui::vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, t, lr::semibold(11.5), lr::TEXT());
     p.hline(rect.x_range(), rect.bottom() - 1.0, egui::Stroke::new(1.0, Color32::from_gray(0x26)));
     lr::hover_tip(ui, &resp, "Alle Fotos dieses Tages an- oder abwählen");
     resp.clicked() && !selectable.is_empty()
@@ -307,11 +310,11 @@ fn paint_cell(ui: &mut egui::Ui, imp: &mut Import, ci: usize, rect: egui::Rect, 
         p.galley(r.min + egui::vec2(2.0, 1.0), g, col);
     }
     // name and kind
-    let color = if duplicate { lr::TEXT_DIM } else { lr::TEXT };
+    let color = if duplicate { lr::TEXT_DIM() } else { lr::TEXT() };
     let clip = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(inner.left() + 4.0, inner.bottom() - 20.0), egui::pos2(inner.right() - 4.0, inner.bottom())));
-    let k = clip.layout_no_wrap(kind, egui::FontId::proportional(10.0), lr::TEXT_DIM);
+    let k = clip.layout_no_wrap(kind, egui::FontId::proportional(10.0), lr::TEXT_DIM());
     let kw = k.size().x;
-    clip.galley(egui::pos2(inner.right() - 5.0 - kw, inner.bottom() - 17.0), k, lr::TEXT_DIM);
+    clip.galley(egui::pos2(inner.right() - 5.0 - kw, inner.bottom() - 17.0), k, lr::TEXT_DIM());
     let n = clip.layout_no_wrap(name, egui::FontId::proportional(10.5), color);
     let clip_name = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(inner.left() + 4.0, inner.bottom() - 20.0), egui::pos2(inner.right() - 10.0 - kw, inner.bottom())));
     clip_name.galley(egui::pos2(inner.left() + 5.0, inner.bottom() - 18.0), n, color);
@@ -338,7 +341,7 @@ pub(super) fn big_view(ui: &mut egui::Ui, imp: &mut Import) {
         let k = &imp.cand[c.members[0]];
         let when = k.capture.as_deref().map(|a| format!(" · {} {}", day_label(&k.tag), a.get(11..19).unwrap_or(""))).unwrap_or_default();
         let size: u64 = c.members.iter().filter(|&&i| imp.member_on(c, i)).map(|&i| imp.cand[i].size).sum();
-        ui.label(egui::RichText::new(format!("{} · {}{} · {}", cell_name(imp, c), cell_kind(imp, c), when, dialog::size(size))).color(lr::TEXT));
+        ui.label(egui::RichText::new(format!("{} · {}{} · {}", cell_name(imp, c), cell_kind(imp, c), when, dialog::size(size))).color(lr::TEXT()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let r = ui.button("›");
             lr::hover_tip(ui, &r, &lr::with_shortcut("Nächstes Foto", "arrows"));
@@ -382,7 +385,7 @@ pub(super) fn big_view(ui: &mut egui::Ui, imp: &mut Import) {
             p.image(t.id(), egui::Rect::from_center_size(rect.center(), sz * f), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
         }
         None => {
-            p.text(rect.center(), egui::Align2::CENTER_CENTER, crate::tr("lädt …"), egui::FontId::proportional(12.0), lr::TEXT_DIM);
+            p.text(rect.center(), egui::Align2::CENTER_CENTER, crate::tr("lädt …"), egui::FontId::proportional(12.0), lr::TEXT_DIM());
         }
     }
     if !imp.thumbs.big.contains_key(path) {

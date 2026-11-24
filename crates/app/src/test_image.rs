@@ -81,25 +81,42 @@ pub fn add(ctx: &egui::Context, p: String) {
     })));
 }
 
-/// Test hook `GRAINEO_KEYS="Space@6,Escape@9"` (only with `GRAINEO_DATA_DIR`): presses these keys (egui names, without
-/// modifiers) once each after the given seconds, as if typed – for screenshots of keyboard paths. Called before the keys
+/// Test hook `GRAINEO_KEYS="Space@6,Escape@9,cmd+U@12"` (only with `GRAINEO_DATA_DIR`): presses these keys (egui names,
+/// optionally with `cmd+`/`shift+`/`alt+` prefixes) once each after the given seconds, as if typed – for screenshots of keyboard paths. Called before the keys
 /// are evaluated in the frame.
 pub fn keys(ctx: &egui::Context) {
-    static KEYS: Mutex<Option<(std::time::Instant, Vec<(egui::Key, f64)>)>> = Mutex::new(None);
+    static KEYS: Mutex<Option<(std::time::Instant, Vec<(egui::Key, egui::Modifiers, f64)>)>> = Mutex::new(None);
     if crate::env::var_os("GRAINEO_DATA_DIR").is_none() {
         return;
     }
     let Ok(spec) = crate::env::var("GRAINEO_KEYS") else { return };
     let mut g = KEYS.lock().unwrap();
     let (start, list) = g.get_or_insert_with(|| {
-        let list = spec.split(',').filter_map(|t| t.rsplit_once('@').and_then(|(k, s)| Some((egui::Key::from_name(k.trim())?, s.trim().parse().ok()?)))).collect();
+        let parse = |k: &str| {
+            let mut m = egui::Modifiers::NONE;
+            let mut name = k.trim();
+            while let Some((pre, rest)) = name.split_once('+') {
+                match pre.to_ascii_lowercase().as_str() {
+                    "cmd" => m = m | egui::Modifiers::COMMAND,
+                    "shift" => m = m | egui::Modifiers::SHIFT,
+                    "alt" => m = m | egui::Modifiers::ALT,
+                    _ => return None,
+                }
+                name = rest;
+            }
+            Some((egui::Key::from_name(name)?, m))
+        };
+        let list = spec.split(',').filter_map(|t| t.rsplit_once('@').and_then(|(k, s)| { let (key, m) = parse(k)?; Some((key, m, s.trim().parse().ok()?)) })).collect();
         (std::time::Instant::now(), list)
     });
     let t = start.elapsed().as_secs_f64();
-    while let Some(pos) = list.iter().position(|(_, s)| t >= *s) {
-        let (key, _) = list.remove(pos);
-        crate::log(&format!("test keys: {key:?} after {t:.1} s"));
-        ctx.input_mut(|i| i.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }));
+    while let Some(pos) = list.iter().position(|(_, _, s)| t >= *s) {
+        let (key, modifiers, _) = list.remove(pos);
+        crate::log(&format!("test keys: {modifiers:?} {key:?} after {t:.1} s"));
+        ctx.input_mut(|i| {
+            i.modifiers = modifiers;
+            i.events.push(egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers });
+        });
     }
     if !list.is_empty() {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));

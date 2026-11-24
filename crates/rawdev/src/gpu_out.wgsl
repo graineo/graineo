@@ -410,7 +410,11 @@ fn equalizer(xl: f32, mk: f32) -> f32 {
         ev += 1.6 * p[9] * ws + 1.5 * p[10] * wh;
     }
     if (p[11] != 0.0) { ev += 1.1 * p[11] * sm(0.3, 2.8, xl); }
-    if (p[12] != 0.0) { ev += 1.4 * p[12] * (1.0 - sm(-6.5, -2.5, xl)); }
+    if (p[12] != 0.0) {
+        // blacks: soft black-point offset (render.rs blacks_ev)
+        let r = 0.12 * abs(p[12]) * exp2(-max(xl, -40.0)) * (1.0 - sm(-2.0, 1.0, xl));
+        if (p[12] < 0.0) { ev -= log2(1.0 + r); } else { ev += log2(0.5 * (1.0 + sqrt(1.0 + 4.0 * r))); }
+    }
     return ev;
 }
 
@@ -493,7 +497,25 @@ fn scene_pixel(x: i32, y: i32, w: i32, h: i32) -> vec3<f32> {
     let xl = log2(yl / MITTELGRAU);
     let ev = equalizer(xl, mk);
     if (ev != 0.0) { v = v * exp2(ev); }
+    // whites down: highlight roll (raw/src/tone.rs whites_roll), one gain on all channels
+    if (p[63] > 0.0) {
+        let mx = max(v.x, max(v.y, v.z));
+        if (mx > 0.0) {
+            let pull = roll_pull(log2(mx / p[64]), p[63]);
+            if (pull > 0.0) { v = v * exp2(-pull); }
+        }
+    }
     return v;
+}
+
+fn roll_ramp(z: f32) -> f32 {
+    if (z <= 0.0) { return 0.0; }
+    if (z < 0.2) { return z * z / 0.4; }
+    return z - 0.1;
+}
+fn roll_pull(t: f32, reach: f32) -> f32 {
+    let knee = reach * 0.2 / 0.8;
+    return 0.8 * (roll_ramp(t + knee + 0.1) - roll_ramp(t - reach + 0.1));
 }
 
 // Film (render.rs scene_linear): linear sRGB of the scene, negative parts cut, as f32 bits in f (three per pixel)

@@ -138,12 +138,14 @@ impl Extra {
         let any = a.blacks != 0.0 || a.dehaze != 0.0 || !lut.is_empty() || grades.is_some();
         Self { any, lut, grades, pivot: (0.5 - 0.3 * a.grade_balance).clamp(0.15, 0.85) }
     }
-    /// The steps of version 4 after contrast, on the corrected colour `q` (`lum`: luminance of the input pixel).
-    pub(crate) fn apply(&self, a: &Adjustments, q: &mut [f32; 3], lum: f32) {
+    /// The steps of version 4 after contrast, on the corrected colour `q`.
+    pub(crate) fn apply(&self, a: &Adjustments, q: &mut [f32; 3]) {
         if a.blacks != 0.0 {
-            let w = 1.0 - smooth(lum / 0.12);
+            // the global blacks curve on the corrected colour (one gain, hue kept)
+            let x = (crate::luma(q).max(1e-9) / crate::MID_GRAY).log2();
+            let g = crate::blacks_ev(a.blacks, x).exp2();
             for v in q.iter_mut() {
-                *v += a.blacks * 0.02 * w;
+                *v *= g;
             }
         }
         if a.dehaze > 0.0 {
@@ -363,7 +365,7 @@ pub fn apply_view(image: Image<'_>, document: &Document, view: View) -> Result<V
                 q[c] = v;
             }
             if extra.any {
-                extra.apply(a, &mut q, lum);
+                extra.apply(a, &mut q);
             }
             // "Dunst" adds a little saturation (removing a veil) or takes it (adding one)
             let saturation = if a.dehaze == 0.0 { a.saturation } else { a.saturation + 0.3 * a.dehaze };

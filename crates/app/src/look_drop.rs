@@ -114,7 +114,7 @@ fn ask_body(ui: &mut egui::Ui, found: &FoundLooks) {
         ui.set_width(ui.available_width());
         egui::ScrollArea::vertical().id_salt("look-drop-list").max_height(LIST_H).auto_shrink([false, true]).show(ui, |ui| {
             for l in &found.looks {
-                let r = ui.add(egui::Label::new(egui::RichText::new(&l.profile.name).color(lr::TEXT)).truncate());
+                let r = ui.add(egui::Label::new(egui::RichText::new(&l.profile.name).color(lr::TEXT())).truncate());
                 lr::hover_tip(ui, &r, &l.profile.path.display().to_string());
             }
         });
@@ -203,9 +203,9 @@ fn hint(ctx: &egui::Context, title: &str, detail: &str) {
         .show(ctx, |ui| {
             egui::Frame::new().fill(egui::Color32::from_gray(0x24)).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x44))).inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| {
                 ui.set_max_width(460.0);
-                ui.label(egui::RichText::new(title).strong().color(lr::TEXT));
+                ui.label(egui::RichText::new(title).strong().color(lr::TEXT()));
                 if !detail.is_empty() {
-                    ui.add(egui::Label::new(egui::RichText::new(detail).small().color(lr::TEXT_DIM)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(detail).small().color(lr::TEXT_DIM())).wrap());
                 }
             });
         });

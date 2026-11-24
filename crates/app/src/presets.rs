@@ -24,6 +24,8 @@ pub enum Scope {
     Toning,
     /// Only the film simulation (`settings.film`): darkroom recipes
     Film,
+    /// Only the Foveon detail bands of the Merrill (`detail_fine`, `detail_structure`)
+    Detail,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -45,6 +47,8 @@ impl Preset {
             Scope::Look => {
                 s = Settings {
                     denoise: cur.denoise,
+                    detail_fine: cur.detail_fine,
+                    detail_structure: cur.detail_structure,
                     nr_luma: cur.nr_luma,
                     nr_chroma: cur.nr_chroma,
                     quattro_detail: cur.quattro_detail,
@@ -80,6 +84,12 @@ impl Preset {
             }
             Scope::Film => {
                 s.film = p.film.clone();
+            }
+            Scope::Detail => {
+                s.detail_fine = p.detail_fine;
+                s.detail_structure = p.detail_structure;
+                // a photo stored with the former switch off gets Sigma's detail processing back
+                s.denoise = true;
             }
         }
         s
@@ -148,6 +158,16 @@ pub fn read_recipe(json: &str) -> Result<Preset, String> {
 #[cfg(test)]
 mod recipe_tests {
     use super::*;
+
+    #[test]
+    fn portrait_preset_sets_only_the_detail_bands() {
+        let p = library().into_iter().flat_map(|c| c.presets).find(|p| p.name == "Porträt (natürlich)").expect("preset");
+        let cur = Settings { exposure: 0.4, ..Settings::default() };
+        let s = p.apply(&cur);
+        assert_eq!((s.detail_fine * 100.0).round(), 30.0);
+        assert_eq!((s.detail_structure * 100.0).round(), 120.0);
+        assert_eq!(s.exposure, 0.4);
+    }
 
     #[test]
     fn recipe_affects_only_the_film() {
@@ -303,6 +323,9 @@ impl P {
     }
 }
 
+/// Foveon detail bands of the preset "Porträt (natürlich)" (fine, structure), tuned on Merrill portraits.
+pub const PORTRAIT_DETAIL: [f32; 2] = [0.3, 1.2];
+
 /// Built-in library (cannot be deleted).
 /// The presets shown in the "Presets" panel: without film looks (own section) and without the
 /// black & white filters (shown as color dots at the black & white mix).
@@ -314,6 +337,12 @@ pub fn library() -> Vec<Category> {
     use Scope::*;
     let look = |p: P, n: &str, h: &str| p.build(n, h, Look);
     let mix = |p: P, n: &str, h: &str| p.build(n, h, Mix);
+    let detail = |[fine, structure]: [f32; 2], n: &str, h: &str| {
+        let mut preset = P::default().build(n, h, Detail);
+        preset.settings.detail_fine = fine;
+        preset.settings.detail_structure = structure;
+        preset
+    };
     // Layer shares as with Sigma: 0 … 1, sum 1 (presets with small negative values are scaled back accordingly)
     let bw = |m: [f32; 3]| {
         let c = m.map(|v| v.max(0.0));
@@ -383,6 +412,7 @@ pub fn library() -> Vec<Category> {
                 ),
                 look(P { k: 0.3, fl: 0.4, li: -0.3, dy: 0.2, ..P::default() }, "Merrill-Pop", "Mikrokontrast und „3D“-Eindruck betont, Schatten mit Fill Light geöffnet"),
                 look(P { mode: Some("FCBlue"), k: 0.4, sa: 0.1, grain: [0.1, 0.8, 0.3], ..P::default() }, "SD9-Klassik", "Die Anmutung der frühen Foveon-Kameras"),
+                detail(PORTRAIT_DETAIL, "Porträt (natürlich)", "Foveon: feinste Detailebene zurückgenommen, Struktur betont – ruhige, natürliche Haut, klare Augen und Wimpern"),
             ],
         },
     ]

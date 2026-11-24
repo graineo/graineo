@@ -42,6 +42,7 @@ use x3f::{CamfEntry, MatrixData, X3fFile};
 
 mod classic_output;
 mod hlclip_cmd;
+mod auto_look_cmd;
 mod scene_cmd;
 mod export_scene_cmd;
 mod learn_look_cmd;
@@ -84,6 +85,7 @@ pub(crate) fn dev_catalog() -> std::path::PathBuf {
 }
 mod formats_cmd;
 mod rawapp;
+mod dcp_cmd;
 mod ai_denoise_cmd;
 mod hdr_cmd;
 mod black_bias;
@@ -180,7 +182,7 @@ fn main() -> Result<()> {
     }
     let (cmd, file) = match (args.first(), args.get(1)) {
         (Some(c), Some(f)) => (c.as_str(), f),
-        _ => bail!("usage: graineo-dev <command> <file> …\ncommands: info camf raw preview develop x3fuse compare spphash sppa sppgpu sppsharp bench stages ca defringe psnr film qa sensor rawapp lens masks lr-masks retouch color-chart grain style camera-color learn-look samples-look look-pair look-image sharpen-study color-export wide-stat auto-data lr-compare lr-calibrate lr-samples camera-samples apple-photos update-key update-sign update-verify update-manifest"),
+        _ => bail!("usage: graineo-dev <command> <file> …\ncommands: info camf raw preview develop x3fuse compare spphash sppa sppgpu sppsharp bench stages ca defringe psnr film qa sensor rawapp auto-look lens masks lr-masks retouch color-chart grain style camera-color learn-look samples-look look-pair look-image sharpen-study color-export wide-stat auto-data lr-compare lr-calibrate lr-samples camera-samples apple-photos update-key update-sign update-verify update-manifest"),
     };
     if cmd == "perf" { return perf::run(&args[1..]); }
     if cmd == "scene-depth" { return scene_cmd::depth(&args[1..]); }
@@ -344,8 +346,16 @@ fn main() -> Result<()> {
     if cmd == "hlclip" {
         return hlclip_cmd::run(&args[1..]);
     }
+    // automatic look ("Auto"): solved settings as JSON, optionally the measured sensitivities, see auto_look_cmd.rs
+    if cmd == "auto-look" {
+        return auto_look_cmd::run(file, &args[2..]);
+    }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);
+    }
+    // camera profiles (DCP) installed locally: HueSatMap/LookTable effect, see dcp_cmd.rs
+    if cmd == "dcp" {
+        return dcp_cmd::run(file, &args[2..]);
     }
     // the system RAW engine of macOS (Core Image) as in the app's comparison view, see apple_raw_cmd.rs
     if cmd == "apple-raw" {
@@ -538,7 +548,7 @@ fn main() -> Result<()> {
             println!("{h:016x} ({}×{}, {:.2?})", c.width, c.height, t.elapsed());
         }
         // CPU vs. GPU noise reduction: times, PSNR, deviations
-        // optional: `sppgpu <X3F> <luma> <chroma>` with SPP noise sliders 0…1
+        // optional: `sppgpu <X3F> <luma> <chroma> [<fine %> <structure %>]` with SPP noise sliders 0…1
         "sppgpu" => sppgpu(file, &args[2..])?,
         // Test bench: finished image CPU against GPU without the RCPS lock (not exact, never in the app)
         "rcps-compare" => rcps_compare::run(file, &args[2..])?,
@@ -704,7 +714,9 @@ fn sppgpu(file: &str, sliders: &[String]) -> Result<()> {
         let v: f64 = sliders.get(i).map_or(Ok(0.5), |s| s.parse())?;
         Ok((v.clamp(develop::NR_OFF, 1.0) * 4.0).round() as i8)
     };
-    let key = develop::SppKey { mode: None, nr: (step(0)?, step(1)?), ..Default::default() };
+    // optional 3rd/4th value: fine and structure gain in percent (default 100/100)
+    let gain = |i: usize| -> Result<u8> { Ok(sliders.get(i).map_or(Ok(100), |s| s.parse())?) };
+    let key = develop::SppKey { mode: None, nr: (step(0)?, step(1)?), texture: [gain(2)?, gain(3)?], ..Default::default() };
     eprintln!("noise slider levels (luminance, color): {:?}", key.nr);
     let cancel = std::sync::atomic::AtomicBool::new(false);
     let t = Instant::now();
@@ -963,6 +975,9 @@ fn develop_cmd(file: &str, out: &str, flags: &[String]) -> Result<()> {
             },
             Some(("--nr", "0" | "off")) => s.denoise = false,
             Some(("--luma", v)) => s.nr_luma = num(v)?,
+            // Merrill Foveon detail bands 0 … 2 (1 = Sigma's detail)
+            Some(("--fine", v)) => s.detail_fine = num(v)? as f32,
+            Some(("--structure", v)) => s.detail_structure = num(v)? as f32,
             Some(("--chroma", v)) => s.nr_chroma = num(v)?,
             // Quattro detail step −3 … 3 (from capture ISO 400 on)
             Some(("--detail", v)) => s.quattro_detail = num(v)? as i8,

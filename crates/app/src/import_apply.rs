@@ -49,7 +49,7 @@ pub(super) fn combo(ui: &mut egui::Ui, name: &mut String, width: f32) -> egui::R
             for (g, p) in choices() {
                 if g != group {
                     ui.separator();
-                    ui.label(egui::RichText::new(crate::tr(&g).to_uppercase()).small().color(crate::lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr(&g).to_uppercase()).small().color(crate::lr::TEXT_DIM()));
                     group = g;
                 }
                 ui.selectable_value(name, p.name.clone(), crate::tr(&p.name));

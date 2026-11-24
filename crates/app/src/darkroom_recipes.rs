@@ -276,7 +276,7 @@ impl App {
                             if ui.add_sized([120.0, 18.0], egui::Slider::new(&mut card_w, crate::darkroom_layout::CARD_RANGE).show_value(false)).changed() {
                                 st.set_card_w(card_w);
                             }
-                            ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM()));
                         });
                     });
                 });
@@ -320,7 +320,7 @@ impl App {
                 }
                 }
                 );
-                ui.add_sized([ui.available_width(),18.0],egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&st.message)).small().color(lr::TEXT_DIM)).truncate());
+                ui.add_sized([ui.available_width(),18.0],egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&st.message)).small().color(lr::TEXT_DIM())).truncate());
             },
             dialog::Buttons::confirm(crate::tr("Anwenden"), has_selection),
         );

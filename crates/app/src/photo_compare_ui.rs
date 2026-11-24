@@ -884,7 +884,7 @@ impl App {
                     if on && resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x2a));
                     }
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), if on { lr::TEXT } else { Color32::from_gray(0x50) });
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), if on { lr::TEXT() } else { Color32::from_gray(0x50) });
                     if on {
                         lr::hover_tip(ui, &resp, crate::tr(tip));
                     }
@@ -895,7 +895,7 @@ impl App {
                     c.page(1);
                 }
                 let label = crate::trf!("Felder {a} von {n}", a = places, n = n);
-                let l = ui.add(egui::Label::new(egui::RichText::new(label).font(egui::FontId::proportional(12.0)).color(lr::TEXT)).sense(egui::Sense::hover()));
+                let l = ui.add(egui::Label::new(egui::RichText::new(label).font(egui::FontId::proportional(12.0)).color(lr::TEXT())).sense(egui::Sense::hover()));
                 lr::hover_tip(ui, &l, crate::tr("Mehr Fotos als Felder: die Pfeile blättern, ein Klick im Filmstreifen holt ein Foto ins gewählte Feld, die Anordnung „Alle“ zeigt bis zu 8"));
                 if arrow(ui, "‹", "Vorige Fotos in die Felder", back) {
                     c.page(-1);
@@ -985,7 +985,7 @@ impl App {
 
     fn tool_mode(&mut self, ui: &mut egui::Ui, c: &mut Compare) {
         let (t1, t2) = (lr::with_shortcut("Vergleich: Fotos in Feldern nebeneinander", "cmp_mode_compare"), lr::with_shortcut("Turnier: Duelle bis Platz 1–3", "cmp_mode_tournament"));
-        let cells = [(lr::Cell::Symbol(lr::Icon::Images, lr::TEXT), c.mode == Mode::Compare, t1.as_str()), (lr::Cell::Symbol(lr::Icon::Flag, lr::TEXT), c.mode == Mode::Tournament, t2.as_str())];
+        let cells = [(lr::Cell::Symbol(lr::Icon::Images, lr::TEXT()), c.mode == Mode::Compare, t1.as_str()), (lr::Cell::Symbol(lr::Icon::Flag, lr::TEXT()), c.mode == Mode::Tournament, t2.as_str())];
         match lr::cell_group(ui, "cmp-modus", &cells, 30.0) {
             Some(0) => c.mode = Mode::Compare,
             Some(_) => start_tournament(c),
@@ -1008,10 +1008,10 @@ impl App {
             Arrange::All => lr::Icon::GridNine,
         };
         let cells = [
-            (lr::Cell::Symbol(arr_icon, lr::TEXT), false, t_arr.as_str()),
-            (lr::Cell::Symbol(if c.coupled { lr::Icon::Lock } else { lr::Icon::LockOpen }, lr::TEXT), c.coupled, t_cpl.as_str()),
-            (lr::Cell::Symbol(lr::Icon::Target, lr::TEXT), false, t_aln.as_str()),
-            (lr::Cell::Symbol(if c.fit.fill() { lr::Icon::FrameCorners } else { lr::Icon::CornersOut }, lr::TEXT), false, t_fit.as_str()),
+            (lr::Cell::Symbol(arr_icon, lr::TEXT()), false, t_arr.as_str()),
+            (lr::Cell::Symbol(if c.coupled { lr::Icon::Lock } else { lr::Icon::LockOpen }, lr::TEXT()), c.coupled, t_cpl.as_str()),
+            (lr::Cell::Symbol(lr::Icon::Target, lr::TEXT()), false, t_aln.as_str()),
+            (lr::Cell::Symbol(if c.fit.fill() { lr::Icon::FrameCorners } else { lr::Icon::CornersOut }, lr::TEXT()), false, t_fit.as_str()),
         ];
         // every cell acts visibly or is greyed with the reason (found in 1.5.0-test.6)
         let state = view_states(c, &self.cmp.same_layout);
@@ -1054,12 +1054,12 @@ impl App {
         ];
         let k = &c.checks;
         let cells = [
-            (lr::Cell::Symbol(lr::Icon::Crosshair, lr::TEXT), k.focus_point, tips[0].as_str()),
-            (lr::Cell::Symbol(lr::Icon::Waveform, lr::TEXT), k.peaking, tips[1].as_str()),
-            (lr::Cell::Symbol(lr::Icon::Warning, lr::TEXT), k.clipping, tips[2].as_str()),
-            (lr::Cell::Symbol(lr::Icon::Info, lr::TEXT), k.exif, tips[3].as_str()),
-            (lr::Cell::Symbol(lr::Icon::Ruler, lr::TEXT), k.measure, tips[4].as_str()),
-            (lr::Cell::Symbol(lr::Icon::Smiley, lr::TEXT), c.faces_bar, tips[5].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), k.focus_point, tips[0].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Waveform, lr::TEXT()), k.peaking, tips[1].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Warning, lr::TEXT()), k.clipping, tips[2].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Info, lr::TEXT()), k.exif, tips[3].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Ruler, lr::TEXT()), k.measure, tips[4].as_str()),
+            (lr::Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), c.faces_bar, tips[5].as_str()),
         ];
         let state = self.check_states(c);
         let tips2: Vec<String> = cells.iter().zip(&state).map(|((_, _, t), (_, why))| why.map_or_else(|| t.to_string(), |w| crate::tr(w).to_string())).collect();
@@ -1090,8 +1090,8 @@ impl App {
             RefView::Difference => lr::Icon::CircleHalf,
         };
         let cells = [
-            (lr::Cell::Symbol(lr::Icon::PushPin, if held { lr::GOLD } else { lr::TEXT }), held, t_hold.as_str()),
-            (lr::Cell::Symbol(view_icon, lr::TEXT), held && c.ref_view != RefView::SideBySide, t_view.as_str()),
+            (lr::Cell::Symbol(lr::Icon::PushPin, if held { lr::GOLD } else { lr::TEXT() }), held, t_hold.as_str()),
+            (lr::Cell::Symbol(view_icon, lr::TEXT()), held && c.ref_view != RefView::SideBySide, t_view.as_str()),
         ];
         let enabled = [!tour && (c.focus.is_some() || held), held && !tour];
         let (click, rect) = lr::cell_group_enabled(ui, "cmp-referenz", &cells, &enabled, 30.0, lr::BAR_H);
@@ -1121,7 +1121,7 @@ impl App {
         if c.ranking_shown() {
             // the ranking: last duel back (⌘Z) or drop it (Esc); "Übernehmen" is the main button
             let tips = [lr::with_shortcut("Letztes Duell zurücknehmen", "cmp_last_duel"), lr::with_shortcut("Ergebnis verwerfen: nichts wird gesetzt", "cmp_back")];
-            let cells = [(lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT), false, tips[0].as_str()), (lr::Cell::Symbol(lr::Icon::X, lr::TEXT), false, tips[1].as_str())];
+            let cells = [(lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT()), false, tips[0].as_str()), (lr::Cell::Symbol(lr::Icon::X, lr::TEXT()), false, tips[1].as_str())];
             match lr::cell_group(ui, "cmp-rangliste", &cells, 30.0) {
                 Some(0) => {
                     c.undo_duel();
@@ -1134,12 +1134,12 @@ impl App {
         if tour {
             let tips = [crate::tr("Linkes Foto behalten (←)").to_string(), crate::tr("Rechtes Foto behalten (→)").to_string(), lr::with_shortcut("Gleich gut: beide bleiben", "cmp_tie"), lr::with_shortcut("Beide raus", "cmp_both_out"), lr::with_shortcut("Letztes Duell zurücknehmen", "cmp_last_duel"), crate::tr("Turnier abbrechen: nichts wird gesetzt (anhalten: Esc)").to_string()];
             let cells = [
-                (lr::Cell::Text("←", 16.0, lr::TEXT), false, tips[0].as_str()),
-                (lr::Cell::Text("→", 16.0, lr::TEXT), false, tips[1].as_str()),
-                (lr::Cell::Text("=", 15.0, lr::TEXT), false, tips[2].as_str()),
-                (lr::Cell::Symbol(lr::Icon::XSquare, lr::TEXT), false, tips[3].as_str()),
-                (lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT), false, tips[4].as_str()),
-                (lr::Cell::Symbol(lr::Icon::X, lr::TEXT), false, tips[5].as_str()),
+                (lr::Cell::Text("←", 16.0, lr::TEXT()), false, tips[0].as_str()),
+                (lr::Cell::Text("→", 16.0, lr::TEXT()), false, tips[1].as_str()),
+                (lr::Cell::Text("=", 15.0, lr::TEXT()), false, tips[2].as_str()),
+                (lr::Cell::Symbol(lr::Icon::XSquare, lr::TEXT()), false, tips[3].as_str()),
+                (lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT()), false, tips[4].as_str()),
+                (lr::Cell::Symbol(lr::Icon::X, lr::TEXT()), false, tips[5].as_str()),
             ];
             // right to left: the group is placed as one
             match lr::cell_group(ui, "cmp-duell", &cells, 30.0) {
@@ -1163,7 +1163,7 @@ impl App {
         }
         let (t_best, t_rest) = (lr::with_shortcut("Fokussiertes Foto als bestes: Markierung „Auswahl“ und Titelfoto", "cmp_choose"), lr::with_shortcut("Rest ablehnen: alle Fotos außer den markierten (ein ⌘Z)", "cmp_rest"));
         let t_best = if c.focus.is_some() { t_best } else { crate::tr("Erst ein Foto fokussieren (Klick)").to_string() };
-        let cells = [(lr::Cell::Symbol(lr::Icon::CheckCircle, lr::TEXT), false, t_best.as_str()), (lr::Cell::Symbol(lr::Icon::XCircle, lr::TEXT), false, t_rest.as_str())];
+        let cells = [(lr::Cell::Symbol(lr::Icon::CheckCircle, lr::TEXT()), false, t_best.as_str()), (lr::Cell::Symbol(lr::Icon::XCircle, lr::TEXT()), false, t_rest.as_str())];
         match lr::cell_group_enabled(ui, "cmp-entscheiden", &cells, &[c.focus.is_some(), true], 30.0, lr::BAR_H).0 {
             Some(0) => {
                 if let Some(f) = c.focus {
@@ -1552,7 +1552,7 @@ impl App {
         let shown: Vec<i64> = if single_ref { c.reference.into_iter().chain(c.candidate()).collect() } else { c.fields.clone() };
         let n = if single_ref { 1 } else { shown.len().max(1) };
         if shown.is_empty() {
-            ui.painter().text(area.center(), egui::Align2::CENTER_CENTER, crate::tr("Im Filmstreifen Fotos mit ⌘-Klick auswählen"), egui::FontId::proportional(13.0), lr::TEXT_DIM);
+            ui.painter().text(area.center(), egui::Align2::CENTER_CENTER, crate::tr("Im Filmstreifen Fotos mit ⌘-Klick auswählen"), egui::FontId::proportional(13.0), lr::TEXT_DIM());
             return;
         }
         if tournament {
@@ -2146,7 +2146,7 @@ impl App {
         let (bar, _) = ui.allocate_exact_size(Vec2::new(160.0, 4.0), egui::Sense::hover());
         ui.painter().rect_filled(bar, 0.0, Color32::from_gray(0x30));
         ui.painter().rect_filled(Rect::from_min_size(bar.min, Vec2::new(bar.width() * (duels as f32 / estimate as f32).min(1.0), bar.height())), 0.0, Color32::from_gray(0xd0));
-        ui.label(egui::RichText::new(crate::trf!("{a} Fotos · {b} raus", a = entrants, b = out)).color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::trf!("{a} Fotos · {b} raus", a = entrants, b = out)).color(lr::TEXT_DIM()));
     }
 
     /// Faces bar: one row per person with its face in every photo – where someone blinks or looks away.
@@ -2836,7 +2836,7 @@ fn compare_hint_symbols(ui: &egui::Ui, p: &egui::Painter, at: Pos2, limit: f32, 
         *x += w + 10.0;
     };
     let Some(q) = hint.quality else {
-        item(&mut x, None, "…".into(), lr::TEXT_DIM, crate::tr("wird gemessen …"), 0);
+        item(&mut x, None, "…".into(), lr::TEXT_DIM(), crate::tr("wird gemessen …"), 0);
         return;
     };
     if let Some(v) = measured {

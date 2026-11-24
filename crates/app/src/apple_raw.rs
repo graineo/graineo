@@ -542,8 +542,8 @@ fn covers(s: [f32; 4], r: [usize; 4]) -> bool {
 /// A message in a pane without a picture (not supported, error).
 fn pane_message(painter: &egui::Painter, area: Rect, text: &str) {
     painter.rect_filled(area, 0.0, Color32::from_gray(24));
-    let g = painter.layout(text.to_string(), egui::FontId::proportional(13.0), crate::lr::TEXT, (area.width() - 40.0).max(120.0));
-    painter.galley(area.center() - g.size() / 2.0, g, crate::lr::TEXT);
+    let g = painter.layout(text.to_string(), egui::FontId::proportional(13.0), crate::lr::TEXT(), (area.width() - 40.0).max(120.0));
+    painter.galley(area.center() - g.size() / 2.0, g, crate::lr::TEXT());
 }
 
 /// Shader warm-up: one small rendering (neutral and standard) per camera model of the library that the system engine
@@ -878,8 +878,8 @@ impl crate::App {
             let (status, bad) = engine_status(dev.as_deref(), &choice, blocked.as_deref(), on.then(|| self.apple.status(&camera)));
             egui::Grid::new("apple-raw-rows").num_columns(2).spacing([10.0, 3.0]).min_col_width(110.0).show(ui, |ui| {
                 for (label, text, warn) in [(crate::tr("Entwickelt mit"), developed, false), (crate::tr("Zeit"), dev_time, false), (crate::tr("Vergleich"), compare_text, false), (crate::tr("Status"), status, bad)] {
-                    ui.label(egui::RichText::new(label).color(crate::lr::TEXT_DIM));
-                    let color = if warn { Color32::from_rgb(0xe8, 0x90, 0x70) } else { crate::lr::TEXT };
+                    ui.label(egui::RichText::new(label).color(crate::lr::TEXT_DIM()));
+                    let color = if warn { Color32::from_rgb(0xe8, 0x90, 0x70) } else { crate::lr::TEXT() };
                     let r = ui.add(egui::Label::new(egui::RichText::new(&text).color(color)).truncate());
                     crate::lr::hover_tip(ui, &r, &text);
                     ui.end_row();
@@ -924,7 +924,7 @@ fn engine_switch(ui: &mut egui::Ui, current: EngineSel, options: &[(EngineSel, &
     use crate::lr::{TEXT, TEXT_DIM};
     let font = egui::TextStyle::Button.resolve(ui.style());
     let (h, pad) = (20.0, 8.0);
-    let widths: Vec<f32> = options.iter().map(|(_, l, ..)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT).size().x + 2.0 * pad).collect();
+    let widths: Vec<f32> = options.iter().map(|(_, l, ..)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT()).size().x + 2.0 * pad).collect();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(widths.iter().sum(), h), egui::Sense::hover());
     let painter = ui.painter().clone();
     painter.rect_filled(rect, 0.0, crate::lr::BUTTON_FILL);
@@ -947,7 +947,7 @@ fn engine_switch(ui: &mut egui::Ui, current: EngineSel, options: &[(EngineSel, &
         if !tip.is_empty() {
             crate::lr::hover_tip(ui, &resp, tip);
         }
-        let color = if active { Color32::WHITE } else if !enabled { TEXT_DIM.gamma_multiply(0.5) } else if resp.hovered() { TEXT } else { TEXT_DIM };
+        let color = if active { Color32::WHITE } else if !enabled { TEXT_DIM().gamma_multiply(0.5) } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.galley(seg.center() - galley.size() / 2.0, galley, color);
     }

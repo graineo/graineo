@@ -181,15 +181,15 @@ pub fn button(ui: &mut egui::Ui, label: &str, busy: bool, enabled: bool, selecte
     let r = ui.add_enabled(enabled, egui::Button::new("").min_size(size).selected(selected));
     let spin = 12.0;
     let text = crate::tr("Ermittle …");
-    let g = ui.painter().layout_no_wrap(text.to_string(), font, lr::TEXT);
+    let g = ui.painter().layout_no_wrap(text.to_string(), font, lr::TEXT());
     let fits = g.size().x + spin + 4.0 <= w_label + 1.0;
     let w = if fits { g.size().x + spin + 4.0 } else { spin };
     let left = r.rect.center().x - w / 2.0;
     let spin_rect = egui::Rect::from_center_size(egui::pos2(left + spin / 2.0, r.rect.center().y), egui::vec2(spin, spin));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(spin_rect));
-    crate::activity::calm_spinner(&mut child, spin, lr::TEXT);
+    crate::activity::calm_spinner(&mut child, spin, lr::TEXT());
     if fits {
-        ui.painter().galley(egui::pos2(left + spin + 4.0, r.rect.center().y - g.size().y / 2.0), g, lr::TEXT);
+        ui.painter().galley(egui::pos2(left + spin + 4.0, r.rect.center().y - g.size().y / 2.0), g, lr::TEXT());
     }
     r
 }
@@ -206,7 +206,7 @@ pub fn status_line(ui: &mut egui::Ui, path: &Path, tools: &[Tool], idle: Option<
         ui.add_space(lr::TEXT_INSET);
         match current(path, tools) {
             Some(s) => {
-                crate::activity::calm_spinner(ui, 12.0, lr::TEXT_DIM);
+                crate::activity::calm_spinner(ui, 12.0, lr::TEXT_DIM());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let r = ui.add_enabled(!s.cancelling, egui::Button::new(crate::tr("Abbrechen")).small());
                     lr::hover_tip(ui, &r, "Berechnung abbrechen (ein laufender Rechenschritt endet noch)");
@@ -215,7 +215,7 @@ pub fn status_line(ui: &mut egui::Ui, path: &Path, tools: &[Tool], idle: Option<
                     }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         // the tool is marked by the spinner on its button; the line names the step
-                        ui.add(egui::Label::new(egui::RichText::new(text(&s)).small().color(lr::TEXT)).truncate());
+                        ui.add(egui::Label::new(egui::RichText::new(text(&s)).small().color(lr::TEXT())).truncate());
                     });
                 });
                 // the seconds count on (a few times a second is enough)
@@ -223,7 +223,7 @@ pub fn status_line(ui: &mut egui::Ui, path: &Path, tools: &[Tool], idle: Option<
             }
             None => {
                 if let Some(t) = idle.filter(|t| !t.is_empty()) {
-                    ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).truncate());
                 }
             }
         }

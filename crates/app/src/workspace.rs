@@ -175,8 +175,7 @@ impl App {
         }
         // F: the whole app full screen (macOS full-screen mode) on/off – in every view, without switching the view
         if crate::shortcuts::pressed(ctx, "full_screen") {
-            let an = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!an));
+            crate::panel_buttons::toggle_full_screen(ctx);
         }
         if crate::shortcuts::pressed(ctx, "refresh_folder") {
             self.lib.refresh_viewed(true);
@@ -287,11 +286,19 @@ impl App {
         }
         let mut surface = egui::ScrollArea::vertical().id_salt("bearbeiten").auto_shrink([false; 2]).max_width(w);
         // Test hook: GRAINEO_SIDEBAR_SCROLL=<points> scrolls the Edit panel on the first draw (for screenshots)
-        if let Some(px) = crate::env::var("GRAINEO_SIDEBAR_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+        if let Some(px) = crate::scroll_hold::first_offset(ui, "edit", self.current.is_some() && self.loading.is_none()) {
             surface = surface.vertical_scroll_offset(px);
         }
-        surface.show(ui, |ui| crate::sticky::scope(ui, |ui| {
+        // placeholder frames (photo opened again, another photo loading) keep the scroll position (scroll_hold.rs)
+        surface.show(ui, |ui| crate::scroll_hold::scope(ui, "edit", |ui| ((), self.edit_panel_content(ui))));
+    }
+
+    /// Scrolled content of the Edit panel; returns true while only a placeholder stands in for the controls.
+    fn edit_panel_content(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut transient = false;
+        crate::sticky::scope(ui, |ui| {
             if self.current.is_none() {
+                transient = self.loading.is_some();
                 let text = match self.not_developable.and_then(|i| self.entries.get(i)) {
                     Some(e) if e.state != 0 && self.lib.work_running() => crate::tr("Bibliothek wird gerade abgeglichen …").to_string(),
                     Some(e) if e.state == 2 => crate::tr("Original nicht erreichbar\nEntwickeln geht wieder, sobald der Speicherort verbunden ist.").to_string(),
@@ -308,7 +315,7 @@ impl App {
                     },
                     None => crate::tr("Kein Bild gewählt").to_string(),
                 };
-                ui.label(egui::RichText::new(text).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(text).color(lr::TEXT_DIM()));
                 return;
             }
             // Sliders always belong to the active image: while another one is loading, the old ones are only
@@ -321,8 +328,9 @@ impl App {
             log_path(active.and_then(|i| self.entries.get(i)).map(|e| e.name.as_str()).unwrap_or(""), kind(active), pipeline.unwrap_or("–"), active == loaded);
             if active != loaded {
                 let name = active.and_then(|i| self.entries.get(i)).map(|e| e.name.clone()).unwrap_or_default();
-                ui.label(egui::RichText::new(crate::trf!("{name} wird geladen …", name = name)).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("{name} wird geladen …", name = name)).color(lr::TEXT_DIM()));
                 if kind(active) != kind(loaded) {
+                    transient = true;
                     return;
                 }
                 let part = self.tool_rail_active();
@@ -346,7 +354,8 @@ impl App {
                 }
                 part => self.develop_controls(ui, part),
             }
-        }));
+        });
+        transient
     }
 
     /// Test hook: `GRAINEO_SET_EV=<EV>` changes the exposure of the active image by this value

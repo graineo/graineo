@@ -308,3 +308,30 @@ pub fn auto_tone_traced(preview: &Preview, cal: &Calibration, s: &Settings) -> O
     let t = t.snapped();
     Some((t, [s0, probe.eval(&t)]))
 }
+
+/// Automatic look for a Sigma photo: all tone and colour sliders solved together (see [`crate::auto_look`]),
+/// measured on the downscaled preview with the remaining settings of `s`. Two renderings of the analysis image.
+pub fn auto_look(preview: &Preview, cal: &Calibration, s: &Settings) -> Option<crate::auto_look::Vector> {
+    let free = crate::auto_look::curve_free(s);
+    with_look_render(preview, cal, s, |r| crate::auto_look::solve(crate::auto_look::Pipeline::Sigma, cal.iso, free, r)).flatten()
+}
+
+/// Hand the analysis rendering of [`auto_look`] (slider vector → features) to `f` (also for the measurement of the
+/// sensitivities in the check tool).
+pub fn with_look_render<R>(preview: &Preview, cal: &Calibration, s: &Settings, f: impl FnOnce(&mut dyn FnMut(&crate::auto_look::Vector) -> Option<crate::auto_look::Features>) -> R) -> Option<R> {
+    use crate::auto_look as al;
+    let probe = probe(preview, cal, s)?;
+    let mut render = |x: &al::Vector| -> Option<al::Features> {
+        let st = al::probe_settings(&probe.base, x);
+        let img = match &probe.spp {
+            Some(m) => crate::render_counts(&probe.lin, probe.cal, &st, m, None),
+            None => crate::render(&probe.lin, probe.cal, &st, None),
+        };
+        let mode = probe.cal.mode(st.color_mode.as_deref());
+        let tone = crate::cached_tone_lut(&mode.tone, &st, if st.monochrome { 0.0 } else { mode.contrast }, probe.cal.pixel_saturation, probe.cal.is_prepared());
+        let white = (crate::gamma_lut()[tone[crate::sigma_out::tone_index(probe.cal.max_count())] as usize] as f32).max(1.0);
+        let bp = x[8] as f32;
+        al::features(img.data.chunks_exact(3).map(|p| [0, 1, 2].map(|c| al::black_point((p[c] as f32 / white).min(1.0), bp))))
+    };
+    Some(f(&mut render))
+}

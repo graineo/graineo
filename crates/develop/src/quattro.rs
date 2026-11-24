@@ -250,7 +250,7 @@ impl HighlightState {
     /// The state of a finished preparation.
     pub fn of(p: &Prepared) -> Self {
         match p.grid.as_ref().and_then(|g| g.highlight.as_ref()) {
-            Some(_) => Self::Rebuilt { sliders: p.classic.is_none() && p.full.is_none() },
+            Some(_) => Self::Rebuilt { sliders: p.classic.is_none() },
             None => Self::None,
         }
     }
@@ -306,9 +306,84 @@ pub fn highlights_rebuilt(path: &Path) -> Option<bool> {
     highlight_state(path).map(|s| s != HighlightState::None)
 }
 
+/// Result of one highlight rebuild: its outcome and the values of all three layers at the pixels it touched.
+type SavedRebuild = Option<(crate::highlight_rebuild::Outcome, Vec<[f32; 3]>)>;
+
+/// Rebuilds shared by the quick and the full preparation of a file: both start from the same layers below capture
+/// ISO 400 (the solve of a heavily clipped photo takes seconds), keyed by the file and a hash of the layers. A second
+/// caller with the same key waits for the first.
+fn rebuild_memo() -> &'static Mutex<Vec<(PathBuf, u64, Arc<std::sync::OnceLock<SavedRebuild>>)>> {
+    static MEMO: Mutex<Vec<(PathBuf, u64, Arc<std::sync::OnceLock<SavedRebuild>>)>> = Mutex::new(Vec::new());
+    &MEMO
+}
+
+/// Hash of the three layers (bit patterns, chunks in parallel).
+fn layers_hash(xs: &[Vec<f32>; 3]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let part = |v: &[f32]| -> Vec<u64> {
+        v.par_chunks(1 << 16)
+            .map(|c| {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                for x in c {
+                    x.to_bits().hash(&mut h);
+                }
+                h.finish()
+            })
+            .collect()
+    };
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    for l in xs {
+        l.len().hash(&mut h);
+        part(l).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// [`crate::highlight_rebuild::rebuild_layer`] of the top layer, computed once per file and layers
+/// ([`rebuild_memo`]).
+fn shared_rebuild(file: &Path, xs: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [f32; 3], neutral: Option<[f32; 3]>) -> Option<crate::highlight_rebuild::Outcome> {
+    let key = layers_hash(xs) ^ (crate::highlight_rebuild::variant() == crate::highlight_rebuild::Variant::Linear) as u64 ^ neutral.map_or(0, |n| u64::from(n[0].to_bits()) << 21 ^ u64::from(n[1].to_bits()) << 3);
+    let cell = {
+        let mut m = rebuild_memo().lock().unwrap_or_else(|e| e.into_inner());
+        match m.iter().find(|(p, k, _)| p == file && *k == key) {
+            Some(e) => e.2.clone(),
+            None => {
+                // a few entries: the quick and the full preparation of the photos being opened
+                if m.len() >= 2 {
+                    m.remove(0);
+                }
+                let c = Arc::new(std::sync::OnceLock::new());
+                m.push((file.to_path_buf(), key, c.clone()));
+                c
+            }
+        }
+    };
+    let mut computed = None;
+    let saved = cell.get_or_init(|| {
+        let out = crate::highlight_rebuild::rebuild_layer_with(xs, w, h, sat, 2, crate::highlight_rebuild::variant(), true, neutral);
+        let values = out.as_ref().map(|o| o.weight.iter().map(|&(i, _)| std::array::from_fn(|c| xs[c][i as usize])).collect());
+        computed = Some(());
+        out.zip(values)
+    });
+    if computed.is_none() {
+        // the second user (quick and full preparation): the entry is no longer needed
+        rebuild_memo().lock().unwrap_or_else(|e| e.into_inner()).retain(|(_, _, c)| !Arc::ptr_eq(c, &cell));
+        if let Some((o, values)) = saved {
+            for (&(i, _), v) in o.weight.iter().zip(values) {
+                for c in 0..3 {
+                    xs[c][i as usize] = v[c];
+                }
+            }
+        }
+    }
+    saved.as_ref().map(|(o, _)| o.clone())
+}
+
 /// Drop every cached preprocessing (a switch that changes the preparation, e.g. the highlight rebuild, was turned).
 pub fn forget_all() {
     cache().lock().unwrap().clear();
+    rebuild_memo().lock().unwrap_or_else(|e| e.into_inner()).clear();
+    crate::highlight_post::forget_all();
 }
 
 /// Preprocessed file (≈ 3–6 s on the first call, afterwards from the cache): highlights without reconstruction, they
@@ -637,24 +712,35 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
     }
     // Level at which the top layer saturates where that is below the top of the stored range (sd Quattro H with its
     // digital gain per layer): cells with a clipped top pixel lose their colour below (`neutral_clipped_cells`)
+    // (with a digital gain per layer the layers saturate below the stored range in any case: a few clipped pixels are
+    // enough to read the level)
+    let digital_gain = camf.matrix("DigitalISOGain").ok().map(|m| m.as_f64()).is_some_and(|v| v.iter().any(|g| *g > 1.0));
+    let few = digital_gain.then_some(SAT_FEW);
     let top_clip = (!file.is_classic() && replacement.is_none() && !x3i && crate::quattro_hi::developer_switch("GRAINEO_QUATTRO_CLIPCELLS").map_or(true, |v| v != "0"))
-        .then(|| saturation_of_values(&xs[2], 1.0))
+        .then(|| saturation_of_values_min(&xs[2], 1.0, few))
         .flatten();
     // the saturation of all layers before that treatment (it removes the pile-up the level is read from)
-    let sat_before = top_clip.map(|t| [saturation_of_values(&xs[0], 1.0).unwrap_or(1.0), saturation_of_values(&xs[1], 1.0).unwrap_or(1.0), t]);
+    let sat_before = top_clip.map(|t| [saturation_of_values_min(&xs[0], 1.0, few).unwrap_or(1.0), saturation_of_values_min(&xs[1], 1.0, few).unwrap_or(1.0), t]);
     // grids with peaks far above their surroundings are enlarged without over- and undershoot
     let peaks = replacement.is_some() || top_clip.is_some();
     // own rebuild of a clipped top layer from the valid lower layers (opt-in, `crate::highlight_rebuild`); where it
     // ran, the cells with a clipped top pixel keep their rebuilt colour (no neutral cells)
     let t_hl = std::time::Instant::now();
     let mut sat_before = sat_before;
+    let mut rebuilt_sat = None;
     let rebuilt = (!file.is_classic() && replacement.is_none() && !x3i && crate::highlight_rebuild::enabled_quattro())
         .then(|| {
-            let sat: [f32; 3] = std::array::from_fn(|c| saturation_of_values(&xs[c], 1.0).unwrap_or(1.0));
+            let sat: [f32; 3] = std::array::from_fn(|c| saturation_of_values_min(&xs[c], 1.0, few).unwrap_or(1.0));
+            rebuilt_sat = Some(sat);
             if std::env::var_os("GRAINEO_QUATTRO_LOG").is_some() {
                 eprintln!("Quattro highlight rebuild: layer saturation {sat:?}");
             }
-            let out = crate::highlight_rebuild::rebuild_layer(&mut xs, w, h, sat, 2, crate::highlight_rebuild::variant());
+            // grey in the layers: the white balance of the photo (as the neutral change of the capture-ISO smoothing)
+            let neutral = {
+                let wbg = Calibration::read_quattro(&file, &camf, &props, &scene, [w, h]).map(|c| c.wb_gain).unwrap_or([1.0; 3]);
+                Some(std::array::from_fn(|c| (wbg[2] / wbg[c]) as f32))
+            };
+            let out = shared_rebuild(path, &mut xs, w, h, sat, neutral);
             // the rebuilt layer no longer piles up at its saturation: the white point of the later highlight
             // treatment is read here (as without the rebuild), so nothing outside the rebuilt areas changes
             if out.is_some() && sat_before.is_none() {
@@ -679,7 +765,28 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
         }
         Arc::new(c)
     });
-    let top_clip = top_clip.filter(|_| rebuilt.is_none());
+    // cells holding a rebuilt pixel keep their rebuilt colour; the others with a clipped top pixel (every layer clipped:
+    // specular highlights, nothing to rebuild from) and their ring still turn neutral as without the rebuild
+    // (a cell that also holds a clipped top pixel that was not rebuilt, every layer clipped there, has a top mean too
+    // low for its lower layers like any clipped cell: it turns neutral as well)
+    let keep_cells: Option<Vec<bool>> = rebuilt.as_ref().zip(rebuilt_sat).map(|(o, sat)| {
+        let (gw, gh) = (w / 2, h / 2);
+        let mut mask = vec![false; w * h];
+        for &(i, wt) in &o.weight {
+            if wt >= 1.0 {
+                mask[i as usize] = true;
+            }
+        }
+        let clip = sat[2] * crate::highlight_rebuild::CLIP_SHARE;
+        let mut c = vec![false; gw * gh];
+        c.par_chunks_mut(gw).enumerate().for_each(|(y, row)| {
+            for (x, k) in row.iter_mut().enumerate() {
+                let px = [2 * y * w + 2 * x, 2 * y * w + 2 * x + 1, (2 * y + 1) * w + 2 * x, (2 * y + 1) * w + 2 * x + 1];
+                *k = px.iter().any(|&i| mask[i]) && px.iter().all(|&i| mask[i] || xs[2][i] < clip);
+            }
+        });
+        c
+    });
     let mut unbinned_noise = None;
     // high-ISO path, sd Quattro / sd Quattro H binned: the first stage runs on the full grid (like unbinned, so no
     // single outlier of the stored values survives as a colour point), then a second pass on the binned grid of the
@@ -797,7 +904,7 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
             // values of the stage → normalised: grey per top unit in the units of the stage
             let wbg = Calibration::read_quattro(&file, &camf, &props, &scene, [w, h]).map(|c| c.wb_gain).unwrap_or([1.0; 3]);
             let grey: [f32; 3] = std::array::from_fn(|c| (wbg[2] / wbg[c]) as f32 * s1.unit[c] / s1.unit[2]);
-            let n = neutral_clipped_cells(&mut grid, &xs[2], w, gw, gh, level, grey);
+            let n = neutral_clipped_cells(&mut grid, &xs[2], w, gw, gh, level, grey, keep_cells.as_deref());
             if std::env::var_os("GRAINEO_QUATTRO_LOG").is_some() {
                 eprintln!("Quattro top layer saturates at {level:.4}: {n} grid cells with clipped top pixels set to neutral");
             }
@@ -888,7 +995,7 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
         let mut after = before.clone();
         let wbg = Calibration::read_quattro(&file, &camf, &props, &scene, [w, h]).map(|c| c.wb_gain).unwrap_or([1.0; 3]);
         let neutral: [f32; 3] = std::array::from_fn(|c| (wbg[2] / wbg[c]) as f32);
-        if neutral_clipped_cells(&mut after, &xs[2], w, gw, gh, level, neutral) > 0 {
+        if neutral_clipped_cells(&mut after, &xs[2], w, gw, gh, level, neutral, keep_cells.as_deref()) > 0 {
             crate::quattro_nr::layers_from_grid_limited(&mut xs, w, h, &before, &after, gw, gh, neutral);
         }
     }
@@ -1465,7 +1572,7 @@ const CLIPPED_CELL_EXCESS: f32 = 0.1;
 /// the neighbours).
 /// `grid`: layer values, `top`: the top layer at full resolution (width `w`), `level` in its units. Returns the cells
 /// changed.
-fn neutral_clipped_cells(grid: &mut [crate::quattro_nr::Px], top: &[f32], w: usize, gw: usize, gh: usize, level: f32, neutral: [f32; 3]) -> usize {
+fn neutral_clipped_cells(grid: &mut [crate::quattro_nr::Px], top: &[f32], w: usize, gw: usize, gh: usize, level: f32, neutral: [f32; 3], keep: Option<&[bool]>) -> usize {
     if gw == 0 || gh == 0 || 2 * gw > w || top.len() < 2 * gh * w || grid.len() < gw * gh || level <= 0.0 {
         return 0;
     }
@@ -1496,7 +1603,8 @@ fn neutral_clipped_cells(grid: &mut [crate::quattro_nr::Px], top: &[f32], w: usi
                         t = t.max(weight[yy * gw + xx]);
                     }
                 }
-                if t <= 0.0 || p[2] <= 0.0 {
+                // a cell holding rebuilt pixels keeps its rebuilt colour; it still turns its ring neutral
+                if t <= 0.0 || p[2] <= 0.0 || keep.is_some_and(|k| k[y * gw + x]) {
                     continue;
                 }
                 // how far the lower layers lie above the grey of the top mean (1 = grey)
@@ -1540,6 +1648,10 @@ fn highlight_pixel(v: [f32; 3], white: f32, start: f32) -> Option<[f32; 3]> {
 const SAT_BIN: f32 = 0.0025;
 /// Range searched by [`layer_saturation`]: a saturation below this is not plausible.
 const SAT_MIN: f32 = 0.2;
+/// Rise of the histogram over the density below it that marks the onset of saturation ([`saturation_onset`]).
+const ONSET_RISE: f64 = 6.0;
+/// Smallest pile-up of [`saturation_of_values_min`] for files with a digital gain per layer (pixels).
+const SAT_FEW: u32 = 8;
 /// A pile-up at or above this level counts as saturation at the top of the stored range (1, as assumed so far).
 const SAT_FULL: f32 = 0.9;
 
@@ -1554,12 +1666,20 @@ const SAT_FULL: f32 = 0.9;
 /// little above it. The level returned is the lower half-maximum edge of the peak (most saturated pixels lie above
 /// it). Layers without such a pile-up, or with it at [`SAT_FULL`] or higher, keep 1.
 pub fn layer_saturation(planes: &[Vec<u16>; 3]) -> [f32; 3] {
-    std::array::from_fn(|c| saturation_from_histogram(&layer_histogram(&planes[c]), planes[c].len()).unwrap_or(1.0))
+    std::array::from_fn(|c| saturation_from_histogram(&layer_histogram(&planes[c]), planes[c].len(), None).unwrap_or(1.0))
 }
 
 /// [`layer_saturation`] for values that are not stored as a layer (`values`: normalised to the full stored range):
 /// the level of the pile-up, `None` without one below [`SAT_FULL`].
 pub(crate) fn saturation_of_values(values: &[f32], scale: f32) -> Option<f32> {
+    saturation_of_values_min(values, scale, None)
+}
+
+/// [`saturation_of_values`] with a smallest pile-up of `min_count` pixels instead of one per 50 000 (at least 200).
+/// For files whose layers are known to saturate below the stored range (a digital gain per layer): a short exposure
+/// clips only at small specular highlights, too few pixels for the general search, and without the level the cells
+/// around them kept the colour of their clipped top layer (coloured single pixels at glints).
+pub(crate) fn saturation_of_values_min(values: &[f32], scale: f32, min_count: Option<u32>) -> Option<f32> {
     let n = ((1.2 - SAT_MIN) / SAT_BIN) as usize;
     let h = values
         .par_chunks(1 << 16)
@@ -1582,7 +1702,24 @@ pub(crate) fn saturation_of_values(values: &[f32], scale: f32) -> Option<f32> {
             a.iter_mut().zip(b).for_each(|(a, b)| *a += b);
             a
         });
-    saturation_from_histogram(&h, values.len())
+    saturation_from_histogram(&h, values.len(), min_count).or_else(|| min_count.and_then(|m| saturation_onset(&h, m)))
+}
+
+/// Saturation of a layer that clips at only a few pixels: the processed values above the clip spread out, so there is
+/// no sharp pile-up, only an abrupt rise of the histogram where the clipped pixels begin. The lowest bin with at least
+/// `min_count` pixels, [`ONSET_RISE`] times the density 0.04–0.10 below it and 3 times the bin 0.0075 below, followed by
+/// a bin as high; `None` without one below [`SAT_FULL`]. Only for layers known to saturate below the stored range.
+fn saturation_onset(h: &[u32], min_count: u32) -> Option<f32> {
+    let sum = |a: usize, b: usize| -> u64 { h[a.min(h.len())..b.min(h.len())].iter().map(|&v| v as u64).sum() };
+    let first = ((0.3 - SAT_MIN) / SAT_BIN) as usize;
+    let last = (((SAT_FULL - SAT_MIN) / SAT_BIN) as usize).min(h.len() - 2);
+    (first.max(40)..last)
+        .find(|&i| {
+            let below = sum(i - 40, i - 16) as f64 / 24.0;
+            let c = h[i] as f64;
+            h[i] >= min_count && c >= ONSET_RISE * below.max(1.0) && c >= 3.0 * h[i - 3] as f64 && h[i + 1] as f64 >= 0.7 * c
+        })
+        .map(|i| SAT_MIN + i as f32 * SAT_BIN)
 }
 
 /// Histogram of one encoded layer over [`SAT_MIN`] ..< 1.2 in bins of [`SAT_BIN`].
@@ -1614,8 +1751,8 @@ fn layer_histogram(plane: &[u16]) -> Vec<u32> {
 
 /// Saturation level from a layer histogram ([`layer_histogram`]) of `n` pixels; `None` without a clear pile-up below
 /// [`SAT_FULL`].
-fn saturation_from_histogram(h: &[u32], n: usize) -> Option<f32> {
-    let min_count = (n as f64 / 50_000.0).max(200.0) as u32;
+fn saturation_from_histogram(h: &[u32], n: usize, min_count: Option<u32>) -> Option<f32> {
+    let min_count = min_count.unwrap_or((n as f64 / 50_000.0).max(200.0) as u32);
     let sum = |a: usize, b: usize| -> u64 { h[a.min(h.len())..b.min(h.len())].iter().map(|&v| v as u64).sum() };
     for i in (40..h.len() - 2).rev() {
         let c = h[i];
@@ -1766,7 +1903,9 @@ pub fn counts_hl(p: &Prepared, mode: Option<&str>, binning: crate::Binning, hl: 
         return counts_from_linear(p, lin, mode, binning);
     }
     if let Some(f) = p.full.as_deref() {
-        return full_counts(&p.cal, f, mode, (2, 2), 0, binning_factor(&p.cal, binning));
+        let mut lin = full_counts(&p.cal, f, mode, (2, 2), 0, binning_factor(&p.cal, binning));
+        full_rebuilt_colour(p, &mut lin, mode, hl);
+        return lin;
     }
     let cal = &p.cal;
     // p = (u − black)/sat, counts = M · diag(count_scale · wb_gain · sat) · p
@@ -1812,6 +1951,36 @@ pub fn counts_hl(p: &Prepared, mode: Option<&str>, binning: crate::Binning, hl: 
     binned_counts(cal, mode, w, h, n, |i| std::array::from_fn(|c| (pl[c][i] as f32 - black[c]) * g[c]))
 }
 
+/// High-ISO chain ([`crate::quattro_hi`]) with rebuilt highlights: the chain develops from the stored sensor values,
+/// which the rebuild ([`crate::highlight_rebuild`], on the prepared layers) does not reach. In the rebuilt areas the
+/// colour comes from the colour grid of the preparation, which holds the rebuild (with the highlight sliders, as on
+/// the grid path); brightness and detail stay the chain's (one factor per pixel: the grid's colour scaled to the
+/// chain's luminance), blended in by the weight of the rebuilt areas. Same size only (not binned).
+fn full_rebuilt_colour(p: &Prepared, lin: &mut Linear, mode: Option<&str>, hl: crate::HighlightSliders) {
+    let Some(grid) = p.grid.as_deref().filter(|g| g.highlight.is_some()) else { return };
+    let (w, h) = (p.raw.columns, p.raw.rows);
+    let Some(cw) = grid.highlight.as_deref().filter(|c| c.len() == grid.width * grid.height) else { return };
+    if lin.width != w || lin.height != h || lin.data.len() != w * h * 3 || grid.width * 2 > w || grid.height * 2 > h {
+        return;
+    }
+    let cal = &p.cal;
+    let g2 = (cal.count_scale * cal.wb_gain[2]) as f32;
+    let (black, pl) = (cal.black[2] as f32, &p.raw.planes[2]);
+    let rebuilt = grid_counts(cal, mode, grid, w, h, hl, |i| (pl[i] as f32 - black) * g2);
+    let wt = crate::quattro_nr::enlarge(cw, grid.width, grid.height, w, h);
+    let luma = |p: &[f32]| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+    lin.data.par_chunks_mut(3).zip(rebuilt.par_chunks(3)).zip(wt.par_iter()).for_each(|((px, r), &t)| {
+        let t = t.clamp(0.0, 1.0);
+        let (y, yr) = (luma(px), luma(r));
+        if t > 0.0 && y > 0.0 && yr > 0.0 {
+            let k = y / yr;
+            for c in 0..3 {
+                px[c] += t * (r[c] * k - px[c]);
+            }
+        }
+    });
+}
+
 /// Working image like [`counts`], with the noise sliders away from the middle position (high-ISO path only, `None`
 /// otherwise): `nr` = steps (luminance, colour) −1 … 4 ([`crate::SppKey::nr`], 2 = middle = the result of the
 /// preparation).
@@ -1822,8 +1991,15 @@ pub fn counts_hl(p: &Prepared, mode: Option<&str>, binning: crate::Binning, hl: 
 ///   step above the middle; below: the top layer moves back towards its state before the smoothing ([`SLIDER_BACK`]). The change is
 ///   neutral on all three layers.
 pub fn counts_with_sliders(p: &Prepared, mode: Option<&str>, binning: crate::Binning, nr: (i8, i8), detail: i8) -> Option<Linear> {
+    counts_with_sliders_hl(p, mode, binning, nr, detail, crate::HighlightSliders::default())
+}
+
+/// [`counts_with_sliders`] with the highlight sliders (they act in the full chain through [`full_rebuilt_colour`]).
+pub fn counts_with_sliders_hl(p: &Prepared, mode: Option<&str>, binning: crate::Binning, nr: (i8, i8), detail: i8, hl: crate::HighlightSliders) -> Option<Linear> {
     if let Some(f) = p.full.as_deref() {
-        return Some(full_counts(&p.cal, f, mode, nr, detail, binning_factor(&p.cal, binning)));
+        let mut lin = full_counts(&p.cal, f, mode, nr, detail, binning_factor(&p.cal, binning));
+        full_rebuilt_colour(p, &mut lin, mode, hl);
+        return Some(lin);
     }
     // the detail step acts in the full chain only: the other ways keep their middle result
     if nr == (2, 2) {
@@ -2143,9 +2319,15 @@ fn grid_counts(cal: &Calibration, mode: Option<&str>, grid: &GridColour, w: usiz
 /// where it is clear (a nearly neutral rebuilt surface stays neutral instead of turning into yellow-green or cyan
 /// blotches).
 fn highlight_colour(cg: &mut [f32], cw: &[f32], gw: usize, gh: usize, k: f32) {
+    highlight_colour_scaled(cg, cw, gw, gh, k, 1);
+}
+
+/// [`highlight_colour`] on an image of `scale` pixels per grid cell (the reach and smoothing in pixels grow with it):
+/// the sliders of the paths without a colour grid ([`crate::highlight_post`]).
+pub(crate) fn highlight_colour_scaled(cg: &mut [f32], cw: &[f32], gw: usize, gh: usize, k: f32, scale: usize) {
     // the weight reaches over the whole coloured surface around the rebuilt cells (a label is rebuilt only in parts:
     // acting on those parts alone left it patchy), softly
-    let wt = box_blur(&max_filter(cw, gw, gh, COLOUR_REACH), gw, gh, COLOUR_REACH / 2);
+    let wt = box_blur(&max_filter(cw, gw, gh, COLOUR_REACH * scale), gw, gh, COLOUR_REACH * scale / 2);
     let luma = |p: &[f32]| 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
     if k < 1.0 {
         cg.par_chunks_mut(3).zip(wt.par_iter()).for_each(|(px, &w)| {
@@ -2161,8 +2343,8 @@ fn highlight_colour(cg: &mut [f32], cw: &[f32], gw: usize, gh: usize, k: f32) {
     }
     // smoothed chroma per channel (5 × 5 cells) and the smoothed brightness it is measured against
     let ys: Vec<f32> = cg.chunks_exact(3).map(luma).collect();
-    let d: [Vec<f32>; 3] = std::array::from_fn(|c| box_blur(&cg.chunks_exact(3).zip(&ys).map(|(p, y)| p[c] - y).collect::<Vec<_>>(), gw, gh, 2));
-    let yl = box_blur(&ys, gw, gh, 2);
+    let d: [Vec<f32>; 3] = std::array::from_fn(|c| box_blur(&cg.chunks_exact(3).zip(&ys).map(|(p, y)| p[c] - y).collect::<Vec<_>>(), gw, gh, 2 * scale));
+    let yl = box_blur(&ys, gw, gh, 2 * scale);
     cg.par_chunks_mut(3).enumerate().for_each(|(i, px)| {
         let w = wt[i].min(1.0);
         if w <= 0.0 || yl[i] <= 0.0 {
@@ -2197,7 +2379,7 @@ const COLOUR_GATE: (f32, f32) = (0.08, 0.2);
 const COLOUR_REACH: usize = 12;
 
 /// Separable maximum of radius `r` (edges clamped).
-fn max_filter(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+pub(crate) fn max_filter(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     let mut tmp = vec![0f32; v.len()];
     tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for x in 0..w {
@@ -2216,7 +2398,7 @@ fn max_filter(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
 }
 
 /// Separable box mean of radius `r` (edges clamped).
-fn box_blur(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+pub(crate) fn box_blur(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     let mut tmp = vec![0f32; v.len()];
     tmp.par_chunks_mut(w).enumerate().for_each(|(y, row)| {
         for x in 0..w {
@@ -2471,11 +2653,11 @@ mod clipped_cell_tests {
         // one top pixel of cell (2, 2) at the saturation level 0.5
         top[2 * 2 * w + 2 * 2 + 1] = 0.5;
         grid[2 * gw + 2][2] = 0.275;
-        let n = neutral_clipped_cells(&mut grid, &top, w, gw, gh, 0.5, neutral);
+        let n = neutral_clipped_cells(&mut grid, &top, w, gw, gh, 0.5, neutral, None);
         assert_eq!(n, 9, "the cell and its eight neighbours");
         // a cell that reads bluer than grey keeps its colour (the clipped top mean is a lower bound)
         let mut blue = vec![[0.05f32, 0.08, 0.2]; gw * gh];
-        assert_eq!(neutral_clipped_cells(&mut blue, &top, w, gw, gh, 0.5, neutral), 0);
+        assert_eq!(neutral_clipped_cells(&mut blue, &top, w, gw, gh, 0.5, neutral, None), 0);
         assert!(blue.iter().all(|p| *p == [0.05, 0.08, 0.2]));
         // the clipped cell: grey of its own top mean, the top mean untouched
         let c = grid[2 * gw + 2];
@@ -2489,7 +2671,7 @@ mod clipped_cell_tests {
         // below the start of the glide nothing changes
         let mut grid = vec![[0.3f32, 0.3, 0.2]; gw * gh];
         top[2 * 2 * w + 2 * 2 + 1] = 0.5 * CLIPPED_CELL_START;
-        assert_eq!(neutral_clipped_cells(&mut grid, &top, w, gw, gh, 0.5, neutral), 0);
+        assert_eq!(neutral_clipped_cells(&mut grid, &top, w, gw, gh, 0.5, neutral, None), 0);
         assert!(grid.iter().all(|p| *p == [0.3, 0.3, 0.2]));
     }
 }

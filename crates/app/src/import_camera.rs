@@ -118,11 +118,11 @@ pub(super) fn is_camera(source: Option<&Path>) -> bool {
 fn state_text(s: &CamState) -> (String, Color32) {
     let warn = Color32::from_rgb(0xe0, 0xb0, 0x40);
     match s {
-        CamState::Found => (crate::tr("angeschlossen – zum Lesen anklicken").to_string(), lr::TEXT_DIM),
-        CamState::Opening => (crate::tr("verbindet …").to_string(), lr::TEXT_DIM),
-        CamState::Catalog(p) => (crate::trf!("liest die Dateiliste … {p} %", p = p), lr::TEXT_DIM),
+        CamState::Found => (crate::tr("angeschlossen – zum Lesen anklicken").to_string(), lr::TEXT_DIM()),
+        CamState::Opening => (crate::tr("verbindet …").to_string(), lr::TEXT_DIM()),
+        CamState::Catalog(p) => (crate::trf!("liest die Dateiliste … {p} %", p = p), lr::TEXT_DIM()),
         CamState::Ready(0) => (crate::tr("keine Dateien – Kamera einschalten?").to_string(), warn),
-        CamState::Ready(n) => (crate::trf!("bereit · {n}", n = dialog::count(*n, crate::tr("Datei"), crate::tr("Dateien"))), lr::TEXT_DIM),
+        CamState::Ready(n) => (crate::trf!("bereit · {n}", n = dialog::count(*n, crate::tr("Datei"), crate::tr("Dateien"))), lr::TEXT_DIM()),
         CamState::Restricted => (crate::tr("gesperrt – entsperren und Zugriff erlauben").to_string(), warn),
         CamState::Gone => (crate::tr("getrennt – anschließen und einschalten").to_string(), warn),
         CamState::InfoOnly(_) => (crate::tr("nur Info-Ablage – Auswahl an der Kamera prüfen").to_string(), warn),

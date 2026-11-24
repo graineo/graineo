@@ -120,6 +120,8 @@ fn key_text_for(path: &Path, key: &SppKey, gpu: bool, version: u32) -> Option<St
     let ca = ca + &crate::quattro_hi::cache_tag();
     // Quattro detail step away from the camera's setting (only then, so existing entries stay valid)
     let ca = if key.detail == 0 { ca } else { ca + &format!("detail={}\n", key.detail) };
+    // Foveon detail bands away from Sigma's detail (only then, so existing entries stay valid)
+    let ca = if key.texture == crate::settings::TEXTURE_NEUTRAL { ca } else { ca + &format!("texture={},{}\n", key.texture[0], key.texture[1]) };
     // own highlight rebuild of Foveon layers (only when switched on, so existing entries stay valid)
     let ca = if crate::highlight_rebuild::enabled_for(key.prepared) {
         ca + &format!("foveon_hl={},{},{}\n", crate::highlight_rebuild::tag(), key.highlight.colour_milli, key.highlight.structure_milli)
@@ -193,7 +195,9 @@ pub fn working_key(path: &Path, key: &SppKey, gpu: bool, cancel: &AtomicBool) ->
     // Grey bases (black and white the Sigma way) are cheap to compute and are not stored
     // a mix of the neural denoising (0 < ai < 100) is cheap from its two stored bases and is not stored itself
     let mix = key.ai > 0 && key.ai < 100;
-    let entry = if disabled() || key.mono || mix { None } else { key_text(path, key, gpu).and_then(|t| Some((file_for(path, &t)?, t))) };
+    // Merrill with the highlight sliders away from the middle: a cheap step on the stored base, not stored itself
+    let hl_step = !key.prepared && key.highlight.on && !key.highlight.is_default();
+    let entry = if disabled() || key.mono || mix || hl_step { None } else { key_text(path, key, gpu).and_then(|t| Some((file_for(path, &t)?, t))) };
     if let Some((file, text)) = &entry {
         if let Some(lin) = load(file, text) {
             log(|| format!("Plattencache: Treffer {}", file.display()));

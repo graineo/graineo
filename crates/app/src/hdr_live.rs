@@ -253,7 +253,7 @@ impl crate::App {
                     undo = ui.add(egui::Button::new(crate::tr("Rückgängig")).corner_radius(0.0)).clicked();
                     sources = ui.add(egui::Button::new(crate::tr("Quellen zeigen")).corner_radius(0.0)).clicked();
                     let (xr, x) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::click());
-                    crate::lr::paint_icon(ui.painter(), xr.shrink(3.0), crate::lr::Icon::X, if x.hovered() { egui::Color32::WHITE } else { crate::lr::TEXT_DIM });
+                    crate::lr::paint_icon(ui.painter(), xr.shrink(3.0), crate::lr::Icon::X, if x.hovered() { egui::Color32::WHITE } else { crate::lr::TEXT_DIM() });
                     crate::lr::hover_tip(ui, &x, crate::tr("Hinweis schließen"));
                     close = x.clicked();
                 });

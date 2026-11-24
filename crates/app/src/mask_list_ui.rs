@@ -125,9 +125,9 @@ pub fn tiles(ui: &mut Ui, salt: &str, path: &Path) -> Option<NewKind> {
             ui.add_space(4.0);
         }
         let font = egui::FontId::proportional(10.0);
-        let t = lr::caps_spaced(ui.painter(), title, font, lr::TEXT_DIM, 0.8);
+        let t = lr::caps_spaced(ui.painter(), title, font, lr::TEXT_DIM(), 0.8);
         let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), t.size().y + 4.0), egui::Sense::hover());
-        ui.painter().galley(egui::pos2(r.left() + lr::TEXT_INSET, r.top() + 1.0), t, lr::TEXT_DIM);
+        ui.painter().galley(egui::pos2(r.left() + lr::TEXT_INSET, r.top() + 1.0), t, lr::TEXT_DIM());
         let w = ui.available_width();
         let gap = 4.0;
         let cell_w = (w - 2.0 * gap) / 3.0;
@@ -144,7 +144,7 @@ pub fn tiles(ui: &mut Ui, salt: &str, path: &Path) -> Option<NewKind> {
             let (fill, stroke) = if resp.hovered() && ok { (Color32::from_gray(0x26), Color32::from_gray(0x50)) } else { (Color32::from_gray(0x1c), Color32::from_gray(0x30)) };
             p.rect_filled(cell, 0.0, fill);
             p.rect_stroke(cell, 0.0, egui::Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
-            let color = if !ok { Color32::from_gray(0x5c) } else if resp.hovered() { Color32::WHITE } else { lr::TEXT };
+            let color = if !ok { Color32::from_gray(0x5c) } else if resp.hovered() { Color32::WHITE } else { lr::TEXT() };
             lr::paint_icon(p, egui::Rect::from_center_size(cell.center_top() + egui::vec2(0.0, 14.0), egui::vec2(17.0, 17.0)), kind.icon(), color);
             let g = p.layout_no_wrap(crate::tr(kind.label()).to_string(), egui::FontId::proportional(10.5), color);
             p.galley(egui::pos2(cell.center().x - g.size().x.min(cell_w - 4.0) / 2.0, cell.bottom() - 4.0 - g.size().y), g, color);
@@ -309,7 +309,7 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
             // eye
             let eye = egui::Rect::from_min_size(rect.min, egui::vec2(24.0, ROW_H));
             let er = ui.interact(eye, ui.scope_id().with(("eye", i)), if fields { egui::Sense::click() } else { egui::Sense::hover() });
-            let ec = if !fields { Color32::from_gray(0x50) } else if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM };
+            let ec = if !fields { Color32::from_gray(0x50) } else if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM() };
             lr::paint_icon(&p, egui::Rect::from_center_size(eye.center(), egui::vec2(14.0, 14.0)), if l.enabled { lr::Icon::Eye } else { lr::Icon::EyeSlash }, ec);
             lr::hover_tip(ui, &er, if fields { crate::tr(if l.enabled { "Maske ausschalten (bleibt erhalten)" } else { "Maske einschalten" }) } else { crate::tr("Erst „Filter auf Version 2 umstellen“ (⋯)") });
             if er.clicked() && fields {
@@ -324,12 +324,12 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
             }
             p.rect_stroke(th, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x3a)), egui::StrokeKind::Outside);
             // strength on the right
-            let text_c = if !l.enabled { Color32::from_gray(0x6a) } else if i == selected { Color32::WHITE } else { lr::TEXT };
+            let text_c = if !l.enabled { Color32::from_gray(0x6a) } else if i == selected { Color32::WHITE } else { lr::TEXT() };
             let pct = format!("{} %", (l.amount * 100.0).round() as i32);
             let font = egui::TextStyle::Body.resolve(ui.style());
-            let gp = p.layout_no_wrap(pct, font.clone(), if l.enabled { lr::TEXT_DIM } else { Color32::from_gray(0x5a) });
+            let gp = p.layout_no_wrap(pct, font.clone(), if l.enabled { lr::TEXT_DIM() } else { Color32::from_gray(0x5a) });
             let pr = egui::pos2(rect.right() - 8.0 - gp.size().x, rect.center().y - gp.size().y / 2.0);
-            p.galley(pr, gp, lr::TEXT_DIM);
+            p.galley(pr, gp, lr::TEXT_DIM());
             let name_x = th.right() + 8.0;
             let name_w = (pr.x - 8.0 - name_x).max(10.0);
             if rename.as_ref().is_some_and(|r| r.0 == i) {

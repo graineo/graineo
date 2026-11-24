@@ -2,7 +2,8 @@
 //! interpolation of the camera matrices of two illuminants via the color temperature of the
 //! as-shot neutral, ForwardMatrix (if present) or inverted ColorMatrix with
 //! Bradford adaptation to D50. Own code following the public specification; matrices come
-//! from the file (DNG) or from rawler (CR2/CR3/RAF/ARW). No Adobe profiles (DCP).
+//! from the file (DNG) or from rawler (CR2/CR3/RAF/ARW); a camera profile installed locally (DCP) can replace them,
+//! see [`crate::dcp`].
 
 pub type M3 = [[f32; 3]; 3];
 

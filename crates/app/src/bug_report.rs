@@ -94,17 +94,17 @@ pub fn frame(ctx: &egui::Context) {
             dialog::hint(ui, crate::tr("Ohne Pfade, Dateinamen, Personennamen und Stichwörter. graineo sendet nichts selbst – du siehst den Bericht vorher im Browser und sendest ihn mit deinem GitHub-Konto."));
             ui.add_space(4.0);
             let text = report.as_ref().map_or_else(|| crate::tr("Bericht wird erstellt …").to_string(), |r| r.text(with_log));
-            egui::Frame::new().fill(egui::Color32::from_gray(0x16)).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE)).inner_margin(8.0).show(ui, |ui| {
+            egui::Frame::new().fill(egui::Color32::from_gray(0x16)).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE())).inner_margin(8.0).show(ui, |ui| {
                 ui.set_width(ui.available_width());
                 egui::ScrollArea::vertical().max_height(260.0).min_scrolled_height(260.0).auto_shrink([false, false]).show(ui, |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(text).monospace().size(10.5).color(lr::TEXT)).wrap().selectable(true));
+                    ui.add(egui::Label::new(egui::RichText::new(text).monospace().size(10.5).color(lr::TEXT())).wrap().selectable(true));
                 });
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
                 dialog::toggle(ui, &mut with_log);
-                ui.label(egui::RichText::new(crate::tr("Protokollzeilen anhängen")).color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::tr("Protokollzeilen anhängen")).color(lr::TEXT()));
             });
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -123,7 +123,7 @@ pub fn frame(ctx: &egui::Context) {
                     }
                 }
                 if now - copied < 2.0 {
-                    ui.label(egui::RichText::new(crate::tr("Kopiert")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Kopiert")).small().color(lr::TEXT_DIM()));
                 }
             });
         },

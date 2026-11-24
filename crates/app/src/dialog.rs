@@ -83,7 +83,7 @@ pub fn show_extra(ctx: &egui::Context, id: &str, title: &str, width: f32, conten
             // left of the row's buttons (drawn after them in the right-to-left row)
             let row = ui.min_rect();
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(egui::Rect::from_min_max(egui::pos2(row.left(), row.bottom() - BUTTON_H), row.max)).layout(egui::Layout::left_to_right(egui::Align::Center)));
-            extra_clicked = child.add(egui::Button::new(crate::tr(t)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE))).clicked();
+            extra_clicked = child.add(egui::Button::new(crate::tr(t)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE()))).clicked();
         }
     });
     // Keys only for the topmost dialog (a confirmation dialog above another one takes them alone)
@@ -185,35 +185,35 @@ fn button_row(ui: &mut egui::Ui, k: &Buttons) -> Answer {
                 a = Answer::Primary;
             }
             if style == Style::Normal && active {
-                ui.label(egui::RichText::new("↩").small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new("↩").small().color(lr::TEXT_DIM()));
             }
         }
         if k.cancel.is_empty() {
             return;
         }
-        if ui.add(egui::Button::new(crate::tr(k.cancel)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE))).clicked() {
+        if ui.add(egui::Button::new(crate::tr(k.cancel)).min_size(egui::vec2(90.0, BUTTON_H)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, crate::lr::FIELD_STROKE()))).clicked() {
             a = Answer::Cancel;
         }
-        ui.label(egui::RichText::new(crate::tr("Esc")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Esc")).small().color(lr::TEXT_DIM()));
     });
     a
 }
 
 /// Short text (one or two sentences).
 pub fn text(ui: &mut egui::Ui, t: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).color(lr::TEXT)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).color(lr::TEXT())).wrap());
 }
 
 /// Grey hint line (small).
 pub fn hint(ui: &mut egui::Ui, t: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(lr::TEXT_DIM)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(lr::TEXT_DIM())).wrap());
 }
 
 /// "Is being determined …": calm turning spinner and the text beside it (redraws a few times a second, only while shown).
 pub fn pending(ui: &mut egui::Ui, t: &str) {
     ui.horizontal(|ui| {
-        crate::activity::calm_spinner(ui, 12.0, lr::TEXT_DIM);
-        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(lr::TEXT_DIM)).wrap());
+        crate::activity::calm_spinner(ui, 12.0, lr::TEXT_DIM());
+        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(lr::TEXT_DIM())).wrap());
     });
 }
 
@@ -257,14 +257,14 @@ pub fn option(ui: &mut egui::Ui, on: &mut bool, label: &str, explanation: &str, 
     ui.add_enabled_ui(locked.is_none(), |ui| {
         ui.horizontal(|ui| {
             changed = toggle(ui, on);
-            if ui.add(egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT)).selectable(false).sense(egui::Sense::click())).clicked() {
+            if ui.add(egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT())).selectable(false).sense(egui::Sense::click())).clicked() {
                 *on = !*on;
                 changed = true;
             }
         });
         ui.horizontal(|ui| {
             ui.add_space(44.0);
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr(locked.unwrap_or(explanation))).small().color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(locked.unwrap_or(explanation))).small().color(lr::TEXT_DIM())).truncate());
         });
     });
     changed
@@ -277,7 +277,7 @@ pub fn toggle(ui: &mut egui::Ui, on: &mut bool) -> bool {
 
 /// Input field (one line) with label above; has focus when opened.
 pub fn input(ui: &mut egui::Ui, label: &str, value: &mut String) -> egui::Response {
-    ui.label(egui::RichText::new(crate::tr(label)).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(crate::tr(label)).small().color(lr::TEXT_DIM()));
     let r = crate::lr::edit_field(ui, egui::TextEdit::singleline(value).desired_width(ui.available_width()));
     if !r.has_focus() && ui.memory(|m| m.focused().is_none()) {
         r.request_focus();
@@ -306,7 +306,7 @@ pub fn progress(ui: &mut egui::Ui, fraction: Option<f32>, current: &str) {
         }
     }
     ui.allocate_ui(egui::vec2(w, 16.0), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(current)).small().color(lr::TEXT_DIM)).truncate());
+        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(current)).small().color(lr::TEXT_DIM())).truncate());
     });
 }
 
@@ -328,13 +328,13 @@ pub fn outcome(ui: &mut egui::Ui, status: Verdict, summary: &str, details: &[Str
     ui.horizontal_top(|ui| {
         let (r, _) = ui.allocate_exact_size(egui::vec2(12.0, 16.0), egui::Sense::hover());
         ui.painter().circle_filled(r.center(), 5.0, c);
-        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(summary)).color(lr::TEXT)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(summary)).color(lr::TEXT())).wrap());
     });
     if !details.is_empty() {
-        egui::CollapsingHeader::new(egui::RichText::new(crate::trf!("Details ({a})", a = details.len())).small().color(lr::TEXT_DIM)).id_salt("dialog-details").default_open(false).show(ui, |ui| {
+        egui::CollapsingHeader::new(egui::RichText::new(crate::trf!("Details ({a})", a = details.len())).small().color(lr::TEXT_DIM())).id_salt("dialog-details").default_open(false).show(ui, |ui| {
             egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
                 for d in details {
-                    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(d)).small().monospace().color(lr::TEXT_DIM)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(d)).small().monospace().color(lr::TEXT_DIM())).wrap());
                 }
             });
         });
@@ -372,7 +372,7 @@ impl Running {
 /// longer. Refreshes itself every second.
 pub fn blocked(ui: &mut egui::Ui, why: &str, r: &Running) {
     outcome(ui, Verdict::Yellow, &crate::trf!("Gerade läuft: {a}. {b}", a = r.what, b = crate::tr(why)), &[]);
-    ui.label(egui::RichText::new(r.timing()).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(r.timing()).small().color(lr::TEXT_DIM()));
     ui.ctx().request_repaint_after(std::time::Duration::from_secs(1));
 }
 
@@ -433,7 +433,7 @@ impl crate::App {
                     let w = ui.available_width().min(470.0);
                     ui.allocate_ui_with_layout(egui::vec2(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                         ui.set_min_width(w);
-                        ui.label(egui::RichText::new(crate::tr("Vorlage")).color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(crate::tr("Vorlage")).color(lr::TEXT_DIM()));
                         self.export_template_controls(ui);
                     });
                 }

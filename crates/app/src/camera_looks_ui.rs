@@ -826,7 +826,7 @@ fn body(ui: &mut egui::Ui, w: &mut Window) {
     let footer = Rect::from_min_max(Pos2::new(full.min.x, full.max.y - footer_h), full.max);
     let (ok, text) = w.message.clone().unwrap_or((true, String::new()));
     let mut f = child(footer, "footer");
-    f.add(egui::Label::new(egui::RichText::new(text).small().color(if ok { lr::TEXT_DIM } else { RED })).truncate());
+    f.add(egui::Label::new(egui::RichText::new(text).small().color(if ok { lr::TEXT_DIM() } else { RED })).truncate());
     ui.allocate_rect(full, egui::Sense::hover());
 }
 
@@ -889,16 +889,16 @@ fn list_ui(ui: &mut egui::Ui, w: &mut Window) {
             let newest = cam.styles.iter().filter_map(|s| status(s).learned.and_then(|(_, m)| new_since(m.as_ref(), cam.photos))).max();
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(cam.name.to_uppercase()).font(lr::semibold(11.5)).color(lr::CATEGORY_LABEL));
+                ui.label(egui::RichText::new(cam.name.to_uppercase()).font(lr::semibold(11.5)).color(lr::CATEGORY_LABEL()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let n = ui.label(egui::RichText::new(dialog::number(cam.photos)).small().color(lr::TEXT_DIM));
+                    let n = ui.label(egui::RichText::new(dialog::number(cam.photos)).small().color(lr::TEXT_DIM()));
                     lr::hover_tip(ui, &n, crate::tr("RAW-Fotos dieser Kamera in der Bibliothek"));
                 });
             });
             // this camera's photos are still being read: the numbers below grow
             let reading = w.snap.cameras.get(&cam.library).copied().filter(|(d, n)| d < n);
             if let Some((d, n)) = reading {
-                let r = ui.label(egui::RichText::new(crate::trf!("Bildstile: {d} von {n} gelesen", d = d, n = n)).small().color(lr::TEXT_DIM));
+                let r = ui.label(egui::RichText::new(crate::trf!("Bildstile: {d} von {n} gelesen", d = d, n = n)).small().color(lr::TEXT_DIM()));
                 lr::hover_tip(ui, &r, crate::tr("Die Zahlen dieser Kamera sind vorläufig, bis ihre Auswahl ganz gelesen ist; Lernen geht danach"));
             }
             if let Some(more) = newest {
@@ -908,7 +908,7 @@ fn list_ui(ui: &mut egui::Ui, w: &mut Window) {
             if cam.styles.is_empty() {
                 // while this camera is read the line above says so
                 if reading.is_none() {
-                    ui.label(egui::RichText::new(if scanning { crate::tr("Bildstile werden gelesen …") } else { crate::tr("kein lesbarer Bildstil") }).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(if scanning { crate::tr("Bildstile werden gelesen …") } else { crate::tr("kein lesbarer Bildstil") }).small().color(lr::TEXT_DIM()));
                 }
                 continue;
             }
@@ -940,9 +940,12 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
     p.circle_filled(Pos2::new(rect.min.x + 8.0, rect.min.y + 11.0), 3.5, learnable_colour(learnable));
     let name = style_label(&s.style);
     let font = egui::FontId::proportional(lr::UI_SIZE);
-    let g = p.layout(name, font, lr::TEXT, width - 70.0);
-    p.galley(Pos2::new(rect.min.x + 18.0, rect.min.y + 3.0), g, lr::TEXT);
-    p.text(Pos2::new(rect.max.x - 4.0, rect.min.y + 4.0), egui::Align2::RIGHT_TOP, dialog::number(s.scanned.len()), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+    // one line only: a long name is cut with "…" so it never runs into the tags below (full name in the tooltip)
+    let mut job = egui::text::LayoutJob::simple_singleline(name.clone(), font, lr::TEXT());
+    job.wrap = egui::text::TextWrapping::truncate_at_width(width - 70.0);
+    let g = p.layout_job(job);
+    p.galley(Pos2::new(rect.min.x + 18.0, rect.min.y + 3.0), g, lr::TEXT());
+    p.text(Pos2::new(rect.max.x - 4.0, rect.min.y + 4.0), egui::Align2::RIGHT_TOP, dialog::number(s.scanned.len()), egui::FontId::proportional(10.5), lr::TEXT_DIM());
     // status tags
     let mut tags: Vec<(String, Color32)> = Vec::new();
     if let Some((on, meta)) = &st.learned {
@@ -964,7 +967,7 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
         tags.push((if st.own { crate::tr("EIGENER LOOK") } else { crate::tr("MITGELIEFERT") }.into(), lr::BLUE_TEXT));
     }
     if st.hue_table {
-        tags.push((crate::tr("FARBTONTABELLE").into(), lr::TEXT_DIM));
+        tags.push((crate::tr("FARBTONTABELLE").into(), lr::TEXT_DIM()));
     }
     if tags.is_empty() {
         tags.push((crate::tr("KEINER").into(), Color32::from_gray(0x80)));
@@ -981,7 +984,7 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
         x = r.max.x + 4.0;
     }
     // tooltip: estimate and where the looks come from
-    let mut tip = vec![format!("{} – {why}", learnable_text(learnable))];
+    let mut tip = vec![name.to_string(), format!("{} – {why}", learnable_text(learnable))];
     if let Some((_, Some(m))) = &st.learned {
         tip.push(crate::trf!("Gelernt: {a}", a = provenance_text(&m.to_string())));
     }
@@ -1048,16 +1051,16 @@ fn side_ui(ui: &mut egui::Ui, w: &mut Window) {
     ui.horizontal_wrapped(|ui| {
         let (r, _) = ui.allocate_exact_size(Vec2::new(10.0, 14.0), egui::Sense::hover());
         ui.painter().circle_filled(r.center(), 4.0, learnable_colour(learnable));
-        ui.label(egui::RichText::new(learnable_text(learnable)).strong().color(lr::TEXT));
+        ui.label(egui::RichText::new(learnable_text(learnable)).strong().color(lr::TEXT()));
     });
-    ui.add(egui::Label::new(egui::RichText::new(&why).color(lr::TEXT)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(&why).color(lr::TEXT())).wrap());
     let expect = match learnable {
         Learnable::Yes => crate::tr("Erfahrungswert: an Kontrollfotos meist nah am Kamera-JPEG (ΔE00 etwa 0,7–1,7). Zugesagt ist nichts: angeboten wird nur, was messbar besser ist."),
         Learnable::Limited => crate::tr("Ergebnis unsicher: angeboten wird nur, was an Kontrollfotos messbar besser ist."),
         Learnable::No => "",
     };
     if !expect.is_empty() {
-        ui.add(egui::Label::new(egui::RichText::new(expect).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(expect).small().color(lr::TEXT_DIM())).wrap());
     }
     let reading = w.reading(&key);
     main_button_row(ui, w, Some((&key, learnable, st.learned.is_some())), reading);
@@ -1075,7 +1078,7 @@ fn side_ui(ui: &mut egui::Ui, w: &mut Window) {
         lr::category(ui, crate::tr("Looks"));
         looks_ui(ui, w, &key, &row, &st, cam_photos);
         // statistics (folded up when the window is low)
-        egui::CollapsingHeader::new(egui::RichText::new(crate::tr("STATISTIK")).font(lr::semibold(11.0)).color(lr::CATEGORY_LABEL))
+        egui::CollapsingHeader::new(egui::RichText::new(crate::tr("STATISTIK")).font(lr::semibold(11.0)).color(lr::CATEGORY_LABEL()))
             .id_salt(("camera-looks-stats", small_height))
             .default_open(!small_height)
             .show(ui, |ui| stats_ui(ui, w, &row, cam_photos, cov.as_ref(), from_blocks.is_some()));
@@ -1207,13 +1210,13 @@ fn live_ui(ui: &mut egui::Ui, w: &mut Window) {
             if !live.today.is_empty() {
                 let mut v = live.today.clone();
                 v.sort_by(|a, b| a.total_cmp(b));
-                let r = ui.label(egui::RichText::new(crate::trf!("Heute bisher: ΔE00 {a}", a = fmt2(v[v.len() / 2]))).small().color(lr::TEXT));
+                let r = ui.label(egui::RichText::new(crate::trf!("Heute bisher: ΔE00 {a}", a = fmt2(v[v.len() / 2]))).small().color(lr::TEXT()));
                 lr::hover_tip(ui, &r, crate::tr("Median der Fotos so weit: Abstand der heutigen Entwicklung zum Kamera-JPEG"));
             }
             for (v, m) in &live.measured {
-                ui.label(egui::RichText::new(format!("{} {}", variant_label(v), fmt2(*m))).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(format!("{} {}", variant_label(v), fmt2(*m))).small().color(lr::TEXT_DIM()));
             }
-            ui.label(egui::RichText::new(dialog::duration(l.started.elapsed())).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(dialog::duration(l.started.elapsed())).small().color(lr::TEXT_DIM()));
         });
     });
     drop(live);
@@ -1222,7 +1225,7 @@ fn live_ui(ui: &mut egui::Ui, w: &mut Window) {
     if b.clicked() {
         l.job.cancel.store(true, Ordering::Relaxed);
     }
-    ui.label(egui::RichText::new(crate::tr("Läuft leise weiter, auch wenn das Fenster geschlossen wird.")).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(crate::tr("Läuft leise weiter, auch wenn das Fenster geschlossen wird.")).small().color(lr::TEXT_DIM()));
     ui.add_space(4.0);
 }
 
@@ -1255,10 +1258,10 @@ fn result_ui(ui: &mut egui::Ui, w: &mut Window) {
     if o.refused.is_none() {
         let after = o.stage.map(|s| s.key());
         egui::Grid::new("camera-looks-metrics").num_columns(3).spacing([14.0, 2.0]).show(ui, |ui| {
-            ui.label(egui::RichText::new(crate::tr("ΔE00 Median / p90")).small().color(lr::TEXT_DIM));
-            let t = ui.label(egui::RichText::new(crate::trf!("Kontrolle ({a})", a = o.check_photos)).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("ΔE00 Median / p90")).small().color(lr::TEXT_DIM()));
+            let t = ui.label(egui::RichText::new(crate::trf!("Kontrolle ({a})", a = o.check_photos)).small().color(lr::TEXT_DIM()));
             lr::hover_tip(ui, &t, crate::tr("Herausgehaltene Fotos anderer Aufnahmetage: der ehrliche Kontrollwert"));
-            let c = ui.label(egui::RichText::new(crate::trf!("Training ({a})", a = o.train_photos)).small().color(lr::TEXT_DIM));
+            let c = ui.label(egui::RichText::new(crate::trf!("Training ({a})", a = o.train_photos)).small().color(lr::TEXT_DIM()));
             lr::hover_tip(ui, &c, crate::tr("Fotos, aus denen gelernt wurde"));
             ui.end_row();
             let mut rows: Vec<(&str, &str)> = vec![("neutral", crate::tr("Neutral")), ("current", crate::tr("Heute"))];
@@ -1280,7 +1283,7 @@ fn result_ui(ui: &mut egui::Ui, w: &mut Window) {
         });
     }
     if r.renewing && o.refused.is_none() {
-        ui.label(egui::RichText::new(crate::tr("Gemessen an denselben Kontrollfotos wie der bisherige Look.")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Gemessen an denselben Kontrollfotos wie der bisherige Look.")).small().color(lr::TEXT_DIM()));
     }
     for wn in &r.learned.warnings {
         dialog::warning(ui, &warning_text(wn));
@@ -1304,8 +1307,8 @@ fn warning_text(w: &Warning) -> String {
 fn looks_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, row: &StyleRow, st: &Status, cam_photos: usize) {
     let line = |ui: &mut egui::Ui, title: &str, text: &str| {
         ui.horizontal_top(|ui| {
-            ui.label(egui::RichText::new(title).small().strong().color(lr::TEXT));
-            ui.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT_DIM)).wrap());
+            ui.label(egui::RichText::new(title).small().strong().color(lr::TEXT()));
+            ui.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT_DIM())).wrap());
         });
     };
     if let Some((on, meta)) = &st.learned {
@@ -1348,9 +1351,9 @@ fn looks_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, row: &StyleRow, st: &S
 fn stats_ui(ui: &mut egui::Ui, w: &Window, row: &StyleRow, cam_photos: usize, cov: Option<&Coverage>, from_blocks: bool) {
     egui::Grid::new("camera-looks-stats-grid").num_columns(2).spacing([12.0, 2.0]).show(ui, |ui| {
         let mut kv = |k: &str, v: String, tip: &str| {
-            let r = ui.label(egui::RichText::new(k).small().color(lr::TEXT_DIM));
+            let r = ui.label(egui::RichText::new(k).small().color(lr::TEXT_DIM()));
             lr::hover_tip(ui, &r, tip);
-            ui.label(egui::RichText::new(v).small().color(lr::TEXT));
+            ui.label(egui::RichText::new(v).small().color(lr::TEXT()));
             ui.end_row();
         };
         kv(crate::tr("Fotos der Kamera"), dialog::number(cam_photos), crate::tr("RAW-Fotos dieser Kamera in der Bibliothek"));
@@ -1366,17 +1369,17 @@ fn stats_ui(ui: &mut egui::Ui, w: &Window, row: &StyleRow, cam_photos: usize, co
     match cov.filter(|c| c.photos > 0) {
         None => {
             let t = if w.stats_job.is_some() { crate::tr("Farbabdeckung wird aus den Vorschauen ermittelt …") } else { crate::tr("Keine Vorschauen für die Farbabdeckung") };
-            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM()));
         }
         Some(c) => {
             let src = if from_blocks { crate::tr("aus den Lernblöcken (Kamera-JPEG)") } else { crate::tr("aus den Vorschauen der Bibliothek") };
-            ui.label(egui::RichText::new(crate::trf!("Abdeckung, {a}", a = src)).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::trf!("Abdeckung, {a}", a = src)).small().color(lr::TEXT_DIM()));
             bars(ui, crate::tr("Helligkeit"), &c.brightness, &|_| Color32::from_gray(0xb0), crate::tr("Anteil dunkler bis heller Bildteile (fünf Stufen)"));
             bars(ui, crate::tr("Farben"), &c.hues, &|i| hue_colour(i), crate::tr("Anteil farbiger Bildteile je Farbton (Rot, Gelb, Grün, Cyan, Blau, Magenta)"));
             ui.horizontal(|ui| {
-                let s = ui.label(egui::RichText::new(crate::trf!("Hauttöne {a} %", a = (c.skin * 100.0).round())).small().color(if c.skin < 0.01 { YELLOW } else { lr::TEXT }));
+                let s = ui.label(egui::RichText::new(crate::trf!("Hauttöne {a} %", a = (c.skin * 100.0).round())).small().color(if c.skin < 0.01 { YELLOW } else { lr::TEXT() }));
                 lr::hover_tip(ui, &s, crate::tr("Anteil hauttonähnlicher Farben; unter 1 % lernt der Look Hauttöne kaum"));
-                let k = ui.label(egui::RichText::new(crate::trf!("kräftige Farben {a} %", a = (c.saturated * 100.0).round())).small().color(if c.saturated < 0.01 { YELLOW } else { lr::TEXT }));
+                let k = ui.label(egui::RichText::new(crate::trf!("kräftige Farben {a} %", a = (c.saturated * 100.0).round())).small().color(if c.saturated < 0.01 { YELLOW } else { lr::TEXT() }));
                 lr::hover_tip(ui, &k, crate::tr("Anteil stark gesättigter Farben; unter 1 % bleiben kräftige Farben unsicher"));
             });
         }
@@ -1391,7 +1394,7 @@ fn stats_ui(ui: &mut egui::Ui, w: &Window, row: &StyleRow, cam_photos: usize, co
         }
         _ => crate::tr("Weißabgleich-Streuung: wird beim Lernen gemessen").to_string(),
     };
-    let r = ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM));
+    let r = ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM()));
     lr::hover_tip(ui, &r, crate::tr("10. bis 90. Perzentil des Weißabgleichs der Aufnahmen"));
 }
 
@@ -1414,7 +1417,7 @@ fn hue_colour(i: usize) -> Color32 {
 
 fn bars(ui: &mut egui::Ui, label: &str, v: &[f32], colour: &dyn Fn(usize) -> Color32, tip: &str) {
     ui.horizontal(|ui| {
-        let l = ui.add_sized([72.0, 16.0], egui::Label::new(egui::RichText::new(label).small().color(lr::TEXT_DIM)));
+        let l = ui.add_sized([72.0, 16.0], egui::Label::new(egui::RichText::new(label).small().color(lr::TEXT_DIM())));
         lr::hover_tip(ui, &l, tip);
         let width = (ui.available_width() - 4.0).min(220.0);
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 24.0), egui::Sense::hover());
@@ -1449,8 +1452,8 @@ fn versions_ui(ui: &mut egui::Ui, w: &mut Window, key: &str) {
         let photos = p.photos.map(|n| crate::trf!("{n} Fotos", n = n)).unwrap_or_default();
         ui.horizontal(|ui| {
             let state = if v.current { crate::tr("in Gebrauch") } else { crate::tr("ersetzt") };
-            ui.label(egui::RichText::new(format!("{date} · {photos} · {quality}")).small().color(lr::TEXT));
-            ui.label(egui::RichText::new(state).small().color(if v.current { GREEN } else { lr::TEXT_DIM }));
+            ui.label(egui::RichText::new(format!("{date} · {photos} · {quality}")).small().color(lr::TEXT()));
+            ui.label(egui::RichText::new(state).small().color(if v.current { GREEN } else { lr::TEXT_DIM() }));
             if !v.current {
                 let armed = w.restore_armed.as_ref().is_some_and(|(p, _)| *p == v.path);
                 let b = ui.add_enabled(w.learning.is_none(), egui::Button::new(if armed { crate::tr("Wirklich?") } else { crate::tr("Zurück zu dieser") }).small());
@@ -1658,7 +1661,7 @@ fn compare_ui(ui: &mut egui::Ui, w: &mut Window) {
         (_, Some(p)) => crate::trf!("{a} · wird entwickelt …", a = file_name(p)),
         _ => String::new(),
     };
-    ui.add(egui::Label::new(egui::RichText::new(info).small().color(lr::TEXT_DIM)).truncate());
+    ui.add(egui::Label::new(egui::RichText::new(info).small().color(lr::TEXT_DIM())).truncate());
     let frame = ui.max_rect();
     let avail = Rect::from_min_max(Pos2::new(frame.min.x, ui.cursor().min.y), frame.max);
     let image_area = Rect::from_min_max(avail.min, Pos2::new(avail.max.x, avail.max.y - STRIP_H - 6.0));
@@ -1695,7 +1698,7 @@ fn images_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, area: Rect) {
     let c = &mut w.compare;
     let Some(s) = c.shown.as_ref() else {
         let t = if c.job.is_some() { crate::tr("Foto wird entwickelt …") } else { crate::tr("Kein Foto zum Vergleichen") };
-        ui.painter().text(area.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(13.0), lr::TEXT_DIM);
+        ui.painter().text(area.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(13.0), lr::TEXT_DIM());
         return;
     };
     let gap = 8.0;
@@ -1788,7 +1791,7 @@ fn images_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, area: Rect) {
                 painter.image(t.id(), r, uv, Color32::WHITE);
             }
             None => {
-                painter.text(pr.center(), egui::Align2::CENTER_CENTER, crate::tr("Noch kein neuer Look: erst lernen"), egui::FontId::proportional(12.0), lr::TEXT_DIM);
+                painter.text(pr.center(), egui::Align2::CENTER_CENTER, crate::tr("Noch kein neuer Look: erst lernen"), egui::FontId::proportional(12.0), lr::TEXT_DIM());
             }
         }
     };
@@ -1859,7 +1862,7 @@ fn strip_ui(ui: &mut egui::Ui, w: &mut Window, strip: &[(PathBuf, Option<PathBuf
                 let (letter, colour, tip) = match mark {
                     Mark::Check => (crate::tr("K"), GREEN, crate::tr("Kontrollfoto: nicht zum Lernen benutzt, daran wird gemessen")),
                     Mark::Training => (crate::tr("T"), lr::BLUE_TEXT, crate::tr("Trainingsfoto: daraus wird gelernt")),
-                    Mark::Unknown => ("", lr::TEXT_DIM, crate::tr("Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)")),
+                    Mark::Unknown => ("", lr::TEXT_DIM(), crate::tr("Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)")),
                 };
                 if !letter.is_empty() {
                     let b = Rect::from_min_size(r.min + Vec2::new(3.0, 3.0), Vec2::new(14.0, 13.0));

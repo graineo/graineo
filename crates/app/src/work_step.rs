@@ -118,7 +118,7 @@ pub fn spinner_tip(ui: &egui::Ui, area: egui::Rect) {
             tip.popup = tip.popup.align(egui::RectAlign::BOTTOM_START);
             tip.show(|ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                ui.label(egui::RichText::new(&text).size(crate::lr::UI_SIZE - 0.5).color(crate::lr::TEXT))
+                ui.label(egui::RichText::new(&text).size(crate::lr::UI_SIZE - 0.5).color(crate::lr::TEXT()))
             });
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
         } else {

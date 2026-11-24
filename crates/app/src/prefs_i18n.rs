@@ -39,7 +39,7 @@ pub(super) fn general(ui: &mut egui::Ui) {
         }) {
             ui.add(
                 egui::Label::new(
-                    egui::RichText::new(i18n::language_error(&error)).color(lr::TEXT_DIM),
+                    egui::RichText::new(i18n::language_error(&error)).color(lr::TEXT_DIM()),
                 )
                 .wrap(),
             );
@@ -83,7 +83,7 @@ pub(super) fn general(ui: &mut egui::Ui) {
         });
         separator(ui);
         row(ui, i18n::text(Text::Version), None, |ui| {
-            ui.label(egui::RichText::new(env!("CARGO_PKG_VERSION")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(env!("CARGO_PKG_VERSION")).color(lr::TEXT_DIM()));
         });
     });
     default_apps(ui);
@@ -161,11 +161,11 @@ fn default_apps(ui: &mut egui::Ui) {
                 ui.ctx().data_mut(|d| d.insert_temp(more_id, !more));
             }
             if own.is_none() {
-                ui.label(egui::RichText::new(crate::tr("Nur in der installierten App einstellbar.")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Nur in der installierten App einstellbar.")).small().color(lr::TEXT_DIM()));
             }
         });
         if let Some(m) = MESSAGE.lock().unwrap().clone() {
-            ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM()));
         }
     });
 }
@@ -197,7 +197,7 @@ fn explorer_menu(ui: &mut egui::Ui) {
             }
         });
         if let Some(m) = MESSAGE.lock().unwrap_or_else(|e| e.into_inner()).clone() {
-            ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(m).small().color(lr::TEXT_DIM()));
         }
     });
 }

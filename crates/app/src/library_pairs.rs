@@ -253,7 +253,7 @@ fn level_color(l: Level) -> Color32 {
     match l {
         Level::Safe => Color32::from_rgb(0x4c, 0xc2, 0x6a),
         Level::Probable => Color32::from_rgb(0xe0, 0xb0, 0x40),
-        _ => lr::TEXT_DIM,
+        _ => lr::TEXT_DIM(),
     }
 }
 
@@ -395,7 +395,7 @@ impl LibraryView {
         };
         let busy = self.pairs.ask.is_some();
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(crate::tr("RAW+JPEG DOPPELT")).color(lr::TEXT_DIM).size(11.0));
+        ui.label(egui::RichText::new(crate::tr("RAW+JPEG DOPPELT")).color(lr::TEXT_DIM()).size(11.0));
         let total = summary.safe + summary.probable + summary.unreachable + summary.own_data;
         let head = if let Some(e) = &error {
             crate::trf!("Suche nicht möglich: {f}", f = e)
@@ -413,7 +413,7 @@ impl LibraryView {
                 e = thousands(summary.unreachable)
             )
         };
-        ui.label(egui::RichText::new(head).color(lr::TEXT));
+        ui.label(egui::RichText::new(head).color(lr::TEXT()));
         ui.add_space(6.0);
         let pairs_all: Arc<Vec<Pair>> = list.unwrap_or_default();
         // Filter, order; ticking, sums and removing only on what is visible
@@ -467,7 +467,7 @@ impl LibraryView {
                 b = thousands(shown.len()),
                 c = size_text(bytes_checked)
             );
-            ui.add(egui::Label::new(egui::RichText::new(sum).small().color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(sum).small().color(lr::TEXT_DIM())).truncate());
         }
         ui.add_space(6.0);
         ui.separator();
@@ -510,13 +510,13 @@ impl LibraryView {
                 let line = |y: f32, text: String, color: Color32, font: &egui::FontId| {
                     clip.text(egui::pos2(x, rect.top() + y), egui::Align2::LEFT_CENTER, text, font.clone(), color);
                 };
-                line(12.0, crate::trf!("RAW  {a} · {b} · {c}", a = p.raw.name, b = p.raw.format, c = size_text(p.raw.size)), lr::TEXT, &font);
-                line(28.0, crate::trf!("JPEG {a} · {b}", a = p.jpeg.name, b = size_text(p.jpeg.size)), lr::TEXT, &font);
+                line(12.0, crate::trf!("RAW  {a} · {b} · {c}", a = p.raw.name, b = p.raw.format, c = size_text(p.raw.size)), lr::TEXT(), &font);
+                line(28.0, crate::trf!("JPEG {a} · {b}", a = p.jpeg.name, b = size_text(p.jpeg.size)), lr::TEXT(), &font);
                 let mut third = format!("{} · {}", p.jpeg.capture.replace('T', " "), folder_text(&p.jpeg.path));
                 if p.raw.folder != p.jpeg.folder {
                     third = format!("{third} ← {}", folder_text(&p.raw.path));
                 }
-                line(43.0, third, lr::TEXT_DIM, &small);
+                line(43.0, third, lr::TEXT_DIM(), &small);
                 line(55.0, level_detail(p), level_color(p.level), &small);
                 let tip = ui.interact(rect, ui.scope_id().with(("paar", p.jpeg.image)), egui::Sense::hover());
                 lr::hover_tip(ui, &tip, &level_reason(p));
@@ -548,7 +548,7 @@ impl LibraryView {
         let can = removable(p);
         let mut on = self.pairs.checked.contains(&p.jpeg.image);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::trf!("Paar {a} von {b}", a = thousands(pos + 1), b = thousands(n))).color(lr::TEXT));
+            ui.label(egui::RichText::new(crate::trf!("Paar {a} von {b}", a = thousands(pos + 1), b = thousands(n))).color(lr::TEXT()));
             ui.add_space(8.0);
             let r = ui.add_enabled(pos > 0, egui::Button::new(crate::tr("◀ Vorheriges")));
             lr::tip_key(ui, &r, "Vorheriges Paar", "pairs_switch");
@@ -603,8 +603,8 @@ impl LibraryView {
             let clip = ui.painter_at(egui::Rect::from_min_size(egui::pos2(frame.left(), frame.bottom()), egui::vec2(w, caption_h)));
             let font = egui::TextStyle::Body.resolve(ui.style());
             let small = egui::TextStyle::Small.resolve(ui.style());
-            clip.text(egui::pos2(frame.left(), frame.bottom() + 12.0), egui::Align2::LEFT_CENTER, line1, font, lr::TEXT);
-            clip.text(egui::pos2(frame.left(), frame.bottom() + 30.0), egui::Align2::LEFT_CENTER, line2, small, lr::TEXT_DIM);
+            clip.text(egui::pos2(frame.left(), frame.bottom() + 12.0), egui::Align2::LEFT_CENTER, line1, font, lr::TEXT());
+            clip.text(egui::pos2(frame.left(), frame.bottom() + 30.0), egui::Align2::LEFT_CENTER, line2, small, lr::TEXT_DIM());
         }
         ui.allocate_rect(area, egui::Sense::hover());
         if close {
@@ -836,7 +836,7 @@ impl LibraryView {
                         dialog::progress(ui, f, &t);
                         // How long it has been running and about how much longer
                         let running = dialog::Running { since: started.map(|t| t.elapsed()).unwrap_or_default(), fraction: f, ..Default::default() };
-                        ui.label(egui::RichText::new(running.timing()).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(running.timing()).small().color(lr::TEXT_DIM()));
                     },
                     Buttons { cancel: crate::tr("Abbrechen"), primary: None },
                 );

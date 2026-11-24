@@ -131,6 +131,8 @@ pub struct Undo {
     ratings: Vec<(i64, i64, i64)>,
     /// image, keyword ids
     keywords: Vec<(i64, Vec<i64>)>,
+    /// keywords this run created (taken from a sidecar); ⌘Z removes those no photo uses any more
+    created_keywords: Vec<i64>,
 }
 
 impl Undo {
@@ -290,7 +292,11 @@ fn reread(db: &Db, list: &[Item], sidecar: bool, keep_undo: bool, cancel: &Atomi
                         let current = crate::sync::keyword_paths(db, image)?;
                         if !crate::sync::equal_kw(&w.keywords, &current) {
                             out.undo.keywords.push((image, crate::keywords::ids_of(&db.conn, image)?));
+                            let max_before: i64 = tx.query_row("SELECT COALESCE(MAX(id), 0) FROM keyword", [], |r| r.get(0)).map_err(f)?;
                             crate::sync::set_keywords(db, image, &w.keywords, crate::now(), true)?;
+                            let mut st = tx.prepare_cached("SELECT id FROM keyword WHERE id > ?1").map_err(f)?;
+                            let new: Vec<i64> = st.query_map([max_before], |r| r.get(0)).map_err(f)?.collect::<Result<_, _>>().map_err(f)?;
+                            out.undo.created_keywords.extend(new);
                             changed = true;
                         }
                     }
@@ -334,6 +340,18 @@ pub fn undo(db: &Db, u: &Undo) -> R<Vec<i64>> {
         if let Some(file) = db.file_of(*image) {
             files.push(file);
         }
+    }
+    // keywords the run created: remove the unused ones, children first (created after their parent)
+    let mut created = u.created_keywords.clone();
+    created.sort_unstable_by(|a, b| b.cmp(a));
+    for id in created {
+        tx.execute(
+            "DELETE FROM keyword WHERE id = ?1 AND person = 0 \
+             AND NOT EXISTS (SELECT 1 FROM image_keyword WHERE keyword = ?1) \
+             AND NOT EXISTS (SELECT 1 FROM keyword c WHERE c.parent = ?1)",
+            [id],
+        )
+        .map_err(f)?;
     }
     tx.commit().map_err(f)?;
     files.sort_unstable();
@@ -464,6 +482,21 @@ mod tests {
         assert_eq!(l.get::<i64>("SELECT stars FROM image WHERE id=?1", image), 0);
         assert_eq!(l.get::<i64>("SELECT label FROM image WHERE id=?1", image), 0);
         assert!(crate::sync::keyword_paths(&l.db, image).unwrap().is_empty());
+        // the keyword the run created is gone again, nothing else was removed
+        assert_eq!(l.get::<i64>("SELECT COUNT(*) FROM keyword WHERE name = 'Berg' AND ?1 = ?1", 0), 0);
+    }
+
+    /// ⌘Z removes only keywords the run created and nobody uses; an existing keyword stays even when unused.
+    #[test]
+    fn undo_keeps_existing_keywords() {
+        let l = lib("xmp-kw");
+        let (file, image) = l.add("a.jpg", &jpeg_with(Some(&sample(true))));
+        l.db.conn.execute("INSERT INTO keyword(name) VALUES('Berg')", []).unwrap();
+        std::fs::write(l.dir.join("photos/a.xmp"), XMP).unwrap();
+        let out = run(&l.db, &[file], true, &never(), &|_, _| {}).unwrap();
+        assert_eq!(crate::sync::keyword_paths(&l.db, image).unwrap(), vec!["Berg".to_string()]);
+        undo(&l.db, &out.undo).unwrap();
+        assert_eq!(l.get::<i64>("SELECT COUNT(*) FROM keyword WHERE name = 'Berg' AND ?1 = ?1", 0), 1);
     }
 
     /// A file that cannot be opened is skipped and counted, its entry stays.

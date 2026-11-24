@@ -812,9 +812,9 @@ impl SensorRaw {
         let mut job = egui::text::LayoutJob::default();
         for (i, (t, on)) in parts.iter().enumerate() {
             if i > 0 {
-                job.append("  ·  ", 0.0, egui::TextFormat::simple(font.clone(), lr::TEXT_DIM));
+                job.append("  ·  ", 0.0, egui::TextFormat::simple(font.clone(), lr::TEXT_DIM()));
             }
-            job.append(t, 0.0, egui::TextFormat::simple(font.clone(), if *on { Color32::from_gray(0xe8) } else { lr::TEXT_DIM }));
+            job.append(t, 0.0, egui::TextFormat::simple(font.clone(), if *on { Color32::from_gray(0xe8) } else { lr::TEXT_DIM() }));
         }
         job.wrap.max_width = (area.width() - 40.0 - reserve).max(60.0);
         job.wrap.max_rows = 1;

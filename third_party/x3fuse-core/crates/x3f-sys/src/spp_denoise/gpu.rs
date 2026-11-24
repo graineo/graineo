@@ -57,6 +57,16 @@ const ENTRIES: &[&str] = &[
     "ca_shift",
     "copy_rgb",
     "restore_chroma",
+    "tex_log",
+    "tex_h1",
+    "tex_v1",
+    "tex_h2",
+    "tex_v2",
+    "tex_h4",
+    "tex_v4",
+    "tex_h8",
+    "tex_v8",
+    "tex_combine",
 ];
 /// Tiles per batch (default); adjustable via `X3F_SPP_GPU_BATCH`.
 const BATCH: usize = 8;
@@ -182,6 +192,10 @@ struct Params {
     ca_v: [f32; 8],
     ca_flags: [f32; 6],
     ca_c: [f32; 12],
+    /// graineo: residual band gains (`residual::texture_bands`), 0/1, fine and structure gain
+    tex_on: u32,
+    tex_fine: f32,
+    tex_structure: f32,
 }
 
 // SAFETY: only u32/i32/f32 fields and arrays of f32 fields, `repr(C)`, no padding.
@@ -785,6 +799,10 @@ pub(crate) fn denoise_image(
     prm.pre_halo_x = pre_halo[0] as u32;
     prm.pre_halo_y = pre_halo[1] as u32;
     prm.chroma_off = u32::from(p.chroma_off);
+    if p.texture != [1.0, 1.0] {
+        prm.tex_on = 1;
+        [prm.tex_fine, prm.tex_structure] = p.texture;
+    }
     if let Some(ca) = view.ca {
         prm.ca_on = 1;
         (prm.ca_v, prm.ca_flags, prm.ca_c) = ca.gpu_values();
@@ -1088,6 +1106,32 @@ pub(crate) fn denoise_image(
         full,
         "Luma+Diffusion+OSF+Ratio",
     ));
+    // graineo: residual band gains (skipped at [1, 1], as on the CPU). Free here: edge, nf
+    // (tile mono), tmp (tile RGB, used as mono), aux (written again by `sharp_l`).
+    if prm.tex_on != 0 {
+        let stage = "texture bands";
+        steps.push(step("tex_log", vec![&b.mono2, &b.edge], full, stage));
+        // log (edge) → 1 → 2 (fine/structure boundary, kept in tmp) → 4 → 8 (broad rest in nf)
+        let passes: [(&'static str, &wgpu::Buffer, &wgpu::Buffer); 8] = [
+            ("tex_h1", &b.edge, &b.aux),
+            ("tex_v1", &b.aux, &b.nf),
+            ("tex_h2", &b.nf, &b.aux),
+            ("tex_v2", &b.aux, &b.tmp),
+            ("tex_h4", &b.tmp, &b.aux),
+            ("tex_v4", &b.aux, &b.nf),
+            ("tex_h8", &b.nf, &b.aux),
+            ("tex_v8", &b.aux, &b.nf),
+        ];
+        for (entry, src, dst) in passes {
+            steps.push(step(entry, vec![src, dst], full, stage));
+        }
+        steps.push(step(
+            "tex_combine",
+            vec![&b.mono2, &b.edge, &b.tmp, &b.nf],
+            full,
+            stage,
+        ));
+    }
     let color = prm.color_mode != 0;
     if color {
         steps.push(step(

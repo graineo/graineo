@@ -84,7 +84,7 @@ impl App {
                     if lr::slider(ui, "Stärke", &mut t, -2.0..=2.0, 0.0, 0.05) {
                         l.adjustments.exposure = t as f32;
                     }
-                    ui.label(egui::RichText::new(strength_text(l.adjustments.exposure)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(strength_text(l.adjustments.exposure)).small().color(lr::TEXT_DIM()));
                 }
             }
         } else {
@@ -92,7 +92,7 @@ impl App {
             if lr::slider(ui, "Stärke", &mut t, -2.0..=2.0, 0.5, 0.05) {
                 self.darkroom.dodge.strength = t as f32;
             }
-            ui.label(egui::RichText::new(strength_text(self.darkroom.dodge.strength)).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(strength_text(self.darkroom.dodge.strength)).small().color(lr::TEXT_DIM()));
         }
         if new_mask {
             let (kind, ev) = (self.darkroom.dodge.kind, self.darkroom.dodge.strength);

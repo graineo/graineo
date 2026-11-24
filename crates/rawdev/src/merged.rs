@@ -398,7 +398,7 @@ fn load_frames(paths: &[PathBuf], keep: bool, ctl: &hdr::Control) -> Result<Vec<
                 let f = match have {
                     Some(f) => (*f).clone(),
                     None => {
-                        let f = hdr::profile("load", || hdr::frames::load(p))?;
+                        let f = hdr::profile("load", || load_frame(p))?;
                         if keep {
                             let mut g = FRAMES.lock().unwrap_or_else(|e| e.into_inner());
                             g.retain(|(q, _, _)| q != p);
@@ -420,7 +420,19 @@ fn load_frames(paths: &[PathBuf], keep: bool, ctl: &hdr::Control) -> Result<Vec<
             })
             .collect()
     };
-    loaded.into_iter().collect()
+    let mut frames: Vec<hdr::frames::Frame> = loaded.into_iter().collect::<Result<_, _>>()?;
+    // Foveon: one clip level for the whole bracket
+    crate::foveon_frames::share_clip(&mut frames);
+    Ok(frames)
+}
+
+/// One frame of a merge: a mosaic RAW, or a Foveon X3F through its linear layers ([`crate::foveon_frames`]).
+fn load_frame(path: &Path) -> Result<hdr::frames::Frame, hdr::Error> {
+    if crate::foveon_frames::is_foveon(path) {
+        crate::foveon_frames::frame(path)
+    } else {
+        hdr::frames::load(path)
+    }
 }
 
 /// One frame for pasting areas at full resolution (memory of the live photo, otherwise read).
@@ -429,7 +441,7 @@ fn frame_for(path: &Path) -> Option<Arc<hdr::frames::Frame>> {
     if let Some(f) = FRAMES.lock().unwrap_or_else(|e| e.into_inner()).iter().find(|(q, m, _)| q == path && *m == t).map(|(_, _, f)| f.clone()) {
         return Some(f);
     }
-    hdr::frames::load(path).ok().map(Arc::new)
+    load_frame(path).ok().map(Arc::new)
 }
 
 fn plane(m: &hdr::Merged) -> Vec<f32> {

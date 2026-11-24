@@ -78,7 +78,7 @@ pub(crate) fn row_if(ui: &mut egui::Ui, label: &str, enabled: bool, add: impl Fn
             ui.allocate_ui_with_layout(egui::vec2(LABEL_W, ROW_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.set_width(LABEL_W);
                 if !label.is_empty() {
-                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM())).truncate());
                 }
             });
             add(ui);
@@ -90,7 +90,7 @@ pub(crate) fn row_if(ui: &mut egui::Ui, label: &str, enabled: bool, add: impl Fn
 pub(crate) fn choice<T: PartialEq + Clone>(ui: &mut egui::Ui, id: &str, value: &mut T, options: &[(T, &str)], tips: &[&str]) -> bool {
     const PAD: f32 = 8.0;
     let font = egui::TextStyle::Button.resolve(ui.style());
-    let need: f32 = options.iter().map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), lr::TEXT).size().x + 2.0 * PAD).sum();
+    let need: f32 = options.iter().map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), lr::TEXT()).size().x + 2.0 * PAD).sum();
     if need <= ui.available_width() - 2.0 {
         return lr::segmented_tips(ui, value, options, tips, PAD);
     }
@@ -233,7 +233,7 @@ impl App {
             // right end of the line, shortened when the dialog is narrow
             let area = egui::Rect::from_min_max(egui::pos2(rect.center().x, rect.top()), rect.max);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).layout(egui::Layout::right_to_left(egui::Align::Center)));
-            let summary = child.add(egui::Label::new(egui::RichText::new(set.join(" · ")).small().color(lr::TEXT_DIM)).truncate().selectable(false));
+            let summary = child.add(egui::Label::new(egui::RichText::new(set.join(" · ")).small().color(lr::TEXT_DIM())).truncate().selectable(false));
             line = rect.with_max_x(summary.rect.left() - 10.0);
         }
         paint_band(ui.painter(), line, &title, 11.5, color, egui::Color32::from_gray(0x36));
@@ -460,6 +460,7 @@ impl App {
                 library::settings::set("exportOptions", v);
             }
         }
+        self.export_sharpen_rows(ui, finished);
         Scope { items, unreachable, has_x3f, finished }
     }
 
@@ -558,7 +559,7 @@ impl App {
             Kind::Original => {
                 // the one hint that explains a decision: the originals are copied as they are
                 row(ui, "", |ui| {
-                    let r = ui.add(egui::Label::new(egui::RichText::new(crate::tr("Unverändert, geprüft kopiert (SHA-256)")).small().color(lr::TEXT_DIM)).truncate());
+                    let r = ui.add(egui::Label::new(egui::RichText::new(crate::tr("Unverändert, geprüft kopiert (SHA-256)")).small().color(lr::TEXT_DIM())).truncate());
                     lr::hover_tip(ui, &r, crate::tr("Die Datei unverändert, geprüft kopiert (SHA-256); nichts wird überschrieben."));
                 });
                 let pairs = items.iter().filter(|&&i| self.lib.sidecar_jpeg_of(self.entries[i].image).is_some()).count();
@@ -694,6 +695,37 @@ impl App {
         }
     }
 
+    /// Section "Ausgabeschärfung": target (off/screen/matte/glossy print) and strength; only for finished images.
+    fn export_sharpen_rows(&mut self, ui: &mut egui::Ui, finished: bool) {
+        use develop::output_sharpen::{Amount as A, Target as T};
+        let before = self.export_sharpen;
+        section(ui, crate::tr("Ausgabeschärfung"));
+        row_if(ui, crate::tr("Schärfen für"), finished, |ui| {
+            choice(
+                ui,
+                "export-sharpen-target",
+                &mut self.export_sharpen.target,
+                &[(T::Off, crate::tr("Aus")), (T::Screen, crate::tr("Bildschirm")), (T::PrintMatte, crate::tr("Druck matt")), (T::PrintGlossy, crate::tr("Druck glänzend"))],
+                &[
+                    "",
+                    crate::tr("Nach dem Verkleinern auf die Ausgabegröße geschärft, Radius in Ausgabepixeln"),
+                    crate::tr("Für Drucke auf mattem Papier: etwas größerer Radius, kräftiger"),
+                    crate::tr("Für Drucke auf glänzendem Papier: feiner Radius"),
+                ],
+            );
+        });
+        row_if(ui, crate::tr("Stärke"), finished && !self.export_sharpen.is_off(), |ui| {
+            // "Hoch" alone is the portrait orientation in the catalogue: own key, German text unchanged
+            let high = crate::menu::i18n::german_or("Hoch", crate::tr("Hoch (Schärfe)"));
+            choice(ui, "export-sharpen-amount", &mut self.export_sharpen.amount, &[(A::Low, crate::tr("Niedrig")), (A::Standard, crate::tr("Normal")), (A::High, high)], &[]);
+        });
+        if self.export_sharpen != before {
+            if let Ok(v) = serde_json::to_value(self.export_sharpen) {
+                library::settings::set("exportSharpen", v);
+            }
+        }
+    }
+
     /// Left part of "Advanced": print border, Foveon quality, GPS, keywords (greyed out where they do not apply).
     fn export_what_advanced(&mut self, ui: &mut egui::Ui, scope: &Scope) {
         row_if(ui, crate::tr("Abzug"), scope.finished, |ui| {
@@ -734,9 +766,9 @@ impl App {
         row(ui, crate::tr("Ordner"), |ui| {
             let none = self.export_dir.is_none();
             let dir = self.export_dir.as_ref().map(|d| d.display().to_string()).unwrap_or_else(|| crate::tr("– noch kein Ordner –").into());
-            let button_w = ui.painter().layout_no_wrap(crate::tr("Ändern …").to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT).size().x + 2.0 * ui.spacing().button_padding.x;
+            let button_w = ui.painter().layout_no_wrap(crate::tr("Ändern …").to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT()).size().x + 2.0 * ui.spacing().button_padding.x;
             let w = (ui.available_width() - button_w - ui.spacing().item_spacing.x).max(40.0);
-            let r = ui.add_sized([w, 18.0], egui::Label::new(egui::RichText::new(&dir).color(if none { lr::TEXT_DIM } else { lr::TEXT })).truncate());
+            let r = ui.add_sized([w, 18.0], egui::Label::new(egui::RichText::new(&dir).color(if none { lr::TEXT_DIM() } else { lr::TEXT() })).truncate());
             if !none {
                 lr::hover_tip(ui, &r, &dir);
             }
@@ -791,15 +823,15 @@ impl App {
                 notes.insert(0, crate::trf!("{a} übersprungen: Original nicht erreichbar", a = scope.unreachable));
                 warn = true;
             }
-            ui.add(egui::Label::new(egui::RichText::new(preview).color(lr::TEXT)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(preview).color(lr::TEXT())).truncate());
             let message = &self.export_names_ui.message;
             let (line, color) = if !notes.is_empty() {
                 // yellow only where files are replaced or left out; "get a number" is plain information
-                (notes.join(" · "), if warn { egui::Color32::from_rgb(0xe0, 0xb0, 0x40) } else { lr::TEXT_DIM })
+                (notes.join(" · "), if warn { egui::Color32::from_rgb(0xe0, 0xb0, 0x40) } else { lr::TEXT_DIM() })
             } else if !message.is_empty() {
                 (message.clone(), egui::Color32::from_rgb(0xe0, 0xb0, 0x40))
             } else {
-                (crate::menu::i18n::tr_msg(&self.export_status).to_string(), lr::TEXT_DIM)
+                (crate::menu::i18n::tr_msg(&self.export_status).to_string(), lr::TEXT_DIM())
             };
             ui.add(egui::Label::new(egui::RichText::new(if line.is_empty() { " ".to_string() } else { line }).small().color(color)).truncate());
         });

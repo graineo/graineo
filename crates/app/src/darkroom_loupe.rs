@@ -47,7 +47,7 @@ impl App {
                 ""
             };
             if self.zoom > 1.001 && self.darkroom.grain_check {
-                ui.label(egui::RichText::new(crate::trf!("Ausschnitt {mm} mm{suffix}", mm = format!("{:.2}", mm), suffix = suffix)).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("Ausschnitt {mm} mm{suffix}", mm = format!("{:.2}", mm), suffix = suffix)).small().color(lr::TEXT_DIM()));
             }
         }
     }
@@ -55,7 +55,7 @@ impl App {
         if !self.darkroom_active() {
             return;
         }
-        let up = ["dk_zoom_plus", "dk_zoom_equals", "dk_zoom_shift_plus"]
+        let up = ["dk_zoom_plus", "dk_zoom_equals"]
             .iter()
             .any(|id| crate::shortcuts::pressed(ctx, id));
         let down = crate::shortcuts::pressed(ctx, "dk_zoom_minus");

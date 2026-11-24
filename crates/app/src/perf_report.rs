@@ -274,7 +274,7 @@ pub fn frame(ctx: &egui::Context) {
                             copy = Some(text.clone());
                         }
                         if now - copied < 2.0 {
-                            ui.label(egui::RichText::new(crate::tr("Kopiert")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Kopiert")).small().color(lr::TEXT_DIM()));
                         }
                     });
                 }

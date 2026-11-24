@@ -123,6 +123,10 @@ pub enum Cmd {
     GamutWarning,
     /// View → "Navigator beim Zoomen" (check mark, `navigator.rs`)
     Navigator,
+    /// UI size one step up / down / back to 100 % (prefs.rs; only in the in-window menu on Linux and as ⌘+ / ⌘− / ⌘0)
+    UiLarger,
+    UiSmaller,
+    UiReset,
 }
 
 impl Cmd {
@@ -140,18 +144,133 @@ impl Cmd {
     }
 }
 
-/// Linux: no native menu bar (muda would pull in the GTK3 bindings). The commands stay
-/// reachable through the shortcuts of the window (`shortcut_without_menu`) and the buttons of the interface.
+/// Linux: no native menu bar (muda would pull in the GTK3 bindings). Instead the same menu as on Windows
+/// is drawn by egui in a fixed bar at the top of the window ([`AppMenu::bar`]); the shortcuts run through
+/// `shortcut_without_menu` as on Windows, the bar only shows them (Ctrl as on Windows).
 #[cfg(not(any(target_os = "macos", windows)))]
-pub struct AppMenu;
+pub struct AppMenu {
+    clicked: std::cell::RefCell<Vec<Cmd>>,
+}
+
+/// One entry of the in-window menu (Linux).
+#[cfg(not(any(target_os = "macos", windows)))]
+enum Entry {
+    Action(Cmd),
+    /// with a check mark (colour proof, gamut warning, navigator)
+    Check(Cmd),
+    Separator,
+    Sub(Text, &'static [Entry]),
+    Minimize,
+    Maximize,
+}
+
+/// The menu tree of the in-window menu: the same entries and order as the Windows menu bar (`AppMenu::install`).
+#[cfg(not(any(target_os = "macos", windows)))]
+const LINUX_MENU: &[(Text, &[Entry])] = {
+    use Cmd::*;
+    use Entry::{Action as A, Check as C, Separator as S};
+    &[
+        (Text::NativeFile, &[A(Import), A(Lightroom), A(OpenFolder), S, A(Export), A(Print), A(ContactPrint), S, A(ShowInFinder), A(ShowInLibrary), S, A(RemoveFromCollection), A(TrashSelected), A(DeleteRejected), S, A(Quit)]),
+        (Text::NativeEdit, &[A(Undo), A(Redo), S, A(SelectAll), A(SelectNone), S, A(CopyPhoto), S, A(CopySettings), A(PasteSettings), A(TransferSettings), A(ApplyToAll), A(ResetSettings), S, A(Settings)]),
+        (Text::NativeLibrary, &[A(NewCollection), A(NewSmartCollection), A(NewCollectionSet), S, A(ManageImports), A(ArrangeKeywords)]),
+        (Text::NativePhoto, &[A(AutoTone), S, A(Crop), A(RotateLeft), A(RotateRight), S, A(VirtualCopy), A(MergeHdr), A(RereadMetadata), S, A(StackReview), A(StackGroup), A(StackDissolve), A(StackToggleAll), S, A(LensRoom), A(CameraLooks), S, A(Pick), A(Reject), A(Unflag)]),
+        (
+            Text::NativeView,
+            &[
+                A(Grid), A(Develop), A(Sensor), S, A(TabInfo), A(TabEdit), S, A(Compare), A(Before), A(CameraJpeg), S, A(Clipping), A(Info), A(Loupe100), C(Navigator), A(JumpToSelection), S,
+                Entry::Sub(Text::MenuProof, &[C(ProofFull), C(ProofSrgb), C(ProofP3), C(ProofAdobe), C(ProofProPhoto), S, A(ProofToggle), C(GamutWarning)]),
+                S, A(Panels), A(Lights), A(FullPreview), S, A(UiLarger), A(UiSmaller), A(UiReset),
+            ],
+        ),
+        (Text::NativeWindow, &[Entry::Minimize, Entry::Maximize]),
+        (Text::NativeHelp, &[A(Shortcuts), S, A(ReportBug), A(PerfReport), A(ShowLogs), S, A(Support), S, A(CheckUpdates), A(About)]),
+    ]
+};
+
+/// Height of the in-window menu bar (Linux), fixed so nothing below it moves.
+#[cfg(not(any(target_os = "macos", windows)))]
+pub const BAR_H: f32 = 24.0;
+
 #[cfg(not(any(target_os = "macos", windows)))]
 impl AppMenu {
     pub fn install(_ctx: &egui::Context, _hwnd: Option<isize>) -> Option<Self> {
         i18n::set_logger(crate::log);
-        None
+        Some(Self { clicked: std::cell::RefCell::new(Vec::new()) })
     }
     pub fn poll(&self) -> Vec<Cmd> {
-        Vec::new()
+        std::mem::take(&mut *self.clicked.borrow_mut())
+    }
+
+    /// Label and shortcut text of a menu command (Linux).
+    fn label(cmd: Cmd) -> (String, String) {
+        let shortcut = |id: &str| shortcuts::find(id).map(|k| shortcuts::display_of(&k.trigger)).unwrap_or_default();
+        match cmd {
+            Cmd::UiLarger => (crate::tr("Oberfläche vergrößern").to_string(), shortcut("ui_larger")),
+            Cmd::UiSmaller => (crate::tr("Oberfläche verkleinern").to_string(), shortcut("ui_smaller")),
+            Cmd::UiReset => (crate::tr("Oberfläche auf 100 %").to_string(), shortcut("ui_reset")),
+            _ => match ACTIONS.iter().find(|a| a.0 == cmd) {
+                Some((_, key, id, _)) => (i18n::text(*key).to_string(), id.map(shortcut).unwrap_or_default()),
+                None => (format!("{cmd:?}"), String::new()),
+            },
+        }
+    }
+
+    fn checked(cmd: Cmd) -> bool {
+        match cmd {
+            Cmd::GamutWarning => crate::proof::warning(),
+            Cmd::Navigator => crate::navigator::enabled(),
+            c => c.proof() == Some(crate::proof::current()),
+        }
+    }
+
+    fn entries(&self, ui: &mut egui::Ui, entries: &[Entry]) {
+        for e in entries {
+            match e {
+                Entry::Separator => {
+                    ui.separator();
+                }
+                Entry::Action(cmd) | Entry::Check(cmd) => {
+                    if *cmd == Cmd::Support && !crate::support::enabled() {
+                        continue;
+                    }
+                    let (title, keys) = Self::label(*cmd);
+                    let button = if matches!(e, Entry::Check(_)) { egui::Button::selectable(Self::checked(*cmd), title) } else { egui::Button::new(title) };
+                    if ui.add(button.shortcut_text(keys)).clicked() {
+                        self.clicked.borrow_mut().push(*cmd);
+                        ui.ctx().request_repaint();
+                    }
+                }
+                Entry::Sub(key, sub) => {
+                    ui.menu_button(i18n::text(*key), |ui| self.entries(ui, sub));
+                }
+                Entry::Minimize => {
+                    if ui.button(i18n::text(Text::NativeMinimize)).clicked() {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    }
+                }
+                Entry::Maximize => {
+                    if ui.button(i18n::text(Text::NativeZoom)).clicked() {
+                        let max = ui.ctx().input(|i| i.viewport().maximized.unwrap_or(false));
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!max));
+                    }
+                }
+            }
+        }
+    }
+
+    /// The menu bar in the window: a fixed strip at the very top (same height always, no layout jumps).
+    pub fn bar(&self, ui: &mut egui::Ui) {
+        let frame = egui::Frame::new().fill(crate::lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(6, 0));
+        egui::Panel::top("menu-bar").show_separator_line(false).resizable(false).exact_size(BAR_H).frame(frame).show(ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                for (key, entries) in LINUX_MENU {
+                    ui.menu_button(i18n::text(*key), |ui| {
+                        ui.set_min_width(260.0);
+                        self.entries(ui, entries);
+                    });
+                }
+            });
+        });
     }
 }
 
@@ -1045,6 +1164,9 @@ impl AppMenu {
             ctx: ctx.clone(),
         })
     }
+
+    /// Only Linux draws the menu in the window; here the system shows it.
+    pub fn bar(&self, _ui: &mut egui::Ui) {}
 
     pub fn poll(&self) -> Vec<Cmd> {
         let test_changed = i18n::locale::test_frame(&self.ctx);

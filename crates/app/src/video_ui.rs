@@ -56,7 +56,7 @@ impl Player {
             if symbol_button(&mut ui, if playing { Symbol::Pause } else { Symbol::Start }) {
                 self.toggle_on();
             }
-            ui.label(egui::RichText::new(library::video::duration_text(pos)).monospace().color(lr::TEXT));
+            ui.label(egui::RichText::new(library::video::duration_text(pos)).monospace().color(lr::TEXT()));
             let rest = ui.available_width() - 120.0;
             let mut p = pos;
             ui.spacing_mut().slider_width = rest.max(60.0);
@@ -66,7 +66,7 @@ impl Player {
                     s.jump(p);
                 }
             }
-            ui.label(egui::RichText::new(library::video::duration_text(length)).monospace().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(library::video::duration_text(length)).monospace().color(lr::TEXT_DIM()));
             if ui.add_sized([64.0, 24.0], egui::Button::new(if self.muted { crate::tr("Ton aus") } else { crate::tr("Ton an") })).clicked() {
                 self.muted = !self.muted;
                 if let Some(s) = &self.mac {
@@ -176,7 +176,7 @@ enum Symbol {
 fn symbol_button(ui: &mut egui::Ui, s: Symbol) -> bool {
     let r = ui.add_sized([34.0, 24.0], egui::Button::new(""));
     let c = r.rect.center();
-    let color = lr::TEXT;
+    let color = lr::TEXT();
     match s {
         Symbol::Start => {
             ui.painter().add(egui::Shape::convex_polygon(vec![c + egui::vec2(-4.0, -6.0), c + egui::vec2(6.0, 0.0), c + egui::vec2(-4.0, 6.0)], color, egui::Stroke::NONE));

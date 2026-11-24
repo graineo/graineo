@@ -1071,7 +1071,7 @@ fn search_row(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<C
             ui.spacing_mut().slider_width = 110.0;
             let r = ui.add(egui::Slider::new(&mut z.size, 100.0..=260.0).show_value(false));
             lr::hover_tip(ui, &r, crate::tr("Kachelgröße"));
-            ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM()));
             ui.add_space(14.0);
             // view: fixed place, both always visible ("Groß" needs one chosen face)
             ui.spacing_mut().item_spacing.x = 0.0;
@@ -1167,14 +1167,14 @@ fn columns_row(ui: &mut egui::Ui, z: &mut State) -> bool {
             let c = &mut child;
             c.horizontal(|ui| {
                 ui.set_height(18.0);
-                ui.label(egui::RichText::new(crate::tr(title)).font(lr::semibold(10.5)).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr(title)).font(lr::semibold(10.5)).color(lr::TEXT_DIM()));
                 if !note.is_empty() {
                     ui.label(egui::RichText::new(crate::tr(note)).size(9.5).color(Color32::from_gray(0x80)));
                 }
                 if !sel.is_empty() {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (r, resp) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::click());
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
                         lr::hover_tip(ui, &resp, crate::tr("Auswahl dieser Spalte aufheben"));
                         if resp.clicked() {
                             clicks[i] = Some(BTreeSet::new());
@@ -1285,8 +1285,8 @@ fn command_bar(ui: &mut egui::Ui, z: &mut State) -> Option<Command> {
             crate::trf!("{n} angezeigt", n = crate::library_ui::thousands(z.built.tiles.len()))
         };
         let (r, _) = ui.allocate_exact_size(egui::vec2(160.0, 20.0), egui::Sense::hover());
-        let g = ui.painter().layout_no_wrap(count_text, egui::FontId::proportional(11.5), lr::TEXT_DIM);
-        ui.painter().with_clip_rect(r).galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        let g = ui.painter().layout_no_wrap(count_text, egui::FontId::proportional(11.5), lr::TEXT_DIM());
+        ui.painter().with_clip_rect(r).galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
         let yes = lr::main_button_min(ui, "Ja", p.yes.is_some(), 56.0);
         lr::tip_key(ui, &yes, p.yes.unwrap_or("Ja: Vorschlag annehmen bzw. Stapel öffnen"), "people_yes");
         if yes.clicked() && p.yes.is_some() {
@@ -1385,7 +1385,7 @@ fn merge_question(z: &mut State, ctx: &egui::Context, anchor: egui::Pos2) {
     egui::Area::new(egui::Id::NULL.with("personen-zusammenfuehren")).order(egui::Order::Foreground).fixed_pos(anchor + egui::vec2(160.0, 0.0)).show(ctx, |ui| {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es schon. {b} Gesichter dazunehmen?", a = name, b = n)).color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es schon. {b} Gesichter dazunehmen?", a = name, b = n)).color(lr::TEXT()));
                 if ui.button(crate::tr("Ja, zusammenführen")).clicked() {
                     let st = step((from, name.clone()), |db, (v, n)| people::rename_person(db, v, &n).map(|_| ()));
                     write(z, ctx, WriteJob { steps: vec![st], faces: Vec::new(), person: Some(from), people_changed: true, undo: UndoMode::Record });
@@ -1422,8 +1422,8 @@ fn context_row(ui: &mut egui::Ui, z: &mut State) -> Option<Command> {
         let name = chosen_face(z).and_then(|id| ix.face(id)).map(|f| f.file_name.clone()).unwrap_or_default();
         // the file name in a fixed width: the buttons after it never move
         let (r, _) = ui.allocate_exact_size(egui::vec2(220.0, 20.0), egui::Sense::hover());
-        let g = ui.painter().layout_job(single_line(name, lr::semibold(13.0), lr::TEXT, r.width()));
-        ui.painter().galley(egui::pos2(r.left() + 4.0, r.center().y - g.size().y / 2.0), g, lr::TEXT);
+        let g = ui.painter().layout_job(single_line(name, lr::semibold(13.0), lr::TEXT(), r.width()));
+        ui.painter().galley(egui::pos2(r.left() + 4.0, r.center().y - g.size().y / 2.0), g, lr::TEXT());
         let f = ui.add(egui::Button::new(crate::tr("Rahmen")).selected(z.frames));
         lr::tip_key(ui, &f, "Gesichtsrahmen zeigen", "people_frames");
         if f.clicked() {
@@ -1458,13 +1458,13 @@ fn context_row(ui: &mut egui::Ui, z: &mut State) -> Option<Command> {
                 Stack::Person(p) => ix.name(p).to_string(),
                 Stack::Group(_) => crate::tr("Gruppe ohne Namen").to_string(),
             };
-            ui.label(egui::RichText::new(title).font(lr::semibold(13.0)).color(lr::TEXT));
+            ui.label(egui::RichText::new(title).font(lr::semibold(13.0)).color(lr::TEXT()));
         }
         // the commands of one person: chosen by search/column, opened as a stack, or one person stack selected
         if let Some(p) = person {
             let name = ix.name(p).to_string();
             if z.stack.is_none() {
-                ui.label(egui::RichText::new(&name).font(lr::semibold(13.0)).color(lr::TEXT));
+                ui.label(egui::RichText::new(&name).font(lr::semibold(13.0)).color(lr::TEXT()));
             }
             ui.add_space(4.0);
             let b = ui.button(crate::tr("In der Bibliothek zeigen"));
@@ -1526,7 +1526,7 @@ fn context_row(ui: &mut egui::Ui, z: &mut State) -> Option<Command> {
         if b.clicked() {
             command = Some(Command::Refresh);
         }
-        one_line(ui, crate::tr("Die Vorschläge wurden im Hintergrund neu berechnet."), lr::TEXT_DIM);
+        one_line(ui, crate::tr("Die Vorschläge wurden im Hintergrund neu berechnet."), lr::TEXT_DIM());
     } else if let Some(c) = apple_hint(ui, z, person) {
         command = Some(c);
     }
@@ -1640,13 +1640,13 @@ fn layout(built: &Built, width: f32, size: f32) -> Layout {
 fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command> {
     if z.index.is_none() {
         ui.add_space(40.0);
-        ui.vertical_centered(|ui| ui.label(egui::RichText::new(crate::tr("Lädt …")).size(15.0).color(lr::TEXT_DIM)));
+        ui.vertical_centered(|ui| ui.label(egui::RichText::new(crate::tr("Lädt …")).size(15.0).color(lr::TEXT_DIM())));
         return None;
     }
     if z.built.tiles.is_empty() {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Keine Gesichter für diese Auswahl")).size(15.0).color(lr::TEXT));
+            ui.label(egui::RichText::new(crate::tr("Keine Gesichter für diese Auswahl")).size(15.0).color(lr::TEXT()));
         });
         return None;
     }
@@ -1700,10 +1700,10 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
                     let s = &z_ref.built.sections[si];
                     let title = section_title(ix, &z_ref.filter, z_ref.stack, s.kind).to_uppercase();
                     let p = ui.painter();
-                    let g = p.layout_no_wrap(title, lr::semibold(11.0), lr::TEXT);
+                    let g = p.layout_no_wrap(title, lr::semibold(11.0), lr::TEXT());
                     let base = egui::pos2(origin.x + 4.0, y + h - 8.0 - g.size().y);
                     let gw = g.size().x;
-                    p.galley(base, g, lr::TEXT);
+                    p.galley(base, g, lr::TEXT());
                     let n = s.range.len();
                     let sub = match s.kind {
                         SectionKind::People if z_ref.filter.one_person().is_some() => String::new(),
@@ -1713,7 +1713,7 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
                         SectionKind::StackFaces => crate::trf!("{n} · neueste zuerst", n = crate::library_ui::thousands(n)),
                         _ => crate::library_ui::thousands(n),
                     };
-                    p.text(egui::pos2(base.x + gw + 10.0, base.y + 1.0), egui::Align2::LEFT_TOP, sub, egui::FontId::proportional(10.5), lr::TEXT_DIM);
+                    p.text(egui::pos2(base.x + gw + 10.0, base.y + 1.0), egui::Align2::LEFT_TOP, sub, egui::FontId::proportional(10.5), lr::TEXT_DIM());
                     p.hline(origin.x..=origin.x + width, y + h - 3.0, egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
                 }
                 Some(start) => {
@@ -1871,12 +1871,12 @@ fn big_view(ui: &mut egui::Ui, z: &State) -> Option<Command> {
     }
     let chosen = chosen_face(z);
     let Some(photo) = shown_photo(z) else {
-        painter.text(area.center(), egui::Align2::CENTER_CENTER, crate::tr("Lädt …"), egui::FontId::proportional(15.0), lr::TEXT_DIM);
+        painter.text(area.center(), egui::Align2::CENTER_CENTER, crate::tr("Lädt …"), egui::FontId::proportional(15.0), lr::TEXT_DIM());
         return command;
     };
     let Some(tex) = &photo.texture else {
         let text = photo.error.as_deref().map_or_else(|| crate::tr("Foto nicht lesbar").to_string(), |e| crate::trf!("Foto nicht lesbar: {e}", e = e));
-        painter.text(area.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), lr::TEXT_DIM);
+        painter.text(area.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), lr::TEXT_DIM());
         return command;
     };
     let s = tex.size_vec2();
@@ -1946,7 +1946,7 @@ pub fn navigator(ui: &mut egui::Ui) {
         let Some(z) = g.as_ref().filter(|z| z.is_open) else { return };
         let chosen = chosen_face(z);
         let text = |t: &str| {
-            painter.text(rect.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(11.0), lr::TEXT_DIM);
+            painter.text(rect.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(11.0), lr::TEXT_DIM());
         };
         if chosen.is_none() {
             text(crate::tr("Kein Gesicht gewählt"));
@@ -2009,13 +2009,13 @@ fn draw_tile(ui: &egui::Ui, z: &State, ix: &FaceIndex, t: &Tile, rect: egui::Rec
     }
     let (title, sub, question) = tile_text(ix, t);
     let w = card.width() - 12.0;
-    let color = if question || hidden { lr::TEXT_DIM } else { lr::TEXT };
+    let color = if question || hidden { lr::TEXT_DIM() } else { lr::TEXT() };
     let g1 = ui.fonts_mut(|f| f.layout_job(single_line(title, lr::semibold(12.5), color, w)));
     let h1 = g1.size().y;
     p.galley(egui::pos2(image_rect.left(), image_rect.bottom() + 5.0), g1, color);
     if !sub.is_empty() {
-        let g2 = ui.fonts_mut(|f| f.layout_job(single_line(sub, egui::FontId::proportional(10.5), lr::TEXT_DIM, w)));
-        p.galley(egui::pos2(image_rect.left(), image_rect.bottom() + 6.0 + h1), g2, lr::TEXT_DIM);
+        let g2 = ui.fonts_mut(|f| f.layout_job(single_line(sub, egui::FontId::proportional(10.5), lr::TEXT_DIM(), w)));
+        p.galley(egui::pos2(image_rect.left(), image_rect.bottom() + 6.0 + h1), g2, lr::TEXT_DIM());
     }
 }
 
@@ -2359,7 +2359,7 @@ fn apple_hint(ui: &mut egui::Ui, z: &State, person: Option<i64>) -> Option<Comma
     }
     let more = if shown.len() > 1 { format!(" {}", crate::trf!("(+{n} weitere)", n = shown.len() - 1)) } else { String::new() };
     let text = format!("{}{more}", crate::trf!("Apple Fotos: Gruppe ohne Namen ({n} Fotos) passt zu {name}, {o} noch offen.", n = h.faces.len(), name = h.name, o = h.open));
-    one_line(ui, &text, lr::TEXT);
+    one_line(ui, &text, lr::TEXT());
     out
 }
 

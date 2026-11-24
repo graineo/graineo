@@ -1156,7 +1156,7 @@ impl LibraryView {
                         Self::set_choice(ui, "bib-neue-sammlung-satz", &sets, parent);
                         if *kind == manage::SMART {
                             ui.add_space(4.0);
-                            ui.label(egui::RichText::new(crate::tr("Regel (Suche, z. B. kamera:dp2 sterne>=3)")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Regel (Suche, z. B. kamera:dp2 sterne>=3)")).small().color(lr::TEXT_DIM()));
                             lr::edit_field(ui, egui::TextEdit::singleline(rule).desired_width(ui.available_width()));
                         }
                         if *kind == manage::COLLECTION {
@@ -1565,7 +1565,7 @@ impl LibraryView {
                             egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                                 egui::Grid::new("bib-importe-liste").num_columns(4).spacing(egui::vec2(14.0, 6.0)).striped(true).show(ui, |ui| {
                                     for h in ["Datum", "Quelle", "Fotos", ""] {
-                                        ui.label(egui::RichText::new(crate::tr(h)).small().color(lr::TEXT_DIM));
+                                        ui.label(egui::RichText::new(crate::tr(h)).small().color(lr::TEXT_DIM()));
                                     }
                                     ui.end_row();
                                     for i in v.iter() {

@@ -15,6 +15,7 @@ mod work_step;
 mod highlight_ui;
 mod edit_marks;
 mod detail_filter;
+mod detail_ui;
 mod print_job;
 mod print_dialog;
 mod print_room;
@@ -33,6 +34,7 @@ mod cell_info;
 mod click_mods;
 mod edge_peek;
 mod sticky;
+mod scroll_hold;
 mod narrow_window;
 mod default_app;
 mod mem_budget;
@@ -98,6 +100,7 @@ mod menu;
 mod paste;
 mod settings_group;
 mod display_color;
+mod window_geometry;
 mod help;
 mod wb_picker;
 mod vectorscope;
@@ -684,6 +687,8 @@ struct App {
     /// Limit the size on export (JPEG/TIFF) and to which size
     export_limit_size: bool,
     export_resize: develop::resize::ResizeFilter,
+    /// output sharpening of finished exports (stored as `exportSharpen`)
+    export_sharpen: develop::output_sharpen::OutputSharpen,
     export_size: develop::export::OutputSize,
     delete_jpegs: bool,
     /// Before/after side by side (Y)
@@ -1068,6 +1073,7 @@ impl App {
             export_as_print: false,
             export_limit_size: library::settings::value("exportLimitSize").as_bool().unwrap_or(false),
             export_resize: library::settings::value("exportResize").as_str().and_then(develop::resize::ResizeFilter::from_key).unwrap_or_default(),
+            export_sharpen: serde_json::from_value(library::settings::value("exportSharpen")).unwrap_or_default(),
             export_size: develop::export::OutputSize::from_json(library::settings::value("exportSize")).unwrap_or(develop::export::OutputSize::LongEdge(2048)),
             delete_jpegs: true,
             compare: false,
@@ -3437,6 +3443,18 @@ impl App {
 
     fn export_after_probe(&mut self, indices: Vec<usize>, dir: PathBuf) {
         self.save_current();
+        // an export target inside a library folder (e.g. the suggested `<photo folder>/export`): the sync must not take
+        // the exported files in as new photos (in the background, the library may be busy)
+        if library::backup_view::active().is_none() {
+            let target = dir.clone();
+            let _ = std::thread::Builder::new().name("export-exclude".into()).spawn(move || {
+                match library::db::Db::open(&library::db_path()).map_err(|e| e.to_string()).and_then(|db| library::manage::exclude_export_folder(&db, &target)) {
+                    Ok(true) => log(&format!("export: {} kept out of the library sync", target.display())),
+                    Ok(false) => {}
+                    Err(e) => log(&format!("export: could not keep {} out of the sync: {e}", target.display())),
+                }
+            });
+        }
         if self.export_original {
             // the files unchanged: every reachable photo (also finished images and videos), with the stacked camera JPEG
             let written = self.export_written(&indices);
@@ -3468,6 +3486,7 @@ impl App {
                 // The size limit only applies to finished images (JPEG/TIFF), DNG stays at full resolution
                 st.output_size = (self.export_limit_size && self.export_format.is_finished_image()).then_some(self.export_size);
                 st.output_filter = self.export_resize;
+                st.output_sharpen = if self.export_format.is_finished_image() { self.export_sharpen } else { Default::default() };
                 tone_eq_ui::without_mask(&mut st);
                 (self.entries[i].path.clone(), st, self.entries[i].image, self.entries[i].meta.clone())
             })
@@ -3645,6 +3664,9 @@ impl App {
                 ctx.request_repaint();
             }
             CheckUpdates => update_ui::check_now(ctx),
+            UiLarger => prefs::step_scale(ctx, 1),
+            UiSmaller => prefs::step_scale(ctx, -1),
+            UiReset => prefs::step_scale(ctx, 0),
             Quit => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             OpenFolder => {
                 file_dialog::folder(ctx, "ordner-oeffnen", |d| d);
@@ -4280,6 +4302,52 @@ impl App {
         }
     }
 
+    /// Zoom percentages offered for the current view (only those above the fit).
+    fn zoom_steps(&self) -> Vec<f32> {
+        let fit_pct = 100.0 / self.one_to_one.max(1e-3);
+        let zoom_steps: &[f32] = if self.tab == Tab::Sensor { &[25.0,50.0,100.0,200.0,400.0,800.0,1600.0,3200.0] } else if self.darkroom_active() { &[25.0,50.0,100.0,200.0,400.0,800.0,1200.0] } else { &[25.0,50.0,100.0,200.0,400.0] };
+        zoom_steps.iter().copied().filter(|p| *p > fit_pct * 1.02).collect()
+    }
+
+    /// Image zoom one step in (`dir` > 0) or out (`dir` < 0, below the first step: fit); `dir` == 0: fit.
+    /// Used by the − / + buttons of the toolbar and by ⌘+ / ⌘− / ⌘0.
+    fn zoom_step(&mut self, dir: i32) {
+        let o = self.one_to_one.max(1e-3);
+        let pct = self.zoom / o * 100.0;
+        let steps = self.zoom_steps();
+        let target = match dir {
+            0 => None,
+            d if d < 0 => steps.iter().rev().copied().find(|p| *p < pct * 0.99),
+            _ => match steps.iter().copied().find(|p| *p > pct * 1.01) {
+                Some(p) => Some(p),
+                None => return,
+            },
+        };
+        match target {
+            None => {
+                self.set_zoom(1.0);
+                self.pan = egui::Vec2::ZERO;
+            }
+            Some(p) => self.set_zoom((o * p / 100.0).max(1.0)),
+        }
+    }
+
+    /// ⌘+ / ⌘− / ⌘0 (Ctrl on Windows and Linux) zoom the photo in Develop and in the comparison; the darkroom keeps them
+    /// for its grain loupe. ⇧⌘+ / ⇧⌘− / ⇧⌘0 change the UI size everywhere (`prefs::scale_shortcuts`).
+    fn zoom_shortcuts(&mut self, ctx: &egui::Context) {
+        use crate::shortcuts::pressed;
+        if prefs::scale_shortcuts(ctx) || self.darkroom_active() || !(self.tab == Tab::Develop || self.compare_shown()) {
+            return;
+        }
+        if pressed(ctx, "image_zoom_in") || pressed(ctx, "image_zoom_in_us") {
+            self.zoom_step(1);
+        } else if pressed(ctx, "image_zoom_out") {
+            self.zoom_step(-1);
+        } else if pressed(ctx, "image_zoom_fit") {
+            self.zoom_step(0);
+        }
+    }
+
     fn set_zoom(&mut self, zoom: f32) {
         self.navigation.zoom.cancel();
         let old = self.zoom;
@@ -4486,6 +4554,8 @@ impl eframe::App for App {
             c.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         display_color::apply(_frame); // display is colour-managed (sRGB → monitor profile)
+        window_geometry::check(_frame, ui.ctx());
+        window_geometry::test_step(ui.ctx());
         photo_display::frame(_frame, self.display.hdr_shown());
         self.video_view = None;
         // the hover preview ended: its image goes too (a new hover never starts with an old picture)
@@ -4647,6 +4717,7 @@ impl eframe::App for App {
         for cmd in commands {
             self.run_cmd(cmd, &ctx);
         }
+        self.zoom_shortcuts(&ctx);
         self.print_room_poll(&ctx);
         if !self.print_room.open {
             self.darkroom_shortcuts(&ctx);
@@ -4665,6 +4736,12 @@ impl eframe::App for App {
             self.shortcuts(&ctx);
         }
 
+        // Linux: the menu bar in the window (macOS and Windows: system menu bar), not in the fullscreen preview (F)
+        if self.preview_full.is_none() {
+            if let Some(m) = &self.menu {
+                m.bar(ui);
+            }
+        }
         // the print room takes the whole window (Esc goes back to the view before)
         if self.print_room.open {
             self.print_room_ui(ui);
@@ -5076,7 +5153,7 @@ impl App {
             // active colour proof or gamut warning: short note (no explanation, no gold; the ?-card is in the settings)
             if let Some(note) = proof::note() {
                 ui.add_space(12.0);
-                ui.label(egui::RichText::new(note).color(lr::TEXT));
+                ui.label(egui::RichText::new(note).color(lr::TEXT()));
             }
             // no file or folder name here: the filmstrip header and the info box already show it
         }
@@ -5149,7 +5226,7 @@ impl App {
             let own_count = self.presets.iter().filter(|p| p.scope != presets::Scope::Film).count();
             lr::subsection(ui, "Eigene", own_count, true, |ui| {
                 if own_count == 0 {
-                    ui.label(egui::RichText::new(crate::tr("Noch keine – unten benennen und mit + speichern.")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch keine – unten benennen und mit + speichern.")).small().color(lr::TEXT_DIM()));
                 } else if let Some((q, _)) = recipe_grid::raster(ui, &self.preset_images, &|e| e.group == 99, active, 105.0, false, &mut hovered_recipe) {
                     selected = Some(q);
                 }
@@ -5305,7 +5382,7 @@ impl App {
                 self.lib.toggle_flag_filter(k);
             }
             let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, filmstrip_layout::HEADER_H), egui::Sense::hover());
-            lr::paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0)), lr::Icon::Funnel, if f != 0 { Color32::WHITE } else { lr::TEXT_DIM });
+            lr::paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0)), lr::Icon::Funnel, if f != 0 { Color32::WHITE } else { lr::TEXT_DIM() });
             // expand / collapse all series (⇧S), the same button as above the grid (library_series.rs)
             if library_ui::series_all_button(ui, self.lib.series_all(), 26.0, filmstrip_layout::HEADER_H - 2.0) {
                 self.lib.series_all_click();
@@ -5314,7 +5391,7 @@ impl App {
                 ui.spacing_mut().button_padding.y = 1.0;
                 self.strip_header_left(ui, library, n, &sel);
                 if let Some(e) = active.and_then(|a| self.entries.get(a)) {
-                    ui.add(egui::Label::new(egui::RichText::new(format!("/ {}", e.name)).small().color(lr::TEXT_DIM)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(format!("/ {}", e.name)).small().color(lr::TEXT_DIM())).truncate());
                 }
             });
         });
@@ -5745,12 +5822,12 @@ impl App {
     fn grid_view(&mut self, ui: &mut egui::Ui) {
         let vis = self.visible();
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::trf!("Raster · {a} von {b} Bildern", a = vis.len(), b = self.entries.len())).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::trf!("Raster · {a} von {b} Bildern", a = vis.len(), b = self.entries.len())).color(lr::TEXT_DIM()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().slider_width = 120.0;
                 let r = ui.add(egui::Slider::new(&mut self.grid_size, 120.0..=360.0).show_value(false));
                 lr::hover_tip(ui, &r, crate::tr("Vorschaugröße"));
-                ui.label(egui::RichText::new(crate::tr("Miniaturen")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Miniaturen")).small().color(lr::TEXT_DIM()));
                 if lr::list_item(ui, crate::tr("Lupe (E)"), false).clicked() {
                     self.grid = false;
                 }
@@ -5824,7 +5901,7 @@ impl App {
                             let room = zone_right - name_left;
                             if room >= measure("a…b.JPG") {
                                 let name = crate::cell_label::middle_with_extension(&e.name, room, &measure);
-                                p.text(egui::pos2(name_left, bottom.y - 1.0), egui::Align2::LEFT_BOTTOM, name, egui::FontId::proportional(10.5), lr::TEXT_DIM);
+                                p.text(egui::pos2(name_left, bottom.y - 1.0), egui::Align2::LEFT_BOTTOM, name, egui::FontId::proportional(10.5), lr::TEXT_DIM());
                             }
                         }
                         if active && self.loading == Some(i) {
@@ -6904,7 +6981,7 @@ impl App {
         let w = ui.available_width();
         let mut surface = egui::ScrollArea::vertical().auto_shrink([false; 2]).max_width(w);
         // Test hook: GRAINEO_SIDEBAR_SCROLL=<points> also scrolls the Sensor tray (screenshots of the whole tray)
-        if let Some(px) = crate::env::var("GRAINEO_SIDEBAR_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+        if let Some(px) = crate::scroll_hold::first_offset(ui, "controls", self.current.is_some()) {
             surface = surface.vertical_scroll_offset(px);
         }
         surface.show(ui, |ui| crate::sticky::scope(ui, |ui| match self.tab {
@@ -7450,7 +7527,7 @@ impl App {
                         }
                     }
                     let sum = (m[row].iter().sum::<f32>() * 100.0).round();
-                    ui.label(egui::RichText::new(crate::trf!("Summe {sum} %", sum = format!("{:.0}", sum))).small().color(if sum == 100.0 { lr::TEXT_DIM } else { Color32::from_rgb(0xe0, 0xb0, 0x60) }));
+                    ui.label(egui::RichText::new(crate::trf!("Summe {sum} %", sum = format!("{:.0}", sum))).small().color(if sum == 100.0 { lr::TEXT_DIM() } else { Color32::from_rgb(0xe0, 0xb0, 0x60) }));
                     if changed && on {
                         s.layer_matrix = Some(m);
                     }
@@ -7518,7 +7595,7 @@ impl App {
                         None => crate::tr("Kein Objektivprofil (Sigma-Objektivdaten nicht gefunden)").to_string(),
                     }
                 };
-                ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM)).truncate());
+                ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).truncate());
                 ui.add_space(4.0);
                 if let Some(id) = &lens_ident {
                     lens_assign::section(ui, s, id);
@@ -7569,7 +7646,7 @@ impl App {
             s.raw.lens_profile = d.raw.lens_profile.clone();
         }
 
-        let nr_changed = s.denoise != d.denoise || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.quattro_detail != d.quattro_detail || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
+        let nr_changed = s.denoise != d.denoise || s.detail_fine != d.detail_fine || s.detail_structure != d.detail_structure || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.quattro_detail != d.quattro_detail || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
             || s.raw.nr_luma != d.raw.nr_luma || s.raw.nr_luma_detail != d.raw.nr_luma_detail || s.raw.nr_color != d.raw.nr_color || s.raw.nr_color_detail != d.raw.nr_color_detail || s.raw.false_color != d.raw.false_color || s.raw.ai_denoise != d.raw.ai_denoise;
         let raw_nr = foreign.as_ref().map(|doc| doc.preview.profile.is_some());
         let reset_nr = lr::section_reset(ui, "Details", true, nr_changed, |ui| {
@@ -7593,7 +7670,7 @@ impl App {
                 lr::hover_tip(ui, &r, binning_ui::sigma_sharpness_locked_tip(binning_cal.is_prepared()));
             }
             if raw_nr.is_none() {
-                ui.label(egui::RichText::new(crate::tr("Zusätzlich schärfen")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Zusätzlich schärfen")).small().color(lr::TEXT_DIM()));
             }
             let mut sh = s.sharpen as f64;
             if lr::slider_hint(ui, "Betrag", &mut sh, 0.0..=2.0, 0.0, 0.01, "Zusätzlich zur Foveon-Schärfung – am besten in 100 % beurteilen (in der eingepassten Ansicht kaum sichtbar)") {
@@ -7616,10 +7693,13 @@ impl App {
                 // Sigma's "noise reduction" is also Sigma's detail level (base and detail layer,
                 // base sharpness) – switching it off therefore also removes the typical Merrill sharpness
                 lr::group_label(ui, "Rauschen & Foveon-Detail");
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut s.denoise, crate::tr("Foveon-Detail"));
-                    help::info(ui, "sigma-detail", "Foveon-Detail", &help::SIGMA_DETAIL);
-                });
+                // two band sliders instead of the switch (detail_ui.rs); photos stored with the switch off keep it
+                if !crate::detail_ui::sliders(ui, s) {
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut s.denoise, crate::tr("Foveon-Detail"));
+                        help::info(ui, "sigma-detail", "Foveon-Detail", &help::SIGMA_DETAIL);
+                    });
+                }
                 // Quattro: adjustable from capture ISO 400 on (full chain); below it the noise reduction runs in the
                 // preparation (see `binning_ui::noise_sliders_locked`). Greyed out, the stored values stay and still apply.
                 let locked = binning_ui::noise_sliders_locked(&binning_cal, &lens_path);
@@ -7651,6 +7731,8 @@ impl App {
             s.sharpen_radius = d.sharpen_radius;
             s.sharpen_mask = d.sharpen_mask;
             s.denoise = d.denoise;
+            s.detail_fine = d.detail_fine;
+            s.detail_structure = d.detail_structure;
             s.nr_luma = d.nr_luma;
             s.nr_chroma = d.nr_chroma;
             s.quattro_detail = d.quattro_detail;
@@ -7800,7 +7882,7 @@ impl App {
             let cells: Vec<_> = icons
                 .iter()
                 .enumerate()
-                .map(|(n, ic)| (Cell::Symbol(*ic, if n == 4 && !can_compare { Color32::from_gray(0x60) } else { lr::TEXT }), n == view, tips[n].as_str()))
+                .map(|(n, ic)| (Cell::Symbol(*ic, if n == 4 && !can_compare { Color32::from_gray(0x60) } else { lr::TEXT() }), n == view, tips[n].as_str()))
                 .collect();
             let view_click = if has(Group::View) {
                 let r = ui.add_enabled_ui(loaded, |ui| {
@@ -7907,7 +7989,7 @@ impl App {
                 }
                 if has(Group::Rotate) {
                     let (t_l, t_r) = (lr::with_shortcut("Nach links drehen", "rotate_left"), lr::with_shortcut("Nach rechts drehen", "rotate_right"));
-                    let cells = [(Cell::Symbol(lr::Icon::RotCcw, lr::TEXT), false, t_l.as_str()), (Cell::Symbol(lr::Icon::RotCw, lr::TEXT), false, t_r.as_str())];
+                    let cells = [(Cell::Symbol(lr::Icon::RotCcw, lr::TEXT()), false, t_l.as_str()), (Cell::Symbol(lr::Icon::RotCw, lr::TEXT()), false, t_r.as_str())];
                     let r = ui.add_enabled_ui(loaded, |ui| {
                         if !loaded {
                             ui.multiply_opacity(0.35);
@@ -7933,11 +8015,11 @@ impl App {
                     let t_hdr = if has_hdr { "HDR-Anzeige" } else { "" };
                     let t_focus = lr::with_shortcut("Fokusfeld der Kamera zeigen", "focus_frame");
                     let cells = [
-                        (Cell::Symbol(lr::Icon::Smiley, lr::TEXT), self.show_faces, "Gesichter anzeigen"),
-                        (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT), self.show_focus, t_focus.as_str()),
-                        (Cell::Symbol(lr::Icon::Warning, lr::TEXT), self.show_clipping, t_clip.as_str()),
-                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT } else { Color32::from_gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
-                        (Cell::Symbol(lr::Icon::Info, lr::TEXT), self.info_level > 0, t_info.as_str()),
+                        (Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), self.show_faces, "Gesichter anzeigen"),
+                        (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), self.show_focus, t_focus.as_str()),
+                        (Cell::Symbol(lr::Icon::Warning, lr::TEXT()), self.show_clipping, t_clip.as_str()),
+                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { Color32::from_gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
+                        (Cell::Symbol(lr::Icon::Info, lr::TEXT()), self.info_level > 0, t_info.as_str()),
                     ];
                     let (c, r) = lr::cell_group_rect(ui, "anzeigen", &cells, 30.0);
                     widths.push((Group::Overlays.key(), r.width()));
@@ -7990,14 +8072,14 @@ impl App {
                 }
                 let icon_rect = egui::Rect::from_center_size(egui::pos2(r.left() + 14.0, r.center().y), egui::vec2(15.0, 15.0));
                 if let Some(ic) = icon {
-                    lr::paint_icon(ui.painter(), icon_rect, ic, lr::TEXT);
+                    lr::paint_icon(ui.painter(), icon_rect, ic, lr::TEXT());
                 }
                 if let Some(c) = swatch {
                     ui.painter().rect_filled(icon_rect.shrink(2.0), 0.0, c);
                 }
-                ui.painter().text(egui::pos2(r.left() + 30.0, r.center().y), egui::Align2::LEFT_CENTER, name, egui::TextStyle::Body.resolve(ui.style()), lr::TEXT);
+                ui.painter().text(egui::pos2(r.left() + 30.0, r.center().y), egui::Align2::LEFT_CENTER, name, egui::TextStyle::Body.resolve(ui.style()), lr::TEXT());
                 if on {
-                    ui.painter().text(egui::pos2(r.right() - 10.0, r.center().y), egui::Align2::RIGHT_CENTER, "✓", egui::TextStyle::Body.resolve(ui.style()), lr::TEXT);
+                    ui.painter().text(egui::pos2(r.right() - 10.0, r.center().y), egui::Align2::RIGHT_CENTER, "✓", egui::TextStyle::Body.resolve(ui.style()), lr::TEXT());
                 }
                 resp.clicked()
             };
@@ -8099,8 +8181,7 @@ impl App {
         let o = self.one_to_one.max(1e-3);
         let pct = self.zoom / o * 100.0;
         let fit_pct = 100.0 / o;
-        let zoom_steps: &[f32] = if self.tab == Tab::Sensor { &[25.0,50.0,100.0,200.0,400.0,800.0,1600.0,3200.0] } else if self.darkroom_active() { &[25.0,50.0,100.0,200.0,400.0,800.0,1200.0] } else { &[25.0,50.0,100.0,200.0,400.0] };
-        let steps: Vec<f32> = zoom_steps.iter().copied().filter(|p| *p > fit_pct * 1.02).collect();
+        let steps = self.zoom_steps();
         let to = |app: &mut Self, p: Option<f32>| match p {
             None => {
                 app.set_zoom(1.0);
@@ -8111,19 +8192,13 @@ impl App {
         // right to left: [fit − +] | menu – menu and buttons as two fields 4 px apart (fit is its own
         // button, highlighted while the photo is fit; the menu shows only the percentage at a fixed width)
         let fit_tip = lr::with_shortcut("Einpassen", "zoom");
-        let cells = [(Cell::Symbol(lr::Icon::FrameCorners, lr::TEXT), self.zoom <= 1.001, fit_tip.as_str()), (Cell::Symbol(lr::Icon::ZoomOut, lr::TEXT), false, "Verkleinern"), (Cell::Symbol(lr::Icon::ZoomIn, lr::TEXT), false, "Vergrößern")];
+        let (out_tip, in_tip) = (lr::with_shortcut("Verkleinern", "image_zoom_out"), lr::with_shortcut("Vergrößern", "image_zoom_in"));
+        let cells = [(Cell::Symbol(lr::Icon::FrameCorners, lr::TEXT()), self.zoom <= 1.001, fit_tip.as_str()), (Cell::Symbol(lr::Icon::ZoomOut, lr::TEXT()), false, out_tip.as_str()), (Cell::Symbol(lr::Icon::ZoomIn, lr::TEXT()), false, in_tip.as_str())];
         let zoom_tip = lr::with_shortcut("Einpassen ↔ 100 %", "zoom");
         match if self.zoom_compact { None } else { lr::cell_group(ui, "zoom", &cells, 30.0) } {
-            Some(0) => to(self, None),
-            Some(1) => match steps.iter().rev().find(|p| **p < pct * 0.99) {
-                Some(p) => to(self, Some(*p)),
-                None => to(self, None),
-            },
-            Some(_) => {
-                if let Some(p) = steps.iter().find(|p| **p > pct * 1.01) {
-                    to(self, Some(*p));
-                }
-            }
+            Some(0) => self.zoom_step(0),
+            Some(1) => self.zoom_step(-1),
+            Some(_) => self.zoom_step(1),
             None => {}
         }
         if !self.zoom_compact {
@@ -8577,7 +8652,7 @@ impl App {
                 if changed {
                     let f = Frame::from_settings(s, fw, fh, cam);
                     let persp = if f.has_perspective() { crate::tr(" · Perspektive") } else { "" };
-                    ui.label(egui::RichText::new(format!("{:.0} × {:.0} px · {:+.1}°{persp}", f.w, f.h, f.angle)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(format!("{:.0} × {:.0} px · {:+.1}°{persp}", f.w, f.h, f.angle)).small().color(lr::TEXT_DIM()));
                 }
                 return;
             }
@@ -8678,7 +8753,7 @@ impl App {
                     // fixed line for the feedback (no jumping)
                     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 16.0), egui::Sense::hover());
                     if let Some(m) = &msg {
-                        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, m, egui::TextStyle::Small.resolve(ui.style()), lr::TEXT_DIM);
+                        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, m, egui::TextStyle::Small.resolve(ui.style()), lr::TEXT_DIM());
                     }
                 }
                 GeoTool::Perspective => {
@@ -8797,7 +8872,7 @@ impl App {
                 self.sensor_raw_sidebar(ui);
             } else {
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new(crate::tr("Die Sensor-Ansicht gibt es für RAW-Dateien (X3F, Bayer, X-Trans) – ein fertiges Bild hat kein Sensormosaik mehr.")).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Die Sensor-Ansicht gibt es für RAW-Dateien (X3F, Bayer, X-Trans) – ein fertiges Bild hat kein Sensormosaik mehr.")).color(lr::TEXT_DIM()));
             }
             return;
         };
@@ -8864,7 +8939,7 @@ impl App {
                             for (color, text) in [(Color32::from_rgb(0xe0, 0xc0, 0x40), crate::tr("geschätzt")), (Color32::from_gray(0x9a), crate::tr("grau gefüllt"))] {
                                 let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
                                 ui.painter().rect_filled(r, 0.0, color);
-                                ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM));
+                                ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM()));
                                 ui.add_space(8.0);
                             }
                         });
@@ -8917,10 +8992,10 @@ impl App {
             if cur.is_some() {
                 s.view = View::Stage { stage, diff: diff && has_diff, gain: g.round().clamp(0.0, 8.0) as u8 };
                 let text = if diff && has_diff { stage.diff_label().unwrap_or_default() } else { stage.explain() };
-                ui.label(egui::RichText::new(crate::tr(text)).small().color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::tr(text)).small().color(lr::TEXT()));
                 let (note, exact) = develop::inspect::exactness(stage, has_spp, prepared);
                 let note = crate::tr(note);
-                let color = if exact { Color32::from_rgb(0x8c, 0xc8, 0x8c) } else { lr::TEXT_DIM };
+                let color = if exact { Color32::from_rgb(0x8c, 0xc8, 0x8c) } else { lr::TEXT_DIM() };
                 ui.label(egui::RichText::new(if exact { format!("● {note}") } else { format!("○ {note}") }).small().color(color));
             } else {
             }
@@ -8935,16 +9010,16 @@ impl App {
         lr::section(ui, "Rohhistogramm & Belichtung", true, |ui| {
             histogram(ui, &hist, 96.0, true);
             ui.add_space(2.0);
-            ui.label(egui::RichText::new(crate::tr("Reserve bis Sättigung")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Reserve bis Sättigung")).color(lr::TEXT_DIM()));
             egui::Grid::new("ettr").num_columns(3).spacing([18.0, 2.0]).show(ui, |ui| {
                 for (c, name) in [(0, "unten"), (1, "Mitte"), (2, "oben")] {
                     let h = headroom[c];
                     let (text, color) = if h.is_nan() {
-                        ("–".to_string(), lr::TEXT_DIM)
+                        ("–".to_string(), lr::TEXT_DIM())
                     } else if h <= 0.05 {
                         ("ausgebrannt".to_string(), Color32::from_rgb(0xe8, 0x70, 0x70))
                     } else {
-                        (format!("{h:+.1} EV"), if h < 0.5 { Color32::from_rgb(0xe8, 0xc0, 0x60) } else { lr::TEXT })
+                        (format!("{h:+.1} EV"), if h < 0.5 { Color32::from_rgb(0xe8, 0xc0, 0x60) } else { lr::TEXT() })
                     };
                     ui.label(name);
                     ui.label(egui::RichText::new(text).color(color).monospace());
@@ -8960,10 +9035,10 @@ impl App {
             });
             match &self.stats {
                 Some((i, [_, _, w, h], st)) if *i == index => {
-                    ui.label(egui::RichText::new(crate::trf!("{w} × {h} Pixel, Rohdaten nach Schwarzabzug (Sensoreinheiten)", w = w, h = h)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::trf!("{w} × {h} Pixel, Rohdaten nach Schwarzabzug (Sensoreinheiten)", w = w, h = h)).small().color(lr::TEXT_DIM()));
                     egui::Grid::new("stats").num_columns(6).striped(true).spacing([10.0, 2.0]).show(ui, |ui| {
                         for t in ["", crate::tr("Mittel"), crate::tr("Std."), crate::tr("Rauschen"), crate::tr("SNR"), crate::tr("Clip")] {
-                            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM()));
                         }
                         ui.end_row();
                         for (c, name) in [(2, "oben"), (1, "Mitte"), (0, "unten")] {
@@ -8981,17 +9056,17 @@ impl App {
                         ui.label(
                             egui::RichText::new(crate::trf!("Rauschen unten/oben: × {a} · Mitte/oben: × {b}", a = format!("{:.2}", st[0].noise / st[2].noise), b = format!("{:.2}", st[1].noise / st[2].noise)))
                             .small()
-                            .color(lr::TEXT_DIM),
+                            .color(lr::TEXT_DIM()),
                         );
                     }
                     ui.label(
                         egui::RichText::new(crate::tr("„Rauschen“ = Differenz waagerechter Nachbarn / √2 – unabhängig von Verläufen im Feld. Für saubere Werte eine gleichmäßige Fläche messen."))
                             .small()
-                            .color(lr::TEXT_DIM),
+                            .color(lr::TEXT_DIM()),
                     );
                 }
                 _ => {
-                    ui.label(egui::RichText::new(crate::tr("Noch kein Messfeld – z. B. Himmel oder eine graue Fläche aufziehen.")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch kein Messfeld – z. B. Himmel oder eine graue Fläche aufziehen.")).small().color(lr::TEXT_DIM()));
                 }
             }
         });
@@ -9003,7 +9078,7 @@ impl App {
             ui.label(
                 egui::RichText::new(crate::tr("Sigmas Werkskalibrierung in jeder Datei: Flat-Field-Karten, Farbmatrizen, Weißabgleich-Tabellen, Rauschmodelle, Defektpixel."))
                     .small()
-                    .color(lr::TEXT_DIM),
+                    .color(lr::TEXT_DIM()),
             );
             // Test hook: GRAINEO_CAMF=<entry> opens the inspector directly
             let auto = crate::env::var("GRAINEO_CAMF").ok().filter(|_| self.camf.index.is_none());
@@ -9025,7 +9100,7 @@ impl App {
             ui.label(
                 egui::RichText::new(crate::tr("Drei lineare 16-Bit-Graustufen-TIFFs (unten, Mitte, oben) in voller Auflösung – für eigene Mischungen, Analysen oder Astro-Stacking."))
                     .small()
-                    .color(lr::TEXT_DIM),
+                    .color(lr::TEXT_DIM()),
             );
             ui.checkbox(&mut self.layers_flat, crate::tr("Flat-Field anwenden (Spatial Gain + Farbschatten)"));
             if ui.button(crate::tr("Schichten speichern …")).clicked() {
@@ -9851,15 +9926,15 @@ fn log(msg: &str) {
     }
 }
 
-/// Apply auto tone to `s` (SPP preview if the settings use it).
+/// Apply the automatic look to `s` (SPP preview if the settings use it).
 fn auto_tone(previews: &jobs::Previews, cal: &develop::Calibration, s: &mut Settings) -> bool {
     let preview = match &previews.spp {
         Some(spp) if develop::Session::uses_spp(s) => spp,
         _ => &previews.developed,
     };
-    match develop::auto::auto_tone(preview, cal, s) {
-        Some(a) => {
-            a.apply_to(s);
+    match develop::auto::auto_look(preview, cal, s) {
+        Some(x) => {
+            develop::auto_look::apply(&x, s);
             true
         }
         None => false,
@@ -9888,6 +9963,7 @@ fn mode_label(m: &str) -> String {
         "ForestGreen" => "Forest Green",
         "TealAndOrange" => "Teal & Orange",
         "" => crate::tr("Wie Aufnahme"),
+        develop::settings::LINEAR_MODE => crate::tr("Linear (Szene)"),
         other => other,
     }
     .to_string()

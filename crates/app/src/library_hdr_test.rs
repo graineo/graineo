@@ -344,10 +344,10 @@ fn selections_and_refusals() {
     // a single photo without a bracket
     let (_, why) = ask(&mut b, &[], lib.singles[0]);
     assert!(why.unwrap().contains("Mindestens zwei"));
-    // X3F (Foveon) are never sources
-    let (_, why) = ask(&mut b, &lib.x3f, lib.x3f[1]);
-    assert!(why.unwrap().contains("Mehrfachaufnahmen der Kamera (X3I)"));
-    // across two series (RW2 and X3F): refused for the X3F
+    // a bracket of Foveon single frames (X3F) merges like any other (1.5.1)
+    let (got, why) = ask(&mut b, &lib.x3f, lib.x3f[1]);
+    assert_eq!((got.len(), why), (3, None));
+    // across two series (RW2 and X3F): refused for the X3F (Foveon frames never merge with mosaic RAWs)
     let mut both = lib.bracket.to_vec();
     both.extend(lib.x3f);
     let (_, why) = ask(&mut b, &both, lib.bracket[1]);
@@ -366,7 +366,8 @@ fn selections_and_refusals() {
     load_series(&mut b, c.image);
     let (got, why) = ask(&mut b, &[c.image, lib.bracket[0], lib.bracket[1], lib.bracket[2]], c.image);
     assert_eq!((got.len(), why), (3, None), "the sources, without the HDR");
-    // "Alle Reihen zusammenfügen": the bracket with its merge marked, no X3F group
+    // "Alle Reihen zusammenfügen": the bracket with its merge marked; the X3F bracket is offered and ticked like any
+    // other (Foveon single frames merge since 1.5.1)
     b.selection = both.iter().copied().collect();
     b.active = Some(lib.bracket[1]);
     let groups = b.hdr_groups();
@@ -374,7 +375,7 @@ fn selections_and_refusals() {
     let rw2 = groups.iter().find(|g| g.rows[0].format == "RW2").unwrap();
     assert!(rw2.merged && !rw2.on, "merged already: offered, not ticked");
     let x3f = groups.iter().find(|g| g.rows[0].format == "X3F").unwrap();
-    assert!(!x3f.on && x3f.reason.as_deref().is_some_and(|r| r.contains("X3I")), "X3F: not ticked, with the reason");
+    assert!(x3f.on && x3f.reason.is_none(), "X3F bracket: ticked, no reason {:?}", x3f.reason);
     drop(b);
     let _ = std::fs::remove_dir_all(&lib.dir);
 }

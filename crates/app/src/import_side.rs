@@ -27,8 +27,8 @@ fn small(ui: &mut egui::Ui, t: &str, color: Color32) {
 fn counter(ui: &mut egui::Ui, n: Option<usize>, text: &str) {
     ui.horizontal(|ui| {
         let n = n.map(dialog::number).unwrap_or_else(|| "…".into());
-        ui.add_sized([58.0, 16.0], egui::Label::new(egui::RichText::new(n).color(lr::TEXT)).halign(egui::Align::Max));
-        ui.label(egui::RichText::new(crate::tr(text)).color(lr::TEXT_DIM));
+        ui.add_sized([58.0, 16.0], egui::Label::new(egui::RichText::new(n).color(lr::TEXT())).halign(egui::Align::Max));
+        ui.label(egui::RichText::new(crate::tr(text)).color(lr::TEXT_DIM()));
     });
 }
 
@@ -44,14 +44,14 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         for name in imp.reading.clone() {
             ui.horizontal(|ui| {
                 ui.add(egui::Spinner::new().size(11.0));
-                small(ui, &crate::trf!("„{n}“ wird gelesen …", n = name), lr::TEXT_DIM);
+                small(ui, &crate::trf!("„{n}“ wird gelesen …", n = name), lr::TEXT_DIM());
             });
         }
         camera::sources(ui, imp, pick);
         ui.add_space(2.0);
         // the folder chosen as source in its own field (label left, button right above it)
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::tr("Ordner")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Ordner")).color(lr::TEXT_DIM()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let r = ui.button(crate::tr("Wählen …"));
                 lr::hover_tip(ui, &r, "Einen Ordner als Quelle wählen");
@@ -66,7 +66,7 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         lr::section_rule(ui);
         heading(ui, "Zuletzt");
         if recent.is_empty() {
-            small(ui, crate::tr("–"), lr::TEXT_DIM);
+            small(ui, crate::tr("–"), lr::TEXT_DIM());
         }
         for p in recent {
             let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string());
@@ -94,7 +94,7 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
                 } else {
                     crate::trf!("prüft, was schon da ist … {g} von {n}", g = dialog::number(g), n = dialog::number(n))
                 };
-                small(ui, &t, lr::TEXT_DIM);
+                small(ui, &t, lr::TEXT_DIM());
             });
         }
         let r = ui.scope(|ui| counter(ui, Some(o.photos), "Fotos gefunden")).response;
@@ -102,10 +102,10 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         let known = |n: usize| (!checking).then_some(n);
         ui.horizontal(|ui| {
             let n = known(o.new).map(dialog::number).unwrap_or_else(|| "…".into());
-            ui.add_sized([58.0, 16.0], egui::Label::new(egui::RichText::new(n).color(lr::TEXT)).halign(egui::Align::Max));
+            ui.add_sized([58.0, 16.0], egui::Label::new(egui::RichText::new(n).color(lr::TEXT())).halign(egui::Align::Max));
             // no size while nothing is new (the size format shows at least 1 MB)
             let t = if o.new_bytes > 0 && !checking { crate::trf!("neu · {a}", a = dialog::size(o.new_bytes)) } else { crate::tr("neu").to_string() };
-            ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(t).color(lr::TEXT_DIM()));
         });
         let r = ui.scope(|ui| counter(ui, known(o.there), "schon da")).response;
         lr::hover_tip(ui, &r, "Schon in der Bibliothek (gleicher Inhalt, egal unter welchem Namen und in welchem Ordner); bei RAW+JPG entscheidet das RAW – nicht angehakt");
@@ -117,7 +117,7 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         // "Hinzufügen" takes whole folders: the file types and the grid switches would do nothing (their place stays)
         let in_place = imp.mode == Mode::InPlace;
         if in_place {
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.")).small().color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.")).small().color(lr::TEXT_DIM())).wrap());
         }
         ui.scope(|ui| {
         if in_place {
@@ -204,7 +204,7 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
         let what = mode_sentence(imp.mode, from_camera);
         ui.add_space(4.0);
         ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 30.0), egui::Layout::top_down(egui::Align::Min), |ui| {
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr(what)).small().color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(what)).small().color(lr::TEXT_DIM())).wrap());
         });
         let copies = imp.mode != Mode::InPlace;
         lr::section_rule(ui);
@@ -233,13 +233,13 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                 } else if let Some(z) = imp.target.clone() {
                     match free_space(imp, &z) {
                         // nothing chosen yet: no "needs 1 MB" (the size format shows at least 1 MB)
-                        Some(f) if need == 0 => (crate::trf!("{a} frei", a = dialog::size(f)), lr::TEXT_DIM),
+                        Some(f) if need == 0 => (crate::trf!("{a} frei", a = dialog::size(f)), lr::TEXT_DIM()),
                         Some(f) if f < need => (crate::trf!("{a} frei · braucht {b} – zu wenig Platz", a = dialog::size(f), b = dialog::size(need)), Color32::from_rgb(0xe0, 0x5c, 0x50)),
-                        Some(f) => (crate::trf!("{a} frei · braucht {b}", a = dialog::size(f), b = dialog::size(need)), lr::TEXT_DIM),
-                        None => (crate::trf!("braucht {b}", b = dialog::size(need)), lr::TEXT_DIM),
+                        Some(f) => (crate::trf!("{a} frei · braucht {b}", a = dialog::size(f), b = dialog::size(need)), lr::TEXT_DIM()),
+                        None => (crate::trf!("braucht {b}", b = dialog::size(need)), lr::TEXT_DIM()),
                     }
                 } else {
-                    (String::new(), lr::TEXT_DIM)
+                    (String::new(), lr::TEXT_DIM())
                 };
                 small(ui, &line.0, line.1);
             }
@@ -255,7 +255,7 @@ pub(super) fn right(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, St
                     format!("→ {name}")
                 }
             });
-            small(ui, &example.unwrap_or_default(), lr::TEXT_DIM);
+            small(ui, &example.unwrap_or_default(), lr::TEXT_DIM());
             lr::section_rule(ui);
             ui.horizontal(|ui| {
                 heading(ui, "Zweite Kopie");
@@ -284,7 +284,7 @@ fn apply_on_import(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, Str
     let field_w = ui.available_width() - label_w - 10.0;
     let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
         ui.horizontal(|ui| {
-            ui.add_sized([label_w, 20.0], egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM)).halign(egui::Align::Min));
+            ui.add_sized([label_w, 20.0], egui::Label::new(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM())).halign(egui::Align::Min));
             add(ui);
         });
     };
@@ -407,7 +407,7 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
         egui::ScrollArea::vertical().id_salt("import-ordner").auto_shrink([false, false]).max_height(list_h - 12.0).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             if imp.folders.is_empty() {
-                small(ui, if imp.scanning { crate::tr("liest die Fotos …") } else { crate::tr("Keine Ordner mit Fotos.") }, lr::TEXT_DIM);
+                small(ui, if imp.scanning { crate::tr("liest die Fotos …") } else { crate::tr("Keine Ordner mit Fotos.") }, lr::TEXT_DIM());
             }
             for (p, n, all_there) in imp.folders.clone() {
                 let focused = imp.folder_focus.as_ref() == Some(&p);
@@ -427,15 +427,15 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
                     painter.rect_filled(check.shrink(3.5), 0.0, Color32::from_gray(0xe8));
                 }
                 let font = egui::TextStyle::Body.resolve(ui.style());
-                let count = painter.layout_no_wrap(dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")), font.clone(), lr::TEXT_DIM);
+                let count = painter.layout_no_wrap(dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")), font.clone(), lr::TEXT_DIM());
                 let mut right = rect.right() - 8.0 - count.size().x;
-                painter.galley(egui::pos2(right, rect.center().y - count.size().y / 2.0), count, lr::TEXT_DIM);
+                painter.galley(egui::pos2(right, rect.center().y - count.size().y / 2.0), count, lr::TEXT_DIM());
                 if all_there {
                     let g = painter.layout_no_wrap(crate::tr("schon in der Bibliothek").to_string(), font.clone(), Color32::from_rgb(0x8f, 0xc0, 0x8a));
                     right -= g.size().x + 10.0;
                     painter.galley(egui::pos2(right, rect.center().y - g.size().y / 2.0), g, Color32::from_rgb(0x8f, 0xc0, 0x8a));
                 }
-                let color = if focused || row.hovered() { Color32::WHITE } else { lr::TEXT };
+                let color = if focused || row.hovered() { Color32::WHITE } else { lr::TEXT() };
                 let name = painter.layout_no_wrap(rel_name(&p), font, color);
                 let clip = egui::Rect::from_min_max(egui::pos2(check.right() + 8.0, rect.top()), egui::pos2(right - 10.0, rect.bottom()));
                 painter.with_clip_rect(clip).galley(egui::pos2(clip.left(), rect.center().y - name.size().y / 2.0), name, color);
@@ -454,10 +454,10 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
     peek(ui, imp, width, peek_h, &rel_name);
     ui.add_space(4.0);
     if imp.source_in_library {
-        small(ui, crate::tr("liegt in einem Ordner der Bibliothek"), lr::TEXT_DIM);
+        small(ui, crate::tr("liegt in einem Ordner der Bibliothek"), lr::TEXT_DIM());
     } else if imp.source.is_some() {
-        small(ui, crate::tr("Neuer Ordner in der Bibliothek:"), lr::TEXT_DIM);
-        small(ui, &source.display().to_string(), lr::TEXT);
+        small(ui, crate::tr("Neuer Ordner in der Bibliothek:"), lr::TEXT_DIM());
+        small(ui, &source.display().to_string(), lr::TEXT());
     }
 }
 
@@ -472,7 +472,7 @@ fn peek(ui: &mut egui::Ui, imp: &mut Import, width: f32, height: f32, rel_name: 
             Some(f) => crate::trf!("Inhalt von „{a}“ · {b}", a = rel_name(f), b = dialog::count(cells.len(), crate::tr("Foto"), crate::tr("Fotos"))),
             None => String::new(),
         };
-        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate());
+        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).truncate());
     });
     let mut wanted: Vec<(PathBuf, String)> = Vec::new();
     egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
@@ -482,7 +482,7 @@ fn peek(ui: &mut egui::Ui, imp: &mut Import, width: f32, height: f32, rel_name: 
         if cells.is_empty() {
             ui.centered_and_justified(|ui| {
                 let t = if imp.scanning { crate::tr("liest die Fotos …") } else if imp.folders.is_empty() { "" } else { crate::tr("Klicke auf einen Ordner, um seine Fotos zu sehen.") };
-                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM()));
             });
             return;
         }
@@ -534,7 +534,7 @@ fn peek_cell(ui: &egui::Ui, imp: &Import, ci: usize, rect: egui::Rect, folder_on
             p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.0), Color32::from_gray(0x82));
         }
     }
-    let color = if there { lr::TEXT_DIM } else { lr::TEXT };
+    let color = if there { lr::TEXT_DIM() } else { lr::TEXT() };
     let name = p.layout_no_wrap(grid::cell_name(imp, c), egui::FontId::proportional(10.0), color);
     let clip = egui::Rect::from_min_max(egui::pos2(inner.left() + 4.0, inner.bottom() - 17.0), egui::pos2(inner.right() - 4.0, inner.bottom()));
     p.with_clip_rect(clip).galley(egui::pos2(inner.left() + 5.0, inner.bottom() - 15.0), name, color);

@@ -60,6 +60,7 @@ fn decode(bytes: &[u8]) -> NoiseParams {
         intensity_model: [f(0x170), f(0x174), f(0x178)],
         fpn_suppression: u(0x180),
         chroma_off: false,
+        texture: [1.0, 1.0],
     }
 }
 

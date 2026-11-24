@@ -300,7 +300,7 @@ impl LibraryView {
         }
         egui::Frame::new().fill(Color32::from_gray(0x24)).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::tr("Duplikate als Raster: die Fotos einer Gruppe stehen nebeneinander.")).color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::tr("Duplikate als Raster: die Fotos einer Gruppe stehen nebeneinander.")).color(lr::TEXT()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(crate::tr("Gruppen zeigen")).clicked() {
                         self.dupes.grid = false;
@@ -370,10 +370,10 @@ impl LibraryView {
             if searching || loading {
                 ui.add(egui::Spinner::new().size(12.0));
             }
-            ui.label(egui::RichText::new(head).color(lr::TEXT));
+            ui.label(egui::RichText::new(head).color(lr::TEXT()));
         });
         if left_out > 0 {
-            ui.label(egui::RichText::new(crate::trf!("{a} nur mit Fotos aus Apple Fotos ausgeblendet (Apple Fotos wird nie verändert)", a = crate::dialog::count(left_out, crate::tr("Gruppe"), crate::tr("Gruppen")))).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::trf!("{a} nur mit Fotos aus Apple Fotos ausgeblendet (Apple Fotos wird nie verändert)", a = crate::dialog::count(left_out, crate::tr("Gruppe"), crate::tr("Gruppen")))).small().color(lr::TEXT_DIM()));
         }
         ui.add_space(6.0);
         // filters
@@ -457,7 +457,7 @@ impl LibraryView {
                 c = if bytes == 0 { "0 MB".to_string() } else { crate::dialog::size(bytes) }
             ))
             .small()
-            .color(lr::TEXT_DIM),
+            .color(lr::TEXT_DIM()),
         );
         ui.add_space(4.0);
         ui.separator();
@@ -530,9 +530,9 @@ impl LibraryView {
         let kw = g.size().x;
         painter.galley(egui::pos2(rect.left() + 4.0, rect.top() + 6.0), g, kind_color);
         let right = if marked_bytes > 0 { crate::trf!("{a} würden frei", a = crate::dialog::size(marked_bytes)) } else { String::new() };
-        painter.text(egui::pos2(rect.right() - 8.0, rect.top() + 6.0), egui::Align2::RIGHT_TOP, &right, small.clone(), lr::TEXT);
+        painter.text(egui::pos2(rect.right() - 8.0, rect.top() + 6.0), egui::Align2::RIGHT_TOP, &right, small.clone(), lr::TEXT());
         let clip = ui.painter_at(egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - 140.0, rect.top() + HEAD_H)));
-        clip.text(egui::pos2(rect.left() + 12.0 + kw, rect.top() + 6.0), egui::Align2::LEFT_TOP, format!("· {why}"), small.clone(), lr::TEXT_DIM);
+        clip.text(egui::pos2(rect.left() + 12.0 + kw, rect.top() + 6.0), egui::Align2::LEFT_TOP, format!("· {why}"), small.clone(), lr::TEXT_DIM());
         for (j, m) in p.members.iter().enumerate() {
             let (line, col) = (j / per_line, j % per_line);
             let card = egui::Rect::from_min_size(egui::pos2(rect.left() + 4.0 + col as f32 * (CARD_W + GAP), rect.top() + HEAD_H + line as f32 * (CARD_H + GAP)), egui::vec2(CARD_W, CARD_H));
@@ -547,12 +547,12 @@ impl LibraryView {
                 let adv = keep.map(|k| dc::decisive(k, m)).unwrap_or(None);
                 (crate::tr("ENTFERNEN").to_string(), crate::trf!("bleibendes: {a}", a = advantage(adv)), Color32::from_rgb(0xe0, 0x6c, 0x5c))
             } else if let Some(why) = m.not_removable().filter(|_| j > 0) {
-                (crate::tr("bleibt").to_string(), crate::menu::i18n::tr_msg(why).into_owned(), lr::TEXT)
+                (crate::tr("bleibt").to_string(), crate::menu::i18n::tr_msg(why).into_owned(), lr::TEXT())
             } else if j == 0 {
                 let adv = p.members.get(1).map(|o| dc::decisive(m, o)).unwrap_or(None);
                 (crate::tr("BLEIBT").to_string(), crate::trf!("Vorteil: {a}", a = advantage(adv)), Color32::from_rgb(0x4c, 0xc2, 0x6a))
             } else {
-                (crate::tr("bleibt").to_string(), String::new(), lr::TEXT)
+                (crate::tr("bleibt").to_string(), String::new(), lr::TEXT())
             };
             if marked {
                 painter.rect_stroke(card, 0.0, egui::Stroke::new(1.5, Color32::from_rgb(0xb0, 0x50, 0x44)), egui::StrokeKind::Inside);
@@ -575,17 +575,17 @@ impl LibraryView {
                 text.text(egui::pos2(x, ty), egui::Align2::LEFT_TOP, t, font.clone(), color);
                 ty += 15.0;
             };
-            line_at(m.name.clone(), &body, lr::TEXT);
-            line_at(folder_text(&m.path), &small, lr::TEXT_DIM);
+            line_at(m.name.clone(), &body, lr::TEXT());
+            line_at(folder_text(&m.path), &small, lr::TEXT_DIM());
             let res = match (m.width, m.height) {
                 (Some(w), Some(h)) if w > 0 && h > 0 => format!("{w}×{h}"),
                 _ => "–".into(),
             };
-            line_at(format!("{} · {res} · {}", m.format, crate::dialog::size(m.size.max(0) as u64)), &small, lr::TEXT);
-            line_at(rating_line(m), &small, lr::TEXT_DIM);
-            line_at(data_line(m), &small, lr::TEXT_DIM);
+            line_at(format!("{} · {res} · {}", m.format, crate::dialog::size(m.size.max(0) as u64)), &small, lr::TEXT());
+            line_at(rating_line(m), &small, lr::TEXT_DIM());
+            line_at(data_line(m), &small, lr::TEXT_DIM());
             line_at(state, &small, state_color);
-            line_at(reason, &small, lr::TEXT_DIM);
+            line_at(reason, &small, lr::TEXT_DIM());
             let tip = crate::trf!(
                 "{a}\n\nKlick: zum Entfernen markieren oder wieder behalten · Doppelklick: nur dieses behalten",
                 a = m.path.display()

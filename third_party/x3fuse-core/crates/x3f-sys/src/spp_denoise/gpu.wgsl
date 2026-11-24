@@ -40,6 +40,7 @@ struct Params {
     ca_v: array<f32, 8>,
     ca_flags: array<f32, 6>,
     ca_c: array<f32, 12>,
+    tex_on: u32, tex_fine: f32, tex_structure: f32,
 }
 
 @group(0) @binding(0) var<storage, read> P: Params;
@@ -693,6 +694,64 @@ fn osf_ratio(@builtin(global_invocation_id) g: vec3<u32>) {
     let s = ld3_2(ix(t, x, y));
     let l = s.x * P.w0 + s.y * P.w1 + s.z * P.w2;
     b1[ix(t, x, y)] = (v + P.epsilon) / (max(l, 0.0) + P.epsilon);
+}
+
+// ---------------------------------------------------------------------------
+// graineo addition (not part of SPP): fine/structure band gains of the luminance residual, as
+// `residual::texture_bands` on the CPU (log domain, separable binomial [1 4 6 4 1]/16 à trous,
+// steps 1, 2 | 4, 8, edge pixels clamped to the tile, recombined as exp(rest + f·fine + s·structure)).
+
+// b0 = residual quotient, b1 = its log (output).
+@compute @workgroup_size(16, 16, 1)
+fn tex_log(@builtin(global_invocation_id) g: vec3<u32>) {
+    let x = g.x; let y = g.y; let t = g.z;
+    if (x >= P.cols || y >= P.rows || t >= P.batch) { return; }
+    let i = ix(t, x, y);
+    b1[i] = log(max(b0[i], 1e-6));
+}
+
+const BINOMIAL5 = array<f32, 5>(0.0625, 0.25, 0.375, 0.25, 0.0625);
+
+// b0 = source, b1 = destination (one direction, dilation `step`).
+fn tex_pass(g: vec3<u32>, step: i32, horizontal: bool) {
+    let x = g.x; let y = g.y; let t = g.z;
+    if (x >= P.cols || y >= P.rows || t >= P.batch) { return; }
+    var sum = 0.0;
+    for (var k = 0; k < 5; k++) {
+        let d = (k - 2) * step;
+        var sx = i32(x); var sy = i32(y);
+        if (horizontal) { sx = clamp(sx + d, 0, i32(P.cols) - 1); } else { sy = clamp(sy + d, 0, i32(P.rows) - 1); }
+        sum += BINOMIAL5[k] * b0[ix(t, u32(sx), u32(sy))];
+    }
+    b1[ix(t, x, y)] = sum;
+}
+
+@compute @workgroup_size(16, 16, 1)
+fn tex_h1(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 1, true); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_v1(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 1, false); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_h2(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 2, true); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_v2(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 2, false); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_h4(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 4, true); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_v4(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 4, false); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_h8(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 8, true); }
+@compute @workgroup_size(16, 16, 1)
+fn tex_v8(@builtin(global_invocation_id) g: vec3<u32>) { tex_pass(g, 8, false); }
+
+// b0 = residual quotient (output), b1 = log, b2 = low-pass after steps 1, 2, b3 = after all steps.
+@compute @workgroup_size(16, 16, 1)
+fn tex_combine(@builtin(global_invocation_id) g: vec3<u32>) {
+    let x = g.x; let y = g.y; let t = g.z;
+    if (x >= P.cols || y >= P.rows || t >= P.batch) { return; }
+    let i = ix(t, x, y);
+    let fine_low = b2[i];
+    let low = b3[i];
+    b0[i] = exp(low + P.tex_fine * (b1[i] - fine_low) + P.tex_structure * (fine_low - low));
 }
 
 // ---------------------------------------------------------------------------

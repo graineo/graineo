@@ -269,7 +269,7 @@ fn overlay_button(ui: &egui::Ui, rect: egui::Rect, id: egui::Id, label: &str, on
     let fill = if r.hovered() { Color32::from_gray(0x2c) } else { Color32::from_black_alpha(150) };
     p.rect_filled(rect, 0.0, fill);
     p.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(if on { 0x6a } else { 0x38 })), egui::StrokeKind::Inside);
-    let color = if on || r.hovered() { TEXT } else { Color32::from_gray(0x80) };
+    let color = if on || r.hovered() { TEXT() } else { Color32::from_gray(0x80) };
     p.text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), color);
     lr::hover_tip(ui, &r, tip);
     r.clicked()
@@ -358,7 +358,7 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
         out.zoom_changed = true;
     }
     let skin_label = crate::tr("Haut");
-    let skin_w = ui.painter().layout_no_wrap(skin_label.to_string(), egui::FontId::proportional(10.0), TEXT).size().x + 10.0;
+    let skin_w = ui.painter().layout_no_wrap(skin_label.to_string(), egui::FontId::proportional(10.0), TEXT()).size().x + 10.0;
     let skin_rect = egui::Rect::from_min_size(outer.right_bottom() + egui::vec2(-skin_w - 4.0, -bh - 4.0), egui::vec2(skin_w, bh));
     if overlay_button(ui, skin_rect, resp.id.with("haut"), skin_label, skin, crate::tr("Hauttonlinie zeigen: Hauttöne aller Menschen liegen nahe daran")) {
         set_skin_line(!skin);
@@ -374,14 +374,14 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
         let line1 = if sat < 3.0 { crate::tr("Neutral (Grau)").to_string() } else { format!("{} · {:.0}°", hue_name(hue_deg(cb, cr)), hue_deg(cb, cr)) };
         let line2 = crate::trf!("Sättigung {s} %", s = format!("{sat:.0}"));
         let f = egui::FontId::proportional(10.5);
-        let g1 = p.layout_no_wrap(line1, f.clone(), TEXT);
-        let g2 = p.layout_no_wrap(line2, f, TEXT_DIM);
+        let g1 = p.layout_no_wrap(line1, f.clone(), TEXT());
+        let g2 = p.layout_no_wrap(line2, f, TEXT_DIM());
         let w = g1.size().x.max(g2.size().x) + 10.0;
         let box_rect = egui::Rect::from_min_size(outer.left_top() + egui::vec2(4.0, 4.0), egui::vec2(w, g1.size().y + g2.size().y + 6.0));
         p.rect_filled(box_rect, 0.0, Color32::from_black_alpha(190));
         let h1 = g1.size().y;
-        p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0), g1, TEXT);
-        p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0 + h1), g2, TEXT_DIM);
+        p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0), g1, TEXT());
+        p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0 + h1), g2, TEXT_DIM());
     }
     // the "?" card stays visible: the display needs an explanation for whoever sees it for the first time
     crate::help::question_mark(ui, outer.right_top() + egui::vec2(-10.0, 10.0), resp.id.with("hilfe"), true, "Vektorskop", "", &crate::help::VECTORSCOPE, "");

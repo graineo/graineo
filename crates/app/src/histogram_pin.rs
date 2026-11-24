@@ -275,7 +275,7 @@ fn size_switch(ui: &mut egui::Ui) {
         } else if resp.hovered() {
             painter.rect_filled(seg.shrink(2.0), 0.0, egui::Color32::from_gray(0x2c));
         }
-        let color = if on { egui::Color32::WHITE } else if resp.hovered() { lr::TEXT } else { lr::TEXT_DIM };
+        let color = if on { egui::Color32::WHITE } else if resp.hovered() { lr::TEXT() } else { lr::TEXT_DIM() };
         painter.text(seg.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), color);
         lr::hover_tip(ui, &resp, &crate::trf!("Größe der Anzeige: {s} (Doppelklick auf die Anzeige: nächste Größe)", s = label));
         if resp.clicked() && !on {
@@ -335,9 +335,9 @@ impl App {
         const NAMES: [&str; 4] = ["Histogramm", "RGB-Parade", "Waveform", "Vektorskop"];
         let mut sel = self.dev_scope.min(3);
         ui.horizontal(|ui| {
-            let g = lr::caps(ui.painter(), "Anzeige", egui::FontId::proportional(10.0), lr::TEXT_DIM);
+            let g = lr::caps(ui.painter(), "Anzeige", egui::FontId::proportional(10.0), lr::TEXT_DIM());
             let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 18.0), egui::Sense::hover());
-            ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+            ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::ComboBox::from_id_salt("dev-scope").selected_text(crate::tr(NAMES[sel as usize])).width(118.0).show_ui(ui, |ui| {
                     for (i, n) in NAMES.iter().enumerate() {
@@ -403,8 +403,8 @@ impl App {
         // One fixed line: shooting data, and when hovering the image the sensor values in the same place – nothing
         // below shifts.
         let line = match &self.readout {
-            Some(r) => egui::RichText::new(r).small().monospace().color(lr::TEXT),
-            None => egui::RichText::new(&c.loaded.summary).small().color(lr::TEXT_DIM),
+            Some(r) => egui::RichText::new(r).small().monospace().color(lr::TEXT()),
+            None => egui::RichText::new(&c.loaded.summary).small().color(lr::TEXT_DIM()),
         };
         ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 16.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add(egui::Label::new(line).truncate());

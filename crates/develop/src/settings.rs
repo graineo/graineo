@@ -97,10 +97,27 @@ fn is_zero_step(v: &i8) -> bool {
 /// minimum 0 (x3fuse-core `SppNoiseSliders::OFF`).
 pub const NR_OFF: f64 = -0.25;
 
+/// Colour mode value of the linear scene rendering ("Linear (scene)"): the camera matrix of the neutral reference
+/// mode and the white balance, then a straight line instead of the tone curve (no contrast curve, no colour mode
+/// tables). Stored like any colour mode in [`Settings::color_mode`].
+pub const LINEAR_MODE: &str = "Linear";
+
+/// Colour mode whose matrix and base a stored mode uses: the linear rendering takes the neutral reference mode.
+pub fn matrix_mode(name: Option<&str>) -> Option<&str> {
+    match name {
+        Some(LINEAR_MODE) => Some(crate::profile::NEUTRAL_MODE),
+        n => n,
+    }
+}
+
+fn is_one(v: &f32) -> bool {
+    *v == 1.0
+}
+
 /// What an SPP base was computed for: colour mode and steps (luminance, colour) 0…4 of the
 /// noise sliders (2 = middle position, −1 = "Off" below SPP's minimum: Sigma's
 /// detail processing without smoothing). See [`Settings::spp_key`].
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SppKey {
     pub mode: Option<String>,
     pub nr: (i8, i8),
@@ -123,9 +140,28 @@ pub struct SppKey {
     pub ai: u8,
     /// Highlight sliders (Quattro with the highlight rebuild switched on; default otherwise)
     pub highlight: HighlightSliders,
+    /// Foveon detail of the Merrill base in percent: gain of the fine and the structure band of the luminance
+    /// residual ([`Settings::detail_fine`], [`Settings::detail_structure`]); `[100, 100]` = Sigma's detail
+    /// unchanged. Quattro and Classic: the same bands on the noise-reduced base ([`crate::foveon_texture`]).
+    /// Neutral in monochrome.
+    pub texture: [u8; 2],
 }
 
+impl Default for SppKey {
+    fn default() -> Self {
+        Self { mode: None, nr: (0, 0), detail: 0, ca: Default::default(), mono: false, mono_mix: [0; 3], prepared: false, binning: Default::default(), ai: 0, highlight: Default::default(), texture: TEXTURE_NEUTRAL }
+    }
+}
+
+/// [`SppKey::texture`] with Sigma's detail unchanged.
+pub const TEXTURE_NEUTRAL: [u8; 2] = [100, 100];
+
 impl SppKey {
+    /// Band gains for the SPP noise reduction (`[1, 1]` = unchanged).
+    pub fn texture_gains(&self) -> [f32; 2] {
+        self.texture.map(|v| f32::from(v) / 100.0)
+    }
+
     /// Slider positions 0…1 for Sigma's noise reduction (−0.25 = "Off").
     pub fn sliders(&self) -> crate::denoise::DenoiseSliders {
         crate::denoise::DenoiseSliders::new(self.nr.0 as f64 / 4.0, self.nr.1 as f64 / 4.0)
@@ -139,9 +175,10 @@ impl SppKey {
     /// Only what changes the base of this camera class (`prepared`: Quattro or Classic, otherwise Merrill);
     /// everything else gets a fixed value, so that a change without effect never recomputes the base or misses
     /// the disk cache. The base computed from the key is identical (the dropped parts are not read for that class):
-    /// - Merrill: the binning setting
+    /// - Merrill: the binning setting, the Quattro detail
     /// - Quattro/Classic: black and white base and mix, CA correction
     pub fn for_class(mut self, prepared: bool) -> Self {
+        let mono = self.mono;
         self.prepared = prepared;
         if prepared {
             self.mono = false;
@@ -150,7 +187,9 @@ impl SppKey {
         } else {
             self.binning = Binning::Auto;
             self.detail = 0;
-            self.highlight = HighlightSliders::default();
+        }
+        if mono {
+            self.texture = TEXTURE_NEUTRAL;
         }
         self
     }
@@ -290,7 +329,17 @@ pub struct Settings {
     pub ca_profile: f32,
     pub ca_red: f32,
     pub ca_blue: f32,
+    /// Legacy switch "Foveon-Detail" (until 1.5.0): `false` = own pipeline without Sigma's base/detail
+    /// processing. Kept so that photos stored with it look the same; the panel now offers
+    /// [`Self::detail_fine`] and [`Self::detail_structure`] instead, moving one of them switches it on again.
     pub denoise: bool,
+    /// Merrill: gain of the fine band of Sigma's detail (pores, grain, residual noise), 0 … 2, 1 = Sigma's
+    /// detail unchanged. Acts in the SPP base, independent of the noise sliders.
+    #[serde(skip_serializing_if = "is_one")]
+    pub detail_fine: f32,
+    /// Merrill: gain of the structure band (eyelashes, hair, edges, skin relief), 0 … 2, 1 = unchanged.
+    #[serde(skip_serializing_if = "is_one")]
+    pub detail_structure: f32,
     /// Noise sliders 0 … 1 (0.5 = neutral); [`NR_OFF`] = "Off" (SPP base only: Sigma's
     /// detail without smoothing; our own noise reduction treats it as 0)
     pub nr_luma: f64,
@@ -342,6 +391,9 @@ pub struct Settings {
     /// Export only, never saved: resampling filter for `output_size`
     #[serde(skip)]
     pub output_filter: crate::resize::ResizeFilter,
+    /// Export only, never saved: output sharpening after scaling ([`crate::output_sharpen`])
+    #[serde(skip)]
+    pub output_sharpen: crate::output_sharpen::OutputSharpen,
 }
 
 /// Noise brake when brightening with Fill Light.
@@ -424,6 +476,10 @@ pub struct RawAdjust {
     /// while off, so the JSON of existing photos stays byte-identical; older versions ignore the field.
     #[serde(rename = "aiDenoise", default, skip_serializing_if = "is_zero")]
     pub ai_denoise: f32,
+    /// Camera profile (DCP) installed locally, as its path: replaces the camera matrices and applies its HueSatMap and
+    /// LookTable (`raw::dcp`). Not written while unset, so existing documents stay byte-identical.
+    #[serde(rename = "cameraProfile", default, skip_serializing_if = "Option::is_none")]
+    pub camera_profile: Option<String>,
     /// Calibration: hue and saturation of red, green, blue, then shadow tint (+ magenta), each −1 … +1 (Lightroom XMP value ÷ 100)
     pub calibration: [f32; 7],
     /// Upright mode from Lightroom XMP (1 Auto, 2 Level, 3 Vertical, 4 Full); applied with our own detection on first open
@@ -480,6 +536,7 @@ impl Default for RawAdjust {
             nr_color_detail: 50.0,
             false_color: 0.6,
             ai_denoise: 0.0,
+            camera_profile: None,
             calibration: [0.0; 7],
             upright_from_lr: None,
             lens: true,
@@ -576,6 +633,8 @@ impl Default for Settings {
             ca_red: 0.0,
             ca_blue: 0.0,
             denoise: true,
+            detail_fine: 1.0,
+            detail_structure: 1.0,
             nr_luma: 0.5,
             nr_chroma: 0.5,
             quattro_detail: 0,
@@ -596,7 +655,15 @@ impl Default for Settings {
             gray_mix: [0.0; 8],
             output_size: None,
             output_filter: Default::default(),
+            output_sharpen: Default::default(),
         }
+    }
+}
+
+impl Settings {
+    /// Linear scene rendering selected ([`LINEAR_MODE`]; black and white keeps its own curve).
+    pub fn is_linear(&self) -> bool {
+        !self.monochrome && self.color_mode.as_deref() == Some(LINEAR_MODE)
     }
 }
 
@@ -688,7 +755,8 @@ impl Settings {
         let step = |v: f64| (v.clamp(NR_OFF, 1.0) * 4.0).round() as i8;
         // neural denoising after Sigma's noise reduction (every Foveon generation), colour only
         let ai = if mono || self.raw.ai_denoise <= 0.0 || !crate::ai_denoise::installed() { 0 } else { (self.raw.ai_denoise.clamp(0.0, 1.0) * 100.0).round() as u8 };
-        SppKey { mode: self.color_mode.clone(), nr: (step(self.nr_luma), step(self.nr_chroma)), detail: self.quattro_detail.clamp(-QUATTRO_DETAIL_RANGE, QUATTRO_DETAIL_RANGE), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning, ai, highlight: if crate::highlight_rebuild::enabled_for(prepared) && !mono { HighlightSliders::new(self.highlight_colour, self.highlight_structure) } else { HighlightSliders::default() } }
+        let pct = |v: f32| (v.clamp(0.0, 2.0) * 100.0).round() as u8;
+        SppKey { texture: [pct(self.detail_fine), pct(self.detail_structure)], mode: matrix_mode(self.color_mode.as_deref()).map(str::to_string), nr: (step(self.nr_luma), step(self.nr_chroma)), detail: self.quattro_detail.clamp(-QUATTRO_DETAIL_RANGE, QUATTRO_DETAIL_RANGE), ca: self.ca_key(), mono, mono_mix: if mono { crate::mono::key_mix(self.normalized_mix()) } else { [0; 3] }, prepared, binning: self.binning, ai, highlight: if crate::highlight_rebuild::enabled_for(prepared) && !mono { HighlightSliders::new(self.highlight_colour, self.highlight_structure) } else { HighlightSliders::default() } }
             .for_class(prepared)
     }
 
@@ -868,5 +936,25 @@ mod lens_profile_tests {
         assert!(t.contains("\"lens_profile\":\"3fa9c0d1e2b4@2\""));
         assert_eq!(serde_json::from_str::<Settings>(&t).unwrap().raw.lens_profile.as_deref(), Some("3fa9c0d1e2b4@2"));
         assert_eq!(serde_json::from_str::<Settings>("{}").unwrap().raw.lens_profile, None);
+    }
+}
+
+#[cfg(test)]
+mod texture_key_tests {
+    use super::*;
+
+    #[test]
+    fn detail_bands_reach_every_colour_base() {
+        let d = Settings::default();
+        assert_eq!(d.spp_key_class(false).texture, TEXTURE_NEUTRAL);
+        let p = Settings { detail_fine: 0.3, detail_structure: 1.2, ..Settings::default() };
+        assert_eq!(p.spp_key_class(false).texture, [30, 120]);
+        assert_eq!(p.spp_key_class(true).texture, [30, 120]);
+        assert_eq!(Settings { monochrome: true, ..p.clone() }.spp_key_class(true).texture, TEXTURE_NEUTRAL);
+        assert_eq!(Settings { monochrome: true, ..p.clone() }.spp_key_class(false).texture, TEXTURE_NEUTRAL);
+        // stored settings without the fields load as Sigma's detail; defaults are not written
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!((old.detail_fine, old.detail_structure), (1.0, 1.0));
+        assert!(!serde_json::to_string(&d).unwrap().contains("detail_fine"));
     }
 }

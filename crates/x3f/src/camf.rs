@@ -104,7 +104,7 @@ impl Camf {
         let seed = u32_at(section, 16)? as i32;
         let block_size = u32_at(section, 20)? as usize;
         let block_count = u32_at(section, 24)? as usize;
-        let data = &section[Self::HEADER_SIZE..];
+        let data = section.get(Self::HEADER_SIZE..).ok_or_else(|| Error::Corrupt("CAMF zu kurz".into()))?;
 
         // Huffman table at the start of the data block, data stream from byte 32.
         let mut pairs = Vec::new();
@@ -176,7 +176,7 @@ impl Camf {
     fn parse_type5(section: &[u8]) -> Result<Self> {
         let decoded_size = u32_at(section, 12)? as usize;
         let seed = u32_at(section, 16)? as i32;
-        let data = &section[Self::HEADER_SIZE..];
+        let data = section.get(Self::HEADER_SIZE..).ok_or_else(|| Error::Corrupt("CAMF zu kurz".into()))?;
         if data.len() < 32 || decoded_size == 0 {
             return corrupt("CAMF zu kurz");
         }

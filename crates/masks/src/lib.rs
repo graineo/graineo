@@ -578,6 +578,34 @@ impl View {
         self.full[0].min(self.full[1])
     }
 }
+/// Middle gray (scene-linear), the same value as `raw::tone::MID_GRAY`.
+pub const MID_GRAY: f32 = 0.1845;
+
+/// Strength of the blacks slider: soft black-point offset at ±1, as a fraction of middle gray (≈ 2.2 % linear).
+pub const BLACKS_OFFSET: f32 = 0.12;
+
+/// Exposure correction (EV) of the blacks slider `s` (−1 … +1) for a pixel at `x` = log2(luminance / middle gray).
+/// Used by the global slider (`rawdev::render`) and by the local corrections; the shaders `rawdev/gpu_out.wgsl` and
+/// `masks/gpu.wgsl` compute the same.
+///
+/// Own curve (not derived from any other program): a soft black-point offset `b = BLACKS_OFFSET · |s| · middle gray`
+/// on the scene-linear luminance Y, faded out towards the mid-tones (window 1 − smoothstep(−2, 1, x), so middle gray
+/// moves by < 0.05 EV). Down: Y' = Y² / (Y + b): above b about Y − b, below b the tones run into black (the black
+/// point is set, the deepest shadows are crushed). Up: the inverse Y' = (Y + √(Y² + 4bY)) / 2: the deepest tones are
+/// lifted strongly (≈ √(bY), pure black stays black). Applied as one gain on the pixel (hue kept). Strength chosen so
+/// that ±100 acts roughly as strongly as the usual blacks slider of other raw converters (−100: the darkest few
+/// percent of the tonal range go to black; +100: deep shadows open by ≈ 2 EV).
+#[inline]
+pub fn blacks_ev(s: f32, x: f32) -> f32 {
+    // r = b / Y (with the mid-tone window)
+    let r = BLACKS_OFFSET * s.abs() * (-x.max(-40.0)).exp2() * (1.0 - smooth((x + 2.0) / 3.0));
+    if s < 0.0 {
+        -(1.0 + r).log2()
+    } else {
+        ((1.0 + (1.0 + 4.0 * r).sqrt()) * 0.5).log2()
+    }
+}
+
 fn smooth(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)

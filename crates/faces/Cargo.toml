@@ -14,3 +14,6 @@ matrixmultiply = { version = "0.3", default-features = false, features = ["std"]
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject", "NSArray", "NSData", "NSDictionary", "NSString", "NSValue", "NSError"] }
+
+[dev-dependencies]
+fuzzkit = { path = "../fuzzkit" }

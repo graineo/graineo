@@ -12,7 +12,7 @@ pub const GROUPS: [(&str, &str); N] = [
     ("Tonwert", "Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz"),
     ("Fill Light", "Fill Light, Rauschbremse"),
     ("Präsenz", "Struktur, Klarheit, Dunst entfernen, Dynamik, Sättigung"),
-    ("Farbstiche", "Lichter neutral, Lichter-Farbe, Lichter-Struktur"),
+    ("Farbstiche", "Lichter neutral, Lichter-Farbe, Lichter-Detail"),
     ("Tonwert-Entzerrer", "Belichtung je Helligkeitszone, Maske"),
     ("Gradationskurve", "Punktkurve RGB, Rot, Grün, Blau"),
     ("Schwarzweiß", "Behandlung und Schichtmischung"),
@@ -200,6 +200,8 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
     }
     if on("Rauschreduzierung") {
         s.denoise = src.denoise;
+        s.detail_fine = src.detail_fine;
+        s.detail_structure = src.detail_structure;
         s.nr_luma = src.nr_luma;
         s.nr_chroma = src.nr_chroma;
         s.quattro_detail = src.quattro_detail;
@@ -299,7 +301,7 @@ pub fn group_choice(ui: &mut egui::Ui, id: &str, groups: &mut Groups) {
                     ui.checkbox(&mut groups.0[i], crate::tr(name));
                     ui.horizontal(|ui| {
                         ui.add_space(22.0);
-                        ui.add(egui::Label::new(egui::RichText::new(if hint.is_empty() { " " } else { crate::tr(hint) }).small().color(lr::TEXT_DIM)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(if hint.is_empty() { " " } else { crate::tr(hint) }).small().color(lr::TEXT_DIM())).wrap());
                     });
                 });
                 if i % 2 == 1 {

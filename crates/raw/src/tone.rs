@@ -140,6 +140,84 @@ impl ToneCurve {
     }
 }
 
+impl ToneCurve {
+    /// Scene value (one channel) at which the curve reaches `level` of its white (display linear), found by bisection.
+    /// Used as "white" for the highlight roll of a lowered Whites slider ([`whites_roll_pull`]).
+    pub fn scene_white(&self, level: f32) -> f32 {
+        let target = level * self.p.white;
+        let (mut lo, mut hi) = (MID_GRAY, 256.0f32);
+        if self.eval(hi) < target {
+            return hi;
+        }
+        for _ in 0..40 {
+            let m = (lo * hi).sqrt();
+            if self.eval(m) < target {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        hi
+    }
+}
+
+/// Display level (linear, fraction of white) that counts as "white" for [`whites_roll_pull`]: 0.995 encodes to about 254.4 of 255.
+pub const ROLL_WHITE_LEVEL: f32 = 0.995;
+
+/// Stops over white that a Whites slider at −1 brings back under white (the roll's reach at full strength).
+pub const ROLL_REACH_STOPS: f32 = 2.0;
+
+/// Reach of the roll in stops for a Whites slider value `whites` (−1 … +1). Zero for `whites >= 0`; grows like `d³/(d²+0.1²)`
+/// so it starts with zero value and zero slope (no jump when the slider leaves 0).
+pub fn whites_roll_reach(whites: f32) -> f32 {
+    let d = (-whites).clamp(0.0, 1.0);
+    if d == 0.0 {
+        return 0.0;
+    }
+    ROLL_REACH_STOPS * d * d * d / (d * d + 0.01)
+}
+
+/// Highlight roll of a lowered Whites slider (idea from greycard's "Whites down reaches over white"; own implementation).
+/// `t` = stops of the pixel's brightest channel relative to white ([`ToneCurve::scene_white`]), `reach` from
+/// [`whites_roll_reach`]. Returns the pull in stops (≥ 0); the caller applies one gain `2^-pull` to all three channels, so the
+/// hue stays. Shape: identity far below white; a band of width `reach·s/(1−s)` under white is compressed to slope `s` so that
+/// the light at `reach` stops over white lands on white; past the reach the slope is one again (pull = reach). The corners
+/// are rounded quadratically (width 2·`ROLL_CORNER`), so the mapping is C¹ and strictly increasing (slope ≥ `s`).
+#[inline]
+pub fn whites_roll_pull(t: f32, reach: f32) -> f32 {
+    const S: f32 = 0.2;
+    const W: f32 = 0.1;
+    if reach <= 0.0 || !t.is_finite() {
+        return 0.0;
+    }
+    let knee = reach * S / (1.0 - S);
+    let ramp = |z: f32| {
+        if z <= 0.0 {
+            0.0
+        } else if z < 2.0 * W {
+            z * z / (4.0 * W)
+        } else {
+            z - W
+        }
+    };
+    (1.0 - S) * (ramp(t + knee + W) - ramp(t - reach + W))
+}
+
+/// Applies [`whites_roll_pull`] to a scene-linear pixel: one gain on all channels; `white` = scene white of the curve.
+#[inline]
+pub fn whites_roll(v: [f32; 3], reach: f32, white: f32) -> [f32; 3] {
+    let mx = v[0].max(v[1]).max(v[2]);
+    if reach <= 0.0 || mx <= 0.0 || !mx.is_finite() {
+        return v;
+    }
+    let pull = whites_roll_pull((mx / white).log2(), reach);
+    if pull <= 0.0 {
+        return v;
+    }
+    let g = (-pull).exp2();
+    [v[0] * g, v[1] * g, v[2] * g]
+}
+
 fn desaturate_negative(p: [f32; 3]) -> [f32; 3] {
     let avg = ((p[0] + p[1] + p[2]) / 3.0).max(0.0);
     let min = p[0].min(p[1]).min(p[2]);
@@ -201,5 +279,49 @@ mod tests {
         let t = ToneCurve::new(Sigmoid::default());
         assert!((t.eval(MID_GRAY) - MID_GRAY).abs() < 2e-3, "{}", t.eval(MID_GRAY));
         assert!(t.eval(100.0) <= 1.0 && t.eval(100.0) > 0.98);
+    }
+
+    #[test]
+    fn whites_roll_zero_is_identity_and_lands_reach_on_white() {
+        assert_eq!(whites_roll_reach(0.0), 0.0);
+        assert_eq!(whites_roll_reach(0.3), 0.0);
+        let v = [3.0, 2.0, 1.0];
+        assert_eq!(whites_roll(v, 0.0, 1.0), v);
+        let r = whites_roll_reach(-1.0);
+        assert!((r - 2.0 * 1.0 / 1.01).abs() < 1e-5);
+        // far below the band: untouched to the bit
+        assert_eq!(whites_roll_pull(-2.0, r), 0.0);
+        // the light at the reach lands within 0.03 stop of white
+        let at = r - whites_roll_pull(r, r);
+        assert!(at.abs() < 0.03, "{at}");
+        // past the reach: pull = reach
+        assert!((whites_roll_pull(r + 3.0, r) - r).abs() < 1e-5);
+    }
+
+    #[test]
+    fn whites_roll_is_monotone_and_keeps_hue() {
+        for &w in &[-0.05f32, -0.3, -0.7, -1.0] {
+            let r = whites_roll_reach(w);
+            let mut last = f32::NEG_INFINITY;
+            let mut t = -4.0;
+            while t < 5.0 {
+                let o = t - whites_roll_pull(t, r);
+                assert!(o > last, "not increasing at {t} (whites {w})");
+                last = o;
+                t += 0.01;
+            }
+        }
+        let v = [4.0, 2.0, 1.0];
+        let o = whites_roll(v, 1.5, 1.0);
+        assert!(o[0] < v[0]);
+        assert!((o[0] / o[1] - 2.0).abs() < 1e-5 && (o[1] / o[2] - 2.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn scene_white_reaches_level() {
+        let c = ToneCurve::new(crate::development::default_tone());
+        let w = c.scene_white(ROLL_WHITE_LEVEL);
+        assert!(w > 1.0 && w < 256.0, "{w}");
+        assert!((c.eval(w) - ROLL_WHITE_LEVEL).abs() < 1e-3);
     }
 }

@@ -30,6 +30,9 @@ static LET_GO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::ne
 pub fn hold_close(ctx: &eframe::egui::Context, pending: bool, unsaved: usize, save: impl FnOnce()) {
     use eframe::egui;
     use std::sync::atomic::Ordering;
+    if hold_for_merge(ctx) {
+        return;
+    }
     let mut waiting = WAITING.lock().unwrap_or_else(|e| e.into_inner());
     if ctx.input(|i| i.viewport().close_requested()) && !LET_GO.load(Ordering::SeqCst) && waiting.is_none() {
         save();
@@ -80,6 +83,129 @@ pub fn hold_close(ctx: &eframe::egui::Context, pending: bool, unsaved: usize, sa
         crate::dialog::Answer::Cancel => *WAITING.lock().unwrap_or_else(|e| e.into_inner()) = None,
         crate::dialog::Answer::Open => ctx.request_repaint_after(Duration::from_millis(100)),
     }
+}
+
+/// Quitting while an HDR merge runs: `None` no question, `Some(false)` asked, `Some(true)` the user chose to wait.
+static MERGE_ASK: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
+/// The user cancelled the merges to quit: do not ask again while they wind down.
+static MERGE_LET_GO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// What a running merge shows in the quit question: lines (name, percent, time left) and the progress of the first.
+pub struct MergeRunning {
+    pub lines: Vec<String>,
+    pub fraction: Option<f32>,
+}
+
+/// HDR merges running now (a batch between two brackets counts as running).
+fn merge_running() -> Option<MergeRunning> {
+    if let Some(r) = test_merge() {
+        return Some(r);
+    }
+    let jobs = rawdev::merged::jobs();
+    if jobs.is_empty() && !crate::hdr_batch::active() {
+        return None;
+    }
+    let fraction = jobs.first().map(|j| merge_fraction(crate::hdr_batch::position(j.file), j.overall()));
+    let mut lines = crate::hdr_ui::activities();
+    if lines.is_empty() {
+        lines.push(crate::tr("HDR-Reihe: nächste Aufnahme wird vorbereitet").to_string());
+    }
+    Some(MergeRunning { lines, fraction })
+}
+
+/// Progress of the whole run: a batch "Reihe k von n" counts its finished brackets.
+fn merge_fraction(position: Option<(usize, usize)>, overall: f32) -> f32 {
+    match position {
+        Some((k, n)) if n > 0 => ((k.saturating_sub(1)) as f32 + overall) / n as f32,
+        _ => overall,
+    }
+}
+
+/// Test hook (only with `GRAINEO_DATA_DIR`): `GRAINEO_QUIT_HDR_TEST=<s>` acts as if an HDR merge ran for the first
+/// `s` seconds after the start (combine with `GRAINEO_QUIT=<s>` to ask for quitting meanwhile).
+fn test_merge() -> Option<MergeRunning> {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    let secs: f32 = crate::env::var("GRAINEO_DATA_DIR").ok().and(crate::env::var("GRAINEO_QUIT_HDR_TEST").ok())?.parse().ok()?;
+    let t = START.get_or_init(Instant::now).elapsed().as_secs_f32();
+    if t >= secs || MERGE_LET_GO.load(std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    let p = t / secs;
+    let left = Duration::from_secs_f32((secs - t).max(1.0));
+    let line = crate::trf!("HDR {a} {p} % · noch etwa {t}", a = "IMG_0412-HDR", p = (p * 100.0).floor() as u32, t = crate::dialog::duration(left));
+    Some(MergeRunning { lines: vec![line], fraction: Some(p) })
+}
+
+/// Before [`hold_close`]: a request to close while an HDR merge runs is held back and asked about (what runs, how
+/// far; "Warten" quits once it is done, "Abbrechen und beenden" stops it and quits, Esc keeps working). Returns
+/// whether the close is held this frame.
+fn hold_for_merge(ctx: &eframe::egui::Context) -> bool {
+    use eframe::egui;
+    use std::sync::atomic::Ordering;
+    let requested = ctx.input(|i| i.viewport().close_requested()) && !LET_GO.load(Ordering::SeqCst) && !MERGE_LET_GO.load(Ordering::SeqCst);
+    let mut ask = MERGE_ASK.lock().unwrap_or_else(|e| e.into_inner());
+    let running = if requested || ask.is_some() { merge_running() } else { None };
+    if requested && (ask.is_some() || running.is_some()) {
+        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        if ask.is_none() {
+            *ask = Some(false);
+            crate::log("quit: HDR merge running, asking");
+        }
+    }
+    let Some(waiting) = *ask else { return false };
+    let Some(run) = running else {
+        // done: quit if the user chose to wait, otherwise just close the question
+        *ask = None;
+        if waiting {
+            crate::log("quit: HDR merge done, quitting");
+            MERGE_LET_GO.store(true, Ordering::SeqCst);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+        return true;
+    };
+    drop(ask);
+    let title = if waiting { crate::tr("Warten auf die HDR-Berechnung …") } else { crate::tr("HDR wird noch berechnet") };
+    let (answer, cancel_quit) = crate::dialog::show_extra(
+        ctx,
+        "beenden-hdr",
+        title,
+        400.0,
+        |ui| {
+            if waiting {
+                crate::dialog::text(ui, crate::tr("graineo beendet sich, sobald die Berechnung fertig ist."));
+            } else {
+                crate::dialog::text(ui, crate::tr("Beim Beenden geht die laufende Berechnung verloren."));
+            }
+            for (i, line) in run.lines.iter().enumerate() {
+                if i == 0 {
+                    crate::dialog::progress(ui, run.fraction, line);
+                } else {
+                    crate::dialog::hint(ui, line);
+                }
+            }
+        },
+        if waiting {
+            crate::dialog::Buttons { cancel: crate::tr("Weiterarbeiten"), primary: None }
+        } else {
+            crate::dialog::Buttons { cancel: "", primary: Some((crate::tr("Warten"), crate::dialog::Style::Normal, true)) }
+        },
+        Some(crate::tr("Abbrechen und beenden")),
+    );
+    if cancel_quit {
+        crate::log("quit: user cancels the HDR merge and quits");
+        *MERGE_ASK.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        MERGE_LET_GO.store(true, Ordering::SeqCst);
+        crate::hdr_ui::cancel_all();
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        return true;
+    }
+    match answer {
+        crate::dialog::Answer::Primary => *MERGE_ASK.lock().unwrap_or_else(|e| e.into_inner()) = Some(true),
+        crate::dialog::Answer::Cancel => *MERGE_ASK.lock().unwrap_or_else(|e| e.into_inner()) = None,
+        crate::dialog::Answer::Open => {}
+    }
+    ctx.request_repaint_after(Duration::from_millis(200));
+    true
 }
 
 /// `on_exit` is waiting for library writes (the guard then waits as well, up to [`WRITES_LIMIT`]).
@@ -140,5 +266,21 @@ mod tests {
         assert!(t.elapsed() < Duration::from_millis(500));
         assert!(wait_until(Duration::from_millis(50), || true));
         assert!(LIMIT < WRITES && WRITES < WRITES_LIMIT);
+    }
+
+    #[test]
+    fn merge_fraction_counts_batch() {
+        assert_eq!(merge_fraction(None, 0.4), 0.4);
+        assert_eq!(merge_fraction(Some((1, 4)), 0.0), 0.0);
+        assert_eq!(merge_fraction(Some((3, 4)), 0.5), 0.625);
+        assert_eq!(merge_fraction(Some((4, 4)), 1.0), 1.0);
+    }
+
+    /// Nothing runs and no question is open: closing is not held.
+    #[test]
+    fn no_merge_no_question() {
+        assert!(merge_running().is_none());
+        let ctx = eframe::egui::Context::default();
+        let _ = ctx.run_ui(Default::default(), |ui| assert!(!hold_for_merge(ui.ctx())));
     }
 }

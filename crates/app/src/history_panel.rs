@@ -64,7 +64,7 @@ impl App {
         lr::section(ui, "Verlauf", true, |ui| {
             ui.horizontal(|ui| {
                 let n = rows.len().saturating_sub(1);
-                ui.label(egui::RichText::new(crate::trf!("{n} Schritte", n = n)).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("{n} Schritte", n = n)).small().color(lr::TEXT_DIM()));
                 crate::help::info(ui, "verlauf", crate::tr("Verlauf"), &crate::help::HISTORY);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let r = ui.add_enabled(cursor > 0 && !rows.is_empty(), egui::Button::new(crate::tr("Original ⟲")).small());
@@ -79,7 +79,7 @@ impl App {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 if rows.is_empty() {
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new(crate::tr("Noch keine Änderungen")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch keine Änderungen")).small().color(lr::TEXT_DIM()));
                 }
                 for row in &rows {
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
@@ -101,13 +101,13 @@ impl App {
                         painter.text(egui::pos2(rect.left() + 2.0, rect.center().y), egui::Align2::LEFT_CENTER, "▶", small.clone(), CURRENT);
                     }
                     // right: "(3×)" and the time, then the name in the space left
-                    let time = painter.layout_no_wrap(row.time.clone(), small.clone(), lr::TEXT_DIM);
+                    let time = painter.layout_no_wrap(row.time.clone(), small.clone(), lr::TEXT_DIM());
                     let mut right = rect.right() - 4.0 - time.size().x;
-                    painter.galley(egui::pos2(right, rect.center().y - time.size().y / 2.0), time, lr::TEXT_DIM);
+                    painter.galley(egui::pos2(right, rect.center().y - time.size().y / 2.0), time, lr::TEXT_DIM());
                     if row.count > 1 {
-                        let c = painter.layout_no_wrap(format!("({}×)", row.count), small.clone(), lr::TEXT_DIM);
+                        let c = painter.layout_no_wrap(format!("({}×)", row.count), small.clone(), lr::TEXT_DIM());
                         right -= c.size().x + 8.0;
-                        painter.galley(egui::pos2(right, rect.center().y - c.size().y / 2.0), c, lr::TEXT_DIM);
+                        painter.galley(egui::pos2(right, rect.center().y - c.size().y / 2.0), c, lr::TEXT_DIM());
                     }
                     let name_rect = egui::Rect::from_min_max(egui::pos2(rect.left() + 16.0, rect.top()), egui::pos2(right - 6.0, rect.bottom()));
                     painter.with_clip_rect(name_rect).text(name_rect.left_center(), egui::Align2::LEFT_CENTER, &row.name, font, color);
@@ -308,12 +308,12 @@ fn lightroom_rows(ui: &mut egui::Ui, steps: &[(String, i64)]) {
     }
     let painter = ui.painter_at(rect);
     let small = egui::FontId::proportional(lr::UI_SIZE - 1.5);
-    painter.text(egui::pos2(rect.left() + 2.0, rect.center().y), egui::Align2::LEFT_CENTER, if open { "▾" } else { "▸" }, small.clone(), lr::TEXT_DIM);
-    let dates = painter.layout_no_wrap(span, small.clone(), lr::TEXT_DIM);
+    painter.text(egui::pos2(rect.left() + 2.0, rect.center().y), egui::Align2::LEFT_CENTER, if open { "▾" } else { "▸" }, small.clone(), lr::TEXT_DIM());
+    let dates = painter.layout_no_wrap(span, small.clone(), lr::TEXT_DIM());
     let right = rect.right() - 4.0 - dates.size().x;
-    painter.galley(egui::pos2(right, rect.center().y - dates.size().y / 2.0), dates, lr::TEXT_DIM);
+    painter.galley(egui::pos2(right, rect.center().y - dates.size().y / 2.0), dates, lr::TEXT_DIM());
     let r = egui::Rect::from_min_max(egui::pos2(rect.left() + 16.0, rect.top()), egui::pos2(right - 6.0, rect.bottom()));
-    painter.with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, text, small.clone(), lr::TEXT_DIM);
+    painter.with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, text, small.clone(), lr::TEXT_DIM());
     if resp.clicked() {
         open = !open;
         ui.ctx().data_mut(|d| d.insert_temp(id, open));

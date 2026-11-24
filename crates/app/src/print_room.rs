@@ -171,7 +171,7 @@ fn mm_field(ui: &mut egui::Ui, value: &mut f64, range: std::ops::RangeInclusive<
 fn row<R>(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.horizontal(|ui| {
         ui.set_min_height(22.0);
-        ui.label(egui::RichText::new(label).color(lr::SLIDER_LABEL));
+        ui.label(egui::RichText::new(label).color(lr::SLIDER_LABEL()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), add).inner
     })
     .inner
@@ -181,7 +181,7 @@ fn switch_row(ui: &mut egui::Ui, label: &str, on: &mut bool, tip: &str) -> bool 
     let before = *on;
     let r = ui.horizontal(|ui| {
         ui.set_min_height(22.0);
-        let l = ui.label(egui::RichText::new(label).color(lr::SLIDER_LABEL));
+        let l = ui.label(egui::RichText::new(label).color(lr::SLIDER_LABEL()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| lr::switch(ui, on));
         l
     });
@@ -593,12 +593,12 @@ impl App {
 
         egui::Panel::top("print-top").resizable(false).exact_size(lr::BAR_H + 8.0).frame(egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
             ui.horizontal_centered(|ui| {
-                let g = lr::caps(ui.painter(), crate::tr("Drucken"), lr::semibold(12.0), lr::TEXT);
+                let g = lr::caps(ui.painter(), crate::tr("Drucken"), lr::semibold(12.0), lr::TEXT());
                 let (r, _) = ui.allocate_exact_size(g.size(), egui::Sense::hover());
-                ui.painter().galley(r.min, g, lr::TEXT);
+                ui.painter().galley(r.min, g, lr::TEXT());
                 ui.add_space(16.0);
                 let what = crate::trf!("{n} Fotos · {p} Seiten", n = self.print_room.photos.len(), p = l.pages.len());
-                ui.label(egui::RichText::new(what).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(what).color(lr::TEXT_DIM()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let r = ui.add(egui::Button::new(crate::tr("Schließen")));
                     lr::tip_key(ui, &r, "Druckraum schließen", "print_close");
@@ -647,7 +647,7 @@ impl App {
             }
             if !self.print_room.user.is_empty() {
                 ui.add_space(6.0);
-                ui.label(egui::RichText::new(crate::tr("Eigene")).color(lr::TEXT_DIM).small());
+                ui.label(egui::RichText::new(crate::tr("Eigene")).color(lr::TEXT_DIM()).small());
             }
             let mut remove: Option<PathBuf> = None;
             let mut update: Option<String> = None;
@@ -700,7 +700,7 @@ impl App {
         ui.add_space(4.0);
         if let Some(name) = self.print_room.replacing.clone() {
             // a template of the same name (or the same file name) is never replaced without asking
-            ui.label(egui::RichText::new(crate::trf!("Vorlage „{a}“ gibt es schon.", a = name)).color(lr::TEXT));
+            ui.label(egui::RichText::new(crate::trf!("Vorlage „{a}“ gibt es schon.", a = name)).color(lr::TEXT()));
             ui.horizontal(|ui| {
                 if ui.button(crate::tr("Ersetzen")).clicked() {
                     self.print_room.replacing = None;
@@ -837,7 +837,7 @@ impl App {
         side(ui, crate::tr("Rand links"), &mut t.margins_mm.left, minimum.map(|m| m.left));
         side(ui, crate::tr("Rand rechts"), &mut t.margins_mm.right, minimum.map(|m| m.right));
         if raised {
-            ui.label(egui::RichText::new(crate::tr("Ränder auf den bedruckbaren Bereich des Druckers angehoben")).color(lr::TEXT_DIM).small());
+            ui.label(egui::RichText::new(crate::tr("Ränder auf den bedruckbaren Bereich des Druckers angehoben")).color(lr::TEXT_DIM()).small());
         }
         row(ui, crate::tr("Reihen × Spalten"), |ui| {
             ui.add_sized([44.0, 20.0], egui::DragValue::new(&mut t.grid.columns).range(1..=tpl::MAX_CELLS).clamp_existing_to_range(false).speed(0.1));
@@ -936,7 +936,7 @@ impl App {
             }
         });
         lr::choice(ui, "Farbraum der Seite", &mut t.job.color.space, &[(PageSpace::AdobeRgb, "Adobe RGB"), (PageSpace::Srgb, "sRGB")], "print");
-        ui.label(egui::RichText::new(crate::tr("Farbmanagement: vom Drucker verwaltet")).color(lr::TEXT_DIM).small());
+        ui.label(egui::RichText::new(crate::tr("Farbmanagement: vom Drucker verwaltet")).color(lr::TEXT_DIM()).small());
         if t.job.output == Output::Jpeg {
             let mut q = t.job.jpeg_quality as f64;
             if lr::slider(ui, "JPEG-Qualität", &mut q, 50.0..=100.0, 92.0, 1.0) {
@@ -961,7 +961,7 @@ impl App {
             None if !room.message.is_empty() => room.message.clone(),
             None => crate::trf!("{w} × {h} px je Seite · {mb} MB", w = w, h = h, mb = format!("{:.0}", mb)),
         };
-        let color = if room.message_is_error && room.running.is_none() { Color32::from_rgb(0xe0, 0x80, 0x70) } else { lr::TEXT_DIM };
+        let color = if room.message_is_error && room.running.is_none() { Color32::from_rgb(0xe0, 0x80, 0x70) } else { lr::TEXT_DIM() };
         ui.add(egui::Label::new(egui::RichText::new(line).color(color).small()).truncate());
         ui.add_space(6.0);
         let printer = t.job.output == Output::Printer;
@@ -988,7 +988,7 @@ impl App {
             });
         });
         if let Some(p) = &room.printer {
-            ui.label(egui::RichText::new(crate::trf!("Drucker: {a}", a = p)).color(lr::TEXT_DIM).small());
+            ui.label(egui::RichText::new(crate::trf!("Drucker: {a}", a = p)).color(lr::TEXT_DIM()).small());
         }
         if setup {
             let t = self.print_room.t.clone();
@@ -1172,7 +1172,7 @@ impl App {
         if prev.clicked() {
             self.print_room.page = room_page.saturating_sub(1);
         }
-        nav_ui.add_sized([180.0, 20.0], egui::Label::new(egui::RichText::new(label).color(lr::TEXT)));
+        nav_ui.add_sized([180.0, 20.0], egui::Label::new(egui::RichText::new(label).color(lr::TEXT())));
         let next = nav_ui.add_enabled(room_page + 1 < pages, egui::Button::new("▶").frame(false));
         lr::tip_key(&nav_ui, &next, "Nächste Seite", "print_page_next");
         if next.clicked() {

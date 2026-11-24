@@ -26,6 +26,7 @@ pub mod learn_look;
 pub mod highlights;
 pub mod markesteijn;
 pub mod lcp;
+pub mod dcp;
 pub mod lensfun;
 pub mod lens;
 pub mod noise;

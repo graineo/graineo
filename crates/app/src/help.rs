@@ -145,10 +145,10 @@ fn vectorscope_sketch(ui: &mut egui::Ui) {
     p.add(egui::Shape::line(arc, white));
     let font = egui::FontId::proportional(10.5);
     let x = c.x + r + 14.0;
-    p.text(egui::pos2(x, c.y - 24.0), egui::Align2::LEFT_CENTER, crate::tr("Winkel = Farbton"), font.clone(), lr::TEXT);
-    p.text(egui::pos2(x, c.y - 8.0), egui::Align2::LEFT_CENTER, crate::tr("Abstand = Sättigung"), font.clone(), lr::TEXT);
-    p.text(egui::pos2(x, c.y + 8.0), egui::Align2::LEFT_CENTER, crate::tr("Mitte = neutral"), font.clone(), lr::TEXT_DIM);
-    p.text(egui::pos2(x, c.y + 24.0), egui::Align2::LEFT_CENTER, crate::tr("Helligkeit = Anzahl Pixel"), font, lr::TEXT_DIM);
+    p.text(egui::pos2(x, c.y - 24.0), egui::Align2::LEFT_CENTER, crate::tr("Winkel = Farbton"), font.clone(), lr::TEXT());
+    p.text(egui::pos2(x, c.y - 8.0), egui::Align2::LEFT_CENTER, crate::tr("Abstand = Sättigung"), font.clone(), lr::TEXT());
+    p.text(egui::pos2(x, c.y + 8.0), egui::Align2::LEFT_CENTER, crate::tr("Mitte = neutral"), font.clone(), lr::TEXT_DIM());
+    p.text(egui::pos2(x, c.y + 24.0), egui::Align2::LEFT_CENTER, crate::tr("Helligkeit = Anzahl Pixel"), font, lr::TEXT_DIM());
 }
 /// Edit sections without a card of their own: the operation of the header comes from the controls line.
 pub static EDIT_SECTION: Card = card(
@@ -305,6 +305,11 @@ pub static SIDECARS: Card = card(
     "graineo speichert alles in der Bibliothek. Mit diesem Schalter steht zusätzlich eine Kopie als XMP neben dem Foto – für andere Programme, und sie wandert mit dem Foto mit. Die Originale bleiben unverändert.\n• **Begleitdateien einlesen** – holt Änderungen anderer Programme aus diesen Dateien in die Bibliothek",
     None,
 );
+pub static METADATA_REREAD: Card = card(
+    "Liest die Aufnahmedaten der gewählten Fotos neu aus den Dateien.",
+    "• **Was die Datei trägt, gewinnt** – Datum, Kamera, Objektiv, Belichtung, Ort, Maße\n• **Was fehlt, bleibt** – z. B. ein Objektiv aus Lightroom; eine korrigierte Aufnahmezeit bleibt immer\n• **Aus XMP** (nur wenn eine Begleitdatei daneben liegt und du es einschaltest) – Bewertung, Etikett und Stichwörter ersetzen die Werte der Bibliothek\n\nNie geändert: Entwicklung, virtuelle Kopien, Sammlungen und die Dateien selbst. ⌘Z nimmt den ganzen Lauf zurück, auch dabei neu angelegte Stichwörter.",
+    None,
+);
 // The camera import (USB/PTP, `import_camera.rs`) is prepared but not switched on yet: the card does not mention it.
 pub static IMPORT: Card = card(
     "Bringt Fotos von einer Karte oder aus einem Ordner in die Bibliothek.",
@@ -441,7 +446,17 @@ pub static SENSOR_VIEWS: Card = card(
 );
 pub static SIGMA_DETAIL: Card = card(
     "Entrauscht und schärft in Grund- und Detailebene.",
-    "Zerlegt das Bild in Grund- und Detailebene, entrauscht und schärft dabei – das ergibt den typischen Foveon-Eindruck, abgestimmt auf das Aussehen von SIGMA Photo Pro in der Grundeinstellung. Ausgeschaltet wird das Bild deutlich weicher. Luminanz und Farbe regeln das Rauschen.",
+    "Zerlegt das Bild in Grund- und Detailebene, entrauscht und schärft dabei – das ergibt den typischen Foveon-Eindruck, abgestimmt auf das Aussehen von SIGMA Photo Pro in der Grundeinstellung. Ausgeschaltet wird das Bild deutlich weicher. Luminanz und Farbe regeln das Rauschen.\n\nDie Regler **Feindetail** und **Struktur** ersetzen diesen Schalter (Merrill, Quattro, Classic).",
+    None,
+);
+pub static DETAIL_FINE: Card = card(
+    "Wie viel der feinsten Foveon-Detailebene zurückkommt.",
+    "Sigmas Entrauschen trennt ein glattes Grundbild von der Detailebene und setzt das Detail danach wieder ein. graineo teilt diese Detailebene in zwei Bänder:\n• **Feindetail** – kleinste Strukturen bis etwa 3 Pixel: Poren, Hauttextur, Restrauschen\n• **Struktur** – gröbere Strukturen bis etwa 30 Pixel: Wimpern, Haare, Augen, Kanten\n\n**100** = Sigmas Detail unverändert (wie SIGMA Photo Pro). Weniger Feindetail glättet Haut, ohne Augen und Haare weich zu machen; mehr betont feinste Textur samt Rauschen. Das Rauschen selbst regeln weiter Luminanz und Farbe.\n\n### Tipp\nFür Porträts: Feindetail niedrig, Struktur etwas höher (Vorgabe „Porträt (natürlich)“). Bei 100 % beurteilen.",
+    None,
+);
+pub static DETAIL_STRUCTURE: Card = card(
+    "Wie viel der gröberen Foveon-Detailebene zurückkommt.",
+    "Das gröbere der beiden Detailbänder (etwa 3 bis 30 Pixel): Wimpern, Haare, Augen, Kanten und das Relief der Haut. **100** = Sigmas Detail unverändert; weniger wirkt weicher und flacher, mehr plastischer. Großflächige Helligkeitsverläufe bleiben immer unverändert. Gegenstück: **Feindetail**.",
     None,
 );
 pub static BINNING: Card = card(
@@ -554,6 +569,8 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Tiefen" if hint.contains("örtlich") => &RAW_SHADOWS,
         "Weiß" => &RAW_WHITES,
         "Schwarz" => &RAW_BLACK,
+        n if hint.contains("Foveon") && n == crate::detail_ui::fine_label() => &DETAIL_FINE,
+        n if hint.contains("Foveon") && n == crate::detail_ui::structure_label() => &DETAIL_STRUCTURE,
         "Struktur" => &RAW_TEXTURE,
         "Luminanz" | "Luminanz-Detail" | "Farbe" | "Farb-Detail" if hint.to_lowercase().contains("rausch") || hint.contains("Höher") => &RAW_NR,
         "Verzeichnung" | "Vignettierung" => &RAW_LENS,
@@ -659,7 +676,7 @@ fn body_job(text: &str, width: f32, color: Color32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = width;
     let plain = egui::TextFormat { font_id: egui::FontId::proportional(BODY), color, line_height: Some(LINE), ..Default::default() };
-    let strong = if color == ASIDE { Color32::from_gray(0xb0) } else { lr::TEXT };
+    let strong = if color == ASIDE { Color32::from_gray(0xb0) } else { lr::TEXT() };
     let bold = egui::TextFormat { font_id: lr::semibold(BODY), color: strong, line_height: Some(LINE), ..Default::default() };
     for (n, part) in text.split("**").enumerate() {
         if !part.is_empty() {
@@ -736,10 +753,10 @@ pub fn show_card(ui: &mut egui::Ui, title: &str, hint: &str, card: &Card, contro
     ui.add_space(2.0);
     let short = if hint.is_empty() { card.short } else { hint };
     if !short.is_empty() {
-        body(ui, crate::tr(short), lr::TEXT);
+        body(ui, crate::tr(short), lr::TEXT());
         ui.add_space(5.0);
     }
-    body(ui, crate::tr(card.text), lr::TEXT_DIM);
+    body(ui, crate::tr(card.text), lr::TEXT_DIM());
     if let Some(extra) = card.extra {
         extra(ui);
     }
@@ -759,7 +776,7 @@ pub fn show_card(ui: &mut egui::Ui, title: &str, hint: &str, card: &Card, contro
                             ui.allocate_exact_size(size, egui::Sense::hover());
                         }
                     }
-                    ui.label(egui::RichText::new(crate::tr(text)).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr(text)).small().color(lr::TEXT_DIM()));
                 });
             }
         });
@@ -913,9 +930,9 @@ fn layer_bars(ui: &mut egui::Ui, read: [f64; 3], color: Color32) {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), LINE), egui::Sense::hover());
         let painter = ui.painter();
         let font = egui::FontId::proportional(BODY - 0.5);
-        painter.text(rect.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), font.clone(), lr::TEXT_DIM);
+        painter.text(rect.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), font.clone(), lr::TEXT_DIM());
         let pct = (read[p] * 100.0).round() as i64;
-        painter.text(rect.right_center(), egui::Align2::RIGHT_CENTER, crate::trf!("{a} % gelesen", a = pct), font, lr::TEXT_DIM);
+        painter.text(rect.right_center(), egui::Align2::RIGHT_CENTER, crate::trf!("{a} % gelesen", a = pct), font, lr::TEXT_DIM());
         let bar = egui::Rect::from_min_size(egui::pos2(rect.left() + 118.0, rect.center().y - 2.5), egui::vec2(rect.width() - 118.0 - 92.0, 5.0));
         painter.rect_filled(bar, 0.0, Color32::from_gray(0x3a));
         let mut done = bar;
@@ -971,7 +988,7 @@ pub fn notice_mark(ui: &mut egui::Ui, salt: &str, heading: &str, items: &[Notice
                 for item in items {
                     ui.add_space(5.0);
                     ui.label(egui::RichText::new(&item.title).font(lr::semibold(BODY)).color(color));
-                    body(ui, &item.text, lr::TEXT_DIM);
+                    body(ui, &item.text, lr::TEXT_DIM());
                     if let Some(read) = item.layers {
                         ui.add_space(4.0);
                         layer_bars(ui, read, color);

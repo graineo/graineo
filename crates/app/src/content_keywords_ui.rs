@@ -75,7 +75,7 @@ impl LibraryView {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
             let blocked = !matches!(state, State::Ready(_));
-            let head = ui.label(egui::RichText::new(crate::tr("Vorschläge")).small().color(if blocked { Color32::from_gray(0x70) } else { lr::TEXT_DIM }));
+            let head = ui.label(egui::RichText::new(crate::tr("Vorschläge")).small().color(if blocked { Color32::from_gray(0x70) } else { lr::TEXT_DIM() }));
             let why = match &state {
                 State::NoModel => crate::tr("Vorschläge aus dem Bildinhalt brauchen das Suchmodell „Beste Treffer“ (SigLIP 2 Base). Installieren unter Einstellungen → Suche; es wird nichts von selbst geladen."),
                 State::Preparing => crate::tr("Die Begriffe werden einmal für das Suchmodell vorbereitet (wenige Sekunden)."),
@@ -89,7 +89,7 @@ impl LibraryView {
                     ui.add(egui::Spinner::new().size(10.0));
                 }
                 State::Ready(v) if v.is_empty() => {
-                    ui.label(egui::RichText::new(crate::tr("keine sicheren")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("keine sicheren")).small().color(lr::TEXT_DIM()));
                 }
                 State::Ready(v) => {
                     for s in v {
@@ -102,7 +102,7 @@ impl LibraryView {
                     }
                 }
                 State::Failed(e) => {
-                    let r = ui.label(egui::RichText::new("–").small().color(lr::TEXT_DIM));
+                    let r = ui.label(egui::RichText::new("–").small().color(lr::TEXT_DIM()));
                     lr::hover_tip(ui, &r, &crate::menu::i18n::tr_msg(e));
                 }
                 State::NoModel | State::NoVector => {
@@ -163,7 +163,7 @@ impl LibraryView {
 /// A suggestion chip: outlined (not filled like an assigned keyword), the name assigns, × rejects.
 /// Returns `Some(true)` for assign, `Some(false)` for reject.
 fn suggestion_chip(ui: &mut egui::Ui, text: &str) -> Option<bool> {
-    let g = ui.painter().layout_no_wrap(text.to_string(), egui::FontId::proportional(10.5), lr::TEXT);
+    let g = ui.painter().layout_no_wrap(text.to_string(), egui::FontId::proportional(10.5), lr::TEXT());
     let (r, _) = ui.allocate_exact_size(g.size() + egui::vec2(24.0, 6.0), egui::Sense::hover());
     let body = egui::Rect::from_min_max(r.min, egui::pos2(r.right() - 16.0, r.bottom()));
     let cross = egui::Rect::from_min_max(egui::pos2(r.right() - 16.0, r.top()), r.max);
@@ -174,8 +174,8 @@ fn suggestion_chip(ui: &mut egui::Ui, text: &str) -> Option<bool> {
         p.rect_filled(r, 0.0, Color32::from_gray(0x33));
     }
     p.rect_stroke(r.shrink(0.5), 0.0, egui::Stroke::new(1.0, Color32::from_gray(if take.hovered() || no.hovered() { 0x80 } else { 0x55 })), egui::StrokeKind::Inside);
-    p.galley(r.min + egui::vec2(7.0, 3.0), g, if take.hovered() { Color32::WHITE } else { lr::TEXT });
-    p.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if no.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+    p.galley(r.min + egui::vec2(7.0, 3.0), g, if take.hovered() { Color32::WHITE } else { lr::TEXT() });
+    p.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if no.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
     lr::hover_tip(ui, &take, crate::tr("Als Stichwort für dieses Foto übernehmen"));
     lr::hover_tip(ui, &no, crate::tr("Vorschlag für dieses Foto ablehnen"));
     if take.clicked() {

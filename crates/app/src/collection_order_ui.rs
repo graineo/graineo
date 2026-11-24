@@ -206,7 +206,7 @@ impl LibraryView {
 
     /// The choice "Im Sammlungssatz" of a dialog (`sets` from [`Self::set_choices`]).
     pub(super) fn set_choice(ui: &mut egui::Ui, salt: &str, sets: &[(Option<i64>, String)], parent: &mut Option<i64>) {
-        ui.label(egui::RichText::new(crate::tr("Im Sammlungssatz")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Im Sammlungssatz")).small().color(lr::TEXT_DIM()));
         let shown = sets.iter().find(|(id, _)| id == parent).map(|(_, n)| n.clone()).unwrap_or_default();
         egui::ComboBox::from_id_salt(salt).selected_text(shown).width(ui.available_width()).show_ui(ui, |ui| {
             for (id, n) in sets {

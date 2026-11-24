@@ -373,7 +373,7 @@ fn title(ui: &mut egui::Ui, t: &str) {
 }
 
 fn small(ui: &mut egui::Ui, t: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).wrap());
 }
 
 fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
@@ -390,7 +390,7 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
             }
             let notes = m.notes_for(german).trim();
             if !notes.is_empty() {
-                egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Neuigkeiten")).small().color(lr::TEXT_DIM)).id_salt("update-notes").default_open(false).show(ui, |ui| {
+                egui::CollapsingHeader::new(egui::RichText::new(crate::tr("Neuigkeiten")).small().color(lr::TEXT_DIM())).id_salt("update-notes").default_open(false).show(ui, |ui| {
                     egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| notes_view(ui, notes));
                 });
             }
@@ -409,7 +409,7 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
                     STATE.lock().unwrap_or_else(|e| e.into_inner()).hidden = true;
                 }
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Diese Version überspringen")).small().color(lr::TEXT_DIM)).frame(false)).clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Diese Version überspringen")).small().color(lr::TEXT_DIM())).frame(false)).clicked() {
                         update::skip_version(&m.version);
                         set(Phase::Idle);
                     }
@@ -435,7 +435,7 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
         }
         Phase::Failed { text, page } => {
             title(ui, crate::tr("Update nicht installiert"));
-            ui.add(egui::Label::new(egui::RichText::new(text).color(lr::TEXT)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(text).color(lr::TEXT())).wrap());
             ui.add_space(4.0);
             ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
@@ -460,11 +460,11 @@ fn notes_view(ui: &mut egui::Ui, notes: &str) {
         if t.is_empty() {
             ui.add_space(2.0);
         } else if let Some(h) = t.strip_prefix('#') {
-            ui.label(egui::RichText::new(h.trim_start_matches('#').trim()).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT));
+            ui.label(egui::RichText::new(h.trim_start_matches('#').trim()).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT()));
         } else if let Some(item) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
-            ui.add(egui::Label::new(egui::RichText::new(format!("•  {item}")).small().color(lr::TEXT)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(format!("•  {item}")).small().color(lr::TEXT())).wrap());
         } else {
-            ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT())).wrap());
         }
     }
 }

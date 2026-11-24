@@ -167,7 +167,7 @@ pub fn cards(ui: &mut egui::Ui, ctx: &egui::Context) {
     // the gold button: the recommended stage while it is not active (one per window)
     let gold = (active != sm::RECOMMENDED && target != Some(sm::RECOMMENDED)).then_some(sm::RECOMMENDED);
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(crate::trf!("Für die meisten: {s}", s = crate::tr(sm::RECOMMENDED.info().title))).color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::trf!("Für die meisten: {s}", s = crate::tr(sm::RECOMMENDED.info().title))).color(lr::TEXT_DIM()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             crate::help::info(ui, "suchmodell", "Suchmodell", &crate::help::SEARCH_MODEL);
         });
@@ -181,8 +181,8 @@ pub fn cards(ui: &mut egui::Ui, ctx: &egui::Context) {
 fn fact(ui: &mut egui::Ui, name: &str, value: &str) {
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(egui::vec2(150.0, 16.0), egui::Sense::hover());
-        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM);
-        ui.add(egui::Label::new(egui::RichText::new(value).size(lr::UI_SIZE - 1.0).color(lr::TEXT)).wrap());
+        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM());
+        ui.add(egui::Label::new(egui::RichText::new(value).size(lr::UI_SIZE - 1.0).color(lr::TEXT())).wrap());
     });
 }
 
@@ -211,9 +211,9 @@ fn card(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, facts: Option<&Facts>,
         ui.spacing_mut().item_spacing.y = 1.0;
         // heading: name, recommendation, quality scale
         ui.horizontal(|ui| {
-            let g = lr::caps(ui.painter(), crate::tr(i.title), lr::semibold(11.0), lr::TEXT);
+            let g = lr::caps(ui.painter(), crate::tr(i.title), lr::semibold(11.0), lr::TEXT());
             let (r, _) = ui.allocate_exact_size(g.size(), egui::Sense::hover());
-            ui.painter().galley(r.min, g, lr::TEXT);
+            ui.painter().galley(r.min, g, lr::TEXT());
             if s == sm::RECOMMENDED {
                 ui.add_space(6.0);
                 crate::dialog::chip(ui, crate::tr("Für die meisten"));
@@ -221,10 +221,10 @@ fn card(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, facts: Option<&Facts>,
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let resp = scale(ui, i.quality);
                 lr::hover_tip(ui, &resp, &crate::trf!("Qualität {n} von 5", n = i.quality));
-                ui.label(egui::RichText::new(crate::tr("Qualität")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Qualität")).small().color(lr::TEXT_DIM()));
             });
         });
-        ui.add(egui::Label::new(egui::RichText::new(crate::tr(i.purpose)).color(lr::TEXT)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr(i.purpose)).color(lr::TEXT())).wrap());
         ui.add_space(2.0);
         fact(ui, "Für wen", crate::tr(i.for_whom));
         fact(ui, "Stärken", crate::tr(i.strengths));
@@ -289,7 +289,7 @@ fn state_row(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, installed: Option
                 });
             });
         });
-        ui.label(egui::RichText::new(crate::tr("Die Suche nutzt bis dahin das bisherige Modell.")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Die Suche nutzt bis dahin das bisherige Modell.")).small().color(lr::TEXT_DIM()));
         return;
     }
     ui.horizontal(|ui| {
@@ -297,18 +297,18 @@ fn state_row(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, installed: Option
             (_, true) => {
                 ui.label(egui::RichText::new("●").color(Color32::from_rgb(0x4c, 0xc2, 0x6a)));
                 let more = vectors.filter(|(d, t)| d < t).map(|(d, t)| crate::trf!(" · {n} neue Fotos folgen", n = crate::dialog::number((t - d) as usize))).unwrap_or_default();
-                ui.label(egui::RichText::new(format!("{}{more}", crate::tr("Aktiv"))).color(lr::TEXT));
+                ui.label(egui::RichText::new(format!("{}{more}", crate::tr("Aktiv"))).color(lr::TEXT()));
             }
             (Some(Status::Installed), false) => {
                 let have = vectors.map_or(0, |v| v.0);
                 let t = if have > 0 && s.needs_reindex() { crate::trf!("installiert · {n} Fotos schon eingelesen", n = crate::dialog::number(have as usize)) } else { crate::tr("installiert").to_string() };
-                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM()));
             }
             (Some(Status::Partial), _) => {
-                ui.label(egui::RichText::new(crate::trf!("unvollständig · {a}", a = crate::dialog::size(s.download_bytes()))).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("unvollständig · {a}", a = crate::dialog::size(s.download_bytes()))).color(lr::TEXT_DIM()));
             }
             (Some(Status::Missing), _) => {
-                ui.label(egui::RichText::new(crate::trf!("nicht installiert · {a}", a = crate::dialog::size(s.download_bytes()))).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("nicht installiert · {a}", a = crate::dialog::size(s.download_bytes()))).color(lr::TEXT_DIM()));
             }
             (None, _) => crate::dialog::pending(ui, crate::tr("wird ermittelt …")),
         }

@@ -472,3 +472,14 @@ leaves the step out):
   registered by the application may handle the highlights; when it returns `true`, the own steps 2–4 (filling,
   desaturation) are skipped. Without a registered hook, or when it returns `false`, every result is bit-identical to
   before.
+- 2026-11-23 (graineo): Foveon detail bands. `spp_denoise/params.rs`: `NoiseSliders::texture` and
+  `NoiseParams::texture` (fine, structure gains, `[1, 1]` = off). `spp_denoise/residual.rs`: `texture_bands`
+  (log-domain split of the luminance residual with a separable binomial à-trous low-pass, recombined additively in the
+  log domain). `spp_denoise/pipeline.rs`: called after `make_ratio` only when the gains differ from `[1, 1]`.
+  `process/spp.rs` (`denoise_dispatch`): non-neutral gains use the CPU path. With `[1, 1]` every result is
+  bit-identical to before.
+- 2026-11-23 (graineo): Foveon detail bands on the GPU. `spp_denoise/gpu.wgsl`: kernels `tex_log`, `tex_h1`…`tex_v8`,
+  `tex_combine` (same band split as `texture_bands`, per tile); `Params` gains `tex_on`, `tex_fine`, `tex_structure`.
+  `spp_denoise/gpu.rs`: the kernels run after `osf_ratio` only when the gains differ from `[1, 1]`.
+  `process/spp.rs` (`denoise_dispatch`): non-neutral gains no longer force the CPU path. With `[1, 1]` every result is
+  bit-identical to before (the steps are not queued).

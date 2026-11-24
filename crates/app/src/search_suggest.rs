@@ -450,7 +450,7 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
     } else if resp.hovered() {
         painter.rect_filled(rect, 0.0, Color32::from_gray(0x38));
     }
-    let color = if active || resp.hovered() { Color32::WHITE } else { lr::TEXT };
+    let color = if active || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
     let font = egui::TextStyle::Body.resolve(ui.style());
     let mut left = rect.left() + 8.0;
     if s.detail.is_some() {
@@ -458,19 +458,19 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
         let base = s.insert.trim_start_matches('-').trim_end_matches('"').trim_end_matches('"');
         let g = painter.layout_no_wrap(base.to_string(), font.clone(), Color32::from_rgb(0x8c, 0xb4, 0xe6));
         let r = egui::Rect::from_min_max(egui::pos2(left, rect.top()), egui::pos2(left + 84.0, rect.bottom()));
-        painter.with_clip_rect(r).galley(egui::pos2(left, rect.center().y - g.size().y / 2.0), g, lr::TEXT);
+        painter.with_clip_rect(r).galley(egui::pos2(left, rect.center().y - g.size().y / 2.0), g, lr::TEXT());
         left += 90.0;
     } else if let Some(kind) = s.kind {
-        let g = lr::caps(&painter, kind, lr::semibold(9.5), lr::TEXT_DIM);
+        let g = lr::caps(&painter, kind, lr::semibold(9.5), lr::TEXT_DIM());
         let kind_rect = egui::Rect::from_min_max(egui::pos2(left, rect.top()), egui::pos2(left + 84.0, rect.bottom()));
-        painter.with_clip_rect(kind_rect).galley(egui::pos2(left, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        painter.with_clip_rect(kind_rect).galley(egui::pos2(left, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
         left += 90.0;
     }
     let mut right = rect.right() - 8.0;
     if let Some(n) = s.count {
-        let g = painter.layout_no_wrap(thousands(n), font.clone(), lr::TEXT_DIM);
+        let g = painter.layout_no_wrap(thousands(n), font.clone(), lr::TEXT_DIM());
         right -= g.size().x;
-        painter.galley(egui::pos2(right, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        painter.galley(egui::pos2(right, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
         right -= 10.0;
     }
     let text_rect = egui::Rect::from_min_max(egui::pos2(left, rect.top()), egui::pos2(right.max(left), rect.bottom()));
@@ -481,9 +481,9 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
     if let Some(detail) = s.detail {
         // explanation after the name, dimmed, cut at the right edge
         let x = left + name_w + 12.0;
-        let g = painter.layout_no_wrap(detail.to_string(), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+        let g = painter.layout_no_wrap(detail.to_string(), egui::FontId::proportional(10.5), lr::TEXT_DIM());
         cut |= x + g.size().x > text_rect.right();
-        painter.with_clip_rect(text_rect).galley(egui::pos2(x, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        painter.with_clip_rect(text_rect).galley(egui::pos2(x, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
     }
     if cut {
         let tip = match s.detail {
@@ -499,7 +499,7 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
 pub fn field_table(ui: &mut egui::Ui) {
     ui.add_space(6.0);
     ui.label(egui::RichText::new(crate::tr("Felder")).font(lr::semibold(11.0)).color(Color32::from_gray(0xe0)));
-    ui.label(egui::RichText::new(crate::tr("Grundform (Kurzform) · Zweitnamen – Erklärung. Alle Namen werden verstanden; eingefügt und gespeichert wird die Grundform.")).size(10.5).color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(crate::tr("Grundform (Kurzform) · Zweitnamen – Erklärung. Alle Namen werden verstanden; eingefügt und gespeichert wird die Grundform.")).size(10.5).color(lr::TEXT_DIM()));
     ui.add_space(2.0);
     egui::ScrollArea::vertical().id_salt("suche-felder").max_height(300.0).auto_shrink([false, true]).show(ui, |ui| {
         for d in &search_fields::FIELD_DEFS {
@@ -507,8 +507,8 @@ pub fn field_table(ui: &mut egui::Ui) {
             let mut job = egui::text::LayoutJob::default();
             job.wrap.max_width = ui.available_width();
             let mono = egui::TextFormat { font_id: egui::FontId::proportional(11.0), color: Color32::from_rgb(0x8c, 0xb4, 0xe6), ..Default::default() };
-            let dim = egui::TextFormat { font_id: egui::FontId::proportional(10.5), color: lr::TEXT_DIM, ..Default::default() };
-            let normal = egui::TextFormat { font_id: egui::FontId::proportional(10.5), color: lr::TEXT, ..Default::default() };
+            let dim = egui::TextFormat { font_id: egui::FontId::proportional(10.5), color: lr::TEXT_DIM(), ..Default::default() };
+            let normal = egui::TextFormat { font_id: egui::FontId::proportional(10.5), color: lr::TEXT(), ..Default::default() };
             job.append(&format!("{}:", d.id), 0.0, mono.clone());
             if !d.short.is_empty() {
                 job.append(&format!(" ({}:)", d.short), 0.0, mono);

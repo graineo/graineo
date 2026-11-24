@@ -5,19 +5,21 @@
 //! layer of a cyan label, the top layer of a red petal), the clipped layer is flat at its clip level: the structure
 //! of the surface is lost and the colour drifts. This module restores the clipped layer **in the gradient domain**:
 //!
-//! 1. Mask `M`: pixels whose target layer lies at or above its clip level while at least one guide layer is still
-//!    below its own. Pixels where every layer is clipped are left alone (no colour is measurable there; the existing
+//! 1. Mask `M`: pixels whose target layer lies at or above [`NEAR_CLIP`] of its clip level while at least one guide
+//!    layer is still below its own. Pixels where every layer is clipped are left alone (no colour is measurable there; the existing
 //!    neutral treatment handles them). This is a hard case split by the validity of the layers.
 //! 2. Guide `G`: one linear combination of the valid guide layers, fitted **once for the whole image** by least
 //!    squares on bright, unclipped pixels. No per-pixel or neighbourhood ratios.
 //! 3. Inside `M` the target layer takes the gradients of `G` (weighted by how reliable the guide still is) and the
 //!    measured values on the border of `M` (Dirichlet): the Poisson equation `Δu = div(ρ∇G)` in `M`, solved by
-//!    conjugate gradients per connected area of `M` (only that area is held in memory). [`Variant::Log`] solves the
-//!    same equation for `ln u` with `ln G`. The measured clip level is a lower bound.
+//!    conjugate gradients per connected area of `M` (only that area is held in memory), for large areas preconditioned
+//!    by one V-cycle of an aggregation multigrid (2 × 2 blocks, Galerkin coarse graphs, damped Jacobi). [`Variant::Log`]
+//!    solves the same equation for `ln u` with `ln G`. The measured value is a lower bound, and with the white balance
+//!    given ([`rebuild_layer_with`]) so is grey at the level of guide layers that near their own clip.
 //! 4. The rebuilt values reach above the clip level. A soft knee compresses the brightness of the rebuilt areas and
 //!    a seam of [`SEAM`] pixels around them into the range up to the clip level, by one factor for all three layers
 //!    (the colour of the pixel stays), so the later stages, which cap at the common white point, keep the structure.
-//!    Pixels away from the rebuilt areas are not touched.
+//!    Pixels with a clipped guide layer keep their values. Pixels away from the rebuilt areas are not touched.
 //!
 //! The weight of each pixel in the rebuilt areas (1 inside, falling off over the seam) is returned for the sliders
 //! "Lichter-Farbe" and "Lichter-Struktur", which act later on the colour grid and the top-layer detail without
@@ -27,7 +29,9 @@
 //! Dirichlet border); D. Rouf, C. Lau, W. Heidrich, "Gradient domain color restoration of clipped highlights",
 //! CVPR Workshops 2012 (gradients of unclipped channels guide a clipped one); M. Masood, J. Zhou, M. Tappen,
 //! "Automatic correction of saturated regions in photographs using cross-channel correlation", 2009; the "guided
-//! laplacians" highlight reconstruction of darktable (A. Pierre, GPL-3.0) follows the same idea.
+//! laplacians" highlight reconstruction of darktable (A. Pierre, GPL-3.0) follows the same idea. Solver:
+//! P. Vaněk, J. Mandel, M. Brezina, "Algebraic multigrid by smoothed aggregation", Computing 56, 1996; Y. Notay,
+//! "An aggregation-based algebraic multigrid method", ETNA 37, 2010 (plain aggregation as a preconditioner).
 
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -129,6 +133,8 @@ pub fn variant() -> Variant {
 
 /// Share of the saturation level from which a value counts as clipped.
 pub const CLIP_SHARE: f32 = 0.97;
+/// Share of the clip level from which the target counts as clipped for the mask (step 1).
+pub const NEAR_CLIP: f32 = 0.95;
 /// Share of the clip level where the soft knee of step 4 starts.
 pub const KNEE: f32 = 0.75;
 /// Width of the seam around the rebuilt areas (pixels) over which the knee and the slider weight fade out.
@@ -172,12 +178,15 @@ pub struct Outcome {
 /// `sat`: saturation level per layer in the units of `layers`. Returns `None` (nothing changed) when no pixel
 /// qualifies or the fit has too few samples.
 pub fn rebuild_layer(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [f32; 3], target: usize, variant: Variant) -> Option<Outcome> {
-    rebuild_layer_with(layers, w, h, sat, target, variant, true)
+    rebuild_layer_with(layers, w, h, sat, target, variant, true, None)
 }
 
 /// [`rebuild_layer`]; `knee`: compress the rebuilt brightness into the clip level (step 4). Without it the rebuilt
 /// values stay above the clip level (for stages that take values above it, Merrill's float frontend).
-pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [f32; 3], target: usize, variant: Variant, knee: bool) -> Option<Outcome> {
+/// `neutral`: the layer values of a grey surface (relative); with it, a rebuilt pixel whose guide layers near their
+/// own clip level does not fall below grey at the guides' level ([`neutral_floor`]).
+#[allow(clippy::too_many_arguments)]
+pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [f32; 3], target: usize, variant: Variant, knee: bool, neutral: Option<[f32; 3]>) -> Option<Outcome> {
     let n = w * h;
     if target > 2 || w < 3 || h < 3 || layers.iter().any(|l| l.len() < n) || sat.iter().any(|s| !(*s > 0.0)) {
         return None;
@@ -188,10 +197,12 @@ pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [
         1 => [0, 2],
         _ => [0, 1],
     };
-    // 1. mask
+    // 1. mask: the target at or just below its clip level (the level is a low percentile of the marked values: the
+    // band just below it is clipped as well, softly; left out, the edge of a white surface stayed yellow)
+    let near = NEAR_CLIP;
     let mask: Vec<bool> = (0..n)
         .into_par_iter()
-        .map(|i| layers[target][i] >= clip[target] && guides.iter().any(|&g| layers[g][i] < clip[g]))
+        .map(|i| layers[target][i] >= near * clip[target] && guides.iter().any(|&g| layers[g][i] < clip[g]))
         .collect();
     let rebuilt = mask.par_iter().filter(|m| **m).count();
     if rebuilt == 0 {
@@ -248,8 +259,9 @@ pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [
         stats.iterations = stats.iterations.max(*it);
         stats.unconverged += usize::from(!conv);
         for &(i, v) in vals {
-            // the measured value is a lower bound
-            layers[target][i] = v.max(layers[target][i]);
+            // the measured value is a lower bound, and grey at the level of guide layers near their own clip
+            let floor = neutral.map_or(0.0, |n| neutral_floor(layers, i, target, guides, clip, n));
+            layers[target][i] = v.max(layers[target][i]).max(floor);
         }
     }
     drop(results);
@@ -263,16 +275,15 @@ pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [
         for &(i, wt) in &weight {
             let i = i as usize;
             let v = layers[target][i];
-            if v > k0 {
+            // a pixel with a clipped guide layer keeps its values: the guide is a lower bound (white detail within a
+            // coloured surface stays light), and lowering only the target turned such pixels (every layer clipped:
+            // specular highlights in the seam) yellow
+            if v > k0 && guides.iter().all(|&g| layers[g][i] < clip[g]) {
                 let out = k0 + span_out * knee_curve((v - k0) / span_in, span_in / span_out);
                 // the knee as it would apply without the seam, faded over the seam; one factor for all layers
                 let f = 1.0 + wt * (out / v - 1.0);
-                for (c, l) in layers.iter_mut().enumerate() {
-                    // a clipped guide layer is a lower bound as well: it keeps its measured value (white detail
-                    // within a coloured surface stays light)
-                    if c == target || l[i] < clip[c] {
-                        l[i] *= f;
-                    }
+                for l in layers.iter_mut() {
+                    l[i] *= f;
                 }
             }
         }
@@ -282,6 +293,25 @@ pub fn rebuild_layer_with(layers: &mut [Vec<f32>; 3], w: usize, h: usize, sat: [
     weights[g1] = wb as f32;
     stats.weights = weights;
     Some(Outcome { stats, weight })
+}
+
+/// Share of a guide layer's clip level from which the grey floor of [`neutral_floor`] starts, and where it is full.
+const NEUTRAL_FLOOR: (f32, f32) = (0.6, 0.9);
+
+/// Lower bound of a rebuilt value from the guide layers that are bright themselves: the target value of a grey
+/// surface at the guide's level, faded in as the guide nears its own clip level. Where every layer is that bright, a
+/// small specular highlight or the edge of a white surface is white: the gradient fill and the image-wide fit (taken
+/// from the coloured surfaces of the photo) left the target below grey there, and the pixel turned yellow.
+fn neutral_floor(l: &[Vec<f32>; 3], i: usize, target: usize, guides: [usize; 2], clip: [f32; 3], neutral: [f32; 3]) -> f32 {
+    guides
+        .iter()
+        .filter(|&&g| neutral[g] > 0.0)
+        .map(|&g| {
+            let v = l[g][i].min(clip[g]);
+            let t = ((v / clip[g] - NEUTRAL_FLOOR.0) / (NEUTRAL_FLOOR.1 - NEUTRAL_FLOOR.0)).clamp(0.0, 1.0);
+            t * t * (3.0 - 2.0 * t) * v / neutral[g] * neutral[target]
+        })
+        .fold(0.0, f32::max)
 }
 
 /// A connected area of the mask: its pixels and bounding box (inclusive).
@@ -401,31 +431,22 @@ fn solve_area(
         }
     }
     let off = if cnt > 0 { off / cnt as f64 } else { lift(clip[target] as f64) - guide[0] };
-    let apply = |x: &[f64], out: &mut [f64]| {
-        let one = |k: usize, i: usize| {
-            let mut s = 0.0;
-            for j in neighbours(i).into_iter().flatten() {
-                s += x[k];
-                let kj = index[local(j)];
-                if kj != u32::MAX {
-                    s -= x[kj as usize];
-                }
-            }
-            s
-        };
-        if cells.len() >= PARALLEL_FROM {
-            out.par_iter_mut().zip(cells.par_iter()).enumerate().for_each(|(k, (o, &i))| *o = one(k, i));
-        } else {
-            for (k, &i) in cells.iter().enumerate() {
-                out[k] = one(k, i);
-            }
-        }
-    };
+    // the operator as a graph: one row per pixel of the area, its neighbours inside the image on the diagonal, the
+    // neighbours inside the area off the diagonal
+    let graph = Graph::of_area(cells, w, h, |j| index[local(j)]);
     // start: the guide shifted to the mean offset on the border
     let mut u: Vec<f64> = guide.iter().map(|g| g + off).collect();
-    // conjugate gradients converge on a Laplacian in a number of steps of the order of the area's width
+    // conjugate gradients converge on a Laplacian in a number of steps of the order of the area's width; a coarse
+    // correction first (aggregated 2 × 2 blocks, recursively) removes the smooth part of the error those steps spend
+    // their time on
     let span = (a.x1 - a.x0).max(a.y1 - a.y0) + 1;
-    let (iterations, converged) = conjugate_gradients(&apply, &rhs, &mut u, 4 * span + 100);
+    let coords: Vec<(u32, u32)> = cells.iter().map(|&i| ((i % w) as u32, (i / w) as u32)).collect();
+    let (iterations, converged) = if cells.len() >= COARSE_FROM && std::env::var_os("GRAINEO_HL_COARSE").map_or(true, |v| v != "0") {
+        let mg = Multigrid::build(graph, &coords);
+        preconditioned_cg(&mg, &rhs, &mut u, 4 * span + 100, CG_TOL)
+    } else {
+        conjugate_gradients(&graph, &rhs, &mut u, 4 * span + 100, CG_TOL)
+    };
     let out = cells
         .iter()
         .zip(&u)
@@ -505,41 +526,356 @@ fn knee_curve(x: f32, ratio: f32) -> f32 {
     1.0 - (1.0 - x).powf(ratio)
 }
 
-/// Solves `A u = b` for the symmetric positive definite operator `apply`, starting from `u`, at most `max_iter`
-/// steps. Returns the iterations and whether the residual reached [`CG_TOL`].
-fn conjugate_gradients(apply: &dyn Fn(&[f64], &mut [f64]), b: &[f64], u: &mut [f64], max_iter: usize) -> (usize, bool) {
+/// Areas from this many pixels get the coarse correction before the conjugate gradients.
+const COARSE_FROM: usize = 4096;
+/// Coarsest level of the correction (pixels): solved by conjugate gradients alone.
+const COARSE_MIN: usize = 1024;
+/// Tolerance of the coarse levels (relative residual): only a start for the level above.
+const COARSE_TOL: f64 = 1e-3;
+
+/// Symmetric positive definite sparse matrix of a weighted graph Laplacian with a Dirichlet part: row `k` is
+/// `diag[k]·x[k] − Σ weight·x[neighbour]` over its entries `start[k]..start[k + 1]`.
+struct Graph {
+    diag: Vec<f64>,
+    start: Vec<u32>,
+    adj: Vec<u32>,
+    weight: Vec<f64>,
+}
+
+impl Graph {
+    /// The 4-neighbourhood Laplacian of an area: a neighbour inside the image adds 1 to the diagonal (outside the
+    /// image: left out, Neumann); one inside the area (`slot` ≠ `u32::MAX`) is an entry with weight 1.
+    fn of_area(cells: &[usize], w: usize, h: usize, slot: impl Fn(usize) -> u32) -> Self {
+        let mut g = Graph { diag: Vec::with_capacity(cells.len()), start: Vec::with_capacity(cells.len() + 1), adj: Vec::with_capacity(4 * cells.len()), weight: Vec::new() };
+        g.start.push(0);
+        for &i in cells {
+            let (x, y) = (i % w, i / w);
+            let mut d = 0.0;
+            for j in [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)].into_iter().flatten() {
+                d += 1.0;
+                let k = slot(j);
+                if k != u32::MAX {
+                    g.adj.push(k);
+                }
+            }
+            g.diag.push(d);
+            g.start.push(g.adj.len() as u32);
+        }
+        g.weight = vec![1.0; g.adj.len()];
+        g
+    }
+
+    fn len(&self) -> usize {
+        self.diag.len()
+    }
+
+    fn row(&self, k: usize, x: &[f64]) -> f64 {
+        let mut s = self.diag[k] * x[k];
+        for e in self.start[k] as usize..self.start[k + 1] as usize {
+            s -= self.weight[e] * x[self.adj[e] as usize];
+        }
+        s
+    }
+
+    fn apply(&self, x: &[f64], out: &mut [f64]) {
+        if self.len() >= PARALLEL_FROM {
+            out.par_iter_mut().enumerate().for_each(|(k, o)| *o = self.row(k, x));
+        } else {
+            for (k, o) in out.iter_mut().enumerate() {
+                *o = self.row(k, x);
+            }
+        }
+    }
+
+    /// Galerkin coarsening by aggregation: the nodes of each 2 × 2 block of `coords` form one coarse node
+    /// (`Pᵀ A P` with the piecewise constant `P`). Returns the coarse graph, its coordinates and the coarse node of
+    /// each node.
+    fn coarsen(&self, coords: &[(u32, u32)]) -> (Graph, Vec<(u32, u32)>, Vec<u32>) {
+        let n = self.len();
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+        for &(x, y) in coords {
+            (x0, y0, x1, y1) = (x0.min(x / 2), y0.min(y / 2), x1.max(x / 2), y1.max(y / 2));
+        }
+        let bw = (x1 - x0 + 1) as usize;
+        let mut slot = vec![u32::MAX; bw * (y1 - y0 + 1) as usize];
+        let mut parent = vec![0u32; n];
+        let mut ccoords = Vec::new();
+        for (k, &(x, y)) in coords.iter().enumerate() {
+            let b = (y / 2 - y0) as usize * bw + (x / 2 - x0) as usize;
+            if slot[b] == u32::MAX {
+                slot[b] = ccoords.len() as u32;
+                ccoords.push((x / 2, y / 2));
+            }
+            parent[k] = slot[b];
+        }
+        drop(slot);
+        let m = ccoords.len();
+        // members of each coarse node (counting sort)
+        let mut first = vec![0u32; m + 1];
+        for &p in &parent {
+            first[p as usize + 1] += 1;
+        }
+        for c in 0..m {
+            first[c + 1] += first[c];
+        }
+        let mut fill = first.clone();
+        let mut members = vec![0u32; n];
+        for (k, &p) in parent.iter().enumerate() {
+            members[fill[p as usize] as usize] = k as u32;
+            fill[p as usize] += 1;
+        }
+        let rows: Vec<(f64, Vec<(u32, f64)>)> = (0..m)
+            .into_par_iter()
+            .map(|c| {
+                let mut d = 0.0;
+                let mut row: Vec<(u32, f64)> = Vec::new();
+                for &k in &members[first[c] as usize..first[c + 1] as usize] {
+                    let k = k as usize;
+                    d += self.diag[k];
+                    for e in self.start[k] as usize..self.start[k + 1] as usize {
+                        let pj = parent[self.adj[e] as usize];
+                        if pj as usize == c {
+                            d -= self.weight[e];
+                        } else if let Some(r) = row.iter_mut().find(|r| r.0 == pj) {
+                            r.1 += self.weight[e];
+                        } else {
+                            row.push((pj, self.weight[e]));
+                        }
+                    }
+                }
+                (d, row)
+            })
+            .collect();
+        let mut g = Graph { diag: Vec::with_capacity(m), start: Vec::with_capacity(m + 1), adj: Vec::new(), weight: Vec::new() };
+        g.start.push(0);
+        for (d, row) in rows {
+            g.diag.push(d);
+            for (j, wt) in row {
+                g.adj.push(j);
+                g.weight.push(wt);
+            }
+            g.start.push(g.adj.len() as u32);
+        }
+        (g, ccoords, parent)
+    }
+}
+
+/// Damping of the Jacobi smoother of [`Multigrid`].
+const JACOBI_OMEGA: f64 = 0.67;
+/// Jacobi sweeps before and after the coarse correction of each level.
+const SMOOTH_STEPS: usize = 1;
+
+/// Hierarchy of aggregated graphs ([`Graph::coarsen`]) used as the preconditioner of [`preconditioned_cg`]: one
+/// V-cycle with damped Jacobi smoothing per step (aggregation multigrid; Vaněk, Mandel, Brezina 1996; Notay 2010).
+struct Multigrid {
+    levels: Vec<Graph>,
+    /// `parents[l][k]`: node of level `l + 1` that holds node `k` of level `l`.
+    parents: Vec<Vec<u32>>,
+    /// `members[l]`: the nodes of level `l` held by each node of level `l + 1` (offsets, nodes).
+    members: Vec<(Vec<u32>, Vec<u32>)>,
+    /// Span of the coarsest level (iteration limit of its solve).
+    coarsest_span: usize,
+}
+
+impl Multigrid {
+    fn build(fine: Graph, coords: &[(u32, u32)]) -> Self {
+        let mut levels = vec![fine];
+        let mut parents = Vec::new();
+        let mut coords = coords.to_vec();
+        while levels.last().map_or(0, Graph::len) >= COARSE_MIN {
+            let (g, c, p) = levels.last().unwrap().coarsen(&coords);
+            if g.len() * 2 > levels.last().unwrap().len() {
+                break;
+            }
+            levels.push(g);
+            parents.push(p);
+            coords = c;
+        }
+        let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+        for &(x, y) in &coords {
+            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+        }
+        let members = parents
+            .iter()
+            .zip(&levels[1..])
+            .map(|(p, g)| {
+                let m = g.len();
+                let mut first = vec![0u32; m + 1];
+                for &c in p {
+                    first[c as usize + 1] += 1;
+                }
+                for c in 0..m {
+                    first[c + 1] += first[c];
+                }
+                let mut fill = first.clone();
+                let mut list = vec![0u32; p.len()];
+                for (k, &c) in p.iter().enumerate() {
+                    list[fill[c as usize] as usize] = k as u32;
+                    fill[c as usize] += 1;
+                }
+                (first, list)
+            })
+            .collect();
+        Multigrid { levels, parents, members, coarsest_span: (x1.saturating_sub(x0)).max(y1.saturating_sub(y0)) as usize + 1 }
+    }
+
+    /// `z ≈ A⁻¹ r` by one V-cycle from level `l`.
+    fn vcycle(&self, l: usize, r: &[f64], z: &mut [f64]) {
+        let g = &self.levels[l];
+        let n = g.len();
+        z.iter_mut().for_each(|v| *v = 0.0);
+        if l + 1 == self.levels.len() {
+            conjugate_gradients(g, r, z, 4 * self.coarsest_span + 100, COARSE_TOL);
+            return;
+        }
+        let par = n >= PARALLEL_FROM;
+        let mut az = vec![0f64; n];
+        let smooth = |z: &mut [f64], az: &mut [f64]| {
+            g.apply(z, az);
+            let step = |(k, zk): (usize, &mut f64)| *zk += JACOBI_OMEGA * (r[k] - az[k]) / g.diag[k];
+            if par {
+                z.par_iter_mut().enumerate().for_each(step);
+            } else {
+                z.iter_mut().enumerate().for_each(step);
+            }
+        };
+        for _ in 0..SMOOTH_STEPS {
+            smooth(z, &mut az);
+        }
+        g.apply(z, &mut az);
+        let parent = &self.parents[l];
+        let m = self.levels[l + 1].len();
+        let (first, members) = &self.members[l];
+        let gather = |c: usize| members[first[c] as usize..first[c + 1] as usize].iter().map(|&k| r[k as usize] - az[k as usize]).sum::<f64>();
+        let rc: Vec<f64> = if par { (0..m).into_par_iter().map(gather).collect() } else { (0..m).map(gather).collect() };
+        let mut ec = vec![0f64; m];
+        self.vcycle(l + 1, &rc, &mut ec);
+        if par {
+            z.par_iter_mut().enumerate().for_each(|(k, zk)| *zk += ec[parent[k] as usize]);
+        } else {
+            for k in 0..n {
+                z[k] += ec[parent[k] as usize];
+            }
+        }
+        for _ in 0..SMOOTH_STEPS {
+            smooth(z, &mut az);
+        }
+    }
+}
+
+/// [`conjugate_gradients`] preconditioned by one V-cycle of `mg` per step (flexible form: the coarsest solve is not
+/// exactly linear). Same stopping rule on the true residual.
+fn preconditioned_cg(mg: &Multigrid, b: &[f64], u: &mut [f64], max_iter: usize, tol: f64) -> (usize, bool) {
+    let g = &mg.levels[0];
     let n = b.len();
+    let par = n >= PARALLEL_FROM;
     let mut r = vec![0f64; n];
-    apply(u, &mut r);
+    g.apply(u, &mut r);
+    for k in 0..n {
+        r[k] = b[k] - r[k];
+    }
+    let bb = dot(b, b).max(1e-30);
+    let mut z = vec![0f64; n];
+    mg.vcycle(0, &r, &mut z);
+    let mut p = z.clone();
+    let mut ap = vec![0f64; n];
+    let mut rz = dot(&r, &z);
+    let mut rr = dot(&r, &r);
+    let mut z_old = vec![0f64; n];
+    for it in 0..max_iter {
+        if rr / bb < tol * tol {
+            return (it, true);
+        }
+        g.apply(&p, &mut ap);
+        let pap = dot(&p, &ap);
+        if !(pap > 0.0) {
+            return (it, false);
+        }
+        let alpha = rz / pap;
+        if par {
+            u.par_iter_mut().zip(r.par_iter_mut()).zip(p.par_iter().zip(ap.par_iter())).for_each(|((uk, rk), (pk, apk))| {
+                *uk += alpha * pk;
+                *rk -= alpha * apk;
+            });
+        } else {
+            for k in 0..n {
+                u[k] += alpha * p[k];
+                r[k] -= alpha * ap[k];
+            }
+        }
+        rr = dot(&r, &r);
+        std::mem::swap(&mut z, &mut z_old);
+        mg.vcycle(0, &r, &mut z);
+        // Conjugate-gradient β update: β = rᵀ(z − z_old) / (r_oldᵀ z_old)
+        let rz_new = dot(&r, &z);
+        let r_zold = dot(&r, &z_old);
+        let beta = ((rz_new - r_zold) / rz).max(0.0);
+        rz = rz_new;
+        if par {
+            p.par_iter_mut().zip(z.par_iter()).for_each(|(pk, zk)| *pk = zk + beta * *pk);
+        } else {
+            for k in 0..n {
+                p[k] = z[k] + beta * p[k];
+            }
+        }
+    }
+    (max_iter, rr / bb < tol * tol)
+}
+
+/// Solves `A u = b` for the symmetric positive definite `graph`, starting from `u`, at most `max_iter` steps.
+/// Returns the iterations and whether the residual reached `tol` (relative to `b`).
+fn conjugate_gradients(graph: &Graph, b: &[f64], u: &mut [f64], max_iter: usize, tol: f64) -> (usize, bool) {
+    let n = b.len();
+    let par = n >= PARALLEL_FROM;
+    let mut r = vec![0f64; n];
+    graph.apply(u, &mut r);
     for k in 0..n {
         r[k] = b[k] - r[k];
     }
     let mut p = r.clone();
     let mut ap = vec![0f64; n];
-    let mut rr: f64 = r.iter().map(|v| v * v).sum();
-    let bb: f64 = b.iter().map(|v| v * v).sum::<f64>().max(1e-30);
+    let mut rr: f64 = dot(&r, &r);
+    let bb: f64 = dot(b, b).max(1e-30);
     for it in 0..max_iter {
-        if rr / bb < CG_TOL * CG_TOL {
+        if rr / bb < tol * tol {
             return (it, true);
         }
-        apply(&p, &mut ap);
+        graph.apply(&p, &mut ap);
         let pap: f64 = dot(&p, &ap);
         if pap <= 0.0 {
             return (it, false);
         }
         let alpha = rr / pap;
-        for k in 0..n {
-            u[k] += alpha * p[k];
-            r[k] -= alpha * ap[k];
-        }
-        let rr_new: f64 = dot(&r, &r);
+        let rr_new: f64 = if par {
+            u.par_iter_mut()
+                .zip(r.par_iter_mut())
+                .zip(p.par_iter().zip(ap.par_iter()))
+                .map(|((uk, rk), (pk, apk))| {
+                    *uk += alpha * pk;
+                    *rk -= alpha * apk;
+                    *rk * *rk
+                })
+                .sum()
+        } else {
+            let mut s = 0.0;
+            for k in 0..n {
+                u[k] += alpha * p[k];
+                r[k] -= alpha * ap[k];
+                s += r[k] * r[k];
+            }
+            s
+        };
         let beta = rr_new / rr;
         rr = rr_new;
-        for k in 0..n {
-            p[k] = r[k] + beta * p[k];
+        if par {
+            p.par_iter_mut().zip(r.par_iter()).for_each(|(pk, rk)| *pk = rk + beta * *pk);
+        } else {
+            for k in 0..n {
+                p[k] = r[k] + beta * p[k];
+            }
         }
     }
-    (max_iter, rr / bb < CG_TOL * CG_TOL)
+    (max_iter, rr / bb < tol * tol)
 }
 
 /// Dot product (parallel for long vectors).

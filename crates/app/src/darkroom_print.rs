@@ -276,7 +276,7 @@ impl App {
         let film_an = self.current.as_ref().is_some_and(|c| self.entries[c.index].settings.film.is_active());
         let Some(t) = self.darkroom.contact.print.tex.as_ref().filter(|_| film_an) else {
             let text = if film_an { "…" } else { crate::tr("Film wählen") };
-            p.text(viewport.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), lr::TEXT_DIM);
+            p.text(viewport.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), lr::TEXT_DIM());
             return;
         };
         let ts = t.size_vec2();

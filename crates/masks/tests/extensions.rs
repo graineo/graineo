@@ -252,6 +252,45 @@ fn new_sliders_act_where_they_should() {
     assert!(run(Adjustments { curve: vec![[0.0, 0.0], [0.5, 0.6], [1.0, 1.0]], ..Default::default() }, [0.2; 3])[0] > 0.25);
 }
 
+/// Local blacks use the global curve: in a full mask a grey pixel gets exactly the global gain, and −100 sets the
+/// deepest shadows to (nearly) black, +100 opens them by more than 1 EV.
+#[test]
+fn blacks_follow_the_global_curve() {
+    let full = Mask::Luminance { low: -10.0, high: 10.0, feather: 0.0 };
+    let run = |s: f32, v: f32| {
+        let data = vec![v; 3];
+        let d = Document { version: 4, layers: vec![Layer::new(full.clone(), Adjustments { blacks: s, ..Default::default() })] };
+        apply(Image::new(1, 1, &data).unwrap(), &d).unwrap()[1]
+    };
+    for s in [-1.0, -0.4, 0.3, 1.0] {
+        for v in [0.002, 0.01, 0.05, 0.18] {
+            let want = v * masks::blacks_ev(s, (v / masks::MID_GRAY).log2()).exp2();
+            assert!((run(s, v) - want).abs() <= want * 1e-5, "{s} {v}: {} {want}", run(s, v));
+        }
+    }
+    assert!(run(-1.0, 0.003) < 0.003 / 8.0);
+    assert!(run(1.0, 0.003) > 0.003 * 2.0);
+    // the mid-tones hardly move
+    assert!((run(-1.0, 0.1845) / 0.1845 - 1.0).abs() < 0.04);
+}
+
+#[test]
+#[ignore = "Explicit GPU check"]
+fn gpu_matches_cpu_with_strong_blacks() {
+    let (w, h) = (128, 96);
+    let data = picture(w, h);
+    let image = Image::new(w, h, &data).unwrap();
+    for s in [-1.0, 1.0] {
+        let a = Adjustments { blacks: s, exposure: -0.5, ..Default::default() };
+        let d = Document { version: 4, layers: vec![Layer::new(Mask::Radial { center: [0.5, 0.5], radii: [0.6, 0.4], angle: 0.2, feather: 0.5 }, a)] };
+        let cpu = apply(image, &d).unwrap();
+        let gpu = gpu::apply(image, &d).unwrap().expect("GPU must be available for this explicit check");
+        let max = cpu.iter().zip(&gpu).map(|(a, b)| (a - b).abs()).fold(0.0, f32::max);
+        println!("GPU/CPU blacks {s}: max {max:.7}");
+        assert!(max < 2e-4, "{max}");
+    }
+}
+
 #[test]
 #[ignore = "Explicit GPU check"]
 fn gpu_matches_cpu_with_the_new_sliders() {

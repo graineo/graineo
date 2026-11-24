@@ -402,7 +402,7 @@ impl<'a> Run<'a> {
 
     /// Like [`Run::dispatch`], but with its own work size (e.g. the small grid of the luminance map).
     fn dispatch_dim(&mut self, name: &'static str, (dw, dh): (usize, usize), extra: &[(usize, f32)], bufs: &[&wgpu::Buffer]) {
-        let mut p = vec![0f32; 64];
+        let mut p = vec![0f32; 72];
         p[0] = dw as f32;
         p[1] = dh as f32;
         for &(i, v) in extra {
@@ -741,6 +741,9 @@ pub struct OutputData {
     pub shadows: f32,
     pub highlights: f32,
     pub whites: f32,
+    /// highlight roll of a lowered Whites slider: reach in stops (0 = off) and scene white
+    pub roll_reach: f32,
+    pub roll_white: f32,
     pub blacks: f32,
     pub saturation: f32,
     pub vibrance: f32,
@@ -1000,6 +1003,8 @@ fn output_kernels_with(g: &Gpu, l: &mut Run, rgb: &wgpu::Buffer, w: usize, h: us
         (23, out_data.lum[2]),
         (61, look_offset as f32),
         (62, out_data.look_tetrahedral as u8 as f32),
+        (63, out_data.roll_reach),
+        (64, out_data.roll_white),
     ];
     if let Some((b, (_, bw, bh, f))) = &brake {
         e.extend_from_slice(&[(54, 1.0), (55, b.luma_exp), (56, b.chroma_exp), (57, b.exposure), (58, *f as f32), (59, *bw as f32), (60, *bh as f32)]);

@@ -112,7 +112,7 @@ impl LibraryView {
         if resp.hovered() {
             ui.painter().rect_filled(plus, 0.0, Color32::from_gray(0x36));
         }
-        let stroke = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+        let stroke = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
         ui.painter().line_segment([c - egui::vec2(5.0, 0.0), c + egui::vec2(5.0, 0.0)], stroke);
         ui.painter().line_segment([c - egui::vec2(0.0, 5.0), c + egui::vec2(0.0, 5.0)], stroke);
         lr::hover_tip(ui, &resp, tip);

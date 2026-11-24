@@ -54,6 +54,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 
 [dev-dependencies]
+fuzzkit = { path = "../fuzzkit" }
 # tests write PNG files with transparency (imageio alpha test)
 image = { version = "0.25", default-features = false, features = ["png"] }
 # JPEG XL metadata tests: the encoder of the export and a reference decoder (both in the tree through develop/rawler)

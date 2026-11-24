@@ -241,8 +241,8 @@ const SECTIONS: [&str; 11] = ["Allgemein", "Oberfläche", "Bibliothek", "Entwick
 /// Icon per section (number in [`symbol`])
 const SYMBOL_NR: [usize; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 2, 9];
 
-/// UI sizes (scales everything evenly: font, spacing, icons).
-const SCALES: [(f32, &str); 3] = [(0.9, "Klein"), (1.0, "Normal"), (1.15, "Groß")];
+/// UI sizes (scales everything evenly: font, spacing, icons). Older saved values 0.9 / 1.0 / 1.15 stay valid.
+const STEPS: [f32; 7] = [0.9, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0];
 
 fn scale_file() -> Option<std::path::PathBuf> {
     crate::app_file("interface.txt")
@@ -250,12 +250,72 @@ fn scale_file() -> Option<std::path::PathBuf> {
 
 /// Apply the saved UI size (at startup).
 pub fn apply_scale(ctx: &egui::Context) {
-    // ⌘+/⌘− from egui off: the size is only chosen in the settings
+    // egui's own ⌘+/⌘− off: ⌘+/⌘− zoom the photo, the UI steps are ⇧⌘+/⇧⌘− in `scale_shortcuts` (fixed steps, saved)
     ctx.options_mut(|o| o.zoom_with_keyboard = false);
     let f = scale_file().and_then(|p| std::fs::read_to_string(p).ok()).and_then(|t| t.trim().parse::<f32>().ok()).unwrap_or(1.0);
-    if SCALES.iter().any(|(v, _)| (*v - f).abs() < 1e-3) {
+    if STEPS.iter().any(|v| (*v - f).abs() < 1e-3) {
         ctx.set_zoom_factor(f);
     }
+    let r = readability_file().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+    let on = |key: &str| r.lines().any(|l| l.trim() == format!("{key}=1"));
+    if on("sans") || on("contrast") {
+        lr::set_readability(ctx, on("sans"), on("contrast"));
+    }
+}
+
+/// Readability options (font, contrast), saved like the UI size.
+fn readability_file() -> Option<std::path::PathBuf> {
+    crate::app_file("interface-readability.txt")
+}
+
+fn save_readability(ctx: &egui::Context, sans: bool, contrast: bool) {
+    if sans == lr::sans_font() && contrast == lr::high_contrast() {
+        return;
+    }
+    lr::set_readability(ctx, sans, contrast);
+    if let Some(p) = readability_file() {
+        let _ = std::fs::write(p, format!("sans={}\ncontrast={}\n", sans as u8, contrast as u8));
+    }
+}
+
+/// Set and save a UI size.
+pub fn set_scale(ctx: &egui::Context, z: f32) {
+    if (ctx.zoom_factor() - z).abs() < 1e-3 {
+        return;
+    }
+    ctx.set_zoom_factor(z);
+    if let Some(p) = scale_file() {
+        let _ = std::fs::write(p, format!("{z}"));
+    }
+    ctx.request_repaint();
+}
+
+/// Next step up (`dir` > 0) or down from the current size; `dir` == 0: back to 100 %.
+pub fn step_scale(ctx: &egui::Context, dir: i32) {
+    let z = ctx.zoom_factor();
+    let next = match dir {
+        0 => 1.0,
+        d if d > 0 => STEPS.iter().copied().find(|s| *s > z + 1e-3).unwrap_or(z),
+        _ => STEPS.iter().rev().copied().find(|s| *s < z - 1e-3).unwrap_or(z),
+    };
+    set_scale(ctx, next);
+}
+
+/// ⇧⌘+ / ⇧⌘− / ⇧⌘0 (⇧Ctrl on Windows and Linux): UI size in steps, everywhere (⌘+ / ⌘− / ⌘0 without ⇧ zoom the photo).
+/// Returns whether one of them was pressed. The reset is checked first: on a German keyboard ⇧0 arrives as "=".
+pub fn scale_shortcuts(ctx: &egui::Context) -> bool {
+    use crate::shortcuts::pressed;
+    let dir = if pressed(ctx, "ui_reset") {
+        0
+    } else if pressed(ctx, "ui_larger") || pressed(ctx, "ui_larger_us") || pressed(ctx, "ui_larger_de") {
+        1
+    } else if pressed(ctx, "ui_smaller") || pressed(ctx, "ui_smaller_de") {
+        -1
+    } else {
+        return false;
+    };
+    step_scale(ctx, dir);
+    true
 }
 
 /// Are the settings open? They are an ordinary egui window; the native image layer of the wide display would otherwise lie above them.
@@ -490,14 +550,14 @@ const NAME_WIDTH: f32 = 290.0;
 /// Group: capitals heading and box.
 pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
     ui.add_space(8.0);
-    let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM);
+    let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM());
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), g.size().y + 4.0), egui::Sense::hover());
-    ui.painter().galley(r.min + egui::vec2(4.0, 0.0), g, lr::TEXT_DIM);
+    ui.painter().galley(r.min + egui::vec2(4.0, 0.0), g, lr::TEXT_DIM());
     // the heading sticks to the top of a long settings page while the group scrolls
     let owned = title.to_string();
     crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.id().with(("gruppe", title)), r.expand2(egui::vec2(0.0, 3.0)), move |p, bar, _| {
-        let g = lr::caps(p, &owned, lr::semibold(10.5), lr::TEXT_DIM);
-        p.galley(egui::pos2(bar.left() + 4.0, bar.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        let g = lr::caps(p, &owned, lr::semibold(10.5), lr::TEXT_DIM());
+        p.galley(egui::pos2(bar.left() + 4.0, bar.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
     });
     egui::Frame::new().fill(Color32::from_gray(0x1d)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x2c))).corner_radius(0.0).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -510,12 +570,12 @@ pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut eg
 pub(crate) fn row(ui: &mut egui::Ui, name: &str, description: Option<&str>, right: impl FnOnce(&mut egui::Ui)) {
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         let (r, _) = ui.allocate_exact_size(egui::vec2(NAME_WIDTH, 24.0), egui::Sense::hover());
-        ui.painter().with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), egui::FontId::proportional(lr::UI_SIZE), lr::TEXT);
+        ui.painter().with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), egui::FontId::proportional(lr::UI_SIZE), lr::TEXT());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
     });
     if let Some(b) = description {
         ui.allocate_ui_with_layout(egui::vec2(ui.available_width(),30.0),egui::Layout::top_down(egui::Align::Min),|ui| {
-            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(b)).small().color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(b)).small().color(lr::TEXT_DIM())).wrap());
         });
         ui.add_space(2.0);
     }
@@ -524,7 +584,7 @@ pub(crate) fn row(ui: &mut egui::Ui, name: &str, description: Option<&str>, righ
 /// Row whose name is longer than the name column: name on the left, controls on the right.
 fn row_wide(ui: &mut egui::Ui, name: &str, right: impl FnOnce(&mut egui::Ui)) {
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.label(egui::RichText::new(name).color(lr::TEXT));
+        ui.label(egui::RichText::new(name).color(lr::TEXT()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
     });
 }
@@ -551,7 +611,7 @@ pub(crate) enum Signal {
 
 /// State value: dot + grey text (right-aligned).
 pub(crate) fn value(ui: &mut egui::Ui, text: &str, a: Signal) {
-    ui.label(egui::RichText::new(crate::menu::i18n::tr_msg(text)).color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(crate::menu::i18n::tr_msg(text)).color(lr::TEXT_DIM()));
     let c = match a {
         Signal::Green => Color32::from_rgb(0x4c, 0xc2, 0x6a),
         Signal::Yellow => Color32::from_rgb(0xe0, 0xb0, 0x40),
@@ -579,7 +639,7 @@ pub(super) fn path_text(ui: &mut egui::Ui, p: &str, width: f32) {
     let width = width.min(ui.available_width()).max(24.0);
     let font = egui::TextStyle::Small.resolve(ui.style());
     let painter = ui.painter().clone();
-    let fits = |s: &str| painter.layout_no_wrap(s.to_string(), font.clone(), lr::TEXT_DIM).size().x <= width - 2.0;
+    let fits = |s: &str| painter.layout_no_wrap(s.to_string(), font.clone(), lr::TEXT_DIM()).size().x <= width - 2.0;
     let shown = if fits(p) {
         p.to_string()
     } else {
@@ -595,7 +655,7 @@ pub(super) fn path_text(ui: &mut egui::Ui, p: &str, width: f32) {
         }
         middle_ellipsis(&chars, lo)
     };
-    ui.add_sized([width, 20.0], egui::Label::new(egui::RichText::new(shown).monospace().small().color(lr::TEXT_DIM)).truncate());
+    ui.add_sized([width, 20.0], egui::Label::new(egui::RichText::new(shown).monospace().small().color(lr::TEXT_DIM())).truncate());
 }
 
 /// `keep` characters of `chars` around "…": a little more of the end (the folder name) than of the start.
@@ -798,7 +858,7 @@ fn show_work(ui: &mut egui::Ui, what: &str) {
     if let Some(a) = work_of(what) {
         ui.horizontal(|ui| {
             ui.add(egui::ProgressBar::new(a.progress).desired_width(240.0).show_percentage());
-            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&a.text)).small().color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&a.text)).small().color(lr::TEXT_DIM())).truncate());
             if !a.done && ui.small_button(crate::tr("Abbrechen")).clicked() {
                 a.cancel.store(true, Ordering::Relaxed);
             }
@@ -857,14 +917,37 @@ pub fn work_status() -> Option<String> {
 fn interface_section(ui: &mut egui::Ui, ctx: &egui::Context) {
     group(ui, i18n::text(Text::Appearance), |ui| {
         row(ui, i18n::text(Text::InterfaceScale), None, |ui| {
-            let mut z = SCALES.iter().map(|(v, _)| *v).min_by(|a, b| (a - ctx.zoom_factor()).abs().total_cmp(&(b - ctx.zoom_factor()).abs())).unwrap_or(1.0);
-            let opts = [(0.9,i18n::text(Text::Small)),(1.0,i18n::text(Text::Normal)),(1.15,i18n::text(Text::Large))];
-            if lr::segmented(ui, &mut z, &opts) {
-                ctx.set_zoom_factor(z);
-                if let Some(p) = scale_file() {
-                    let _ = std::fs::write(p, format!("{z}"));
+            let mut z = STEPS.iter().copied().min_by(|a, b| (a - ctx.zoom_factor()).abs().total_cmp(&(b - ctx.zoom_factor()).abs())).unwrap_or(1.0);
+            let label = |v: f32| format!("{} %", (v * 100.0).round() as i32);
+            egui::ComboBox::from_id_salt("prefs-ui-scale").selected_text(label(z)).width(110.0).height(300.0).show_ui(ui, |ui| {
+                for v in STEPS {
+                    ui.selectable_value(&mut z, v, label(v));
                 }
-            }
+            });
+            ui.label(egui::RichText::new(format!("{} / {} / {}", crate::shortcuts::display("ui_larger"), crate::shortcuts::display("ui_smaller"), crate::shortcuts::display("ui_reset"))).color(lr::TEXT_DIM()));
+            set_scale(ctx, z);
+        });
+        separator(ui);
+        row(ui, &crate::tr("Schrift"), None, |ui| {
+            let mut sans = lr::sans_font();
+            let name = |s: bool| if s { "IBM Plex Sans" } else { "IBM Plex Mono" };
+            egui::ComboBox::from_id_salt("prefs-ui-font").selected_text(name(sans)).width(150.0).show_ui(ui, |ui| {
+                for v in [false, true] {
+                    ui.selectable_value(&mut sans, v, name(v));
+                }
+            });
+            save_readability(ctx, sans, lr::high_contrast());
+        });
+        separator(ui);
+        row(ui, &crate::tr("Kontrast"), None, |ui| {
+            let mut hc = lr::high_contrast();
+            let name = |h: bool| if h { crate::menu::i18n::german_or("Hoch", crate::tr("Hoch (Kontrast)")) } else { crate::tr("Standard") };
+            egui::ComboBox::from_id_salt("prefs-ui-contrast").selected_text(name(hc)).width(150.0).show_ui(ui, |ui| {
+                for v in [false, true] {
+                    ui.selectable_value(&mut hc, v, name(v));
+                }
+            });
+            save_readability(ctx, lr::sans_font(), hc);
         });
         separator(ui);
         // info lines below the photos of the grid (cell_info.rs), default off
@@ -878,7 +961,7 @@ fn interface_section(ui: &mut egui::Ui, ctx: &egui::Context) {
                         }
                     }
                 });
-                ui.label(egui::RichText::new(if i == 0 { crate::tr("Zeile 1") } else { crate::tr("Zeile 2") }).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(if i == 0 { crate::tr("Zeile 1") } else { crate::tr("Zeile 2") }).color(lr::TEXT_DIM()));
                 if i == 1 {
                     ui.add_space(12.0);
                 }
@@ -899,7 +982,7 @@ fn library(ui: &mut egui::Ui) {
             match &z {
                 Some(z) => {
                     let name = std::path::Path::new(&z.lr_catalog).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| crate::tr("Kein Katalog gewählt").to_string());
-                    ui.add_sized([300.0, 20.0], egui::Label::new(egui::RichText::new(name).monospace().small().color(lr::TEXT_DIM)).truncate());
+                    ui.add_sized([300.0, 20.0], egui::Label::new(egui::RichText::new(name).monospace().small().color(lr::TEXT_DIM())).truncate());
                 }
                 None => determining(ui),
             }
@@ -935,7 +1018,7 @@ fn library(ui: &mut egui::Ui) {
     // Edits live in the library; sidecar files next to the photos are an option (default off)
     group(ui, crate::tr("Bearbeitungen"), |ui| {
         row(ui, crate::tr("Gespeichert in"), None, |ui| {
-            ui.label(egui::RichText::new(crate::tr("Bibliothek")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Bibliothek")).color(lr::TEXT_DIM()));
         });
         separator(ui);
         row_wide(ui, crate::tr("Begleitdateien (XMP) neben die Fotos schreiben"), |ui| {
@@ -971,7 +1054,7 @@ fn library(ui: &mut egui::Ui) {
             }
             let m = HISTORY_MESSAGE.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if !m.is_empty() {
-                ui.add(egui::Label::new(egui::RichText::new(m).small().color(lr::TEXT_DIM)).truncate());
+                ui.add(egui::Label::new(egui::RichText::new(m).small().color(lr::TEXT_DIM())).truncate());
             }
         });
         history_question(ui.ctx());
@@ -1044,7 +1127,7 @@ fn library(ui: &mut egui::Ui) {
             });
         });
         if !cfg!(target_os = "macos") {
-            ui.label(egui::RichText::new(crate::tr("Hinweise zu Gesichtern und Augen gibt es nur unter macOS.")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Hinweise zu Gesichtern und Augen gibt es nur unter macOS.")).small().color(lr::TEXT_DIM()));
         }
     });
     // HDR merge (hdr_ui.rs): where the result goes and its keyword – "HDR zusammenfügen" asks nothing beforehand
@@ -1428,7 +1511,7 @@ fn develop_section(ui: &mut egui::Ui) {
             crate::highlight_ui::prefs_switch_merrill(ui, toggle);
         });
         separator(ui);
-        row(ui, crate::tr("Quattro: Lichter rekonstruieren"), Some(crate::tr("Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg")), |ui| {
+        row(ui, crate::tr("Quattro: Lichter rekonstruieren"), Some(crate::tr("Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Detail“. Aus: bisheriger Weg")), |ui| {
             crate::highlight_ui::prefs_switch_quattro(ui, toggle);
         });
     });
@@ -1833,12 +1916,12 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
                 Status::Missing => crate::trf!("nicht installiert · {a}", a = gb(total)),
             }
         };
-        let color = if st == Status::Installed && !busy { lr::TEXT } else { lr::TEXT_DIM };
+        let color = if st == Status::Installed && !busy { lr::TEXT() } else { lr::TEXT_DIM() };
         ui.allocate_ui_with_layout(egui::vec2(MODEL_STATUS_W, 24.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.add(egui::Label::new(egui::RichText::new(status).color(color)).truncate());
         });
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            let r = ui.add(egui::Label::new(egui::RichText::new(&name).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT)).truncate().sense(egui::Sense::hover()));
+            let r = ui.add(egui::Label::new(egui::RichText::new(&name).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT())).truncate().sense(egui::Sense::hover()));
             lr::hover_tip(ui, &r, crate::tr(d.name));
         });
     });
@@ -1847,7 +1930,7 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
         let dim = |t: String, c: Color32| egui::Label::new(egui::RichText::new(t).small().color(c)).truncate().sense(egui::Sense::hover());
         if let Some(a) = own.as_ref().filter(|_| busy && !removing) {
             ui.add(egui::ProgressBar::new(a.progress).desired_width(240.0).desired_height(6.0));
-            ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), lr::TEXT_DIM));
+            ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), lr::TEXT_DIM()));
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
         } else if let Some(a) = own.as_ref().filter(|a| a.done && a.failed) {
             ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), Color32::from_rgb(0xe0, 0x8c, 0x70)));
@@ -1866,7 +1949,7 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
             ui.hyperlink_to(egui::RichText::new(crate::tr("Lizenz")).small(), t.url);
         } else {
             let t = crate::trf!("{a} · Lizenz {b}", a = crate::tr(d.purpose), b = short_license(d.license));
-            let r = ui.add(dim(t, lr::TEXT_DIM));
+            let r = ui.add(dim(t, lr::TEXT_DIM()));
             lr::hover_tip(ui, &r, &crate::trf!("Lizenz: {l} · Quelle: {r}", l = d.license, r = library::module::source_label(d)));
         }
     });
@@ -1995,7 +2078,7 @@ fn storage_section(ui: &mut egui::Ui) {
 
 /// Small grey hint text below a row.
 fn dialog_hint_small(ui: &mut egui::Ui, text: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(text)).small().color(lr::TEXT_DIM)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(text)).small().color(lr::TEXT_DIM())).wrap());
 }
 
 pub(crate) fn thousands(n: i64) -> String {

@@ -435,7 +435,7 @@ impl App {
                 }
                 let main = self.print_room.sel.main();
                 if let Some(e) = main.and_then(|a| self.print_room.order.iter().position(|&o| o == a)).and_then(|p| self.entries.get(p)) {
-                    ui.add(egui::Label::new(egui::RichText::new(format!("/ {}", e.name)).small().color(lr::TEXT_DIM)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(format!("/ {}", e.name)).small().color(lr::TEXT_DIM())).truncate());
                 }
             });
         });
@@ -471,7 +471,7 @@ impl App {
             } else {
                 crate::tr("Keine Fotos ausgewählt: „Alle“ zeigt alle Fotos der Ansicht")
             };
-            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.0), lr::TEXT_DIM);
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.0), lr::TEXT_DIM());
             ui.allocate_rect(r, egui::Sense::hover());
             self.print_room.follow = None;
             self.print_room.cells = Some(cells);

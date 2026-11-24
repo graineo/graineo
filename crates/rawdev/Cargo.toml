@@ -14,6 +14,8 @@ hdr = { path = "../hdr" }
 serde = { version = "1", features = ["derive"] }
 lensprof = { path = "../lensprof" }
 develop = { path = "../develop", default-features = false }
+# Foveon frames of a merge: camera EXIF of the embedded JPEG
+x3f = { path = "../x3f" }
 masks = { path = "../masks" }
 # JPEG/HEIC/TIFF/PNG via macOS ImageIO (library::imageio)
 library = { path = "../library" }
@@ -28,3 +30,4 @@ pollster = "0.4"
 bytemuck = "1.25"
 
 [dev-dependencies]
+fuzzkit = { path = "../fuzzkit" }

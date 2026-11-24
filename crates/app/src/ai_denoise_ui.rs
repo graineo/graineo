@@ -64,7 +64,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Settings, doc: Option<&rawdev::RawDoc>
         _ => just_done(ui, &doc.path).unwrap_or_default(),
     };
     ui.allocate_ui(egui::vec2(ui.available_width(), 30.0), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).wrap());
     });
 }
 
@@ -118,7 +118,7 @@ pub fn section_sigma(ui: &mut egui::Ui, s: &mut Settings, path: &std::path::Path
         None => just_done(ui, path).unwrap_or_default(),
     };
     ui.allocate_ui(egui::vec2(ui.available_width(), 30.0), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).wrap());
     });
 }
 

@@ -259,7 +259,7 @@ impl App {
                 f.print_border = t as f32;
             }
             let mut u = f.print_border_bottom as f64;
-            if lr::slider(ui, "Rand unten", &mut u, 0.0..=10.0, 0.0, 0.1) {
+            if lr::slider_hint(ui, "Unten zusätzlich", &mut u, 0.0..=10.0, 0.0, 0.1, "Wird zum Papierrand addiert: unten etwas breiter wirkt ausgewogener (klassisch 10–25 % mehr).") {
                 f.print_border_bottom = u as f32;
             }
             ui.vertical(|ui| {

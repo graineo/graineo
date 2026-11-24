@@ -362,7 +362,7 @@ fn goal_card(ui: &mut egui::Ui, goal: &mut Goal, value: Goal, title: &str, how: 
                 let (m, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
                 ui.painter().circle_stroke(m.center(), 6.0, egui::Stroke::new(1.0, egui::Color32::from_gray(if on { 0xd0 } else { 0x70 })));
                 if on {
-                    ui.painter().circle_filled(m.center(), 3.0, lr::TEXT);
+                    ui.painter().circle_filled(m.center(), 3.0, lr::TEXT());
                 }
                 if value.grid() {
                     sketch(ui, true);
@@ -371,8 +371,8 @@ fn goal_card(ui: &mut egui::Ui, goal: &mut Goal, value: Goal, title: &str, how: 
                     sketch(ui, false);
                 }
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(crate::tr(title)).color(lr::TEXT).strong());
-                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(how)).small().color(lr::TEXT_DIM)).wrap());
+                    ui.label(egui::RichText::new(crate::tr(title)).color(lr::TEXT()).strong());
+                    ui.add(egui::Label::new(egui::RichText::new(crate::tr(how)).small().color(lr::TEXT_DIM())).wrap());
                 });
             });
         })
@@ -454,7 +454,7 @@ pub fn ui(ctx: &egui::Context) {
                     ui.add_space(4.0);
                     dialog::input(ui, "Name des Objektivs (zum Beispiel „Helios 44-2 58mm“)", &mut s.name);
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new(crate::tr("Brennweite in mm (nur nötig, wenn die Datei keine nennt)")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Brennweite in mm (nur nötig, wenn die Datei keine nennt)")).small().color(lr::TEXT_DIM()));
                     lr::edit_field(ui, egui::TextEdit::singleline(&mut s.focal).desired_width(120.0));
                     if !focal_ok {
                         dialog::hint(ui, "Die Brennweite ist keine Zahl.");
@@ -465,7 +465,7 @@ pub fn ui(ctx: &egui::Context) {
                         if ui.button(crate::tr("Zurück")).clicked() {
                             back = true;
                         }
-                        ui.label(egui::RichText::new(s.name.trim().to_string()).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(s.name.trim().to_string()).small().color(lr::TEXT_DIM()));
                         crate::help::info(ui, "objektiv-aufnahmen", "Aufnahmen für ein neues Objektiv", &crate::help::LENS_SHOTS);
                     });
                     ui.add_space(4.0);
@@ -478,7 +478,7 @@ pub fn ui(ctx: &egui::Context) {
                     // grid template to print (only when a grid is needed; the row keeps its height)
                     ui.add_enabled_ui(s.goal.grid(), |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(crate::tr("Gitter-Vorlage")).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Gitter-Vorlage")).small().color(lr::TEXT_DIM()));
                             lr::segmented(ui, &mut s.paper, &[(crate::lens_grid_pdf::Paper::A4, "A4"), (crate::lens_grid_pdf::Paper::A3, "A3")]);
                             lr::segmented(ui, &mut s.orientation, &[(crate::lens_grid_pdf::Orientation::Portrait, crate::tr("Hoch")), (crate::lens_grid_pdf::Orientation::Landscape, crate::tr("Quer"))]);
                             let b = ui.button(crate::tr("Vorlage drucken (PDF)"));
@@ -498,7 +498,7 @@ pub fn ui(ctx: &egui::Context) {
                         if ui.button(crate::tr("Zurück")).clicked() {
                             back = true;
                         }
-                        ui.label(egui::RichText::new(s.name.trim().to_string()).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(s.name.trim().to_string()).small().color(lr::TEXT_DIM()));
                     });
                     ui.horizontal(|ui| {
                         if goal.grid() && ui.button(crate::tr("Gitteraufnahmen …")).clicked() {
@@ -522,7 +522,7 @@ pub fn ui(ctx: &egui::Context) {
                     // drop area: photos or folders dragged onto the window land here (`take_dropped`)
                     let hovering = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
                     let area = egui::Frame::new()
-                        .stroke(egui::Stroke::new(1.0, if hovering { lr::TEXT } else { egui::Color32::from_gray(0x30) }))
+                        .stroke(egui::Stroke::new(1.0, if hovering { lr::TEXT() } else { egui::Color32::from_gray(0x30) }))
                         .fill(if hovering { egui::Color32::from_gray(0x24) } else { egui::Color32::TRANSPARENT })
                         .inner_margin(egui::Margin::same(4));
                     area.show(ui, |ui| {
@@ -531,19 +531,19 @@ pub fn ui(ctx: &egui::Context) {
                             ui.add_space(if s.rows.is_empty() { 100.0 } else { 0.0 });
                             ui.vertical_centered(|ui| {
                                 let t = if hovering { crate::tr("Loslassen: Fotos und Ordner kommen in die Liste") } else { crate::tr("Fotos oder Ordner hierher ziehen oder über die Knöpfe oben hinzufügen") };
-                                ui.label(egui::RichText::new(t).small().color(if hovering { lr::TEXT } else { lr::TEXT_DIM }));
+                                ui.label(egui::RichText::new(t).small().color(if hovering { lr::TEXT() } else { lr::TEXT_DIM() }));
                             });
                         }
                         for (i, r) in s.rows.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
                                 let name = r.path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-                                ui.add_sized([180.0, 18.0], egui::Label::new(egui::RichText::new(name).small().color(lr::TEXT)).truncate());
+                                ui.add_sized([180.0, 18.0], egui::Label::new(egui::RichText::new(name).small().color(lr::TEXT())).truncate());
                                 egui::ComboBox::from_id_salt(("objektiv-art", i)).width(170.0).selected_text(crate::tr(kind_text(r.kind))).show_ui(ui, |ui| {
                                     for k in [Kind::Auto, Kind::Grid, Kind::Flat, Kind::FlatRotated] {
                                         ui.selectable_value(&mut r.kind, k, crate::tr(kind_text(k)));
                                     }
                                 });
-                                ui.label(egui::RichText::new("f/").small().color(lr::TEXT_DIM));
+                                ui.label(egui::RichText::new("f/").small().color(lr::TEXT_DIM()));
                                 lr::edit_field(ui, egui::TextEdit::singleline(&mut r.aperture).desired_width(44.0));
                                 if ui.small_button("✕").clicked() {
                                     remove = Some(i);
@@ -557,7 +557,7 @@ pub fn ui(ctx: &egui::Context) {
                     }
                     // fixed line: why "Messen" is locked
                     let why = block.map(crate::tr).map(str::to_string).unwrap_or_else(|| crate::trf!("{n} Aufnahmen · Blende nur eintragen, wenn die Datei keine nennt", n = s.rows.len()));
-                    ui.label(egui::RichText::new(why).small().color(if block.is_some() { lr::TEXT_DIM } else { lr::TEXT }));
+                    ui.label(egui::RichText::new(why).small().color(if block.is_some() { lr::TEXT_DIM() } else { lr::TEXT() }));
                 }
                 Phase::Running { done, total, name } => {
                     dialog::text(ui, "Die Aufnahmen werden ausgewertet. Das dauert etwa eine Sekunde pro Foto, bei Sigma-X3F etwas länger.");
@@ -755,7 +755,7 @@ fn outcome_ui(
         }
         if let Some((before, after)) = preview {
             ui.add_space(6.0);
-            ui.label(egui::RichText::new(crate::tr("Vorher / Nachher")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Vorher / Nachher")).small().color(lr::TEXT_DIM()));
             let b = (ui.available_width() - 8.0) / 2.0;
             ui.horizontal(|ui| {
                 for t in [before, after] {
@@ -768,7 +768,7 @@ fn outcome_ui(
         ui.add_space(4.0);
         let unused = e.shots.iter().filter(|a| matches!(a.role, Role::Unusable(_))).count();
         let title = crate::trf!("Aufnahmen ({a}, davon {b} nicht verwendet)", a = e.shots.len(), b = unused);
-        egui::CollapsingHeader::new(egui::RichText::new(title).small().color(lr::TEXT_DIM)).id_salt("ov-aufnahmen").default_open(*show_shots).show(ui, |ui| {
+        egui::CollapsingHeader::new(egui::RichText::new(title).small().color(lr::TEXT_DIM())).id_salt("ov-aufnahmen").default_open(*show_shots).show(ui, |ui| {
             for a in &e.shots {
                 let role = match &a.role {
                     Role::Grid => crate::tr("Gitter").to_string(),
@@ -777,14 +777,14 @@ fn outcome_ui(
                 };
                 let f = a.focal_length.map_or(String::new(), |f| format!(" · {f:.0} mm"));
                 let n = a.aperture.map_or(String::new(), |n| format!(" f/{n:.1}"));
-                ui.add(egui::Label::new(egui::RichText::new(format!("{}{f}{n}: {role}", a.name)).small().color(lr::TEXT_DIM)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(format!("{}{f}{n}: {role}", a.name)).small().color(lr::TEXT_DIM())).wrap());
             }
         });
         ui.add_space(4.0);
         match saved {
             None => {
                 if e.profile.is_some() {
-                    ui.label(egui::RichText::new(crate::tr("DANACH ZUWEISEN")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("DANACH ZUWEISEN")).small().color(lr::TEXT_DIM()));
                     if e.lens.as_deref().map(str::trim).unwrap_or("").is_empty() {
                         ui.checkbox(assign_rule, crate::tr("allen Fotos dieser Kamera ohne Objektivangabe (Vorgabe)"));
                     }

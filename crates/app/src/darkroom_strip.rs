@@ -218,7 +218,7 @@ impl App {
         lr::group_label(ui, "Probestreifen");
         let Some(pi) = self.darkroom_strip_paper(index) else {
             let text = crate::darkroom::no_paper_text(&self.entries[index].settings.film);
-            ui.add(egui::Label::new(egui::RichText::new(text).color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(text).color(lr::TEXT_DIM())).wrap());
             return;
         };
         let (grade, multi) = (pi.grade.clone(), pi.multi);
@@ -288,12 +288,12 @@ impl App {
                         let image = Rect::from_center_size(r.center(), ts * fit);
                         ui.painter().image(t.id(), image, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
                     } else {
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM);
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM());
                     }
                     let margin = if active { Stroke::new(1.5, lr::ACCENT) } else if resp.hovered() { Stroke::new(1.0, Color32::from_gray(0x70)) } else { Stroke::new(1.0, Color32::from_gray(0x2e)) };
                     ui.painter().rect_stroke(r, 0.0, margin, egui::StrokeKind::Inside);
                     let (lr_, _) = ui.allocate_exact_size(Vec2::new(b, 14.0), egui::Sense::hover());
-                    ui.painter().text(lr_.center(), egui::Align2::CENTER_CENTER, name, egui::FontId::monospace(10.5), if active { Color32::WHITE } else { lr::TEXT_DIM });
+                    ui.painter().text(lr_.center(), egui::Align2::CENTER_CENTER, name, egui::FontId::monospace(10.5), if active { Color32::WHITE } else { lr::TEXT_DIM() });
                     if resp.clicked() {
                         pick = Some(*value);
                     }

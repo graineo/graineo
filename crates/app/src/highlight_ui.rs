@@ -1,5 +1,5 @@
 //! Sliders of the own highlight rebuild of Foveon photos (`develop::highlight_rebuild`): "Lichter-Farbe" and
-//! "Lichter-Struktur" in the colour-cast section, and the two switches in the preferences (Merrill on, Quattro off by default).
+//! "Lichter-Detail" in the colour-cast section, and the two switches in the preferences (Merrill on, Quattro off by default).
 
 use develop::Settings;
 use eframe::egui;
@@ -64,11 +64,15 @@ pub fn sliders(ui: &mut egui::Ui, s: &mut Settings, path: &Path) {
     } else if develop::quattro::is_classic_cached(path) {
         Some(crate::tr("Nur für Merrill und Quattro"))
     } else if !develop::quattro::is_prepared_cached(path) {
-        Some(if develop::highlight_rebuild::enabled_merrill() {
-            crate::tr("Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch")
+        if !develop::highlight_rebuild::enabled_merrill() {
+            Some(crate::tr("Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)"))
+        } else if matches!(develop::highlight_post::weight(path), Some(None)) {
+            Some(crate::tr("Dieses Foto hat keine rekonstruierbaren Lichter"))
         } else {
-            crate::tr("Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)")
-        })
+            // known rebuilt areas, or not yet developed in this session (a base from the disk cache): the first move
+            // develops the photo once and learns its areas
+            None
+        }
     } else if !develop::highlight_rebuild::enabled_quattro() {
         Some(crate::tr("Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)"))
     } else {
@@ -94,7 +98,7 @@ pub fn sliders(ui: &mut egui::Ui, s: &mut Settings, path: &Path) {
             s.highlight_colour = (c / 100.0) as f32;
         }
         let mut t = s.highlight_structure as f64 * 100.0;
-        if lr::slider_hint(ui, "Lichter-Struktur", &mut t, 0.0..=100.0, 50.0, 1.0, "Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach") {
+        if lr::slider_hint(ui, "Lichter-Detail", &mut t, 0.0..=100.0, 50.0, 1.0, "Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach") {
             s.highlight_structure = (t / 100.0) as f32;
         }
     });

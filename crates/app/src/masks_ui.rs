@@ -299,7 +299,7 @@ fn color_samples(ui: &mut Ui, samples: &mut Vec<[f32; 3]>) {
     let w = lr::visible_width(ui);
     let (row, _) = ui.allocate_exact_size(egui::vec2(w, h + 4.0), egui::Sense::hover());
     if samples.is_empty() {
-        ui.painter().text(row.left_center() + egui::vec2(lr::TEXT_INSET, 0.0), egui::Align2::LEFT_CENTER, crate::tr("Noch keine Probe: Farbe im Bild anklicken"), egui::FontId::proportional(11.0), lr::TEXT_DIM);
+        ui.painter().text(row.left_center() + egui::vec2(lr::TEXT_INSET, 0.0), egui::Align2::LEFT_CENTER, crate::tr("Noch keine Probe: Farbe im Bild anklicken"), egui::FontId::proportional(11.0), lr::TEXT_DIM());
         return;
     }
     let mut remove = None;
@@ -524,7 +524,7 @@ fn parts_section(ui: &mut Ui, s: &mut State, layer: &mut Layer, name: &str, path
             Some(Operation::Subtract) => "−",
             Some(Operation::Intersect) => "∩",
         };
-        let c = if i == s.part { Color32::WHITE } else { lr::TEXT };
+        let c = if i == s.part { Color32::WHITE } else { lr::TEXT() };
         // the symbol (its ink, whichever font draws it) starts at the text edge of the tray
         let g = p.layout_no_wrap(sym.to_string(), egui::FontId::proportional(13.0), c);
         let ink = g.rows.first().and_then(|r| r.row.glyphs.first().map(|q| r.pos.x + q.pos.x + q.uv_rect.offset.x)).unwrap_or(0.0);
@@ -549,7 +549,7 @@ fn parts_section(ui: &mut Ui, s: &mut State, layer: &mut Layer, name: &str, path
         if m.hovered() {
             ui.painter().rect_filled(more, 0.0, Color32::from_gray(0x44));
         }
-        ui.painter().text(more.center(), egui::Align2::CENTER_CENTER, "⋯", egui::FontId::proportional(13.0), lr::TEXT_DIM);
+        ui.painter().text(more.center(), egui::Align2::CENTER_CENTER, "⋯", egui::FontId::proportional(13.0), lr::TEXT_DIM());
         lr::hover_tip(ui, &m, crate::tr("Teil: invertieren, Verknüpfung ändern, löschen"));
         let menu = |ui: &mut Ui| -> Option<PartAction> {
             let mut a = None;
@@ -1923,11 +1923,9 @@ mod tests {
     use super::*;
     #[test]
     fn local_xmp_roundtrip() {
-        let root = std::path::PathBuf::from(
-            crate::env::var("GRAINEO_DATA_DIR").expect("own test folder missing"),
-        );
-        assert!(root.starts_with("/private/tmp/"));
-        let root = root.join(format!(
+        // the system's temporary folder: sidecars may be written there in every test run (with or without an own
+        // data folder, wherever it lies)
+        let root = std::env::temp_dir().join(format!(
             "mask-xmp-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -2452,6 +2450,24 @@ mod brush_view_tests {
     /// The overlay while painting a mask of 200 strokes: time of one frame (overlay computed again for the new point).
     #[test]
     fn painting_over_many_strokes_stays_quick() {
+        // processor time of this thread, not wall time: other tests and builds on the machine must not make a quick
+        // frame look slow (the work of a frame runs on this thread)
+        fn thread_ms() -> f64 {
+            #[cfg(any(target_os = "macos", target_os = "linux"))]
+            {
+                extern "C" {
+                    fn clock_gettime(clock: i32, tp: *mut [i64; 2]) -> i32;
+                }
+                const THREAD_CPUTIME: i32 = if cfg!(target_os = "macos") { 16 } else { 3 };
+                let mut t = [0i64; 2];
+                // SAFETY: valid pointer to a timespec-sized buffer (two 64-bit fields on these targets)
+                if unsafe { clock_gettime(THREAD_CPUTIME, &mut t) } == 0 {
+                    return t[0] as f64 * 1000.0 + t[1] as f64 / 1e6;
+                }
+            }
+            static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+            START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64() * 1000.0
+        }
         let ctx = Context::default();
         let strokes: Vec<Mask> = (0..200)
             .map(|i| Mask::Brush { points: (0..500).map(|j| { let t = j as f32 * 0.02 + i as f32; [0.5 + 0.4 * (t * 0.37).sin() * (t * 0.011).cos(), 0.5 + 0.4 * (t * 0.23).cos()] }).collect(), radius: 0.04, hardness: 0.6, flow: 0.2, density: 1.0, auto: None })
@@ -2471,9 +2487,9 @@ mod brush_view_tests {
         let mut times = Vec::new();
         for k in 1..=30 {
             let p = a + egui::vec2(k as f32 * 4.0, (k as f32 * 0.5).sin() * 20.0);
-            let t = std::time::Instant::now();
+            let t = thread_ms();
             let out = frame_of(&ctx, &mut local, vec![egui::Event::PointerMoved(p)]);
-            times.push(t.elapsed().as_secs_f64() * 1000.0);
+            times.push(thread_ms() - t);
             assert!(drawn(&out).meshes >= 1);
         }
         let first = times[0];

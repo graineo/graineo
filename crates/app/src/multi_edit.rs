@@ -511,7 +511,7 @@ impl App {
         let mut mode = self.multi.mode();
         // row 1: number of photos, way of applying
         ui.allocate_ui_with_layout(egui::vec2(width, 20.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            let r = ui.add(egui::Label::new(egui::RichText::new(crate::trf!("Auswahl: {n} Fotos", n = crate::library_ui::thousands(n))).small().color(lr::TEXT)).truncate());
+            let r = ui.add(egui::Label::new(egui::RichText::new(crate::trf!("Auswahl: {n} Fotos", n = crate::library_ui::thousands(n))).small().color(lr::TEXT())).truncate());
             lr::hover_tip(ui, &r, crate::tr("Die Regler ändern nur das aktive Foto. „Anwenden“ überträgt die Änderungen danach auf die übrigen ausgewählten Fotos."));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let busy = self.multi.progress().is_some();
@@ -538,7 +538,7 @@ impl App {
         let change = self.multi_change();
         let list = change.as_ref().map(|(_, b, now)| describe(b, now)).unwrap_or_default();
         let (text, color) = match list.len() {
-            0 => (crate::tr("Keine Änderung am aktiven Foto").to_string(), lr::TEXT_DIM),
+            0 => (crate::tr("Keine Änderung am aktiven Foto").to_string(), lr::TEXT_DIM()),
             1 => (crate::trf!("1 Änderung noch nicht angewendet: {a}", a = list[0]), BAND_ACCENT),
             m => (crate::trf!("{m} Änderungen noch nicht angewendet", m = m), BAND_ACCENT),
         };
@@ -548,7 +548,7 @@ impl App {
         }
         let ok = change.is_some() && others > 0;
         let fill = if ok { BAND_BUTTON } else { lr::BUTTON_FILL };
-        let b = ui.add_enabled(ok, egui::Button::new(egui::RichText::new(crate::trf!("Auf {n} Fotos anwenden", n = crate::library_ui::thousands(others))).color(if ok { egui::Color32::WHITE } else { lr::TEXT_DIM })).fill(fill).min_size(egui::vec2(width, 22.0)));
+        let b = ui.add_enabled(ok, egui::Button::new(egui::RichText::new(crate::trf!("Auf {n} Fotos anwenden", n = crate::library_ui::thousands(others))).color(if ok { egui::Color32::WHITE } else { lr::TEXT_DIM() })).fill(fill).min_size(egui::vec2(width, 22.0)));
         let why = if ok {
             crate::trf!("Überträgt {a} auf die übrigen ausgewählten Fotos. Läuft im Hintergrund; ⌘Z nimmt es in einem Schritt zurück.", a = list.join(", "))
         } else {

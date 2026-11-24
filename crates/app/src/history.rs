@@ -986,6 +986,8 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("nr_chroma", "Rauschreduzierung", false),
     ("quattro_detail", "Rauschreduzierung", false),
     ("denoise", "Rauschreduzierung", false),
+    ("detail_fine", crate::detail_ui::FINE_KEY, false),
+    ("detail_structure", crate::detail_ui::STRUCTURE_KEY, false),
     ("monochrome", "Schwarzweiß", false),
     ("mix", "Schwarzweiß", false),
     ("gray_mix", "Schwarzweiß", false),
@@ -994,7 +996,7 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("layer_matrix", "Schichtmischer", false),
     ("highlight_neutralize", "Lichter neutral", false),
     ("highlight_colour", "Lichter-Farbe", false),
-    ("highlight_structure", "Lichter-Struktur", false),
+    ("highlight_structure", "Lichter-Detail", false),
     ("hsl", "Farbmischer", false),
     ("tone_curve", "Gradationskurve", false),
     ("toneEqualizer", "Tonwert-Entzerrer", false),
@@ -1268,7 +1270,11 @@ fn fields_name(l: &Value) -> String {
     for f in &fields {
         match field(f) {
             Some((n, _)) => {
-                let n = crate::tr(n).to_string();
+                let n = match n {
+                    crate::detail_ui::FINE_KEY => crate::detail_ui::fine_label(),
+                    crate::detail_ui::STRUCTURE_KEY => crate::detail_ui::structure_label(),
+                    n => crate::tr(n),
+                }.to_string();
                 if !names.contains(&n) {
                     names.push(n);
                 }
@@ -1365,6 +1371,9 @@ mod tests {
         // unknown field: the section it belongs to
         let g = Settings { noise_brake: develop::NoiseBrake::Color, ..a.clone() };
         assert_eq!(named(&a, &g), "Fill Light");
+        let [fine, structure] = crate::presets::PORTRAIT_DETAIL;
+        let p = Settings { detail_fine: fine, detail_structure: structure, ..a.clone() };
+        assert_eq!(named(&a, &p), "Feindetail, Struktur");
         // commands name themselves
         let h = Hint::preset("Kontrastreich");
         let s = Step { seq: 1, time: 0, kind: h.kind.into(), label: Some(h.label.to_string()), patch: json!({}), count: 1, command: None };

@@ -188,9 +188,9 @@ impl App {
         // pipeline graineo | Apple | compare (macOS only, apple_raw.rs)
         self.apple_section(ui);
         if let Some(t) = self.sensor_raw.apple_only.clone() {
-            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(t).small().color(lr::TEXT_DIM()));
         } else if let Some(e) = self.sensor_raw.error.clone() {
-            ui.label(egui::RichText::new(crate::trf!("Sensordaten nicht lesbar: {e}", e = e)).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::trf!("Sensordaten nicht lesbar: {e}", e = e)).small().color(lr::TEXT_DIM()));
         }
         lr::section(ui, "Überlagerungen", true, |ui| {
             ui.add_enabled_ui(ready, |ui| {
@@ -231,7 +231,7 @@ impl App {
                     lr::group_label(ui, "Demosaik");
                     help::info(ui, "sensor-demosaik", "Demosaik-Verfahren", &help::SENSOR_DEMOSAIC);
                 });
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Nur zum Vergleichen – ändert die Entwicklung nicht.")).small().color(lr::TEXT_DIM)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Nur zum Vergleichen – ändert die Entwicklung nicht.")).small().color(lr::TEXT_DIM())).wrap());
                 ui.add_space(2.0);
                 let busy = self.sensor_raw.demosaic_running();
                 for (i, (_, name)) in DEMOSAIC.iter().enumerate().skip(1) {
@@ -247,14 +247,14 @@ impl App {
                     }
                 }
                 let match_text = if self.sensor_raw.sensor_type() == Some(2) { "Diese Kamera: Bayer – passend: RCD" } else { "Diese Kamera: X-Trans – passend: Markesteijn" };
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr(match_text)).small().color(lr::TEXT_DIM)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(crate::tr(match_text)).small().color(lr::TEXT_DIM())).wrap());
             });
         });
         lr::section(ui, "Am Zeiger", true, |ui| {
             let v = self.sensor_raw.values();
             egui::Grid::new("sensor-zeiger").num_columns(2).spacing([10.0, 3.0]).min_col_width(GRID_LABEL_W).show(ui, |ui| {
                 for (i, label) in VALUE_ROWS.iter().enumerate() {
-                    ui.label(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr(label)).color(lr::TEXT_DIM()));
                     let t = v.as_ref().map_or("–", |v| v[i].as_str());
                     ui.add(egui::Label::new(egui::RichText::new(t).monospace()).truncate());
                     ui.end_row();
@@ -267,16 +267,16 @@ impl App {
             ui.add_space(4.0);
             egui::Grid::new("sensor-reserve").num_columns(2).spacing([10.0, 3.0]).min_col_width(GRID_LABEL_W).show(ui, |ui| {
                 for (c, name) in ["R", "G", "B"].iter().enumerate() {
-                    ui.label(egui::RichText::new(crate::trf!("Reserve {a}", a = name)).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::trf!("Reserve {a}", a = name)).color(lr::TEXT_DIM()));
                     let (text, color) = match h.as_ref().and_then(|h| h.2[c]) {
-                        None => ("–".to_string(), lr::TEXT_DIM),
+                        None => ("–".to_string(), lr::TEXT_DIM()),
                         Some(r) if r <= 0.05 => (crate::tr("ausgebrannt").to_string(), Color32::from_rgb(0xe8, 0x70, 0x70)),
-                        Some(r) => (format!("{r:+.1} EV").de_comma(), if r < 0.5 { Color32::from_rgb(0xe8, 0xc0, 0x60) } else { lr::TEXT }),
+                        Some(r) => (format!("{r:+.1} EV").de_comma(), if r < 0.5 { Color32::from_rgb(0xe8, 0xc0, 0x60) } else { lr::TEXT() }),
                     };
                     ui.label(egui::RichText::new(text).color(color).monospace());
                     ui.end_row();
                 }
-                ui.label(egui::RichText::new(crate::tr("Geclippt")).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Geclippt")).color(lr::TEXT_DIM()));
                 let t = h.as_ref().and_then(|h| h.3).map_or("–".to_string(), |p| format!("{p:.2} %").de_comma());
                 ui.label(egui::RichText::new(t).monospace());
                 ui.end_row();
@@ -288,7 +288,7 @@ impl App {
         lr::section(ui, "Legende", true, |ui| {
             let l = self.sensor_raw.legends();
             if l.is_empty() {
-                ui.label(egui::RichText::new("–").color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new("–").color(lr::TEXT_DIM()));
             }
             for (o, lines) in l {
                 ui.horizontal(|ui| {
@@ -309,11 +309,11 @@ impl App {
         lr::section(ui, "Kennzahlen", true, |ui| {
             let k = self.sensor_raw.metrics();
             if k.is_empty() {
-                ui.label(egui::RichText::new("–").color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new("–").color(lr::TEXT_DIM()));
             }
             egui::Grid::new("sensor-kennzahlen").num_columns(2).spacing([10.0, 3.0]).min_col_width(GRID_LABEL_W).max_col_width((ui.available_width() - GRID_LABEL_W - 10.0).max(GRID_LABEL_W)).show(ui, |ui| {
                 for (n, v) in k {
-                    ui.label(egui::RichText::new(n).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(n).color(lr::TEXT_DIM()));
                     ui.add(egui::Label::new(v).wrap());
                     ui.end_row();
                 }
@@ -343,7 +343,7 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
     } else if on || resp.hovered() {
         Color32::WHITE
     } else {
-        lr::TEXT
+        lr::TEXT()
     };
     let mut x = rect.left() + 8.0;
     if let Some(i) = icon {
@@ -351,7 +351,7 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
         x += 22.0;
     }
     let right = if busy { "…".to_string() } else { key.to_string() };
-    let rg = painter.layout_no_wrap(right, egui::FontId::proportional(10.5), if on { Color32::from_gray(0xc8) } else { lr::TEXT_DIM });
+    let rg = painter.layout_no_wrap(right, egui::FontId::proportional(10.5), if on { Color32::from_gray(0xc8) } else { lr::TEXT_DIM() });
     let rx = rect.right() - 8.0 - rg.size().x;
     painter.galley(egui::pos2(rx, rect.center().y - rg.size().y / 2.0), rg, Color32::WHITE);
     painter.with_clip_rect(egui::Rect::from_min_max(rect.min, egui::pos2(rx - 6.0, rect.bottom()))).text(
@@ -377,7 +377,7 @@ fn ev_axis(painter: &egui::Painter, plot: egui::Rect, ev0: f32, ev1: f32, step: 
     while e as f32 <= ev1 + 1e-3 {
         let x = plot.left() + plot.width() * (e as f32 - ev0) / (ev1 - ev0);
         painter.line_segment([egui::pos2(x, plot.top()), egui::pos2(x, plot.bottom())], egui::Stroke::new(1.0, CHART_GRID));
-        painter.text(egui::pos2(x, plot.bottom() + 2.0), egui::Align2::CENTER_TOP, if e == 0 { "0".to_string() } else { format!("{e}") }, font.clone(), lr::TEXT_DIM);
+        painter.text(egui::pos2(x, plot.bottom() + 2.0), egui::Align2::CENTER_TOP, if e == 0 { "0".to_string() } else { format!("{e}") }, font.clone(), lr::TEXT_DIM());
         e += step;
     }
 }
@@ -427,10 +427,10 @@ fn snr_chart(ui: &mut egui::Ui, d: Option<&(Vec<f64>, Vec<Vec<f64>>, Vec<Vec<(f6
         let y = plot.bottom() - plot.height() * db as f32 / db_max;
         painter.line_segment([egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)], egui::Stroke::new(1.0, CHART_GRID));
         if db % 20 == 0 {
-            painter.text(egui::pos2(plot.left() - 4.0, y), egui::Align2::RIGHT_CENTER, format!("{db}"), font.clone(), lr::TEXT_DIM);
+            painter.text(egui::pos2(plot.left() - 4.0, y), egui::Align2::RIGHT_CENTER, format!("{db}"), font.clone(), lr::TEXT_DIM());
         }
     }
-    painter.text(egui::pos2(plot.left() + 4.0, plot.top() + 3.0), egui::Align2::LEFT_TOP, "dB", font.clone(), lr::TEXT_DIM);
+    painter.text(egui::pos2(plot.left() + 4.0, plot.top() + 3.0), egui::Align2::LEFT_TOP, "dB", font.clone(), lr::TEXT_DIM());
     let Some((ev, model, points)) = d else { return };
     let to = |e: f64, db: f64| egui::pos2(plot.left() + plot.width() * (e as f32 - ev0) / (ev1 - ev0), plot.bottom() - plot.height() * (db as f32 / db_max).clamp(0.0, 1.0));
     for (c, m) in model.iter().enumerate().take(3) {

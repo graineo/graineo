@@ -768,9 +768,9 @@ fn frame_row(ui: &mut egui::Ui, w: f32, label: &str, ev: Option<f64>, thumb: Opt
     let tick = egui::Rect::from_min_size(rect.min, egui::vec2(26.0, ROW_H));
     let tr = ui.interact(tick, ui.id().with(("hdr-tick", id)), egui::Sense::click());
     let b = egui::Rect::from_center_size(tick.center(), egui::vec2(13.0, 13.0));
-    p.rect_stroke(b, 0.0, egui::Stroke::new(1.0, if tr.hovered() { Color32::WHITE } else { lr::TEXT_DIM }), egui::StrokeKind::Inside);
+    p.rect_stroke(b, 0.0, egui::Stroke::new(1.0, if tr.hovered() { Color32::WHITE } else { lr::TEXT_DIM() }), egui::StrokeKind::Inside);
     if used {
-        lr::paint_icon(&p, b.shrink(1.0), lr::Icon::Check, lr::TEXT);
+        lr::paint_icon(&p, b.shrink(1.0), lr::Icon::Check, lr::TEXT());
     }
     let th = egui::Rect::from_min_size(egui::pos2(tick.right() + 2.0, rect.center().y - 12.0), egui::vec2(36.0, 24.0));
     p.rect_filled(th, 0.0, Color32::from_gray(0x0c));
@@ -784,12 +784,12 @@ fn frame_row(ui: &mut egui::Ui, w: f32, label: &str, ev: Option<f64>, thumb: Opt
         lr::paint_icon(&p, egui::Rect::from_center_size(star.center(), egui::vec2(14.0, 14.0)), lr::Icon::Star, sc);
     }
     let font = egui::TextStyle::Body.resolve(ui.style());
-    let tc = if used { lr::TEXT } else { Color32::from_gray(0x78) };
+    let tc = if used { lr::TEXT() } else { Color32::from_gray(0x78) };
     let room = (star.left() - 60.0 - th.right() - 8.0).max(20.0);
     let shown = lr::middle_ellipsis_font(&p, label, &font, room);
     p.text(egui::pos2(th.right() + 8.0, rect.center().y), egui::Align2::LEFT_CENTER, shown, font, tc);
     if let Some(e) = ev {
-        p.text(egui::pos2(star.left() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, format!("{} EV", crate::hdr_ui::ev_label(e)), egui::TextStyle::Small.resolve(ui.style()), if used { lr::TEXT_DIM } else { Color32::from_gray(0x66) });
+        p.text(egui::pos2(star.left() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, format!("{} EV", crate::hdr_ui::ev_label(e)), egui::TextStyle::Small.resolve(ui.style()), if used { lr::TEXT_DIM() } else { Color32::from_gray(0x66) });
     }
     (resp, tr, sr)
 }
@@ -799,7 +799,7 @@ fn switch(ui: &mut egui::Ui, on: &mut bool, label: &str, tip: &str) -> bool {
     let mut changed = false;
     let r = ui.horizontal(|ui| {
         changed = crate::dialog::toggle(ui, on);
-        if ui.add(egui::Label::new(egui::RichText::new(label).color(lr::TEXT)).selectable(false).sense(egui::Sense::click())).clicked() {
+        if ui.add(egui::Label::new(egui::RichText::new(label).color(lr::TEXT())).selectable(false).sense(egui::Sense::click())).clicked() {
             *on = !*on;
             changed = true;
         }
@@ -829,7 +829,7 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
     let (line, running) = status_line(info);
     let mut recompute = false;
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(line).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(line).small().color(lr::TEXT_DIM()));
         if let Some(f) = running {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let b = ui.add(egui::Button::new(egui::RichText::new(crate::tr("Abbrechen")).small()).frame(false));
@@ -851,19 +851,19 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
     }
     // opened without the reference file: the picture is rendered with less than the file gives – never silently
     if info.offline {
-        ui.add(egui::Label::new(egui::RichText::new(crate::tr("Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht")).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr("Referenzaufnahme nicht erreichbar: Objektivkorrektur vereinfacht")).small().color(lr::TEXT_DIM())).wrap());
     }
     // a source is gone: the picture stays usable (from the cache), the controls below are locked – said here
     if !info.missing.is_empty() {
         if !(info.pending || info.stale) {
-            ui.add(egui::Label::new(egui::RichText::new(locked_text(info)).small().color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(locked_text(info)).small().color(lr::TEXT_DIM())).wrap());
         }
         ui.disable();
     }
     if let Some(wn) = info.warnings.first() {
         // (the numbers of the rows: with a frame left out its neighbours keep theirs – QA 11, N-3)
         let names: Vec<String> = (0..n).map(|i| number_of(info, i)).collect();
-        ui.add(egui::Label::new(egui::RichText::new(crate::hdr_ui::warning_text(wn, &names)).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::hdr_ui::warning_text(wn, &names)).small().color(lr::TEXT_DIM())).wrap());
     }
 
     // ── AUFNAHMEN
@@ -877,10 +877,10 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
     let mut restore = false;
     if !info.in_step && info.busy {
         // why ticks and stars do nothing now
-        ui.label(egui::RichText::new(crate::tr("Die Aufnahmen werden neu berechnet – ändern geht gleich wieder")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Die Aufnahmen werden neu berechnet – ändern geht gleich wieder")).small().color(lr::TEXT_DIM()));
     } else if !info.in_step {
         // nothing computes: the list is the one of the picture shown, the recipe holds another one
-        ui.add(egui::Label::new(egui::RichText::new(crate::tr("Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.")).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr("Die geänderte Auswahl der Aufnahmen ist nicht berechnet. Die Liste zeigt die Aufnahmen des Bildes.")).small().color(lr::TEXT_DIM())).wrap());
         let b = lr::secondary_button(ui, None, "Auswahl zurücknehmen");
         lr::hover_tip(ui, &b, crate::tr("Das Rezept nimmt wieder die Aufnahmen des gezeigten Bildes; danach lässt sich die Liste wieder ändern"));
         restore = b.clicked();
@@ -969,7 +969,7 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
         for (a, b) in [(r.left_top(), r.right_top()), (r.right_top(), r.right_bottom()), (r.right_bottom(), r.left_bottom()), (r.left_bottom(), r.left_top())] {
             p.extend(egui::Shape::dashed_line(&[a, b], stroke, 4.0, 3.0));
         }
-        p.text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Foto aus dem Filmstreifen hierher ziehen"), egui::TextStyle::Small.resolve(ui.style()), if over { Color32::WHITE } else { lr::TEXT_DIM });
+        p.text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Foto aus dem Filmstreifen hierher ziehen"), egui::TextStyle::Small.resolve(ui.style()), if over { Color32::WHITE } else { lr::TEXT_DIM() });
         if let Some(d) = resp.dnd_release_payload::<crate::library_ui::PhotoDrag>() {
             if info.in_step {
                 take_in = Some(d.file);
@@ -1068,7 +1068,7 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
     if s.tool {
         ui.add_space(4.0);
         lr::choice(ui, "Werkzeug", &mut s.erase, &[(false, crate::tr("Malen")), (true, crate::tr("Verkleinern"))], "");
-        ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM()));
         let slider = ui.add(egui::Slider::new(&mut s.brush, 4.0..=150.0).logarithmic(true).show_value(false));
         lr::tip_key(ui, &slider, crate::tr("Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])"), "brush_smaller");
         let nb = ui.add(egui::Button::new(crate::tr("Neuer Bereich")));
@@ -1106,13 +1106,13 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
         }
         let er = ui.interact(egui::Rect::from_min_size(rect.min, egui::vec2(24.0, 26.0)), ui.id().with(("hdr-area-eye", i)), egui::Sense::click());
         let hidden = s.hidden.get(i).copied().unwrap_or(false);
-        lr::paint_icon(&p, egui::Rect::from_center_size(er.rect.center(), egui::vec2(14.0, 14.0)), if hidden { lr::Icon::EyeSlash } else { lr::Icon::Eye }, if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+        lr::paint_icon(&p, egui::Rect::from_center_size(er.rect.center(), egui::vec2(14.0, 14.0)), if hidden { lr::Icon::EyeSlash } else { lr::Icon::Eye }, if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
         lr::hover_tip(ui, &er, crate::tr(if hidden { "Bereich wieder einsetzen" } else { "Bereich ausblenden (vorher sehen)" }));
         let xr = ui.interact(egui::Rect::from_min_size(egui::pos2(rect.right() - 24.0, rect.top()), egui::vec2(24.0, 26.0)), ui.id().with(("hdr-area-x", i)), egui::Sense::click());
-        lr::paint_icon(&p, egui::Rect::from_center_size(xr.rect.center(), egui::vec2(12.0, 12.0)), lr::Icon::X, if xr.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+        lr::paint_icon(&p, egui::Rect::from_center_size(xr.rect.center(), egui::vec2(12.0, 12.0)), lr::Icon::X, if xr.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
         lr::hover_tip(ui, &xr, crate::tr("Bereich löschen"));
         let text = crate::trf!("Bereich {k} · aus {f}", k = i + 1, f = recipe_number(info, a.frame));
-        p.text(egui::pos2(rect.left() + 30.0, rect.center().y), egui::Align2::LEFT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if hidden { Color32::from_gray(0x6a) } else { lr::TEXT });
+        p.text(egui::pos2(rect.left() + 30.0, rect.center().y), egui::Align2::LEFT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if hidden { Color32::from_gray(0x6a) } else { lr::TEXT() });
         if er.clicked() {
             eye = Some(i);
         } else if xr.clicked() {
@@ -1540,7 +1540,7 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
             let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("hdr-chooser"))).with_clip_rect(avail);
             p.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(0x18, 0x18, 0x18, 238));
             p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x44)), egui::StrokeKind::Inside);
-            p.text(r.left_top() + egui::vec2(8.0, 7.0), egui::Align2::LEFT_TOP, crate::tr("Aus Aufnahme"), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+            p.text(r.left_top() + egui::vec2(8.0, 7.0), egui::Align2::LEFT_TOP, crate::tr("Aus Aufnahme"), egui::FontId::proportional(10.5), lr::TEXT_DIM());
             let reference = s.settings.reference.unwrap_or(info.reference);
             let (pos, clicked) = ctx.input(|i| (i.pointer.hover_pos(), i.pointer.primary_clicked()));
             for (k, t) in crops.iter().enumerate() {
@@ -1553,7 +1553,7 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
                 }
                 let ev = info.ev.get(k).map(|e| crate::hdr_ui::ev_label(*e)).unwrap_or_default();
                 let label = format!("{} · {}{}", number_of(info, k), ev, if k == reference { " ★" } else { "" });
-                p.text(egui::pos2(tr.left(), tr.bottom() + 3.0), egui::Align2::LEFT_TOP, label, egui::FontId::proportional(10.5), if chosen { Color32::WHITE } else { lr::TEXT_DIM });
+                p.text(egui::pos2(tr.left(), tr.bottom() + 3.0), egui::Align2::LEFT_TOP, label, egui::FontId::proportional(10.5), if chosen { Color32::WHITE } else { lr::TEXT_DIM() });
                 // (the crops are the frames of the picture shown: while a change of the frames is computed they are not
                 // the frames of the recipe any more – the index would name another frame, or none)
                 if hovered && clicked && !chosen && info.in_step {
@@ -1723,7 +1723,7 @@ impl crate::App {
     /// Panel of the tool "Zusammenfügen".
     pub(crate) fn merge_panel(&mut self, ui: &mut egui::Ui) {
         let Some(info) = self.merge_info_full() else {
-            ui.label(egui::RichText::new(crate::tr("Dieses Foto ist kein zusammengefügtes Foto.")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Dieses Foto ist kein zusammengefügtes Foto.")).color(lr::TEXT_DIM()));
             return;
         };
         if let Some(file) = panel(ui, &info) {

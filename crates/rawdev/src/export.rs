@@ -16,7 +16,7 @@ pub fn export(doc: &RawDoc, s: &Settings, format: Format, path: &Path) -> Result
     let img = doc.render_full(s)?;
     let img = develop::geometry::apply(img, s, doc.orientation);
     // border "as print": only when set (otherwise unchanged)
-    let img = develop::export::apply_output_size(develop::film::apply_border(img, &s.film), s.output_size,s.output_filter);
+    let img = develop::export::finish_output(develop::film::apply_border(img, &s.film), s, graineo_color::Space::Srgb);
     match format {
         Format::Jpeg { quality } => develop::export::write_jpeg(&img, path, quality).map_err(|e| e.to_string()),
         Format::Tiff16 => develop::export::write_tiff16(&img, path).map_err(|e| e.to_string()),
@@ -185,14 +185,14 @@ pub fn render_color(doc:&RawDoc,s:&Settings,space:graineo_color::Space)->Result<
  let img=if film{
   let img=doc.render_full(s)?;
   let img=develop::geometry::apply(img,s,doc.orientation);
-  let mut img=develop::export::apply_output_size(develop::film::apply_border(img,&s.film),s.output_size,s.output_filter);
+  let mut img=develop::export::finish_output(develop::film::apply_border(img,&s.film),s,graineo_color::Space::Srgb);
   img.data=graineo_color::transcode_srgb16(&img.data,space)?;
   img
  }else{
   let img=crate::color::render(doc,s,space)?;
   let img=develop::geometry::apply(img,s,doc.orientation);
   // Without film the border is neutral (paper/black); the profile does not change neutrals.
-  develop::export::apply_output_size(develop::film::apply_border(img,&s.film),s.output_size,s.output_filter)
+  develop::export::finish_output(develop::film::apply_border(img,&s.film),s,space)
  };
  Ok(img)
 }

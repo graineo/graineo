@@ -335,7 +335,7 @@ impl LibraryView {
                 if lr::main_button_min(ui, crate::tr("Fertig"), true, 110.0).clicked() {
                     done = true;
                 }
-                ui.label(egui::RichText::new(crate::tr("Esc")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Esc")).small().color(lr::TEXT_DIM()));
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     let n = self.manage.undo.len().saturating_sub(a.undo_start);
                     let status = match (drag_status(ui, &tree), &a.message) {
@@ -344,7 +344,7 @@ impl LibraryView {
                         (None, None) if n > 0 => crate::trf!("{n} Änderungen · ⌘Z nimmt sie einzeln zurück", n = n),
                         (None, None) => String::new(),
                     };
-                    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&status)).small().color(lr::TEXT_DIM)).truncate());
+                    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&status)).small().color(lr::TEXT_DIM())).truncate());
                 });
             });
         });
@@ -381,7 +381,7 @@ impl LibraryView {
         let (top, top_resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::hover());
         let dragging = egui::DragAndDrop::payload::<KeywordDrag>(ui.ctx());
         let top_ok = dragging.as_ref().is_some_and(|d| d.0.iter().any(|k| tree.by_id.get(k).is_some_and(|k| k.parent.is_some())));
-        ui.painter().text(top.left_center() + egui::vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::tr("Oberste Ebene"), egui::FontId::proportional(10.5), if top_ok { lr::TEXT } else { lr::TEXT_DIM });
+        ui.painter().text(top.left_center() + egui::vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::tr("Oberste Ebene"), egui::FontId::proportional(10.5), if top_ok { lr::TEXT() } else { lr::TEXT_DIM() });
         if top_resp.dnd_hover_payload::<KeywordDrag>().is_some() && top_ok {
             ui.painter().rect_stroke(top, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xe0)), egui::StrokeKind::Inside);
             set_drag_status(ui, crate::trf!("{a} auf die oberste Ebene legen", a = dragged_names(tree, dragging.as_deref().map(|d| d.0.as_slice()).unwrap_or(&[]))));
@@ -421,18 +421,18 @@ impl LibraryView {
                 }
                 let n = count(row.id);
                 let dim = !row.hit || n == 0;
-                let color = if on || resp.hovered() { Color32::WHITE } else if dim { Color32::from_gray(0x7a) } else { lr::TEXT };
+                let color = if on || resp.hovered() { Color32::WHITE } else if dim { Color32::from_gray(0x7a) } else { lr::TEXT() };
                 let font = egui::FontId::proportional(10.5);
-                let count_g = p.layout_no_wrap(crate::library_ui::thousands(n), font.clone(), lr::TEXT_DIM);
+                let count_g = p.layout_no_wrap(crate::library_ui::thousands(n), font.clone(), lr::TEXT_DIM());
                 let space = egui::Rect::from_min_max(egui::pos2(arrow.right() + 2.0, r.top()), egui::pos2(r.right() - count_g.size().x - 24.0, r.bottom()));
                 let label = if k.person { format!("{} ·", k.name) } else { k.name.clone() };
                 let g = p.layout_no_wrap(label, font, color);
                 p.with_clip_rect(space).galley(egui::pos2(space.left(), r.center().y - g.size().y / 2.0), g, color);
                 let count_x = r.right() - 4.0 - count_g.size().x;
-                p.galley(egui::pos2(count_x, r.center().y - count_g.size().y / 2.0), count_g, lr::TEXT_DIM);
+                p.galley(egui::pos2(count_x, r.center().y - count_g.size().y / 2.0), count_g, lr::TEXT_DIM());
                 // marked "never export" (itself; the branch below inherits it)
                 if a.marks.contains(&row.id) {
-                    p.text(egui::pos2(count_x - 8.0, r.center().y), egui::Align2::RIGHT_CENTER, "⊘", egui::FontId::proportional(10.5), lr::TEXT_DIM);
+                    p.text(egui::pos2(count_x - 8.0, r.center().y), egui::Align2::RIGHT_CENTER, "⊘", egui::FontId::proportional(10.5), lr::TEXT_DIM());
                 }
                 // drag: the selection if the row belongs to it, else this row
                 if resp.drag_started() {
@@ -800,21 +800,21 @@ fn arrange_properties(ui: &mut egui::Ui, a: &mut Arrange, tree: &Tree, count: &d
     match &sel[..] {
         [] => {
             heading(ui, crate::tr("Kein Stichwort gewählt"));
-            ui.label(egui::RichText::new(crate::trf!("{n} Stichwörter", n = crate::library_ui::thousands(tree.by_id.values().filter(|k| a.people || !k.person).count()))).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::trf!("{n} Stichwörter", n = crate::library_ui::thousands(tree.by_id.values().filter(|k| a.people || !k.person).count()))).small().color(lr::TEXT_DIM()));
         }
         [id] => {
             let Some(k) = tree.by_id.get(id) else { return };
             heading(ui, &k.name);
             if k.parent.is_some() {
-                ui.add(egui::Label::new(egui::RichText::new(tree.path(*id)).small().color(lr::TEXT_DIM)).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(tree.path(*id)).small().color(lr::TEXT_DIM())).wrap());
             }
             let kids = tree.children.get(&Some(*id)).map_or(0, |v| v.len());
-            ui.label(egui::RichText::new(crate::trf!("{a} Fotos ({b} direkt)", a = crate::library_ui::thousands(count(*id)), b = crate::library_ui::thousands(k.count))).small().color(lr::TEXT));
+            ui.label(egui::RichText::new(crate::trf!("{a} Fotos ({b} direkt)", a = crate::library_ui::thousands(count(*id)), b = crate::library_ui::thousands(k.count))).small().color(lr::TEXT()));
             if kids > 0 {
-                ui.label(egui::RichText::new(crate::trf!("{n} Unterbegriffe", n = kids)).small().color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::trf!("{n} Unterbegriffe", n = kids)).small().color(lr::TEXT()));
             }
             if k.person {
-                ui.label(egui::RichText::new(crate::tr("Person")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Person")).small().color(lr::TEXT_DIM()));
             }
         }
         many => {
@@ -843,7 +843,7 @@ fn arrange_properties(ui: &mut egui::Ui, a: &mut Arrange, tree: &Tree, count: &d
                 2 => crate::tr("Neuer Unterbegriff (auch „A > B“)"),
                 _ => crate::tr("Name des Oberbegriffs"),
             };
-            ui.label(egui::RichText::new(label).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(label).small().color(lr::TEXT_DIM()));
             let id = egui::Id::unique("kw-arrange-input");
             let r = lr::edit_field(ui, egui::TextEdit::singleline(t).id(id).desired_width(ui.available_width() - 4.0));
             if !r.has_focus() && !r.lost_focus() {
@@ -862,7 +862,7 @@ fn arrange_properties(ui: &mut egui::Ui, a: &mut Arrange, tree: &Tree, count: &d
             });
         }
         Mode::Pick { merge, filter } => {
-            ui.label(egui::RichText::new(if *merge { crate::tr("Zusammenführen mit (filtern)") } else { crate::tr("Verschieben unter (filtern)") }).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(if *merge { crate::tr("Zusammenführen mit (filtern)") } else { crate::tr("Verschieben unter (filtern)") }).small().color(lr::TEXT_DIM()));
             let r = lr::edit_field(ui, egui::TextEdit::singleline(filter).desired_width(ui.available_width() - 4.0));
             if !r.has_focus() && !r.lost_focus() {
                 r.request_focus();
@@ -1072,13 +1072,13 @@ impl LibraryView {
                                         s.checked.remove(&idx);
                                     }
                                 }
-                                ui.add_sized(egui::vec2(120.0, 20.0), egui::Label::new(egui::RichText::new(crate::tr(kind_name(x.kind))).small().color(lr::TEXT_DIM)).truncate());
-                                ui.add_sized(egui::vec2(400.0, 20.0), egui::Label::new(egui::RichText::new(text).color(lr::TEXT)).truncate());
+                                ui.add_sized(egui::vec2(120.0, 20.0), egui::Label::new(egui::RichText::new(crate::tr(kind_name(x.kind))).small().color(lr::TEXT_DIM())).truncate());
+                                ui.add_sized(egui::vec2(400.0, 20.0), egui::Label::new(egui::RichText::new(text).color(lr::TEXT())).truncate());
                                 let counts = match x.share {
                                     Some(sh) => crate::trf!("{a} / {b} Fotos · {p} %", a = x.photos_from, b = x.photos_to, p = (sh * 100.0).round()),
                                     None => crate::trf!("{a} / {b} Fotos", a = x.photos_from, b = x.photos_to),
                                 };
-                                ui.label(egui::RichText::new(counts).small().color(lr::TEXT_DIM));
+                                ui.label(egui::RichText::new(counts).small().color(lr::TEXT_DIM()));
                             });
                         }
                     });
@@ -1101,7 +1101,7 @@ impl LibraryView {
                 if ui.button(crate::tr("Schließen")).clicked() {
                     close = true;
                 }
-                ui.label(egui::RichText::new(crate::trf!("{n} gewählt", n = n)).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("{n} gewählt", n = n)).small().color(lr::TEXT_DIM()));
                 if n > 0 && ui.button(crate::tr("Keine")).clicked() {
                     s.checked.clear();
                 }

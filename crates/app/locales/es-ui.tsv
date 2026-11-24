@@ -1057,7 +1057,6 @@ Vorher | Nachher nebeneinander	Antes | Después lado a lado
 Dunkelkammer ein/aus (dort: F6 Miniaturleiste, Tab nur Bild, Esc zurück)	Mostrar/ocultar Cuarto oscuro (allí: F6 tira de miniaturas, Tab solo imagen, Esc volver)
 Dunkelkammer: nächste Körnungs-Lupenstufe	Cuarto oscuro: siguiente nivel de lupa de grano
 Dunkelkammer: nächste Körnungs-Lupenstufe (US-Tastatur)	Cuarto oscuro: siguiente nivel de lupa de grano (teclado US)
-Dunkelkammer: nächste Körnungs-Lupenstufe (⇧+)	Cuarto oscuro: siguiente nivel de lupa de grano (⇧+)
 Dunkelkammer: vorherige Körnungs-Lupenstufe	Cuarto oscuro: nivel anterior de lupa de grano
 obere Leiste ein/aus	mostrar/ocultar barra superior
 Filmstreifen ein/aus	mostrar/ocultar tira de película
@@ -1135,7 +1134,7 @@ Film → Papier → Abzug	Película → Papel → Copia
 Probe · Lichtpunkte	Prueba · puntos de luz
 Rand & Rahmen	Borde y marco
 Papierrand	Borde del papel
-Rand unten	Borde inferior
+Rand unten	Margen inferior
 Aktuelle Einstellungen speichern	Guardar ajustes actuales
 Stärke der aktiven Wiedergabe	Intensidad del render activo
 Vorgaben	Preajustes
@@ -6593,7 +6592,7 @@ Mehr	Más
 # HDR merge (hdr_ui.rs)
 Mindestens zwei Fotos einer Belichtungsreihe wählen.	Elige al menos dos fotos de una serie de exposiciones.
 Höchstens {n} Fotos.	Como máximo {n} fotos.
-{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a}: solo fotos RAW con sensor Bayer o X-Trans.
+{a}: nur RAW-Fotos (Bayer, X-Trans oder Foveon).	{a}: solo fotos RAW (Bayer, X-Trans o Foveon).
 Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	Las fotos son de cámaras distintas o tienen tamaños distintos.
 {a} ist nicht erreichbar.	{a} no está disponible.
 {a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b}: el brillo difiere {e} EV de los datos de toma – ¿cambió la luz?
@@ -6982,8 +6981,8 @@ Es werden gerade Reihen zusammengefügt – weitere Reihen danach	Se están comb
 Bricht die Berechnung ab; das neue HDR wird wieder entfernt	Detiene el cálculo; el nuevo HDR se vuelve a quitar
 Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	Detiene el cálculo; la foto queda como se muestra
 die Berechnung wurde abgebrochen	el cálculo se canceló
-{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} es una foto Foveon (X3F). Para HDR sirven las tomas múltiples de la cámara (X3I) –se abren directamente como una sola foto– y las series RAW de otras cámaras.
-Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Detalle de la Quattro a partir de ISO 400: de suave (−3) a fuerte (+3), 0 = ajuste de la cámara. Se aprecia mejor al 100 %
+{a} ist ein Foveon-Foto (X3F): es lässt sich nur mit anderen X3F-Fotos derselben Kamera zusammenfügen.	{a} es una foto Foveon (X3F): solo se puede fusionar con otras fotos X3F de la misma cámara.
+Wie viel Detail die Rauschminderung der Quattro ab ISO 400 stehen lässt: sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Feindetail und Struktur wirken danach auf das Ergebnis	Cuánto detalle conserva la reducción de ruido de la Quattro a partir de ISO 400: suave (−3) a fuerte (+3), 0 = ajuste de la cámara. Detalle fino y Estructura actúan después sobre el resultado
 Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	La ruta Quattro completa está desactivada; solo ella evalúa el regulador de detalle.
 Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	En las tomas múltiples (X3I) el detalle es fijo; la nitidez Foveon de arriba sigue actuando.
 Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	Por debajo de ISO 400 el detalle de la Quattro es fijo; la nitidez Foveon de arriba sigue actuando.
@@ -7021,8 +7020,8 @@ Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	Torneo no a
 Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	Torneo aplicado: ganadora seleccionada – ⌘Z lo deshace
 HDR abgebrochen und entfernt (Quellen bleiben)	HDR cancelado y eliminado (las fuentes se conservan)
 Lichter-Farbe	Color de iluminaciones
-Lichter-Struktur	Estructura de iluminaciones
-Lichter neutral, Lichter-Farbe, Lichter-Struktur	Iluminaciones neutras, color de iluminaciones, estructura de iluminaciones
+Lichter-Detail	Detalle de iluminaciones
+Lichter neutral, Lichter-Farbe, Lichter-Detail	Iluminaciones neutras, color de iluminaciones, detalle de iluminaciones
 Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	Color de las iluminaciones reconstruidas: 0 neutro, 50 tal como se reconstruyen, 100 más intenso (solo colores claros)
 Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	Detalle en las iluminaciones reconstruidas: 0 liso, 50 tal como se reconstruye, 100 triple
 Nur für Farbe	Solo en color
@@ -7047,7 +7046,6 @@ Foveon: Lichter	Foveon: iluminaciones
 KI-Entrauschen gibt es nur in Farbe.	La reducción de ruido con IA solo funciona en color.
 KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	La reducción de ruido con IA solo funciona con la reducción de ruido activada.
 Nur für Merrill und Quattro	Solo para Merrill y Quattro
-Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	Sin reguladores en Merrill, la reconstrucción actúa automáticamente
 Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	Sin reguladores en esta foto (ISO alto), la reconstrucción actúa automáticamente
 Lichter werden rekonstruiert …	Reconstruyendo las altas luces …
 Lichter werden rekonstruiert … (seit {n} s)	Reconstruyendo las altas luces … ({n} s)
@@ -7056,4 +7054,56 @@ Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung 
 Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	La reconstrucción de iluminaciones para Merrill está desactivada en los ajustes (Revelar → «Merrill: reconstruir iluminaciones»)
 Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	La reconstrucción de iluminaciones para Quattro está desactivada en los ajustes (Revelar → «Quattro: reconstruir iluminaciones»)
 Quattro: Lichter rekonstruieren	Quattro: reconstruir iluminaciones
-Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	Cálculo intensivo en fotos muy sobreexpuestas (tardan unos segundos más en abrirse). dp, sd y sd H Quattro: reconstruye la capa superior quemada a partir de las inferiores, con los reguladores «Color de iluminaciones» y «Estructura de iluminaciones». Desactivado: método anterior
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Detail“. Aus: bisheriger Weg	Cálculo intensivo en fotos muy sobreexpuestas (tardan unos segundos más en abrirse). dp, sd y sd H Quattro: reconstruye la capa superior quemada a partir de las inferiores, con los reguladores «Color de iluminaciones» y «Detalle de iluminaciones». Desactivado: método anterior
+Oberfläche vergrößern	Ampliar la interfaz
+Oberfläche verkleinern	Reducir la interfaz
+Oberfläche auf 100 %	Interfaz al 100 %
+Oberfläche vergrößern (US-Tastatur)	Ampliar la interfaz (teclado US)
+Zerlegt das Bild in Grund- und Detailebene, entrauscht und schärft dabei – das ergibt den typischen Foveon-Eindruck, abgestimmt auf das Aussehen von SIGMA Photo Pro in der Grundeinstellung. Ausgeschaltet wird das Bild deutlich weicher. Luminanz und Farbe regeln das Rauschen.\n\nDie Regler **Feindetail** und **Struktur** ersetzen diesen Schalter (Merrill, Quattro, Classic).	Divide la imagen en capa base y capa de detalle, reduciendo ruido y enfocando a la vez: así surge el aspecto Foveon típico, ajustado al aspecto por defecto de SIGMA Photo Pro. Desactivado, la imagen queda claramente más suave. Luminancia y Color regulan el ruido.\n\nLos controles **Detalle fino** y **Estructura** sustituyen este interruptor (Merrill, Quattro, Classic).
+Wie viel der feinsten Foveon-Detailebene zurückkommt.	Cuánto vuelve de la banda de detalle Foveon más fina.
+Sigmas Entrauschen trennt ein glattes Grundbild von der Detailebene und setzt das Detail danach wieder ein. graineo teilt diese Detailebene in zwei Bänder:\n• **Feindetail** – kleinste Strukturen bis etwa 3 Pixel: Poren, Hauttextur, Restrauschen\n• **Struktur** – gröbere Strukturen bis etwa 30 Pixel: Wimpern, Haare, Augen, Kanten\n\n**100** = Sigmas Detail unverändert (wie SIGMA Photo Pro). Weniger Feindetail glättet Haut, ohne Augen und Haare weich zu machen; mehr betont feinste Textur samt Rauschen. Das Rauschen selbst regeln weiter Luminanz und Farbe.\n\n### Tipp\nFür Porträts: Feindetail niedrig, Struktur etwas höher (Vorgabe „Porträt (natürlich)“). Bei 100 % beurteilen.	La reducción de ruido de Sigma separa una imagen base suave de la capa de detalle y después vuelve a añadir el detalle. graineo divide esta capa en dos bandas:\n• **Detalle fino** – estructuras más pequeñas, hasta unos 3 píxeles: poros, textura de piel, ruido residual\n• **Estructura** – estructuras más gruesas, hasta unos 30 píxeles: pestañas, pelo, ojos, bordes\n\n**100** = detalle de Sigma sin cambios (como SIGMA Photo Pro). Menos detalle fino suaviza la piel sin ablandar ojos ni pelo; más resalta la textura más fina, ruido incluido. Luminancia y Color siguen regulando el ruido.\n\n### Consejo\nPara retratos: detalle fino bajo, estructura algo más alta (ajuste «Retrato (natural)»). Juzgar al 100 %.
+Wie viel der gröberen Foveon-Detailebene zurückkommt.	Cuánto vuelve de la banda de detalle Foveon más gruesa.
+Das gröbere der beiden Detailbänder (etwa 3 bis 30 Pixel): Wimpern, Haare, Augen, Kanten und das Relief der Haut. **100** = Sigmas Detail unverändert; weniger wirkt weicher und flacher, mehr plastischer. Großflächige Helligkeitsverläufe bleiben immer unverändert. Gegenstück: **Feindetail**.	La más gruesa de las dos bandas de detalle (unos 3 a 30 píxeles): pestañas, pelo, ojos, bordes y el relieve de la piel. **100** = detalle de Sigma sin cambios; menos se ve más suave y plano, más se ve más plástico. Los degradados amplios de luminosidad nunca cambian. Contraparte: **Detalle fino**.
+Feinste Foveon-Ebene: Poren, Hauttextur, Restrauschen. 100 = Sigmas Detail, weniger = glattere Haut	Banda Foveon más fina: poros, textura de piel, ruido residual. 100 = detalle de Sigma, menos = piel más suave
+Gröbere Foveon-Ebene: Wimpern, Haare, Augen, Kanten. 100 = Sigmas Detail	Banda Foveon más gruesa: pestañas, pelo, ojos, bordes. 100 = detalle de Sigma
+Wirkt nur in Farbe	Solo actúa en color
+Porträt (natürlich)	Retrato (natural)
+Foveon: feinste Detailebene zurückgenommen, Struktur betont – ruhige, natürliche Haut, klare Augen und Wimpern	Foveon: banda de detalle más fina reducida, estructura realzada – piel tranquila y natural, ojos y pestañas nítidos
+fest	fijo
+Schrift	Fuente
+Feindetail (Detailband)	Detalle fino
+Struktur (Detailband)	Estructura
+Hoch (Kontrast)	Alto
+Unten zusätzlich	Extra abajo
+Wird zum Papierrand addiert: unten etwas breiter wirkt ausgewogener (klassisch 10–25 % mehr).	Se suma al borde del papel: un poco más ancho abajo resulta más equilibrado (clásicamente 10–25 % más).
+Filmdaten nicht gefunden – der Ordner „spektrafilm“ muss neben dem Programm liegen.	Datos de película no encontrados: la carpeta «spektrafilm» debe estar junto al programa.
+Schärfen für	Enfocar para
+Bildschirm	Pantalla
+Druck matt	Impresión mate
+Druck glänzend	Impresión brillante
+Nach dem Verkleinern auf die Ausgabegröße geschärft, Radius in Ausgabepixeln	Se enfoca tras reducir al tamaño de salida, radio en píxeles de salida
+Für Drucke auf mattem Papier: etwas größerer Radius, kräftiger	Para impresiones en papel mate: radio algo mayor, más intenso
+Für Drucke auf glänzendem Papier: feiner Radius	Para impresiones en papel brillante: radio fino
+Hoch (Schärfe)	Alto
+Foto vergrößern (in der Dunkelkammer: Körnungs-Lupe)	Ampliar la foto (en el cuarto oscuro: lupa de grano)
+Foto vergrößern (US-Tastatur)	Ampliar la foto (teclado US)
+Foto verkleinern (in der Dunkelkammer: Körnungs-Lupe)	Reducir la foto (en el cuarto oscuro: lupa de grano)
+Foto einpassen	Ajustar la foto
+Oberfläche vergrößern (deutsche Tastatur)	Ampliar la interfaz (teclado alemán)
+Oberfläche verkleinern (deutsche Tastatur)	Reducir la interfaz (teclado alemán)
+Vollbild	Pantalla completa
+Vollbild beenden	Salir de pantalla completa
+nutzbar	utilizables
+adaptiv	adaptativas
+Linear (Szene)	Lineal (escena)
+Ohne Kurve, Look, Schärfen, Entrauschen	Sin curva, look, enfoque ni reducción de ruido
+Sensordaten ohne Kurve, Look, Schärfen, Entrauschen – flacher Ausgangspunkt	Datos del sensor sin curva, look, enfoque ni reducción de ruido: punto de partida plano
+Liest die Aufnahmedaten der gewählten Fotos neu aus den Dateien.	Vuelve a leer de los archivos los datos de toma de las fotos seleccionadas.
+• **Was die Datei trägt, gewinnt** – Datum, Kamera, Objektiv, Belichtung, Ort, Maße\n• **Was fehlt, bleibt** – z. B. ein Objektiv aus Lightroom; eine korrigierte Aufnahmezeit bleibt immer\n• **Aus XMP** (nur wenn eine Begleitdatei daneben liegt und du es einschaltest) – Bewertung, Etikett und Stichwörter ersetzen die Werte der Bibliothek\n\nNie geändert: Entwicklung, virtuelle Kopien, Sammlungen und die Dateien selbst. ⌘Z nimmt den ganzen Lauf zurück, auch dabei neu angelegte Stichwörter.	• **Lo que lleva el archivo gana** – fecha, cámara, objetivo, exposición, lugar, dimensiones\n• **Lo que falta se queda** – p. ej. un objetivo de Lightroom; una hora de captura corregida se queda siempre\n• **Desde XMP** (solo si hay un archivo adjunto al lado y lo activas) – valoración, etiqueta y palabras clave sustituyen los valores de la biblioteca\n\nNunca cambia: revelado, copias virtuales, colecciones ni los propios archivos. ⌘Z deshace toda la operación, también las palabras clave creadas.
+HDR-Reihe: nächste Aufnahme wird vorbereitet	Serie HDR: preparando el siguiente horquillado
+Warten auf die HDR-Berechnung …	Esperando el cálculo HDR …
+HDR wird noch berechnet	El HDR aún se está calculando
+graineo beendet sich, sobald die Berechnung fertig ist.	graineo se cerrará en cuanto termine el cálculo.
+Beim Beenden geht die laufende Berechnung verloren.	Al salir ahora se pierde el cálculo en curso.
+Warten	Esperar
+Abbrechen und beenden	Cancelar y salir

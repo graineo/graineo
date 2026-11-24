@@ -187,7 +187,7 @@ fn options_box(ui: &mut egui::Ui, d: &mut BatchDialog) {
         dialog::option(ui, &mut d.in_stack, crate::tr("Ergebnis in den Stapel legen"), crate::tr(if in_stack { "Oben im Stapel des Referenzbilds" } else { "Eigenes Foto neben den Quellen, ohne Stapel" }), None);
         dialog::option(ui, &mut d.align, crate::tr("Ausrichten"), crate::tr("Gleicht Verschiebung, Drehung und Maßstab zwischen den Aufnahmen aus"), None);
         ui.add_space(2.0);
-        ui.label(egui::RichText::new(crate::tr("Stichwort für das Ergebnis")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Stichwort für das Ergebnis")).small().color(lr::TEXT_DIM()));
         lr::edit_field(ui, egui::TextEdit::singleline(&mut d.keyword).desired_width(ui.available_width()).hint_text(crate::tr("leer = keins")));
     });
 }
@@ -201,13 +201,13 @@ fn group_row(ui: &mut egui::Ui, g: &mut Group) {
             let on: &mut bool = if locked { &mut off } else { &mut g.on };
             lr::switch(ui, on);
             let title = g.title();
-            if ui.add(egui::Label::new(egui::RichText::new(title).color(lr::TEXT)).truncate().selectable(false).sense(egui::Sense::click())).clicked() && !locked {
+            if ui.add(egui::Label::new(egui::RichText::new(title).color(lr::TEXT())).truncate().selectable(false).sense(egui::Sense::click())).clicked() && !locked {
                 g.on = !g.on;
             }
         });
         ui.horizontal(|ui| {
             ui.add_space(44.0);
-            ui.add(egui::Label::new(egui::RichText::new(g.detail()).small().color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(g.detail()).small().color(lr::TEXT_DIM())).truncate());
         });
     });
 }

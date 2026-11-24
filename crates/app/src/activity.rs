@@ -220,27 +220,27 @@ impl App {
                 _ => crate::trf!("{a} Fehler", a = faults),
             };
             dot(&mut child, RED);
-            child.add(egui::Label::new(egui::RichText::new(label).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT })).truncate().selectable(false));
+            child.add(egui::Label::new(egui::RichText::new(label).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT() })).truncate().selectable(false));
             if let Some(t) = summary(&tasks) {
-                child.add(egui::Label::new(egui::RichText::new("·").small().color(lr::TEXT_DIM)).selectable(false));
-                calm_spinner(&mut child, 9.0, lr::TEXT_DIM.gamma_multiply(0.8));
-                child.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate().selectable(false));
+                child.add(egui::Label::new(egui::RichText::new("·").small().color(lr::TEXT_DIM())).selectable(false));
+                calm_spinner(&mut child, 9.0, lr::TEXT_DIM().gamma_multiply(0.8));
+                child.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).truncate().selectable(false));
             }
         } else if let Some((text, since)) = &done {
             // fades out during the last half second
             let fade = ((DONE_SECS - (now - since)) / 0.5).clamp(0.0, 1.0) as f32;
             dot(&mut child, GREEN.gamma_multiply(fade));
-            child.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT.gamma_multiply(fade))).truncate().selectable(false));
+            child.add(egui::Label::new(egui::RichText::new(text).small().color(lr::TEXT().gamma_multiply(fade))).truncate().selectable(false));
             // the place has a fixed width: a longer message is cut there, all of it in the tooltip
             lr::hover_tip(ui, &resp, text);
         } else if let Some(text) = summary(&tasks) {
             // background only: a calm, dimmed line without a spinner; work of the user or of what is visible: spinner
             let background = tasks.first().is_some_and(|t| t.rank.tier() == 3);
             if background {
-                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { lr::TEXT_DIM } else { lr::TEXT_DIM.gamma_multiply(0.75) })).truncate().selectable(false));
+                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { lr::TEXT_DIM() } else { lr::TEXT_DIM().gamma_multiply(0.75) })).truncate().selectable(false));
             } else {
-                calm_spinner(&mut child, 9.0, lr::TEXT_DIM.gamma_multiply(0.8));
-                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT })).truncate().selectable(false));
+                calm_spinner(&mut child, 9.0, lr::TEXT_DIM().gamma_multiply(0.8));
+                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT() })).truncate().selectable(false));
                 // the spinner explains itself: the step the computing job is at
                 if let Some(step) = crate::work_step::describe() {
                     lr::hover_tip(ui, &resp, &step);
@@ -248,7 +248,7 @@ impl App {
             }
         } else if !all.is_empty() {
             // only quiet background work: a small static dot (no redraws) leads to the list
-            dot(&mut child, lr::TEXT_DIM.gamma_multiply(if hover { 0.9 } else { 0.5 }));
+            dot(&mut child, lr::TEXT_DIM().gamma_multiply(if hover { 0.9 } else { 0.5 }));
         }
         if !active {
             self.notes.open = false;
@@ -283,10 +283,10 @@ impl App {
                         ui.label(egui::RichText::new(&f.title).font(lr::semibold(12.5)).color(egui::Color32::from_gray(0xf0)));
                     });
                     if !f.cause.is_empty() {
-                        ui.add(egui::Label::new(egui::RichText::new(&f.cause).font(lr::sans(12.0)).color(lr::TEXT)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(&f.cause).font(lr::sans(12.0)).color(lr::TEXT())).wrap());
                     }
                     if !f.subject.is_empty() {
-                        ui.add(egui::Label::new(egui::RichText::new(&f.subject).small().color(lr::TEXT_DIM)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(&f.subject).small().color(lr::TEXT_DIM())).wrap());
                     }
                     ui.add_space(2.0);
                     ui.horizontal(|ui| {
@@ -310,7 +310,7 @@ impl App {
                         // an import running in the background: its window comes back from here
                         if t.rank == Rank::Import {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT()));
                                 if ui.small_button(crate::tr("Fenster zeigen")).clicked() {
                                     action = Some(Click::ShowImport);
                                 }
@@ -320,7 +320,7 @@ impl App {
                         // "Metadaten neu einlesen": cancellable here (what was read stays, ⌘Z covers it)
                         if t.rank == Rank::Started && Some(&t.text) == reread_text().as_ref() {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT()));
                                 if ui.small_button(crate::tr("Abbrechen")).clicked() {
                                     action = Some(Click::CancelReread);
                                 }
@@ -329,14 +329,14 @@ impl App {
                         }
                         if t.rank == Rank::Merge {
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                                ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT()));
                                 if ui.small_button(crate::tr("Abbrechen")).clicked() {
                                     action = Some(Click::CancelMerge);
                                 }
                             });
                             continue;
                         }
-                        ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT));
+                        ui.label(egui::RichText::new(&t.text).small().color(lr::TEXT()));
                     }
                 }
             });

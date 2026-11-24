@@ -544,3 +544,34 @@ fn broken_data_never_panics() {
     assert!(sony_field(&[100, 100, 200, 50], None).is_none());
     assert!(fuji_field(10.0, 10.0, None, false).is_none());
 }
+
+// ---------------------------------------------------------------------------------------------
+// fuzzing (short run here, long runs: scripts/fuzz.sh)
+
+fn fuzz_seeds() -> Vec<Vec<u8>> {
+    let v = afinfo2(9, 9, (5616, 3744), &[(100, 120, 0, 0), (100, 120, 200, 300)], &[1 << 1], &[1]);
+    vec![
+        canon_tiff(true, "Canon EOS RP", 6, 0x0026, &v),
+        canon_tiff(false, "Canon EOS 5D Mark II", 1, 0x003c, &v),
+        canon_tiff(true, "Canon EOS 400D DIGITAL", 1, 0x0012, &[9, 9, 3888, 2592, 3504, 2336, 120, 110, 0, 0, 0, 0]),
+        sony_arw(true, [6000, 4000, 3000, 2000], Some([400, 300, 1]), Some(2)),
+        sony_dng(8, [8640, 5760, 2160, 4320]),
+        fuji_raf([100, 80], [6000, 4000], 0, 0),
+        heic(&exif_tiff(&[3000, 2000, 400, 300], [6000, 4000], 1)),
+        jpeg(&exif_tiff(&[3000, 2000], [6000, 4000], 8)),
+    ]
+}
+
+/// Focus points and picture style from mutated RAW/JPEG/HEIC headers and makernotes: no panic, no hang.
+#[test]
+fn fuzz_focus_and_picture_style() {
+    fuzzkit::run("raw_makernote", &fuzz_seeds(), 1 << 16, |d| {
+        let _ = from_source(&source(d.to_vec(), 0));
+        let p = fuzzkit::temp_file("makernote.bin", d);
+        let _ = load(&p, HEAD).and_then(|q| from_source(&q));
+        let _ = load(&p, 64).and_then(|q| from_source(&q));
+        let _ = crate::picture_style::read(&p);
+        let _ = crate::picture_style::read_large(&p);
+        let _ = crate::picture_style::makernote(&p);
+    });
+}

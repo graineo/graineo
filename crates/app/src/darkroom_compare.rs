@@ -265,7 +265,7 @@ impl App {
     pub(crate) fn darkroom_compare_actions(&mut self, ui: &mut egui::Ui) {
         let Some(index) = self.current.as_ref().map(|c| c.index) else { return };
         let toggle = |ui: &mut egui::Ui, on: bool, text: &str| {
-            let color = if on { Color32::WHITE } else { lr::TEXT_DIM };
+            let color = if on { Color32::WHITE } else { lr::TEXT_DIM() };
             ui.add(egui::Button::new(egui::RichText::new(text).color(color)).frame(on).fill(if on { Color32::from_gray(0x33) } else { Color32::TRANSPARENT })).clicked()
         };
         match self.darkroom.compare.mode {

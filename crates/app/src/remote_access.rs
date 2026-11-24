@@ -367,13 +367,13 @@ pub fn settings_page(ui: &mut egui::Ui) {
             row(ui, "Adresse im Browser", Some("Auf dem Tablet eine dieser Adressen öffnen (gleiches WLAN). Beim ersten Mal warnt der Browser vor dem Zertifikat: Fingerabdruck vergleichen oder das Zertifikat installieren (siehe unten)."), |ui| {
                 ui.vertical(|ui| {
                     for u in s.urls.iter().take(3) {
-                        ui.add(egui::Label::new(egui::RichText::new(u).color(lr::TEXT)).selectable(true));
+                        ui.add(egui::Label::new(egui::RichText::new(u).color(lr::TEXT())).selectable(true));
                     }
                 });
             });
             separator(ui);
             row(ui, "Fingerabdruck des Zertifikats", None, |_| {});
-            ui.add(egui::Label::new(egui::RichText::new(format!("SHA-256 {}", s.fingerprint)).small().monospace().color(lr::TEXT_DIM)).wrap().selectable(true));
+            ui.add(egui::Label::new(egui::RichText::new(format!("SHA-256 {}", s.fingerprint)).small().monospace().color(lr::TEXT_DIM())).wrap().selectable(true));
         }
     });
 
@@ -399,12 +399,12 @@ pub fn settings_page(ui: &mut egui::Ui) {
                     }
                     ui.add_space(12.0);
                     ui.vertical(|ui| {
-                        ui.label(egui::RichText::new(crate::tr("Kopplungscode")).small().color(lr::TEXT_DIM));
-                        ui.add(egui::Label::new(egui::RichText::new(&code).font(lr::semibold(26.0)).color(lr::TEXT)).selectable(true));
+                        ui.label(egui::RichText::new(crate::tr("Kopplungscode")).small().color(lr::TEXT_DIM()));
+                        ui.add(egui::Label::new(egui::RichText::new(&code).font(lr::semibold(26.0)).color(lr::TEXT())).selectable(true));
                         let left = (expires - library::now()).max(0);
-                        ui.label(egui::RichText::new(crate::trf!("gültig noch {m}:{s}", m = left / 60, s = format!("{:02}", left % 60))).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(crate::trf!("gültig noch {m}:{s}", m = left / 60, s = format!("{:02}", left % 60))).small().color(lr::TEXT_DIM()));
                         ui.add_space(6.0);
-                        ui.add(egui::Label::new(egui::RichText::new(crate::tr("QR-Code mit der Kamera des Tablets scannen oder die Adresse öffnen und den Code eingeben. Der Code gilt einmal und fünf Minuten.")).small().color(lr::TEXT_DIM)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(crate::tr("QR-Code mit der Kamera des Tablets scannen oder die Adresse öffnen und den Code eingeben. Der Code gilt einmal und fünf Minuten.")).small().color(lr::TEXT_DIM())).wrap());
                         if ui.button(crate::tr("Abbrechen")).clicked() {
                             s.cancel_pairing();
                         }
@@ -426,9 +426,9 @@ pub fn settings_page(ui: &mut egui::Ui) {
         }
         for d in &devices {
             ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 26.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new(&d.name).color(lr::TEXT));
+                ui.label(egui::RichText::new(&d.name).color(lr::TEXT()));
                 let role = if d.role == Role::Write { crate::tr("darf ändern") } else { crate::tr("nur ansehen") };
-                ui.label(egui::RichText::new(format!("· {role} · {} {} · {} {}", crate::tr("zuletzt"), when(d.last_seen), crate::tr("gültig bis"), if d.expires == 0 { crate::tr("Widerruf").to_string() } else { when(d.expires) })).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(format!("· {role} · {} {} · {} {}", crate::tr("zuletzt"), when(d.last_seen), crate::tr("gültig bis"), if d.expires == 0 { crate::tr("Widerruf").to_string() } else { when(d.expires) })).small().color(lr::TEXT_DIM()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button(crate::tr("Entfernen")).clicked() {
                         s.revoke(&d.id);
@@ -497,7 +497,7 @@ pub fn settings_page(ui: &mut egui::Ui) {
             page.log.as_ref().map(|(_, l)| l.clone()).unwrap_or_default()
         };
         for l in lines {
-            ui.add(egui::Label::new(egui::RichText::new(l).small().monospace().color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(l).small().monospace().color(lr::TEXT_DIM())).truncate());
         }
     });
 
@@ -507,7 +507,7 @@ pub fn settings_page(ui: &mut egui::Ui) {
             "Fotos auf dem NAS: Das NAS muss auf diesem Rechner eingehängt sein, damit Originale entwickelt werden können. Zum Ansehen genügen die Vorschauen und Offline-Kopien, die hier liegen.",
             "Ruhezustand: Schläft der Rechner oder ist graineo beendet, ist der Browser-Zugriff nicht erreichbar.",
         ] {
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr(t)).small().color(lr::TEXT_DIM)).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(t)).small().color(lr::TEXT_DIM())).wrap());
             ui.add_space(4.0);
         }
     });

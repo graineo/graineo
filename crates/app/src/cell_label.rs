@@ -159,7 +159,7 @@ pub fn copy_tip(copy: &str) -> String {
 
 /// Measuring function for the painter in the given font size.
 pub fn measurer(p: &egui::Painter, size: f32) -> impl Fn(&str) -> f32 + '_ {
-    move |s: &str| p.layout_no_wrap(s.to_owned(), egui::FontId::proportional(size), lr::TEXT).size().x
+    move |s: &str| p.layout_no_wrap(s.to_owned(), egui::FontId::proportional(size), lr::TEXT()).size().x
 }
 
 #[cfg(test)]

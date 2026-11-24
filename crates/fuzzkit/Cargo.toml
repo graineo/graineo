@@ -1,0 +1,9 @@
+[package]
+name = "fuzzkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Small stable-Rust mutation fuzzer for the readers of foreign files (dev-dependency only)"
+
+[dependencies]

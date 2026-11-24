@@ -9,7 +9,7 @@ use super::params::NoiseParams;
 use super::pixmap::{bilateral_filter_rgb, generate_kernel_map, local_mean, BilateralRgbParams};
 use super::residual::{
     anisotropic_diffusion_mono, anisotropic_diffusion_mono_nm, apply_color_residual,
-    apply_mono_residual, color_residual_mixing, generate_sharp_l, mono_residual_mixing,
+    apply_mono_residual, color_residual_mixing, generate_sharp_l, mono_residual_mixing, texture_bands,
     osf_filter,
 };
 use super::{
@@ -448,6 +448,10 @@ impl Pipeline {
             self.channel_weights,
             self.params.epsilon,
         );
+        // graineo addition: fine/structure gains of the luminance residual (skipped at [1, 1]: bit-identical)
+        if self.params.texture != [1.0, 1.0] {
+            texture_bands(&mut mono, cols, size, self.params.texture)?;
+        }
         control.check()?;
         lap.lap(5);
 

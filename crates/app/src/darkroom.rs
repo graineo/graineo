@@ -231,7 +231,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
         while gx <= x.1 {
             let a = map_px(gx, y.0);
             p.line_segment([Pos2::new(a.x, field.top()), a], Stroke::new(1.0, Color32::from_gray(0x1e)));
-            p.text(Pos2::new(a.x, field.bottom() + 8.0), egui::Align2::CENTER_CENTER, format!("{gx:.0}"), font.clone(), lr::TEXT_DIM);
+            p.text(Pos2::new(a.x, field.bottom() + 8.0), egui::Align2::CENTER_CENTER, format!("{gx:.0}"), font.clone(), lr::TEXT_DIM());
             gx += step_x;
         }
         let step_y = if y.1 - y.0 > 2.5 { 1.0 } else { 0.5 };
@@ -239,7 +239,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
         while gy <= y.1 + 1e-4 {
             let a = map_px(x.0, gy);
             p.line_segment([a, Pos2::new(field.right(), a.y)], Stroke::new(1.0, Color32::from_gray(0x1e)));
-            p.text(Pos2::new(field.left() - 4.0, a.y), egui::Align2::RIGHT_CENTER, decimal_comma(gy, if step_y < 1.0 { 1 } else { 0 }), font.clone(), lr::TEXT_DIM);
+            p.text(Pos2::new(field.left() - 4.0, a.y), egui::Align2::RIGHT_CENTER, decimal_comma(gy, if step_y < 1.0 { 1 } else { 0 }), font.clone(), lr::TEXT_DIM());
             gy += step_y;
         }
     }
@@ -265,7 +265,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
 fn question_mark(ui: &mut egui::Ui, center: Pos2, id: egui::Id) -> bool {
     let r = Rect::from_center_size(center, Vec2::splat(18.0));
     let resp = ui.interact(r, id, egui::Sense::click());
-    let color = if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM };
+    let color = if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() };
     lr::paint_icon(ui.painter(), Rect::from_center_size(center, Vec2::splat(13.0)), lr::Icon::Info, color);
     resp.clicked()
 }
@@ -317,6 +317,14 @@ pub(crate) fn no_paper_text(f: &FilmSettings) -> String {
     }
 }
 
+/// Shown instead of an empty film list when the spektrafilm data were not found (paths are in the log).
+pub(crate) fn film_data_missing_hint(ui: &mut egui::Ui) {
+    if film::data_dir().is_none() {
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr("Filmdaten nicht gefunden – der Ordner „spektrafilm“ muss neben dem Programm liegen.")).color(lr::TEXT_DIM())).wrap());
+        ui.add_space(6.0);
+    }
+}
+
 const CARD_LINE: Color32 = Color32::from_gray(0x33);
 /// Running text in the info modal stays at a comfortable line length.
 const CARD_MEASURE: f32 = 520.0;
@@ -335,7 +343,7 @@ fn card_item(ui: &mut egui::Ui, text: &str) {
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
         let (r, _) = ui.allocate_exact_size(Vec2::new(14.0, 16.0), egui::Sense::hover());
-        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, "·", egui::FontId::proportional(12.0), lr::TEXT_DIM);
+        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, "·", egui::FontId::proportional(12.0), lr::TEXT_DIM());
         ui.vertical(|ui| {
             ui.set_max_width(ui.available_width().min(CARD_MEASURE));
             card_text(ui, text, Color32::from_gray(0xd0), 12.0);
@@ -380,7 +388,7 @@ fn card_rows(ui: &mut egui::Ui, rows: &[(String, String)]) {
         ui.add_space(5.0);
         ui.horizontal_top(|ui| {
             let (r, _) = ui.allocate_exact_size(Vec2::new(KEY_W, 16.0), egui::Sense::hover());
-            ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, key, egui::FontId::proportional(11.0), lr::TEXT_DIM);
+            ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, key, egui::FontId::proportional(11.0), lr::TEXT_DIM());
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width());
                 card_text(ui, value, Color32::from_gray(0xd8), 11.5);
@@ -431,15 +439,15 @@ fn shelf_row(ui: &mut egui::Ui, stock: Option<&film::StockInfo>, id: &str, tex: 
         }
         let text_x = thumb_rect.right() + 10.0;
         let width = r.right() - text_x - SIGN_W;
-        let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT });
+        let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT() });
         job.wrap = egui::text::TextWrapping { max_width: width, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
         let g = p.layout_job(job);
         p.galley(Pos2::new(text_x, r.top() + 5.0), g, Color32::WHITE);
         // the characterisation may take two lines
-        let mut job = egui::text::LayoutJob::simple(sub.to_string(), egui::FontId::proportional(10.0), lr::TEXT_DIM, width);
+        let mut job = egui::text::LayoutJob::simple(sub.to_string(), egui::FontId::proportional(10.0), lr::TEXT_DIM(), width);
         job.wrap = egui::text::TextWrapping { max_width: width, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
         let g = p.layout_job(job);
-        p.galley(Pos2::new(text_x, r.top() + 21.0), g, lr::TEXT_DIM);
+        p.galley(Pos2::new(text_x, r.top() + 21.0), g, lr::TEXT_DIM());
     }
     let q = match stock {
         Some(s) => crate::darkroom_shelf::sign_button(ui, r, ui.scope_id().with(("dk-info", id)), crate::darkroom_shelf::format_of(s), crate::darkroom_shelf::color_of(s)),
@@ -467,7 +475,7 @@ fn foveon_section(ui: &mut egui::Ui, s: &mut develop::Settings, cal: Option<&dev
                 ui.horizontal(|ui| {
                     lr::switch(ui, on);
                     ui.add_space(6.0);
-                    ui.label(egui::RichText::new(crate::tr(label)).color(if reason.is_none() { lr::TEXT } else { lr::TEXT_DIM }));
+                    ui.label(egui::RichText::new(crate::tr(label)).color(if reason.is_none() { lr::TEXT() } else { lr::TEXT_DIM() }));
                 })
                 .response
             });
@@ -642,7 +650,7 @@ impl App {
             ui.separator();
             egui::ScrollArea::vertical().id_salt("dk-regler").auto_shrink([false, false]).show(ui, |ui| crate::sticky::scope(ui, |ui| {
                 if !self.entries[index].settings.film.is_active() {
-                    ui.label(egui::RichText::new(crate::tr("Film wählen")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Film wählen")).color(lr::TEXT_DIM()));
                 } else {
                     self.darkroom_film_sliders(ui, index);
                     self.darkroom_extended_panel(ui, index);
@@ -685,6 +693,7 @@ impl App {
         }
         area.show(ui, |ui| crate::sticky::scope(ui, |ui| {
             ui.add_space(6.0);
+            film_data_missing_hint(ui);
             {
                 for (cat, title) in GROUPS {
                     let films: Vec<_> = film::films().iter().filter(|f| f.category == cat).collect();
@@ -854,7 +863,7 @@ impl App {
             let paper_info = film_info.as_ref().filter(|fi| !fi.positive && !s.film.negative);
             let Some(fi) = paper_info else {
                 lr::section(ui, "Papier", true, |ui| {
-                    ui.add(egui::Label::new(egui::RichText::new(no_paper_text(&s.film)).color(lr::TEXT_DIM)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(no_paper_text(&s.film)).color(lr::TEXT_DIM())).wrap());
                 });
                 self.darkroom_right_rest(ui, index);
                 return;
@@ -885,17 +894,17 @@ impl App {
                     }
                     let tx = r.left() + 100.0;
                     let width = r.right() - tx - crate::darkroom_shelf::SIGN_W;
-                    let mut job = egui::text::LayoutJob::simple(paper_short_name(&p.name), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT }, width);
+                    let mut job = egui::text::LayoutJob::simple(paper_short_name(&p.name), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT() }, width);
                     job.wrap.max_rows = 2;
                     let g = pa.layout_job(job);
                     let name_h = g.size().y;
                     pa.galley(Pos2::new(tx, r.top() + 5.0), g, Color32::WHITE);
                     // characterisation below the name, up to two lines (fits the row also below a two-line name)
                     let sub = self.darkroom.subtitle(p);
-                    let mut job = egui::text::LayoutJob::simple(sub, egui::FontId::proportional(10.0), lr::TEXT_DIM, width);
+                    let mut job = egui::text::LayoutJob::simple(sub, egui::FontId::proportional(10.0), lr::TEXT_DIM(), width);
                     job.wrap = egui::text::TextWrapping { max_width: width, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
                     let g = pa.layout_job(job);
-                    pa.galley(Pos2::new(tx, r.top() + 6.0 + name_h), g, lr::TEXT_DIM);
+                    pa.galley(Pos2::new(tx, r.top() + 6.0 + name_h), g, lr::TEXT_DIM());
                     let q = crate::darkroom_shelf::sign_button(ui, r, ui.scope_id().with(("dk-papier-info", &p.id)), crate::darkroom_shelf::format_of(p), crate::darkroom_shelf::color_of(p));
                     if q {
                         info = Some(p.id.clone());
@@ -1050,7 +1059,7 @@ impl App {
                     sub.push(format!("ISO {iso:.0}"));
                 }
                 if !sub.is_empty() {
-                    card_text(ui, &sub.join(" · "), lr::TEXT_DIM, 11.5);
+                    card_text(ui, &sub.join(" · "), lr::TEXT_DIM(), 11.5);
                 }
                 if !k.text.is_empty() {
                     ui.add_space(6.0);
@@ -1125,7 +1134,7 @@ impl App {
                     ui.add_space(SECTION_GAP);
                     card_heading(ui, "Quellen");
                     for q in sources {
-                        card_text(ui, q, lr::TEXT_DIM, 10.0);
+                        card_text(ui, q, lr::TEXT_DIM(), 10.0);
                     }
                 }
             });
@@ -1145,11 +1154,11 @@ impl App {
                     let c = curve_color(i, k.characteristic_curves.len(), Some(i) == active, false);
                     let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
                     ui.painter().circle_filled(dot.center(), 3.5, c);
-                    ui.label(egui::RichText::new(&rh.name).small().color(if Some(i) == active { Color32::WHITE } else { lr::TEXT_DIM }));
+                    ui.label(egui::RichText::new(&rh.name).small().color(if Some(i) == active { Color32::WHITE } else { lr::TEXT_DIM() }));
                     ui.add_space(6.0);
                 }
             });
-            ui.label(egui::RichText::new(crate::tr("Belichtung (log, 0 = Mittelgrau) → Dichte")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Belichtung (log, 0 = Mittelgrau) → Dichte")).small().color(lr::TEXT_DIM()));
             if !k.is_paper && marker.filled() > 0 {
                 ui.label(egui::RichText::new(crate::tr("Balken: wie viel vom Foto bei dieser Belichtung auf den Film fällt")).small().color(lr::ACCENT));
             }
@@ -1165,12 +1174,12 @@ impl App {
                         for (i, rh) in k.spectrum.iter().enumerate() {
                             let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
                             ui.painter().circle_filled(dot.center(), 3.5, curve_color(i, k.spectrum.len(), false, true));
-                            ui.label(egui::RichText::new(&rh.name).small().color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(&rh.name).small().color(lr::TEXT_DIM()));
                             ui.add_space(6.0);
                         }
                     });
                 }
-                ui.label(egui::RichText::new(crate::tr("Wellenlänge (nm) → relative Empfindlichkeit (log)")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Wellenlänge (nm) → relative Empfindlichkeit (log)")).small().color(lr::TEXT_DIM()));
             }
             });
             }));

@@ -15,6 +15,8 @@ enum Symbol {
     Panels,
     /// Frame with a bright centre: the image stays lit, the surroundings go dark.
     Lights,
+    /// Four corners pointing out (window full screen off) or in (on).
+    FullScreen { on: bool },
 }
 
 /// Size of the switches (like the other icon buttons).
@@ -33,6 +35,19 @@ fn lights_switch_id() -> egui::Id {
 
 fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Color32) {
     let stroke = Stroke::new(1.2, color);
+    if let Symbol::FullScreen { on } = symbol {
+        // corners of a 14 × 10 frame: arms point outwards (enter) or the corners sit inside (leave)
+        let f = Rect::from_center_size(rect.center(), egui::vec2(14.0, 10.0));
+        let arm = 4.0;
+        for (corner, dx, dy) in [(f.left_top(), 1.0, 1.0), (f.right_top(), -1.0, 1.0), (f.left_bottom(), 1.0, -1.0), (f.right_bottom(), -1.0, -1.0)] {
+            // `on`: the elbow moves inwards by the arm length, so the corners point to the centre
+            let c = if on { corner + egui::vec2(dx * arm, dy * arm) } else { corner };
+            let (sx, sy) = if on { (-dx, -dy) } else { (dx, dy) };
+            painter.line_segment([c, c + egui::vec2(sx * arm, 0.0)], stroke);
+            painter.line_segment([c, c + egui::vec2(0.0, sy * arm)], stroke);
+        }
+        return;
+    }
     let frame = Rect::from_center_size(rect.center(), egui::vec2(15.0, 11.0));
     painter.rect_stroke(frame, 1.5, stroke, egui::StrokeKind::Inside);
     match symbol {
@@ -44,6 +59,7 @@ fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Colo
         Symbol::Lights => {
             painter.rect_filled(Rect::from_center_size(frame.center(), egui::vec2(7.0, 5.0)), 0.5, color);
         }
+        Symbol::FullScreen { .. } => {}
     }
 }
 
@@ -57,7 +73,7 @@ fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str)
     } else if resp.hovered() {
         (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, lr::TEXT)
+        (Color32::TRANSPARENT, lr::TEXT())
     };
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, fill);
@@ -85,6 +101,25 @@ fn lights_tip(lights: u8, usable: bool) -> String {
         (true, 1) => lr::with_shortcut("Licht ganz aus", "lights_out"),
         (true, _) => lr::with_shortcut("Licht wieder an", "lights_out"),
     }
+}
+
+fn full_screen_tip(on: bool) -> String {
+    if on {
+        lr::with_shortcut("Vollbild beenden", "full_screen")
+    } else {
+        lr::with_shortcut("Vollbild", "full_screen")
+    }
+}
+
+/// Is the window in full screen (system full-screen mode)?
+fn window_full_screen(ctx: &egui::Context) -> bool {
+    ctx.input(|i| i.viewport().fullscreen.unwrap_or(false))
+}
+
+/// The action of the key F and of the full-screen switch: the whole window full screen on/off, the view stays.
+pub(crate) fn toggle_full_screen(ctx: &egui::Context) {
+    let on = window_full_screen(ctx);
+    ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(!on));
 }
 
 impl App {
@@ -142,10 +177,14 @@ impl App {
         self.lights = 0;
     }
 
-    /// The two switches at the right end of the top bar (call first in a right-to-left row: the lights switch ends up
-    /// at the very right, the panels switch to its left).
+    /// The switches at the right end of the top bar (call first in a right-to-left row: full screen ends up at the
+    /// very right, the lights switch to its left, then the panels switch).
     pub(crate) fn panel_buttons(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.x = 2.0;
+        let full = window_full_screen(ui.ctx());
+        if switch(ui, Symbol::FullScreen { on: full }, full, true, &full_screen_tip(full)).0 {
+            toggle_full_screen(ui.ctx());
+        }
         let usable = self.lights_usable();
         let (clicked, rect) = switch(ui, Symbol::Lights, self.lights > 0, usable, &lights_tip(self.lights, usable));
         // the place of the lights switch: while the lights are dimmed it stays there, above the shade (never moves)

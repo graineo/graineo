@@ -1158,7 +1158,7 @@ impl Calibration {
     }
 
     pub fn mode(&self, name: Option<&str>) -> &ColorMode {
-        let want = name.unwrap_or(&self.camera_mode);
+        let want = crate::settings::matrix_mode(name).unwrap_or(&self.camera_mode);
         self.modes
             .iter()
             .find(|m| m.name == want)

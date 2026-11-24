@@ -16,6 +16,10 @@ impl PropList {
             return corrupt("PROP-Sektion ohne SECp-Kennung");
         }
         let num = u32_at(s, 8)? as usize;
+        // every pair needs 8 bytes in the table; a larger count only occurs in damaged files
+        if num > s.len().saturating_sub(Self::HEADER_SIZE) / 8 {
+            return corrupt(format!("PROP-Sektion mit unplausibler Zahl {num}"));
+        }
         let table = Self::HEADER_SIZE;
         let chars_start = table + num * 8;
         let chars: Vec<u16> = s[chars_start.min(s.len())..]

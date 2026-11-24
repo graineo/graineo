@@ -535,7 +535,7 @@ fn option_link(ui: &mut egui::Ui, label: &str) -> bool {
     if hot {
         ui.painter().rect_filled(rect, 0.0, Color32::from_gray(0x2c));
     }
-    let color = if hot { lr::TEXT } else { Color32::from_gray(0xa4) };
+    let color = if hot { lr::TEXT() } else { Color32::from_gray(0xa4) };
     lr::paint_icon(ui.painter(), egui::Rect::from_center_size(egui::pos2(rect.left() + 9.0, rect.center().y), egui::vec2(10.0, 10.0)), lr::Icon::X, color);
     let font = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, color);
@@ -558,7 +558,7 @@ fn option_row(ui: &mut egui::Ui, on: &mut bool, label: &str, tip: &str) -> bool 
     if *on {
         painter.rect_filled(square.shrink(2.5), 0.0, Color32::from_gray(0xe0));
     }
-    let color = if hot { lr::TEXT } else { Color32::from_gray(0xa4) };
+    let color = if hot { lr::TEXT() } else { Color32::from_gray(0xa4) };
     let font = egui::TextStyle::Body.resolve(ui.style());
     let galley = painter.layout_no_wrap(label.to_string(), font, color);
     painter.galley(egui::pos2(x0 + 14.0, rect.center().y - galley.size().y / 2.0), galley, color);

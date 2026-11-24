@@ -169,7 +169,7 @@ pub fn info_section(ui: &mut egui::Ui, photo: &Path, copy: Option<&str>) {
     };
     lr::panel(ui, |ui| {
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(crate::tr("AUS DER SICHERUNG")).font(lr::semibold(11.0)).color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("AUS DER SICHERUNG")).font(lr::semibold(11.0)).color(lr::TEXT_DIM()));
         ui.add_space(2.0);
         match state {
             None => crate::dialog::pending(ui, crate::tr("Wird mit der Bibliothek verglichen …")),

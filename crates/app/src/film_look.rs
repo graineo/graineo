@@ -165,11 +165,33 @@ impl Choice {
             Self::Look(n) => {
                 t.film.active = false;
                 t.raw.look = n.clone();
+                // linear scene rendering: start values without white balancing (D65 keeps the light of the scene),
+                // without noise reduction and extra sharpening; every slider stays free afterwards
+                if n == rawdev::learn::LINEAR_LOOK {
+                    t.raw.wb_mode = "custom".into();
+                    t.raw.temperature = 6504.0;
+                    t.raw.tint = 0.0;
+                    t.raw.nr_luma = 0.0;
+                    t.raw.nr_color = 0.0;
+                    t.sharpen = 0.0;
+                }
             }
             Self::Sigma(m) => {
                 t.film.active = false;
                 t.color_mode = if m.is_empty() { None } else { Some(m.clone()) };
                 t.monochrome = false;
+                // linear scene rendering: daylight white balance (keeps the light of the scene), noise sliders off,
+                // Foveon sharpening at its minimum (unsharpened), no extra sharpening
+                if m == develop::settings::LINEAR_MODE {
+                    t.white_balance = Some("Sunlight".into());
+                    t.wb_mult = [1.0; 3];
+                    t.wb_temp = 0.0;
+                    t.wb_tint = 0.0;
+                    t.nr_luma = develop::settings::NR_OFF;
+                    t.nr_chroma = develop::settings::NR_OFF;
+                    t.sigma_sharpness = -2.0;
+                    t.sharpen = 0.0;
+                }
             }
             Self::SigmaMono => {
                 t.film.active = false;
@@ -223,6 +245,10 @@ fn film_groups() -> Vec<Group> {
         }
     }
     groups
+}
+/// Tile of the linear scene rendering (RAW look or Sigma colour mode)?
+fn is_linear_key(key: &str) -> bool {
+    key == format!("look:{}", rawdev::learn::LINEAR_LOOK) || key == format!("sigma:{}", develop::settings::LINEAR_MODE)
 }
 /// Tile key of Sigma's black and white (apart from `sigma:<mode>`, the colour modes).
 pub(crate) const SIGMA_MONO_KEY: &str = "sigma-mono";
@@ -292,7 +318,7 @@ fn look_groups(
         });
         let entries = mono
             .into_iter()
-            .chain(std::iter::once("").chain(modes.iter().map(String::as_str)).map(|m| Entry {
+            .chain(std::iter::once("").chain(modes.iter().map(String::as_str)).chain(std::iter::once(develop::settings::LINEAR_MODE)).map(|m| Entry {
                 key: format!("sigma:{m}"),
                 name: if m.is_empty() {
                     crate::trf!("{a} (Kamera)", a = mode_label(camera_mode))
@@ -356,7 +382,7 @@ fn look_card(
         } else {
             mode_label(&m)
         },
-        crate::tr("Farbmodus der Kamera").into(),
+        if s.is_linear() { crate::tr("Ohne Kurve, Look, Schärfen, Entrauschen") } else { crate::tr("Farbmodus der Kamera") }.into(),
     )
 }
 /// Head of "Film & Look": thumbnail, name (up to two lines), subline and an optional dimmed note –
@@ -393,7 +419,7 @@ fn look_header(
             Color32::WHITE,
         );
     } else {
-        p.text(img.center(), egui::Align2::CENTER_CENTER, if key.is_empty() { "—" } else { "…" }, lr::semibold(lr::UI_SIZE), lr::TEXT_DIM);
+        p.text(img.center(), egui::Align2::CENTER_CENTER, if key.is_empty() { "—" } else { "…" }, lr::semibold(lr::UI_SIZE), lr::TEXT_DIM());
     }
     let x = img.right() + 10.;
     let text_w = (rect.right() - BUTTONS_W - 8. - x).max(40.);
@@ -413,9 +439,9 @@ fn look_header(
         if text.is_empty() {
             continue;
         }
-        let g = line(text, egui::FontId::proportional(10.), lr::TEXT_DIM, rows);
+        let g = line(text, egui::FontId::proportional(10.), lr::TEXT_DIM(), rows);
         let h = g.size().y;
-        p.galley(egui::pos2(x, y), g, lr::TEXT_DIM);
+        p.galley(egui::pos2(x, y), g, lr::TEXT_DIM());
         y += h + 1.;
     }
     // symbol buttons: comparison on the far right (fixed place), darkroom to its left
@@ -449,12 +475,12 @@ fn package_header_paint(p: &egui::Painter, rect: egui::Rect, name: &str, count: 
         p.rect_stroke(
             rect,
             3.,
-            egui::Stroke::new(1., lr::TEXT),
+            egui::Stroke::new(1., lr::TEXT()),
             egui::StrokeKind::Inside,
         );
     }
     let color = if available {
-        lr::TEXT
+        lr::TEXT()
     } else {
         Color32::from_gray(0x68)
     };
@@ -565,6 +591,10 @@ fn group_ui(
         if let Some(n) = numbers(&items[*i].key) {
             crate::compare_view::pick_mark(ui.painter(), rect.min, n);
         }
+        if is_linear_key(&items[*i].key) {
+            let hover = ui.interact(*rect, ui.id().with(("linear-tip", &items[*i].key)), egui::Sense::hover());
+            lr::hover_tip(ui, &hover, "Sensordaten ohne Kurve, Look, Schärfen, Entrauschen – flacher Ausgangspunkt");
+        }
     }
     if let Some(i) = r.clicked {
         action.chosen = Some(items[i].choice.apply(basis));
@@ -591,11 +621,11 @@ impl App {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::click());
         let p = ui.painter();
         p.rect_filled(rect, 0.0, if resp.hovered() { Color32::from_gray(0x2a) } else { Color32::from_gray(0x1e) });
-        let g = lr::caps(p, crate::tr("Film & Look"), egui::FontId::proportional(10.0), lr::TEXT_DIM);
-        p.galley(egui::pos2(rect.left() + 10.0, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+        let g = lr::caps(p, crate::tr("Film & Look"), egui::FontId::proportional(10.0), lr::TEXT_DIM());
+        p.galley(egui::pos2(rect.left() + 10.0, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
         let clip = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(rect.left() + 100.0, rect.top()), egui::pos2(rect.right() - 26.0, rect.bottom())));
-        clip.text(egui::pos2(rect.left() + 100.0, rect.center().y), egui::Align2::LEFT_CENTER, name, egui::TextStyle::Body.resolve(ui.style()), lr::TEXT);
-        lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 14.0, rect.center().y), egui::vec2(12.0, 12.0)), lr::Icon::Chevron, lr::TEXT_DIM);
+        clip.text(egui::pos2(rect.left() + 100.0, rect.center().y), egui::Align2::LEFT_CENTER, name, egui::TextStyle::Body.resolve(ui.style()), lr::TEXT());
+        lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 14.0, rect.center().y), egui::vec2(12.0, 12.0)), lr::Icon::Chevron, lr::TEXT_DIM());
         if resp.clicked() {
             self.choose_tool(crate::workspace::ToolTab::FilmLook);
         }
@@ -692,7 +722,7 @@ impl App {
         ui.add_space(4.);
         // fixed place; without an exportable look the button is dimmed and the tooltip says why
         let lut = self.look_lut_available();
-        let lut_button = ui.add(egui::Button::new(egui::RichText::new(crate::tr("LOOK ALS LUT SPEICHERN …")).color(if lut.is_ok() { lr::TEXT } else { lr::TEXT_DIM })));
+        let lut_button = ui.add(egui::Button::new(egui::RichText::new(crate::tr("LOOK ALS LUT SPEICHERN …")).color(if lut.is_ok() { lr::TEXT() } else { lr::TEXT_DIM() })));
         lr::hover_tip(ui, &lut_button, match lut {
             Ok(()) => "Gewählten Look als 3D-LUT (.cube) speichern",
             Err(reason) => reason,
@@ -727,6 +757,7 @@ impl App {
         if !presentation.0.is_empty() && (film_an || look_ready) {
             requested.push(presentation.0.clone());
         }
+        crate::darkroom::film_data_missing_hint(ui);
         // Order: camera or Sigma, film looks (grid), plain films (collapsed), look packs
         let mut groups = look_groups(&s, foreign.as_deref(), &camera_mode, &modes);
         let after_camera = groups.len().min(1);

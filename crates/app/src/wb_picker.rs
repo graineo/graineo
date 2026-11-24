@@ -304,8 +304,8 @@ pub fn lines(p: &Probe, side: usize) -> ([String; 2], (String, Color32)) {
         _ if p.outcome == Outcome::None => (crate::tr("Nicht neutral messbar").to_string(), BAD),
         _ if p.outcome.out_of_range() => (crate::tr("Außerhalb der Skala").to_string(), WARN),
         _ if p.outcome.doubtful() => (crate::tr("Wohl nicht neutral").to_string(), WARN),
-        _ if p.samples > 1 => (crate::trf!("{s}×{s} · {n} Proben", s = side, n = p.samples), lr::TEXT_DIM),
-        _ => (format!("{side}×{side}"), lr::TEXT_DIM),
+        _ if p.samples > 1 => (crate::trf!("{s}×{s} · {n} Proben", s = side, n = p.samples), lr::TEXT_DIM()),
+        _ => (format!("{side}×{side}"), lr::TEXT_DIM()),
     };
     (values, state)
 }
@@ -395,11 +395,11 @@ pub fn paint_loupe(painter: &egui::Painter, area: egui::Rect, m: egui::Pos2, (px
     let font = egui::FontId::proportional(11.5);
     let mut y = lens.bottom() + PAD * 0.5;
     for v in values.iter() {
-        tp.text(egui::pos2(outer.left() + PAD, y), egui::Align2::LEFT_TOP, v, font.clone(), lr::TEXT);
+        tp.text(egui::pos2(outer.left() + PAD, y), egui::Align2::LEFT_TOP, v, font.clone(), lr::TEXT());
         y += LINE;
     }
     tp.text(egui::pos2(outer.left() + PAD, y), egui::Align2::LEFT_TOP, state, font, color);
-    painter.rect_stroke(outer, 2.0, egui::Stroke::new(1.0, lr::FIELD_STROKE), egui::StrokeKind::Inside);
+    painter.rect_stroke(outer, 2.0, egui::Stroke::new(1.0, lr::FIELD_STROKE()), egui::StrokeKind::Inside);
     outer
 }
 

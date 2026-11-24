@@ -164,9 +164,9 @@ impl View {
 pub fn strictness_slider(ui: &mut egui::Ui, row: egui::Rect, y: f32, value: &mut f32) -> (bool, bool) {
     let track_w = 110.0;
     let track = egui::Rect::from_min_size(egui::pos2(row.right() - 20.0 - track_w, y - 8.0), egui::vec2(track_w, 16.0));
-    let label = lr::caps(ui.painter(), crate::tr("Strenge"), lr::semibold(10.0), lr::SLIDER_LABEL);
+    let label = lr::caps(ui.painter(), crate::tr("Strenge"), lr::semibold(10.0), lr::SLIDER_LABEL());
     let label_pos = egui::pos2(track.left() - 10.0 - label.size().x, y - label.size().y / 2.0);
-    ui.painter().galley(label_pos, label, lr::SLIDER_LABEL);
+    ui.painter().galley(label_pos, label, lr::SLIDER_LABEL());
     let resp = ui.interact(track.expand2(egui::vec2(6.0, 0.0)), ui.id().with("sem-strenge"), egui::Sense::click_and_drag());
     let mut changed = false;
     if resp.dragged() || resp.clicked() || resp.drag_started() {
@@ -213,7 +213,7 @@ pub fn busy_mark(ui: &mut egui::Ui, frame: egui::Rect, has_cross: bool) {
     let x = frame.right() - if has_cross { 36.0 } else { 18.0 };
     let r = egui::Rect::from_center_size(egui::pos2(x, frame.center().y), egui::vec2(11.0, 11.0));
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
-    crate::activity::calm_spinner(&mut child, 11.0, lr::TEXT_DIM);
+    crate::activity::calm_spinner(&mut child, 11.0, lr::TEXT_DIM());
     let resp = ui.interact(r.expand(3.0), ui.id().with("sem-laeuft"), egui::Sense::hover());
     lr::hover_tip(ui, &resp, crate::tr("Bedeutungssuche läuft …"));
 }

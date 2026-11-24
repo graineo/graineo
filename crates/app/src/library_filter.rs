@@ -568,6 +568,7 @@ impl Facets {
             9 => crate::library_ui::month_name(&format!("0000-{name}")),
             WEEKDAY_COL => weekday_name(name.parse().unwrap_or(0)).to_string(),
             TIME_COL => time_of_day_name(name.parse().unwrap_or(9)).to_string(),
+            1 => crate::cell_info::lens_label(&name),
             _ => name,
         }
     }
@@ -681,7 +682,7 @@ impl Facets {
             ui.spacing_mut().item_spacing.x = 6.0;
             ui.set_height(16.0);
             if !hidden.is_empty() {
-                ui.label(egui::RichText::new(crate::tr("Weitere Filter:")).size(10.5).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("Weitere Filter:")).size(10.5).color(lr::TEXT_DIM()));
                 for sl in hidden {
                     if ui.add(egui::Button::new(format!("{} ×", crate::tr(sl.title()))).small()).clicked() {
                         self.clear_slot(sl);
@@ -714,7 +715,7 @@ impl Facets {
                 });
             if active {
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::click());
-                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
                 if resp.clicked() {
                     self.clear_slot(slot);
                     changed = true;
@@ -763,7 +764,7 @@ impl Facets {
         // same height as the search field of the other columns: nothing jumps when switching the content
         let (header, _) = ui.allocate_exact_size(egui::vec2(w - 8.0, 18.0), egui::Sense::hover());
         let font = egui::FontId::proportional(10.5);
-        let color = if sel.is_empty() { lr::TEXT_DIM } else { Color32::WHITE };
+        let color = if sel.is_empty() { lr::TEXT_DIM() } else { Color32::WHITE };
         let g = ui.painter().layout_no_wrap(text, font, color);
         ui.painter().with_clip_rect(header).galley(egui::pos2(header.left() + 4.0, header.center().y - g.size().y / 2.0), g, color);
         let numbers = self.band_numbers[r].clone();
@@ -848,14 +849,14 @@ fn list_rows_with(ui: &mut egui::Ui, salt: (&str, usize), len: usize, row_at: &d
             } else if resp.hovered() {
                 p.rect_filled(r, 0.0, Color32::from_gray(0x2a));
             }
-            let color = if row.dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT };
+            let color = if row.dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
             let font = egui::FontId::proportional(10.5);
             let right = r.right() - 2.0;
-            let count_galley = p.layout_no_wrap(row.count.clone(), font.clone(), lr::TEXT_DIM);
+            let count_galley = p.layout_no_wrap(row.count.clone(), font.clone(), lr::TEXT_DIM());
             let space = egui::Rect::from_min_max(r.min + egui::vec2(3.0, 0.0), egui::pos2(right - count_galley.size().x - 4.0, r.bottom()));
             let name_galley = p.layout_no_wrap(row.name.clone(), font, color);
             p.with_clip_rect(space).galley(egui::pos2(space.left(), r.center().y - name_galley.size().y / 2.0), name_galley, color);
-            p.galley(egui::pos2(right - count_galley.size().x, r.center().y - count_galley.size().y / 2.0), count_galley, lr::TEXT_DIM);
+            p.galley(egui::pos2(right - count_galley.size().x, r.center().y - count_galley.size().y / 2.0), count_galley, lr::TEXT_DIM());
             if let Some(m) = menu.as_mut() {
                 m(&resp, value);
             }

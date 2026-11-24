@@ -348,15 +348,31 @@ pub fn data_dir() -> Option<&'static Path> {
     static DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
     DIR.get_or_init(|| {
         let exe = std::env::current_exe().ok();
-        data_dir_candidates(
+        let mut c = data_dir_candidates(
             std::env::var_os("GRAINEO_FILM_DATA").map(PathBuf::from),
             exe.as_deref(),
             std::env::var_os("CARGO_MANIFEST_DIR").map(PathBuf::from),
             std::env::current_dir().ok(),
-        )
-        .into_iter()
-        .find(|p| p.join("profiles").is_dir() && p.join("luts").is_dir())
-        .map(|p| p.canonicalize().unwrap_or(p))
+        );
+        c.extend(system_data_candidates(exe.as_deref()));
+        let found = c
+            .iter()
+            .find(|p| p.join("profiles").is_dir() && p.join("luts").is_dir())
+            .map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()))
+            .or_else(|| match embedded_base().and_then(|b| unpack_embedded(&b)) {
+                Ok(p) => Some(p),
+                Err(e) => {
+                    eprintln!("film: embedded film data could not be unpacked: {e}");
+                    None
+                }
+            });
+        if found.is_none() {
+            eprintln!("film: spektrafilm data not found; searched:");
+            for p in &c {
+                eprintln!("film:   {}", p.display());
+            }
+        }
+        found
     })
     .as_deref()
 }
@@ -384,6 +400,89 @@ fn data_dir_candidates(env: Option<PathBuf>, exe: Option<&Path>, manifest: Optio
         c.extend(tree(&d));
     }
     c
+}
+
+/// Further places: next to the real program after resolving symlinks (`../share/graineo/spektrafilm` too, for a
+/// `bin/` + `share/` install), then on Linux and other Unix systems `$XDG_DATA_HOME/graineo/spektrafilm`
+/// (default `~/.local/share`) and every `$XDG_DATA_DIRS` entry (default `/usr/local/share:/usr/share`).
+fn system_data_candidates(exe: Option<&Path>) -> Vec<PathBuf> {
+    let mut c: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = exe.and_then(|e| e.canonicalize().ok()).as_deref().and_then(Path::parent) {
+        c.push(dir.join("spektrafilm"));
+        c.push(dir.join("../share/graineo/spektrafilm"));
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let var = |k: &str| std::env::var_os(k).filter(|v| !v.is_empty());
+        let home = var("HOME").map(PathBuf::from);
+        let data_home = var("XDG_DATA_HOME").map(PathBuf::from).or_else(|| home.map(|h| h.join(".local/share")));
+        c.extend(data_home.map(|d| d.join("graineo/spektrafilm")));
+        let dirs = var("XDG_DATA_DIRS").unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+        c.extend(std::env::split_paths(&dirs).filter(|d| d.is_absolute()).map(|d| d.join("graineo/spektrafilm")));
+    }
+    c
+}
+
+/// Film data built into the program (see `build.rs`), the last fallback.
+static EMBEDDED: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/film_data.bin"));
+
+/// Unpacks the built-in film data once into the app cache (`<cache>/spektrafilm-<version>-<size>`; with
+/// `GRAINEO_DATA_DIR` into its `cache/` folder). A `complete` marker is written last, so an interrupted unpack is
+/// redone; the data are written to a temporary folder and renamed into place.
+fn embedded_base() -> Result<PathBuf, String> {
+    match std::env::var_os("GRAINEO_DATA_DIR").filter(|v| !v.is_empty()) {
+        Some(d) => Ok(PathBuf::from(d).join("cache")),
+        None => sysdirs::app_cache_dir(sysdirs::APP).ok_or_else(|| "no cache folder".to_string()),
+    }
+}
+
+fn unpack_embedded(base: &Path) -> Result<PathBuf, String> {
+    let dir = base.join(format!("spektrafilm-{}-{}", env!("CARGO_PKG_VERSION"), EMBEDDED.len()));
+    if dir.join("complete").is_file() {
+        return Ok(dir);
+    }
+    let tmp = base.join(format!("spektrafilm-unpack-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let res = (|| -> std::io::Result<()> {
+        use std::io::Read;
+        let mut r = flate2::read::DeflateDecoder::new(EMBEDDED);
+        let mut n4 = [0u8; 4];
+        loop {
+            match r.read_exact(&mut n4) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(e),
+            }
+            let mut name = vec![0u8; u32::from_le_bytes(n4) as usize];
+            r.read_exact(&mut name)?;
+            let mut n8 = [0u8; 8];
+            r.read_exact(&mut n8)?;
+            let mut bytes = vec![0u8; u64::from_le_bytes(n8) as usize];
+            r.read_exact(&mut bytes)?;
+            let name = String::from_utf8(name).map_err(|_| std::io::Error::other("bad name"))?;
+            if name.split('/').any(|c| c.is_empty() || c == "..") {
+                return Err(std::io::Error::other("bad path"));
+            }
+            let p = tmp.join(&name);
+            std::fs::create_dir_all(p.parent().unwrap())?;
+            std::fs::write(p, bytes)?;
+        }
+        std::fs::write(tmp.join("complete"), b"")?;
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)?;
+        }
+        std::fs::rename(&tmp, &dir)
+    })();
+    if let Err(e) = res {
+        let _ = std::fs::remove_dir_all(&tmp);
+        // another process may have finished it meanwhile
+        if dir.join("complete").is_file() {
+            return Ok(dir);
+        }
+        return Err(e.to_string());
+    }
+    eprintln!("film: built-in film data unpacked to {}", dir.display());
+    Ok(dir)
 }
 
 fn catalog() -> &'static (Vec<StockInfo>, Vec<StockInfo>) {
@@ -1339,3 +1438,18 @@ mod data_dir_tests {
         assert!(data_dir().is_some(), "film data found in the source tree");
     }
 }
+
+#[cfg(test)]
+mod embedded_tests {
+    #[test]
+    fn embedded_film_data_unpack_with_all_profiles() {
+        let tmp = std::env::temp_dir().join(format!("graineo-film-embed-{}", std::process::id()));
+        let dir = super::unpack_embedded(&tmp).unwrap();
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../third_party/spektrafilm-rs/data/profiles");
+        let count = |d: &std::path::Path| std::fs::read_dir(d).unwrap().count();
+        assert_eq!(count(&dir.join("profiles")), count(&src));
+        assert!(dir.join("luts/spectral_upsampling").is_dir() && dir.join("filters/neutral_print_filters.json").is_file());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+}
+

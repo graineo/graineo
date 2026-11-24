@@ -182,7 +182,7 @@ pub(crate) fn subgroup(ui: &mut egui::Ui, title: &str, gap: bool, extra: impl Fn
         ui.add_space(14.0);
     }
     ui.horizontal(|ui| {
-        let g = crate::lr::caps(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), crate::lr::CATEGORY_LABEL);
+        let g = crate::lr::caps(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), crate::lr::CATEGORY_LABEL());
         let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 18.0), egui::Sense::hover());
         ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, egui::Color32::WHITE);
         extra(ui);
@@ -197,5 +197,5 @@ pub(crate) fn subgroup(ui: &mut egui::Ui, title: &str, gap: bool, extra: impl Fn
 
 /// Short line why controls are not there.
 fn hint(ui: &mut egui::Ui, text: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(text).small().color(crate::lr::TEXT_DIM)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(text).small().color(crate::lr::TEXT_DIM())).wrap());
 }

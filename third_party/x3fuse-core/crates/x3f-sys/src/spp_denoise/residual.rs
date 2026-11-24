@@ -1004,3 +1004,92 @@ mod tests {
         assert_eq!(rgb, original);
     }
 }
+
+/// graineo addition (not part of SPP): dilations of the separable binomial low-pass `[1 4 6 4 1] / 16`
+/// ("à trous" scheme, Holschneider et al. 1989; Starck & Murtagh, "Astronomical Image and Data
+/// Analysis", 2006). After the first two the low-pass marks the boundary between the fine band
+/// (pores, grain, residual noise; ≲ 3 px) and the structure band (eyelashes, hair, edges, skin relief;
+/// ≈ 3–30 px); after all four it is the broad shading, which always stays.
+const TEXTURE_STEPS: [usize; 4] = [1, 2, 4, 8];
+const TEXTURE_FINE_STEPS: usize = 2;
+const BINOMIAL5: [f32; 5] = [0.0625, 0.25, 0.375, 0.25, 0.0625];
+
+fn binomial_pass(src: &[f32], dst: &mut [f32], size: [usize; 2], step: usize, horizontal: bool) {
+    let [cols, rows] = size;
+    for y in 0..rows {
+        for x in 0..cols {
+            let mut sum = 0.0_f32;
+            for (k, w) in BINOMIAL5.iter().enumerate() {
+                let d = (k as isize - 2) * step as isize;
+                let (sx, sy) = if horizontal {
+                    ((x as isize + d).clamp(0, cols as isize - 1) as usize, y)
+                } else {
+                    (x, (y as isize + d).clamp(0, rows as isize - 1) as usize)
+                };
+                sum += w * src[sy * cols + sx];
+            }
+            dst[y * cols + x] = sum;
+        }
+    }
+}
+
+/// graineo addition (not part of SPP): splits the luminance residual (the ratio of the detail image to the
+/// smoothed base, before the residual mixing) in the log domain into a fine band, a structure band and the
+/// broad rest, and recombines them as `exp(rest + fine·f + structure·s)` (`gains = [f, s]`, each ≥ 0).
+/// `[1, 1]` leaves the residual unchanged; callers skip the function then (bit-identical). The gains act
+/// additively on log bands (a power of the band ratio), never as `1 + s·(r − 1)`.
+pub fn texture_bands(ratio: &mut [f32], stride: usize, size: [usize; 2], gains: [f32; 2]) -> Result<()> {
+    check_layout(ratio.len(), size, stride, 1)?;
+    if !gains.iter().all(|g| g.is_finite() && *g >= 0.0) {
+        return Err(Error::InvalidData("invalid texture gains"));
+    }
+    let [cols, rows] = size;
+    let mut log = vec![0.0_f32; cols * rows];
+    for y in 0..rows {
+        for x in 0..cols {
+            log[y * cols + x] = ratio[y * stride + x].max(1e-6).ln();
+        }
+    }
+    let mut low = log.clone();
+    let mut tmp = vec![0.0_f32; cols * rows];
+    let mut fine_low = Vec::new();
+    for (i, &step) in TEXTURE_STEPS.iter().enumerate() {
+        binomial_pass(&low, &mut tmp, size, step, true);
+        binomial_pass(&tmp, &mut low, size, step, false);
+        if i + 1 == TEXTURE_FINE_STEPS {
+            fine_low = low.clone();
+        }
+    }
+    let [f, s] = gains;
+    for y in 0..rows {
+        for x in 0..cols {
+            let i = y * cols + x;
+            let fine = log[i] - fine_low[i];
+            let structure = fine_low[i] - low[i];
+            ratio[y * stride + x] = (low[i] + f * fine + s * structure).exp();
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod texture_tests {
+    use super::*;
+
+    #[test]
+    fn unit_gains_reproduce_the_residual_and_zero_removes_fine_texture() {
+        let size = [40, 30];
+        let base: Vec<f32> = (0..1200).map(|i| 1.0 + 0.2 * (((i * 7919) % 13) as f32 / 13.0 - 0.5)).collect();
+        let mut same = base.clone();
+        texture_bands(&mut same, 40, size, [1.0, 1.0]).unwrap();
+        assert!(same.iter().zip(&base).all(|(a, b)| (a - b).abs() < 1e-5));
+        let mut flat = base.clone();
+        texture_bands(&mut flat, 40, size, [0.0, 1.0]).unwrap();
+        let var = |v: &[f32]| {
+            let m = v.iter().sum::<f32>() / v.len() as f32;
+            v.iter().map(|x| (x - m) * (x - m)).sum::<f32>()
+        };
+        assert!(var(&flat) < 0.5 * var(&base));
+        assert!(texture_bands(&mut flat, 40, size, [f32::NAN, 1.0]).is_err());
+    }
+}

@@ -107,7 +107,7 @@ impl CamfInspector {
                 ui.label(
                     egui::RichText::new(crate::trf!("{a} Einträge – Sigmas Kalibrier- und Aufnahmedaten in dieser Datei. Karten erscheinen als Heatmap.", a = camf.order.len()))
                     .small()
-                    .color(lr::TEXT_DIM),
+                    .color(lr::TEXT_DIM()),
                 );
                 egui::Panel::left("camf-list").resizable(true).default_size(280.0).show(ui, |ui| {
                     crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut self.filter).hint_text(crate::tr("Suchen (z. B. SpatialGain, WB, Noise) …")).desired_width(f32::INFINITY));
@@ -136,7 +136,7 @@ impl CamfInspector {
                     };
                     ui.heading(&name);
                     if let Some(e) = explain(&name) {
-                        ui.label(egui::RichText::new(e).color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(e).color(lr::TEXT_DIM()));
                     }
                     ui.add_space(6.0);
                     match camf.entries.get(&name) {
@@ -206,7 +206,7 @@ impl CamfInspector {
                     let (x, y) = (((u.x * w as f32) as usize).min(w - 1), ((u.y * h as f32) as usize).min(h - 1));
                     crate::trf!("Zeile {y}, Spalte {x}: {a}", y = y, x = x, a = fmt(data[y * w + x]))
                 });
-                ui.label(egui::RichText::new(readout.unwrap_or_else(|| "–".to_string())).small().color(crate::lr::TEXT_DIM));
+                ui.label(egui::RichText::new(readout.unwrap_or_else(|| "–".to_string())).small().color(crate::lr::TEXT_DIM()));
                 // Color scale
                 let (rect, _) = ui.allocate_exact_size(egui::vec2(size.x, 10.0), egui::Sense::hover());
                 let n = 64;

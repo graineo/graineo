@@ -2183,7 +2183,8 @@ fn camera_time(t: i64) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + i64::from(m <= 2);
-    format!("{d:02}.{m:02}.{y} {:02}:{:02}", secs / 3600, secs % 3600 / 60)
+    let iso = format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}", secs / 3600, secs % 3600 / 60);
+    crate::cell_info::capture_text(&iso, crate::menu::i18n::language()).unwrap_or(iso)
 }
 
 /// Downscale 8-bit RGB to at most `edge` pixels edge length (area average).

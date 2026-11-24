@@ -452,7 +452,7 @@ impl Brand {
                             }
                             line(ui, &crate::tr("Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm"));
                             head(ui, &crate::tr("Schriften und Symbole"));
-                            line(ui, "IBM Plex Mono, Syne (OFL)");
+                            line(ui, "IBM Plex Mono, IBM Plex Sans, Syne (OFL)");
                             line(ui, "Phosphor (MIT)");
                             head(ui, &crate::tr("Marken"));
                             line(ui, &crate::tr("Foveon und Sigma sind Marken der Sigma Corporation; graineo ist nicht mit Sigma verbunden."));

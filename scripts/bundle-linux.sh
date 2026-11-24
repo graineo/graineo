@@ -46,6 +46,7 @@ else
   docker rm "$CID" > /dev/null
 fi
 cp crates/app/assets/icon-1024.png "$D/graineo.png"
+cp scripts/linux-install.sh "$D/install.sh" && chmod +x "$D/install.sh"
 cat > "$D/graineo.desktop" <<DESK
 [Desktop Entry]
 Type=Application
@@ -61,9 +62,10 @@ cat > "$D/README-linux.txt" <<README
 graineo $VER, EXPERIMENTAL Linux build ($ARCH). Not tested on real hardware, not signed, no automatic updates.
 Face detection and Apple Photos are not available. Needs a Vulkan driver (Mesa: mesa-vulkan-drivers; with
 lavapipe also without a GPU, slow), libxkbcommon, fontconfig and X11 or Wayland.
-Start: ./graineo   (data: ~/.local/share/graineo, cache: ~/.cache/graineo, log: ~/.local/state/graineo/logs)
-For the menu: copy graineo.desktop to ~/.local/share/applications and edit Exec= to the full path, graineo.png
-to ~/.local/share/icons.
+Install: ./install.sh   (program and film data to ~/.local/share/graineo/app, command ~/.local/bin/graineo,
+entry in the application menu). Remove: ~/.local/share/graineo/app/install.sh --uninstall (keeps your library).
+Or start without installing: ./graineo   (keep the folder together; the film data are also built into the program)
+Data: ~/.local/share/graineo, cache: ~/.cache/graineo, log: ~/.local/state/graineo/logs
 README
 cp LICENSE THIRD_PARTY.md "$D/licenses/"
 [ -d LICENSES ] && cp LICENSES/* "$D/licenses/"

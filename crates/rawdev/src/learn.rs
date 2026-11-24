@@ -831,6 +831,10 @@ fn extract_observed(c: &Candidate, keep_going: &dyn Fn() -> bool, observe: &dyn 
 /// Look value of the tone curve matched per photo to the camera's own rendering of the shot (camera JPEG next to the
 /// RAW, else the embedded preview). Chosen like a camera look; never a default.
 pub const MATCHED_LOOK: &str = "match:camera";
+/// Look value of the linear scene rendering ("Linear (scene)"): demosaic, black and white level, camera matrix and
+/// base exposure from the file, then no tone curve, no camera look or hue table, no capture sharpening. Chosen like a
+/// camera look; never a default.
+pub const LINEAR_LOOK: &str = "linear";
 /// Internal look value: a table without any change (the plain development, for computing the matched curve).
 pub const IDENTITY_LOOK: &str = "match:identity";
 

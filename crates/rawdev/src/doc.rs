@@ -182,6 +182,8 @@ pub struct DetailKey {
     apple: u64,
     /// neural denoising in percent ([`crate::ai_denoise`]); 0 = off
     pub(crate) ai: u32,
+    /// capture sharpening at full resolution (off for the linear rendering)
+    sharpen: bool,
 }
 
 /// Registry that turns the assignment text (`"id@version"`, `""`) into a number for the `Copy` key and back.
@@ -220,6 +222,7 @@ impl DetailKey {
             pin: pin_hash(r.lens_profile.as_deref()),
             apple: 0,
             ai: crate::ai_denoise::percent(s),
+            sharpen: s.raw.look != crate::learn::LINEAR_LOOK,
         }
     }
     fn noise(&self) -> NoiseReduction {
@@ -732,7 +735,14 @@ impl RawDoc {
         // the reference as an ordinary RAW: camera data, white balance, looks, lens. When it is not there (the source
         // was deleted, its drive is not connected) a result in the cache still opens, with the camera data stored
         // beside it – the finished picture does not depend on its sources.
-        let opened = if reference.is_file() { Self::open_engine(&reference, &Settings::default(), keep_going) } else { Err(format!("{}: Quelle fehlt", reference.display())) };
+        let opened = if !reference.is_file() {
+            Err(format!("{}: Quelle fehlt", reference.display()))
+        } else if crate::foveon_frames::is_foveon(&reference) {
+            // Foveon: the reference's camera data and colour; its pixels never stand in (they are not developed here)
+            Self::foveon_reference(&reference).map(Some)
+        } else {
+            Self::open_engine(&reference, &Settings::default(), keep_going)
+        };
         let (mut doc, offline) = match opened {
             Ok(Some(d)) => (d, false),
             Ok(None) => return Ok(None),
@@ -751,6 +761,14 @@ impl RawDoc {
             doc.path = path.to_path_buf();
             doc.logical_path = path.to_path_buf();
             doc.summary = merged_summary(&doc.summary, src.sources.len());
+            if doc.preview.w == 0 || doc.preview.h == 0 {
+                // Foveon reference: no pixels of its own. A small neutral grey frame with the photo's aspect stands in
+                // until the merge arrives (an empty stage would break the preview, histograms and tone map).
+                let [fw, fh] = doc.full_size;
+                let long = fw.max(fh).max(1) as f32;
+                let (w, h) = (((fw as f32 / long) * 64.0).round().max(1.0) as usize, ((fh as f32 / long) * 64.0).round().max(1.0) as usize);
+                doc.preview = Arc::new(Stage::new(vec![[0.18; 3]; w * h], w, h, None));
+            }
             doc.merged = Some(Arc::new(Merged { source: src, meta, pending: true, offline: false, asked: Default::default() }));
             return Ok(Some(doc));
         };
@@ -767,6 +785,69 @@ impl RawDoc {
         doc.summary = merged_summary(&doc.summary, src.sources.len());
         doc.merged = Some(Arc::new(Merged { source: src, meta, pending: false, offline, asked: Default::default() }));
         Ok(Some(doc))
+    }
+
+    /// The reference of a Foveon merge (X3F): camera data and colour as the general path reads them
+    /// ([`crate::foveon_frames::info`]), no pixels (the merge supplies them).
+    fn foveon_reference(reference: &Path) -> Result<RawDoc, String> {
+        let s = develop::Session::open(reference).map_err(|e| format!("{}: {e}", reference.display()))?;
+        let [w, h] = s.size();
+        let info = crate::foveon_frames::info(reference, &s.cal, w, h).map_err(|e| e.to_string())?;
+        drop(s);
+        let wb = info.wb.unwrap_or([1.0; 3]);
+        let n_shot = [wb[1] / wb[0], 1.0, wb[1] / wb[2]];
+        let as_shot = crate::wb::temp_from_neutral(&info, n_shot).unwrap_or((5500.0, 0.0));
+        let cam_xyz_shot = color::determine([1.0 / wb[0], 1.0 / wb[1], 1.0 / wb[2]], &info.calibration, &color::diag([1.0; 3])).map(|c| c.camera_to_xyz_d50).unwrap_or(color::diag([1.0; 3]));
+        let (info_rows, summary) = info_texts(&info, None, as_shot);
+        let i = &info;
+        let c = CameraData {
+            version: CAMERA_DATA_VERSION,
+            format: i.format.clone(),
+            maker: i.maker.clone(),
+            model: i.model.clone(),
+            mode: i.mode.clone(),
+            width: i.width,
+            height: i.height,
+            channels: i.channels,
+            bits: i.bits,
+            xtrans: false,
+            cfa: i.cfa.clone(),
+            cfa_size: i.cfa_size,
+            black: i.black.clone(),
+            black_pattern: i.black_pattern,
+            white: i.white.clone(),
+            wb: i.wb,
+            matrix: i.matrix.clone(),
+            matrix_illuminants: i.matrix_illuminants.clone(),
+            orientation: i.orientation,
+            active: None,
+            crop: None,
+            baseline_exposure: 0.0,
+            iso: i.exif.iso,
+            exposure_time: i.exif.exposure_time,
+            aperture: i.exif.aperture,
+            focal_length: i.exif.focal_length,
+            distance: None,
+            lens_maker: None,
+            lens: i.exif.lens.clone(),
+            lens_db: None,
+            capture_date: i.exif.capture_date.clone(),
+            serial_number: i.exif.serial_number.clone(),
+            calibration: i.calibration.iter().map(|c| (c.kelvin, c.color, c.forward)).collect(),
+            analog_balance: None,
+            fuji_dr: None,
+            full_size: [w, h],
+            style: None,
+            auto_look: None,
+            learn_key: None,
+            as_shot,
+            base_ev: raw::development::BASE_EV,
+            lr_offset: 0.0,
+            cam_xyz_shot,
+            info_rows,
+            summary,
+        };
+        Ok(Self::from_camera(c, reference))
     }
 
     /// What a merged photo needs of its reference frame beyond the pixels (see [`CameraData`]).
@@ -826,6 +907,7 @@ impl RawDoc {
     /// pixels are set by the caller.
     fn from_camera(c: CameraData, reference: &Path) -> RawDoc {
         let region = |r: [usize; 4]| raw::Region { x: r[0], y: r[1], w: r[2], h: r[3] };
+        let foveon = c.format == "X3F";
         let info = raw::Info {
             format: c.format,
             maker: c.maker,
@@ -835,7 +917,14 @@ impl RawDoc {
             height: c.height,
             channels: c.channels,
             bits: c.bits,
-            sensor: if c.xtrans { raw::Sensor::XTrans } else { raw::Sensor::Bayer },
+            // a Foveon reference (X3F) has no mosaic: three layers per pixel
+            sensor: if foveon {
+                raw::Sensor::Linear
+            } else if c.xtrans {
+                raw::Sensor::XTrans
+            } else {
+                raw::Sensor::Bayer
+            },
             cfa: c.cfa,
             cfa_size: c.cfa_size,
             black: c.black,
@@ -1028,13 +1117,18 @@ impl RawDoc {
     /// ([`Self::auto_look`]) is applied only when it is chosen, then it is stored by name.
     pub fn look_name(&self, s: &Settings) -> Option<String> {
         match s.raw.look.as_str() {
-            "" | "neutral" => None,
+            "" | "neutral" | crate::learn::LINEAR_LOOK => None,
             n => Some(n.to_string()),
         }
     }
 
     /// The learned look that is the standard of this shot's camera and style (switched on), with its strength.
     /// `None` for finished images, the plain development ([`Self::plain`]) and without a learned look.
+    /// Linear scene rendering chosen ([`crate::learn::LINEAR_LOOK`]; RAWs only).
+    pub fn is_linear(&self, s: &Settings) -> bool {
+        !self.finished && s.raw.look == crate::learn::LINEAR_LOOK
+    }
+
     pub fn learned_look(&self) -> Option<(Arc<raw::looks::Look>, f32)> {
         if self.finished || self.plain.load(std::sync::atomic::Ordering::Relaxed) {
             return None;
@@ -1215,7 +1309,7 @@ impl RawDoc {
             let grid = corr_opt.as_ref().filter(|_| fits).map(|k| k.grid(lens_grid_step()));
             let job = crate::gpu::Job {
                 noise: base.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-                sharpen: (!self.finished).then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
+                sharpen: (!self.finished && key.sharpen).then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
                 lens: grid.as_ref(),
             };
             if let Some(px) = fits.then(|| crate::gpu::detail(&base.px, w, h, &job)).flatten() {
@@ -1230,7 +1324,7 @@ impl RawDoc {
             noise::apply(&mut px, w, h, p, &key.noise());
             lap_time("Rauschminderung");
         }
-        if full && !self.finished {
+        if full && !self.finished && key.sharpen {
             let _t = crate::timings::Stage::new("CPU Schärfe");
             raw::sharpness::apply(&mut px, w, h, &raw::sharpness::Sharpness::default(), self.sharpen_clip());
             lap_time("Grundschärfe");
@@ -1630,7 +1724,7 @@ impl RawDoc {
         let grid = corr_opt.as_ref().map(|k| k.grid(lens_grid_step()));
         let job = crate::gpu::Job {
             noise: b.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
+            sharpen: key.sharpen.then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
             lens: grid.as_ref(),
         };
         let Some(mut out_data) = crate::render::Params::new(self, se).gpu_data(self.lum()) else { return Ok(None) };
@@ -1679,7 +1773,7 @@ impl RawDoc {
         let grid = corr_opt.as_ref().map(|k| k.grid(lens_grid_step()));
         let job = crate::gpu::Job {
             noise: b.profile.as_ref().and_then(|p| raw::noise::parameter(p, &key.noise(), w, h)),
-            sharpen: Some((sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
+            sharpen: key.sharpen.then(|| (sch.strength, raw::sharpness::kernel(sch.sigma), sch.iterations, sch.threshold, self.sharpen_clip())),
             lens: grid.as_ref(),
         };
         let Some(mut out_data) = crate::render::Params::new(self, se).gpu_data(self.lum()) else { return Ok(None) };
@@ -1760,33 +1854,47 @@ impl RawDoc {
         hdr_auto_values(&mut y).map(|v| hdr_auto_scaled(v, strength))
     }
 
-    /// Automatic tone: exposure such that the mean luminance lies as in a
-    /// balanced shot; highlights/shadows with a lot of contrast. Returns: changed?
+    /// Automatic look ("Auto", ⌘U): all tone and colour sliders solved together (see [`develop::auto_look`]), measured
+    /// on a small rendering of the preview with the remaining settings of `s`. The starting point carries the part of
+    /// the base exposure that Lightroom start values leave out (see [`Self::base_ev_for`]), so such photos are measured
+    /// as bright as without them. Two renderings of the analysis image. Returns: changed?
     pub fn auto_tone(&self, s: &mut Settings) -> bool {
-        let st = &self.preview;
-        let lum = self.lum();
-        // measured with the base exposure the photo is rendered with (Lightroom start values leave out the part
-        // Lightroom does not apply, see `base_ev_for`)
-        let g = self.base_ev_for(s).exp2();
-        let mut y: Vec<f32> = st.px.iter().step_by(7).map(|p| (lum[0] * p[0] + lum[1] * p[1] + lum[2] * p[2]) * g).collect();
-        if y.len() < 100 {
-            return false;
+        match self.auto_look(s) {
+            Some(x) => {
+                develop::auto_look::apply(&x, s);
+                true
+            }
+            None => false,
         }
-        y.sort_by(|a, b| a.total_cmp(b));
-        let q = |f: f32| y[((y.len() - 1) as f32 * f) as usize].max(1e-6);
-        // mean in log space of the middle 80 %
-        let lo = y.len() / 10;
-        let hi = y.len() * 9 / 10;
-        let mean = (y[lo..hi].iter().map(|v| v.max(1e-6).ln()).sum::<f32>() / (hi - lo) as f32).exp();
-        let ev = (0.16 / mean).log2().clamp(-2.5, 2.5);
-        let bright = q(0.995) * ev.exp2();
-        let dark = q(0.02) * ev.exp2();
-        s.exposure = ((ev * 20.0).round() / 20.0) as f64;
-        s.highlight = if bright > 1.5 { (-(bright.log2() - 0.6) * 0.35).clamp(-0.7, 0.0) as f64 } else { 0.0 };
-        s.shadow = if dark < 0.004 { ((0.004 / dark).log2() * 0.08).clamp(0.0, 0.5) as f64 } else { 0.0 };
-        s.raw.whites = 0.0;
-        s.raw.blacks = 0.0;
-        true
+    }
+
+    /// The solved slider vector of [`Self::auto_tone`] (exposure already including the Lightroom offset).
+    pub fn auto_look(&self, s: &Settings) -> Option<develop::auto_look::Vector> {
+        use develop::auto_look as al;
+        let offset = (self.base_ev - self.base_ev_for(s)) as f64;
+        let iso = self.info.exif.iso.unwrap_or(100) as f64;
+        let free = al::curve_free(s);
+        let mut x = self.with_look_render(s, |r| al::solve(al::Pipeline::Raw, iso, free, r))?;
+        x[0] = ((x[0] + offset) * 20.0).round() / 20.0;
+        Some(x)
+    }
+
+    /// Hand the analysis rendering of [`Self::auto_look`] (slider vector → features; exposure relative to the
+    /// Lightroom offset) to `f` (also for the measurement of the sensitivities in the check tool).
+    pub fn with_look_render<R>(&self, s: &Settings, f: impl FnOnce(&mut dyn FnMut(&develop::auto_look::Vector) -> Option<develop::auto_look::Features>) -> R) -> R {
+        use develop::auto_look as al;
+        let offset = (self.base_ev - self.base_ev_for(s)) as f64;
+        let base = Settings { exposure: 0.0, ..s.clone() };
+        let small = self.small(&base, 320);
+        let mut render = |x: &al::Vector| -> Option<al::Features> {
+            let mut v = *x;
+            v[0] += offset;
+            let st = al::probe_settings(&base, &v);
+            let img = self.render_stage(&small, &st);
+            let bp = x[8] as f32;
+            al::features(img.data.chunks_exact(3).map(|p| [0, 1, 2].map(|c| al::black_point(p[c] as f32 / 65535.0, bp))))
+        };
+        f(&mut render)
     }
 }
 
@@ -1796,8 +1904,8 @@ impl RawDoc {
 /// - highlights: the 99.5 % highlight brought down to just above white (the slider lowers bright surroundings by up
 ///   to 1.5 EV), what is left over goes to whites (up to 1.1 EV more), beyond that to a lower exposure (up to 2 EV);
 /// - shadows: the 2 % shadow lifted to about −4 EV under middle grey and the 10 % shadow to about −2.4 EV (up to
-///   1.6 EV); blacks a little down by a quarter
-///   of the shadow lift, so the deepest blacks stay black and the picture does not turn grey.
+///   1.6 EV); blacks a little down by a tenth of the shadow lift (the blacks slider sets the black point firmly
+///   since 1.5.1; a tenth now acts about like the former quarter), so the deepest blacks stay black and the picture does not turn grey.
 ///
 /// `None` with too few pixels.
 pub fn hdr_auto_values(y: &mut [f32]) -> Option<[f32; 5]> {
@@ -1820,7 +1928,7 @@ pub fn hdr_auto_values(y: &mut [f32]) -> Option<[f32; 5]> {
     // the deepest 2 % to about −4 EV under middle grey, the darkest 10 % (a ground in shadow) to about −2.4 EV
     let need_lo = (0.01 / (q(0.02) * ev.exp2())).log2().max((0.03 / (q(0.1) * ev.exp2())).log2()).max(0.0);
     let shadows = (need_lo / 1.6).min(1.0);
-    let blacks = -0.25 * shadows;
+    let blacks = -0.1 * shadows;
     Some([ev, highlights, shadows, whites, blacks])
 }
 
@@ -2070,5 +2178,21 @@ mod extension_tests {
             assert!(super::is_raw(Path::new(name)), "{name}");
         }
         assert!(!super::is_raw(Path::new("a.jpg")));
+    }
+}
+
+#[cfg(test)]
+mod linear_tests {
+    use super::*;
+
+    /// The linear scene rendering leaves out the capture sharpening (own detail stage), other looks keep it.
+    #[test]
+    fn linear_look_has_no_capture_sharpening() {
+        let mut s = Settings::default();
+        assert!(DetailKey::from_settings(&s).sharpen);
+        s.raw.look = crate::learn::LINEAR_LOOK.into();
+        let k = DetailKey::from_settings(&s);
+        assert!(!k.sharpen);
+        assert_ne!(k, DetailKey::from_settings(&Settings::default()));
     }
 }

@@ -16,6 +16,32 @@
 //! Without the rebuild the frontend's own steps run unchanged (the hook returns `false`).
 
 use rayon::prelude::*;
+use std::cell::RefCell;
+
+/// Weight of the rebuilt areas (valid rectangle: width, height, values) of the last hook call on this thread: `None`
+/// before a call, `Some(None)` when nothing was rebuilt.
+type Capture = Option<Option<(usize, usize, Vec<f32>)>>;
+
+thread_local! {
+    static CAPTURE: RefCell<Capture> = const { RefCell::new(None) };
+}
+
+/// Clears the weight of the last call (before developing a photo on this thread).
+pub fn clear_capture() {
+    CAPTURE.with(|c| *c.borrow_mut() = None);
+}
+
+/// The weight of the hook call since [`clear_capture`] in the coordinates of a working image of `width × height`
+/// (the active area: the valid rectangle shrunk evenly on both sides). `None`: the hook did not run (rebuild off).
+pub fn take_capture(width: usize, height: usize) -> Option<Option<crate::highlight_post::Weight>> {
+    let c = CAPTURE.with(|c| c.borrow_mut().take())?;
+    Some(c.and_then(|(w, h, v)| {
+        let (ox, oy) = (w.checked_sub(width)? / 2, h.checked_sub(height)? / 2);
+        let mut data = vec![0f32; width * height];
+        data.par_chunks_mut(width).enumerate().for_each(|(y, row)| row.copy_from_slice(&v[(y + oy) * w + ox..(y + oy) * w + ox + width]));
+        Some(crate::highlight_post::Weight { width, height, data })
+    }))
+}
 
 /// Registers the hook in the frontend (once; the hook itself checks whether the rebuild is on).
 pub fn install() {
@@ -68,7 +94,10 @@ fn hook(input: &mut x3f_core::HighlightInput<'_>) -> bool {
     let sat = level.map(|l| l / crate::highlight_rebuild::CLIP_SHARE);
     // 2. top, then middle layer
     let variant = crate::highlight_rebuild::variant();
-    let top_out = crate::highlight_rebuild::rebuild_layer_with(&mut layers, w, h, sat, 2, variant, false);
+    // no grey floor here: the image-wide fit below is the floor of the top layer, and a grey floor whitened bright
+    // yellow surfaces (stamens of a zinnia) without helping white ones
+    let neutral = None;
+    let top_out = crate::highlight_rebuild::rebuild_layer_with(&mut layers, w, h, sat, 2, variant, false, neutral);
     // the global fit as a floor of the rebuilt top layer: the gradient-domain fill takes its level from the border of
     // a blown area, which is often another surface (a white bird against a darker fence, a blown sky above a wall);
     // its level stays near the clip there and the area turned yellow. The fit of the whole image never lies below.
@@ -80,7 +109,7 @@ fn hook(input: &mut x3f_core::HighlightInput<'_>) -> bool {
             layers[2][i] = layers[2][i].max(layers[2][i] + wt * (g - layers[2][i]));
         }
     }
-    let mid_out = crate::highlight_rebuild::rebuild_layer_with(&mut layers, w, h, sat, 1, variant, false);
+    let mid_out = crate::highlight_rebuild::rebuild_layer_with(&mut layers, w, h, sat, 1, variant, false, neutral);
     // 3. neutral where the bottom layer is clipped
     let bottom_clipped: Vec<f32> = (0..w * h).map(|i| f32::from(u8::from(bits(i % w, i / w) & 1 != 0))).collect();
     let share = box_share(&bottom_clipped, w, h, NEUTRAL_RADIUS);
@@ -97,6 +126,15 @@ fn hook(input: &mut x3f_core::HighlightInput<'_>) -> bool {
             }
         }
     }
+    // weight of the rebuilt areas for the sliders ([`crate::highlight_post`])
+    let mut weight: Option<Vec<f32>> = None;
+    for o in [top_out.as_ref(), mid_out.as_ref()].into_iter().flatten() {
+        let wv = weight.get_or_insert_with(|| vec![0f32; w * h]);
+        for &(i, wt) in &o.weight {
+            wv[i as usize] = wv[i as usize].max(wt);
+        }
+    }
+    CAPTURE.with(|c| *c.borrow_mut() = Some(weight.map(|v| (w, h, v))));
     if std::env::var_os("X3F_HL_DEBUG").is_some() {
         eprintln!(
             "Merrill highlight rebuild: levels {level:?}, top {:?}, middle {:?}, {:.2?}",

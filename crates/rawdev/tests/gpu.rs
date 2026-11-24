@@ -132,3 +132,34 @@ fn gpu_vs_cpu() {
     println!("finished image: ΔE00 mean {:.4}, largest {:.3}, pixels above 1: {} of {} ({:.4} %)", de_sum / n as f64, de_max, above1, n, above1 as f64 * 100.0 / n as f64);
     assert!(de_sum / (n as f64) < 0.05, "mean deviation too large");
 }
+
+/// Whites down (highlight roll): GPU output stage against the CPU stage on the same preview stage.
+/// `GRAINEO_BENCH_RAW=<file> cargo test -p rawdev --release --test gpu whites_roll -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn whites_roll_gpu_matches_cpu() {
+    let Ok(p) = std::env::var("GRAINEO_BENCH_RAW") else { return };
+    if rawdev::gpu::gpu().is_none() {
+        println!("no GPU");
+        return;
+    }
+    let doc = rawdev::RawDoc::open(std::path::Path::new(&p), &|| true).unwrap().unwrap();
+    for whites in [0.0f32, -0.5, -1.0] {
+        let mut s = develop::Settings::default();
+        s.raw.whites = whites;
+        let st = doc.preview_stage(&s);
+        let cpu = doc.render_stage(&st, &s);
+        let Some(gpu) = doc.render_stage_gpu(&st, &s) else { panic!("GPU path refused") };
+        let n = cpu.width * cpu.height;
+        let (mut de_max, mut de_sum) = (0f32, 0f64);
+        for i in 0..n {
+            let pa = [cpu.data[3 * i], cpu.data[3 * i + 1], cpu.data[3 * i + 2]];
+            let pb = [gpu.data[3 * i], gpu.data[3 * i + 1], gpu.data[3 * i + 2]];
+            let d = de2000(lab_from_srgb16(pa), lab_from_srgb16(pb));
+            de_max = de_max.max(d);
+            de_sum += d as f64;
+        }
+        println!("whites {whites}: ΔE00 GPU/CPU mean {:.4}, largest {:.3}", de_sum / n as f64, de_max);
+        assert!(de_sum / (n as f64) < 0.05);
+    }
+}

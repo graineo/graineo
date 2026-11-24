@@ -15,7 +15,9 @@ fn sstep(a:f32,b:f32,x:f32)->f32{return smooth1((x-a)/(b-a));}
 // p[29] pivot, p[30] curve on, p[31..31+1024] curve table
 fn extra(q0:vec3<f32>,y:f32)->vec3<f32>{
  var q=q0;
- if p[17]!=0.0{let w=1.0-smooth1(y/0.12);q=q+vec3(p[17]*0.02*w);}
+ // blacks: the global curve (lib.rs blacks_ev), MID_GRAY 0.1845, BLACKS_OFFSET 0.12
+ if p[17]!=0.0{let x=log2(max(lum(q),1e-9)/0.1845);let r=0.12*abs(p[17])*exp2(-max(x,-40.0))*(1.0-smooth1((x+2.0)/3.0));
+  var ev:f32;if p[17]<0.0{ev=-log2(1.0+r);}else{ev=log2(0.5*(1.0+sqrt(1.0+4.0*r)));} q=q*exp2(ev);}
  if p[18]>0.0{let h=p[18]*0.15;q=(q-vec3(h*0.35))/(1.0-h);}else if p[18]<0.0{let h=-p[18]*0.15;q=q*(1.0-h)+vec3(h*0.35);}
  if p[30]!=0.0{for(var c=0u;c<3u;c++){let e=enc(q[c]);let f=clamp(e,0.0,1.0)*1023.0;let i=min(u32(f),1022u);let t=f-f32(i);let v=p[31u+i]+(p[32u+i]-p[31u+i])*t;q[c]=dec(v+max(e-1.0,0.0));}}
  if p[28]!=0.0{let l=clamp(enc(max(lum(q),0.0)),0.0,1.0);let ws=1.0-sstep(0.0,p[29],l);let wh=sstep(p[29],1.0,l);let wm=max(1.0-ws-wh,0.0);

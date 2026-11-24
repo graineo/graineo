@@ -385,13 +385,13 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
                 egui::Align2::CENTER_CENTER,
                 "…",
                 lr::semibold(12.0),
-                lr::TEXT_DIM,
+                lr::TEXT_DIM(),
             );
         }
         let mut name = egui::text::LayoutJob::simple(
             e.name.clone(),
             lr::semibold(11.0),
-            lr::TEXT,
+            lr::TEXT(),
             width - 12.0,
         );
         name.wrap.max_rows = 2;
@@ -399,12 +399,12 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
         p.galley(
             Pos2::new(rect.left() + 6.0, rect.top() + image_h + 3.0),
             g,
-            lr::TEXT,
+            lr::TEXT(),
         );
         let mut film = egui::text::LayoutJob::simple(
             sub_line(e),
             egui::FontId::monospace(9.5),
-            lr::TEXT_DIM,
+            lr::TEXT_DIM(),
             width - 12.0,
         );
         film.wrap.max_rows = 1;
@@ -412,7 +412,7 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
         p.galley(
             Pos2::new(rect.left() + 6.0, rect.bottom() - 15.0),
             g,
-            lr::TEXT_DIM,
+            lr::TEXT_DIM(),
         );
         p.rect_stroke(
             rect, 0.0,
@@ -458,12 +458,12 @@ pub fn line(ui: &mut egui::Ui, v: &Previews, width: f32, filter: u8, current: &F
                 let scale = (image.width() / size.x).min(image.height() / size.y);
                 p.image(t.id(), Rect::from_center_size(image.center(), size * scale), Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
             } else {
-                p.text(image.center(), egui::Align2::CENTER_CENTER, "…", lr::semibold(12.0), lr::TEXT_DIM);
+                p.text(image.center(), egui::Align2::CENTER_CENTER, "…", lr::semibold(12.0), lr::TEXT_DIM());
             }
-            let mut job = egui::text::LayoutJob::simple_singleline(e.name.clone(), egui::FontId::proportional(11.0), lr::TEXT);
+            let mut job = egui::text::LayoutJob::simple_singleline(e.name.clone(), egui::FontId::proportional(11.0), lr::TEXT());
             job.wrap = egui::text::TextWrapping { max_width: width - 10.0, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
             let g = p.layout_job(job);
-            p.galley(Pos2::new(rect.left() + 5.0, rect.bottom() - 18.0), g, lr::TEXT);
+            p.galley(Pos2::new(rect.left() + 5.0, rect.bottom() - 18.0), g, lr::TEXT());
             p.rect_stroke(rect, 0.0, Stroke::new(if selected { 1.5 } else { 1.0 }, Color32::from_gray(if selected { 210 } else if r.hovered() { 115 } else { 46 })), egui::StrokeKind::Inside);
             if r.hovered() {
                 hovered = Some((e.source, e.film.clone()));

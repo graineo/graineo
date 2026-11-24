@@ -330,6 +330,13 @@ pub fn apply_output_size(img: Rgb16, g: Option<OutputSize>, filter: crate::resiz
     crate::resize::resize(&img, w, h, filter)
 }
 
+/// Output size and output sharpening of `s` for an image encoded in `space` (the steps after border, before the file).
+pub fn finish_output(img: Rgb16, s: &Settings, space: graineo_color::Space) -> Rgb16 {
+    let mut img = apply_output_size(img, s.output_size, s.output_filter);
+    crate::output_sharpen::apply(&mut img, s.output_sharpen, space);
+    img
+}
+
 /// Exports the image of the session. DNG contains the linear data (noise reduction
 /// according to the settings, without tone curve); JPEG/TIFF the fully developed image.
 /// Returns whether Sigma's exact base was used.
@@ -345,7 +352,7 @@ pub fn export_with_opts(session: &mut Session, s: &Settings, format: Format, eng
             // TIFF/PNG: true 16-bit gradations (tone curve interpolated, exact gamma)
             let img = if matches!(format, Format::Jpeg { .. }) { session.render_full_own(s) } else { session.render_full_own_fine(s) };
             let img = crate::geometry::apply(img, s, session.cal.orientation);
-            let img = apply_output_size(crate::film::apply_border(img, &s.film), s.output_size, s.output_filter);
+            let img = finish_output(crate::film::apply_border(img, &s.film), s, graineo_color::Space::Srgb);
             match format {
                 Format::Tiff16 if opts.tiff_compression == tiffw::Compression::None => write_tiff16(&img, path)?,
                 Format::Jpeg { quality } => write_jpeg(&img, path, quality)?,
@@ -415,13 +422,13 @@ pub fn export_opts(session: &mut Session, s: &Settings, format: Format, path: &P
         }
         // Crop/straighten only after development (DNGs stay uncropped)
         Format::Png16 | Format::Jxl { .. } | Format::Tiff16 if format != Format::Tiff16 || opts.tiff_compression != tiffw::Compression::None => {
-            let img = apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter);
+            let img = finish_output(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s, graineo_color::Space::Srgb);
             write_finished(&img, path, format, graineo_color::Space::Srgb, opts)
         }
         Format::TiffFloat | Format::Exr { .. } => export_scene(session, s, format, Session::uses_spp(s), path, opts),
         Format::RawLayers => crate::rawlayers::write(&session.path, &session.cal, path, opts.tiff_compression).map(|_| ()),
-        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 => write_tiff16(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter), path),
-        Format::Jpeg { quality } => write_jpeg(&apply_output_size(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s.output_size, s.output_filter), path, quality),
+        Format::Png16 | Format::Jxl { .. } | Format::Tiff16 => write_tiff16(&finish_output(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s, graineo_color::Space::Srgb), path),
+        Format::Jpeg { quality } => write_jpeg(&finish_output(crate::film::apply_border(crate::geometry::apply(session.render_full(s), s, session.cal.orientation), &s.film), s, graineo_color::Space::Srgb), path, quality),
     }
 }
 

@@ -33,6 +33,8 @@ pub mod label;
 pub mod lens_use;
 pub mod exif;
 pub mod exif_header;
+#[cfg(test)]
+mod fuzz_tests;
 pub mod textmeta;
 pub mod people;
 pub mod face_index;

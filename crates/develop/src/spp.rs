@@ -17,7 +17,7 @@ fn color_mode(name: Option<&str>) -> Option<ColorMode> {
         "FCYellow" => ColorMode::FCYellow,
         "Cinema" => ColorMode::Cinema,
         "TealAndOrange" => ColorMode::TealAndOrange,
-        "Standard" => ColorMode::Standard,
+        "Standard" | crate::settings::LINEAR_MODE => ColorMode::Standard,
         "Vivid" => ColorMode::Vivid,
         "Neutral" => ColorMode::Neutral,
         "Portrait" => ColorMode::Portrait,
@@ -166,17 +166,35 @@ pub fn working_key(
     let s = key.sliders();
     // Black and white: grey base from the preprocessed layers (see crate::mono)
     if key.mono {
-        let sliders = x3f_core::SppNoiseSliders { luma: s.luma, chroma: s.chroma };
+        let sliders = x3f_core::SppNoiseSliders { luma: s.luma, chroma: s.chroma, texture: [1.0, 1.0] };
         let mix = if key.mono_mix == [0; 3] { [0.33, 0.33, 0.34] } else { key.mono_mix.map(|m| f64::from(m) / 1000.0) };
         let w = r.spp_mono_working_image(sliders, mix, cancel).map_err(|e| e.to_string())?;
         return Ok(crate::mono::base(w));
     }
+    // highlight sliders of the Merrill rebuild away from the middle: on the kept base, no new development
+    // ([`crate::highlight_post`])
+    if key.highlight.on && !key.highlight.is_default() && crate::highlight_rebuild::enabled_merrill() {
+        let mut k0 = key.clone();
+        k0.highlight = crate::HighlightSliders::new(0.5, 0.5);
+        // without a known weight the base is developed here (the hook runs and leaves it), not read from the disk cache
+        let known = crate::highlight_post::weight(path).is_some();
+        let base = crate::highlight_post::base(path, &k0, || if known { crate::diskcache::working_key(path, &k0, gpu, cancel) } else { working_key(path, &k0, gpu, cancel) })?;
+        let mut lin = (*base).clone();
+        if let Some(Some(w)) = crate::highlight_post::weight(path) {
+            crate::highlight_post::apply(&mut lin, &w, key.highlight.colour(), key.highlight.structure());
+        }
+        return Ok(lin);
+    }
     // Lens correction (CA) as in SPP; off or without a profile → `None`, bit-identical as before.
     let ca = crate::lens::correction(path, &key.ca);
+    crate::merrill_highlights::clear_capture();
     let w = with_fallback_color_mode(key.mode.as_deref(), |m| {
-        let sliders = x3f_core::SppNoiseSliders { luma: s.luma, chroma: s.chroma };
+        let sliders = x3f_core::SppNoiseSliders { luma: s.luma, chroma: s.chroma, texture: key.texture_gains() };
         r.spp_working_image_ca(Some(m), gpu, sliders, ca.as_ref(), cancel).map_err(|e| e.to_string())
     })?;
+    if let Some(wt) = crate::merrill_highlights::take_capture(w.width, w.height) {
+        crate::highlight_post::remember(path, wt);
+    }
     // Detail image "L" for the sharpness slider (Δ relative to sharpness 0, see crate::sharpness)
     let detail = crate::sharpness::SharpDetail { l: w.sharp_l, base: w.sharpen_base, scale: 1.0 };
     let mut data = w.data;
@@ -204,6 +222,16 @@ pub fn working_key(
 /// Quattro: in the middle position the noise reduction of the preparation is kept (first stage on the colour grid,
 /// see [`crate::quattro_nr`]); changed sliders act as before via our own noise reduction.
 fn quattro_working_nr(path: &Path, key: &crate::SppKey, cancel: &std::sync::atomic::AtomicBool) -> Result<crate::Linear, String> {
+    let mut lin = quattro_working_nr_base(path, key, cancel)?;
+    // Foveon detail bands after the noise reduction (Quattro and Classic, see crate::foveon_texture)
+    if key.texture != crate::TEXTURE_NEUTRAL {
+        let (w, h) = (lin.width, lin.height);
+        crate::foveon_texture::apply(&mut lin.data, w, h, key.texture_gains());
+    }
+    Ok(lin)
+}
+
+fn quattro_working_nr_base(path: &Path, key: &crate::SppKey, cancel: &std::sync::atomic::AtomicBool) -> Result<crate::Linear, String> {
     if key.neutral_noise() {
         let q = crate::quattro::prepared(path)?;
         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
@@ -213,7 +241,7 @@ fn quattro_working_nr(path: &Path, key: &crate::SppKey, cancel: &std::sync::atom
     }
     let q = crate::quattro::prepared(path)?;
     // high-ISO path: the sliders move from the preparation's result (see `crate::quattro::counts_with_sliders`)
-    if let Some(lin) = crate::quattro::counts_with_sliders(&q, key.mode.as_deref(), key.binning, key.nr, key.detail) {
+    if let Some(lin) = crate::quattro::counts_with_sliders_hl(&q, key.mode.as_deref(), key.binning, key.nr, key.detail, key.highlight) {
         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("abgebrochen".into());
         }

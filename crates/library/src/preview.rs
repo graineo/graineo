@@ -1366,7 +1366,16 @@ fn from_source(src: &rawler::rawsource::RawSource, min: u32) -> Result<(RgbImage
             }
         }
     }
-    let img = best.ok_or("keine eingebettete Vorschau")?.to_rgb8();
+    let mut img = best.ok_or("keine eingebettete Vorschau")?.to_rgb8();
+    // far larger than asked (the full-size camera JPEG of a CR2 for a thumbnail): shrink before turning it upright –
+    // turning and copying 20 MP took seconds per thumbnail on the background cores (filmstrip of a viewed folder stayed
+    // on placeholders). Twice the size stays for the fine downscale of the caller.
+    let edge = img.width().max(img.height());
+    if min > 0 && edge > 2 * min {
+        let k = (2 * min) as f64 / edge as f64;
+        let (w, h) = (((img.width() as f64 * k).round() as u32).max(1), ((img.height() as f64 * k).round() as u32).max(1));
+        img = image::imageops::thumbnail(&img, w, h);
+    }
     let o = meta.as_ref().and_then(|m| m.exif.orientation).unwrap_or(1);
     let m = Meta {
         width: None,
@@ -1625,6 +1634,10 @@ struct Inner {
     /// keys whose development failed in this run (not tried again until the next start)
     failed: Mutex<HashSet<u64>>,
     running: Mutex<HashSet<(u64, u32)>>,
+    /// of those: run for the background (they hand back no image)
+    running_back: Mutex<HashSet<(u64, u32)>>,
+    /// number of workers (0 in tests without threads)
+    workers: AtomicUsize,
     signal: Condvar,
     wait_for: Mutex<()>,
     outcomes: Mutex<Vec<Outcome>>,
@@ -1657,6 +1670,8 @@ impl Inner {
             back: Mutex::new(VecDeque::new()),
             failed: Mutex::new(HashSet::new()),
             running: Mutex::new(HashSet::new()),
+            running_back: Mutex::new(HashSet::new()),
+            workers: AtomicUsize::new(0),
             signal: Condvar::new(),
             wait_for: Mutex::new(()),
             outcomes: Mutex::new(Vec::new()),
@@ -1676,6 +1691,7 @@ impl Generator {
     /// tile (wanted at once) and `false` for background work (a redraw within a second is enough).
     pub fn new(cache: Arc<Cache>, threads: usize, wake: Box<dyn Fn(bool) + Send + Sync>) -> Generator {
         let inner = Arc::new(Inner::new(cache, wake));
+        inner.workers.store(threads.max(1), Ordering::Relaxed);
         for i in 0..threads.max(1) {
             let inn = inner.clone();
             std::thread::Builder::new().name(format!("vorschau-{i}")).spawn(move || workers(inn, i)).ok();
@@ -1782,20 +1798,34 @@ enum Origin {
 
 fn nearest(inn: &Inner) -> Option<(Job, Origin)> {
     let running = inn.running.lock().unwrap();
-    if let Some(a) = inn.urgent.lock().unwrap().take() {
-        if !running.contains(&(a.key, a.level)) {
-            return Some((a, Origin::Urgent));
+    // A shown job waits while the same preview is being made for another shown job (that one hands the image back).
+    // One being made for the background hands back no image and runs at the lowest priority: the shown job is made
+    // anyway. Before, a shown job in either case was dropped and the filmstrip of a viewed folder kept its placeholders
+    // (QA 1.5.0).
+    let blocked = {
+        let back = inn.running_back.lock().unwrap();
+        move |a: &Job| running.contains(&(a.key, a.level)) && !back.contains(&(a.key, a.level))
+    };
+    {
+        let mut urgent = inn.urgent.lock().unwrap();
+        if urgent.as_ref().is_some_and(|a| !blocked(a)) {
+            return urgent.take().map(|a| (a, Origin::Urgent));
         }
     }
     for queue in [&inn.front, &inn.ahead] {
         let mut v = queue.lock().unwrap();
-        while let Some(a) = v.pop_front() {
-            if !running.contains(&(a.key, a.level)) {
-                return Some((a, Origin::Shown));
-            }
+        if let Some(n) = v.iter().position(|a| !blocked(a)) {
+            return v.remove(n).map(|a| (a, Origin::Shown));
         }
     }
+    drop(blocked);
+    let running = inn.running.lock().unwrap();
     if inn.cache.paused() {
+        return None;
+    }
+    // one worker always stays free for shown jobs (background jobs of a RAW can take seconds each)
+    let workers = inn.workers.load(Ordering::Relaxed);
+    if workers >= 2 && running.len() >= workers - 1 {
         return None;
     }
     // first the jobs to do soon, then (if switched on) the rest of the library; at most one large one at a time
@@ -1947,6 +1977,9 @@ fn workers(inn: Arc<Inner>, _nr: usize) {
         };
         let visible = origin != Origin::Back;
         inn.running.lock().unwrap_or_else(|e| e.into_inner()).insert((a.key, a.level));
+        if !visible {
+            inn.running_back.lock().unwrap_or_else(|e| e.into_inner()).insert((a.key, a.level));
+        }
         // whatever happens below (also a panic in a reader): "running" and the heavy counter are reset
         let mut guard = RunningMark { inn: &inn, key: (a.key, a.level), heavy: false };
         // visible tiles soon (utility), the rest of the library at the lowest priority (efficiency cores); the gates
@@ -2035,6 +2068,9 @@ impl Drop for RunningMark<'_> {
             self.inn.heavy_running.fetch_sub(1, Ordering::SeqCst);
         }
         self.inn.running.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+        self.inn.running_back.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+        // a shown job may have waited for this run (see `nearest`)
+        self.inn.signal.notify_all();
     }
 }
 
@@ -2093,6 +2129,43 @@ mod tests {
         assert!(develop_soon_after(Origin::Urgent));
         assert!(!develop_soon_after(Origin::Shown), "comparison fields / read ahead");
         assert!(!develop_soon_after(Origin::Back));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// A shown job for a preview that another shown job is making right now waits for it (that one hands the image
+    /// back); one being made for the background (no image back, lowest priority) does not hold it up. Before, both
+    /// were dropped and the filmstrip of a viewed folder kept its placeholders.
+    #[test]
+    fn a_shown_job_is_never_lost_behind_a_running_one() {
+        let d = tmp("running");
+        let inn = Inner::new(Arc::new(Cache::open(&d)), Box::new(|_| {}));
+        let job = |file: i64| Job { file, path: PathBuf::from(format!("/nowhere/{file}.CR2")), format: "CR2".into(), key: file as u64, level: 320, orientation: None };
+        // 2 runs for a shown job, 3 for the background
+        inn.running.lock().unwrap().extend([(2, 320), (3, 320)]);
+        inn.running_back.lock().unwrap().insert((3, 320));
+        inn.front.lock().unwrap().extend([job(2), job(3), job(4)]);
+        assert_eq!(nearest(&inn).map(|(a, o)| (a.file, o)), Some((3, Origin::Shown)), "the background run does not hold it up");
+        assert_eq!(nearest(&inn).map(|(a, _)| a.file), Some(4));
+        assert_eq!(nearest(&inn).map(|(a, _)| a.file), None, "2 waits while it runs");
+        inn.running.lock().unwrap().clear();
+        assert_eq!(nearest(&inn).map(|(a, o)| (a.file, o)), Some((2, Origin::Shown)), "and comes after it");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// With several workers one always stays free for shown jobs: the background does not take the last one.
+    #[test]
+    fn the_background_leaves_a_worker_for_shown_jobs() {
+        let d = tmp("reserve");
+        let inn = Inner::new(Arc::new(Cache::open(&d)), Box::new(|_| {}));
+        inn.workers.store(4, Ordering::Relaxed);
+        let job = |file: i64| Job { file, path: PathBuf::from(format!("/nowhere/{file}.CR2")), format: "CR2".into(), key: file as u64, level: 320, orientation: None };
+        inn.soon.lock().unwrap().extend([job(5), job(6)]);
+        inn.running.lock().unwrap().extend([(1, 320), (2, 320), (3, 320)]);
+        assert!(nearest(&inn).is_none(), "three of four busy: the last one waits for shown jobs");
+        inn.front.lock().unwrap().push_back(job(7));
+        assert_eq!(nearest(&inn).map(|(a, _)| a.file), Some(7));
+        inn.running.lock().unwrap().remove(&(3, 320));
+        assert_eq!(nearest(&inn).map(|(a, o)| (a.file, o)), Some((5, Origin::Back)));
         let _ = std::fs::remove_dir_all(&d);
     }
 

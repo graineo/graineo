@@ -113,6 +113,19 @@ pub const ALL: &[Shortcut] = &[
     t("refresh_folder", U, CA, Key::R, "angesehenen Ordner neu einlesen"),
     t("settings", U, C, Key::Comma, "Einstellungen"),
     t("overview", U, C, Key::Slash, "diese Übersicht"),
+    // photo zoom in Develop and in the comparison (main.rs `zoom_shortcuts`); in the darkroom ⌘+ / ⌘− stay with the grain loupe
+    t("image_zoom_in", U, C, Key::Plus, "Foto vergrößern (in der Dunkelkammer: Körnungs-Lupe)"),
+    t("image_zoom_in_us", U, C, Key::Equals, "Foto vergrößern (US-Tastatur)"),
+    t("image_zoom_out", U, C, Key::Minus, "Foto verkleinern (in der Dunkelkammer: Körnungs-Lupe)"),
+    t("image_zoom_fit", U, C, Key::Num0, "Foto einpassen"),
+    // UI size in steps 90 … 200 % (prefs.rs). With ⇧ the keys arrive differently per layout (German ⇧+ = *, ⇧- = _,
+    // ⇧0 = =): without a logical key egui reports the physical one, so the German positions are listed as well
+    t("ui_larger", U, CS, Key::Plus, "Oberfläche vergrößern"),
+    t("ui_larger_us", U, CS, Key::Equals, "Oberfläche vergrößern (US-Tastatur)"),
+    t("ui_larger_de", U, CS, Key::CloseBracket, "Oberfläche vergrößern (deutsche Tastatur)"),
+    t("ui_smaller", U, CS, Key::Minus, "Oberfläche verkleinern"),
+    t("ui_smaller_de", U, CS, Key::Slash, "Oberfläche verkleinern (deutsche Tastatur)"),
+    t("ui_reset", U, CS, Key::Num0, "Oberfläche auf 100 %"),
     t("show_in_finder", U, CS, Key::F, "Im Finder zeigen"),
     t("show_in_library_folder", U, CA, Key::F, "Im Ordner der Bibliothek anzeigen"),
     t("side_panels", U, N, Key::Tab, "Seitenleisten ein/aus"),
@@ -261,7 +274,6 @@ pub const ALL: &[Shortcut] = &[
     t("darkroom", E, S, Key::D, "Dunkelkammer ein/aus (dort: Tab nur Bild, Esc zurück)"),
     t("dk_zoom_plus", E, C, Key::Plus, "Dunkelkammer: nächste Körnungs-Lupenstufe"),
     t("dk_zoom_equals", E, C, Key::Equals, "Dunkelkammer: nächste Körnungs-Lupenstufe (US-Tastatur)"),
-    t("dk_zoom_shift_plus", E, CS, Key::Plus, "Dunkelkammer: nächste Körnungs-Lupenstufe (⇧+)"),
     t("dk_zoom_minus", E, C, Key::Minus, "Dunkelkammer: vorherige Körnungs-Lupenstufe"),
     t("dk_contact", E, N, Key::K, "Kontaktabzug der Dunkelkammer ein/aus (Esc schließt zuerst)"),
     t("f5", E, N, Key::F5, "obere Leiste ein/aus"),
@@ -445,12 +457,16 @@ mod tests {
         }
     }
 
+    /// Deliberate overlaps: in the darkroom ⌘+ / ⌘− zoom the grain loupe instead of the photo (main.rs `zoom_shortcuts`);
+    /// German ⇧⌘0 arrives as ⇧⌘= with the physical key 0 (prefs::scale_shortcuts checks the reset first).
+    const SHADOWED: &[(&str, &str)] = &[("image_zoom_in", "dk_zoom_plus"), ("image_zoom_in_us", "dk_zoom_equals"), ("image_zoom_out", "dk_zoom_minus")];
+
     #[test]
     fn no_duplicate_bindings() {
         let mut errors = Vec::new();
         for (i, a) in ALL.iter().enumerate() {
             for b in &ALL[i + 1..] {
-                if !a.context.overlaps(b.context) {
+                if !a.context.overlaps(b.context) || SHADOWED.contains(&(a.id, b.id)) {
                     continue;
                 }
                 for x in key_combos(&a.trigger) {

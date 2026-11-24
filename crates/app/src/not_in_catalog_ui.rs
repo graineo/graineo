@@ -290,7 +290,7 @@ impl LibraryView {
         }
         egui::Frame::new().fill(Color32::from_gray(0x24)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(crate::trf!("Dieser Ordner ist noch nicht in der Bibliothek · {a}", a = crate::dialog::count(e.count, crate::tr("Foto"), crate::tr("Fotos")))).color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::trf!("Dieser Ordner ist noch nicht in der Bibliothek · {a}", a = crate::dialog::count(e.count, crate::tr("Foto"), crate::tr("Fotos")))).color(lr::TEXT()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // not gold: the one main button of the library is "Import"
                     if ui.add_enabled(!self.not_in_catalog.capture_running, egui::Button::new(crate::tr("Aufnehmen"))).clicked() {
@@ -326,7 +326,7 @@ impl LibraryView {
         ui.set_max_width(full_w);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(crate::tr("NICHT IN DER BIBLIOTHEK")).color(lr::TEXT_DIM).size(11.0));
+            ui.label(egui::RichText::new(crate::tr("NICHT IN DER BIBLIOTHEK")).color(lr::TEXT_DIM()).size(11.0));
             crate::help::info(ui, "nicht-in-bibliothek", "Nicht in der Bibliothek", &crate::help::NOT_IN_LIBRARY);
         });
         ui.add_space(6.0);
@@ -348,7 +348,7 @@ impl LibraryView {
             if running || waiting {
                 ui.add(egui::Spinner::new().size(12.0));
             }
-            ui.add(egui::Label::new(egui::RichText::new(header).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(header).font(lr::semibold(lr::UI_SIZE)).color(lr::TEXT())).truncate());
         });
         // second line: explanation, refresh state, hidden folders – always one line (no jump when a search starts)
         let mut info = Vec::new();
@@ -366,7 +366,7 @@ impl LibraryView {
             info.push(crate::trf!("{a} früher aus der Bibliothek entfernt (wird nicht wieder angeboten)", a = folder_count(removed)));
         }
         let info = info.join(" · ");
-        let r = ui.add(egui::Label::new(egui::RichText::new(if info.is_empty() { " ".to_string() } else { info.clone() }).small().color(lr::TEXT_DIM)).truncate());
+        let r = ui.add(egui::Label::new(egui::RichText::new(if info.is_empty() { " ".to_string() } else { info.clone() }).small().color(lr::TEXT_DIM())).truncate());
         if !info.is_empty() {
             lr::hover_tip(ui, &r, &info);
         }
@@ -380,7 +380,7 @@ impl LibraryView {
             let all = !entries.is_empty() && selected.len() == entries.len();
             let (t_all, t_none) = (crate::tr("Alle auswählen"), crate::tr("Auswahl aufheben"));
             let pad = ui.spacing().button_padding.x * 2.0;
-            let w = [t_all, t_none].iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT).size().x).fold(0.0, f32::max) + pad;
+            let w = [t_all, t_none].iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT()).size().x).fold(0.0, f32::max) + pad;
             if ui.add_enabled(!entries.is_empty(), egui::Button::new(if all { t_none } else { t_all }).min_size(egui::vec2(w, 0.0))).clicked() {
                 if all {
                     self.not_in_catalog.selection.clear();
@@ -418,10 +418,10 @@ impl LibraryView {
             ui.set_min_height(14.0);
             if busy {
                 ui.add(egui::Spinner::new().size(11.0));
-                ui.label(egui::RichText::new(crate::tr("wird aufgenommen …")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("wird aufgenommen …")).small().color(lr::TEXT_DIM()));
             } else if !selected.is_empty() {
                 let n: usize = selected.iter().map(|e| e.count).sum();
-                ui.label(egui::RichText::new(crate::trf!("{a} ausgewählt · {b}", a = folder_count(selected.len()), b = crate::dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")))).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::trf!("{a} ausgewählt · {b}", a = folder_count(selected.len()), b = crate::dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")))).small().color(lr::TEXT_DIM()));
             }
         });
 
@@ -447,7 +447,7 @@ impl LibraryView {
         const GROUP: f32 = 26.0;
         // "Import …" button as wide as its label (English and German differ a lot)
         let import_label = crate::tr("Importieren …");
-        let button_w = (ui.painter().layout_no_wrap(import_label.to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT).size().x + ui.spacing().button_padding.x * 2.0 + 8.0).ceil().max(80.0);
+        let button_w = (ui.painter().layout_no_wrap(import_label.to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT()).size().x + ui.spacing().button_padding.x * 2.0 + 8.0).ceil().max(80.0);
         let height = |i: &Item| match i {
             Item::Group(_, later) => GROUP + if *later { 18.0 } else { 0.0 },
             Item::Row(_) => ROW,
@@ -455,7 +455,7 @@ impl LibraryView {
         let total: f32 = items.iter().map(height).sum();
         // column widths from the widest value, so the numbers line up
         let photos_text = |e: &Entry| crate::dialog::count(e.count, crate::tr("Foto"), crate::tr("Fotos"));
-        let measure = |t: String| ui.painter().layout_no_wrap(t, small.clone(), lr::TEXT).size().x;
+        let measure = |t: String| ui.painter().layout_no_wrap(t, small.clone(), lr::TEXT()).size().x;
         let col_photos = entries.iter().map(|e| measure(photos_text(e))).fold(measure(crate::tr("Fotos").to_uppercase()) + 6.0, f32::max).ceil();
         let col_size = entries.iter().map(|e| measure(crate::dialog::size(e.bytes))).fold(measure(crate::tr("Größe").to_uppercase()) + 6.0, f32::max).ceil();
         let body = egui::TextStyle::Body.resolve(ui.style());
@@ -493,16 +493,16 @@ impl LibraryView {
                         // shortened with "…" at the end when the column is narrow (never cut off)
                         let room = name_right - rect.left() - pad_x - 8.0;
                         let mut t: Vec<char> = title.chars().collect();
-                        let mut g = lr::caps_spaced(&p, title, small.clone(), lr::TEXT_DIM, 0.6);
+                        let mut g = lr::caps_spaced(&p, title, small.clone(), lr::TEXT_DIM(), 0.6);
                         while g.size().x > room && t.len() > 1 {
                             t.pop();
                             let s = format!("{}…", t.iter().collect::<String>().trim_end());
-                            g = lr::caps_spaced(&p, &s, small.clone(), lr::TEXT_DIM, 0.6);
+                            g = lr::caps_spaced(&p, &s, small.clone(), lr::TEXT_DIM(), 0.6);
                         }
-                        p.galley(egui::pos2(rect.left() + pad_x, base - g.size().y), g, lr::TEXT_DIM);
+                        p.galley(egui::pos2(rect.left() + pad_x, base - g.size().y), g, lr::TEXT_DIM());
                         let label = |text: &str, right: f32| {
-                            let g = lr::caps_spaced(&p, text, small.clone(), lr::TEXT_DIM, 0.6);
-                            p.galley(egui::pos2(right - g.size().x, base - g.size().y), g, lr::TEXT_DIM);
+                            let g = lr::caps_spaced(&p, text, small.clone(), lr::TEXT_DIM(), 0.6);
+                            p.galley(egui::pos2(right - g.size().x, base - g.size().y), g, lr::TEXT_DIM());
                         };
                         label("Fotos", photos_right);
                         if wide {
@@ -536,7 +536,7 @@ impl LibraryView {
                         let parent = std::iter::once(root).chain(parts[..parts.len().saturating_sub(1)].iter().copied()).collect::<Vec<_>>().join(" › ");
                         let name_w = (name_right - name_left).max(40.0);
                         let name = lr::middle_ellipsis_font(&p, name, &name_font, name_w);
-                        p.text(egui::pos2(name_left, line1), egui::Align2::LEFT_CENTER, name, name_font.clone(), lr::TEXT);
+                        p.text(egui::pos2(name_left, line1), egui::Align2::LEFT_CENTER, name, name_font.clone(), lr::TEXT());
                         // second line: parent path, then the hint from the name and probable duplicates
                         // the hints stay whole as long as possible; the path gives way first
                         let extra = row_hints(e);
@@ -544,22 +544,22 @@ impl LibraryView {
                             lr::middle_ellipsis_font(&p, &parent, &small, name_w)
                         } else {
                             let extra = format!(" · {extra}");
-                            let width = |t: &str| p.layout_no_wrap(t.to_string(), small.clone(), lr::TEXT).size().x;
+                            let width = |t: &str| p.layout_no_wrap(t.to_string(), small.clone(), lr::TEXT()).size().x;
                             // the path keeps at least half the room, the hints get the rest
                             let path = lr::middle_ellipsis_font(&p, &parent, &small, (name_w - width(&extra)).max(name_w * 0.5));
                             let extra = lr::middle_ellipsis_font(&p, &extra, &small, name_w - width(&path));
                             format!("{path}{extra}")
                         };
-                        p.text(egui::pos2(name_left, line2), egui::Align2::LEFT_CENTER, second, small.clone(), lr::TEXT_DIM);
+                        p.text(egui::pos2(name_left, line2), egui::Align2::LEFT_CENTER, second, small.clone(), lr::TEXT_DIM());
                         // numbers: photos (bright) with the formats below, size
-                        p.text(egui::pos2(photos_right, line1), egui::Align2::RIGHT_CENTER, photos_text(e), body.clone(), lr::TEXT);
+                        p.text(egui::pos2(photos_right, line1), egui::Align2::RIGHT_CENTER, photos_text(e), body.clone(), lr::TEXT());
                         if wide {
-                            p.text(egui::pos2(size_right, line1), egui::Align2::RIGHT_CENTER, crate::dialog::size(e.bytes), body.clone(), lr::TEXT);
+                            p.text(egui::pos2(size_right, line1), egui::Align2::RIGHT_CENTER, crate::dialog::size(e.bytes), body.clone(), lr::TEXT());
                         }
                         let formats = e.formats.iter().take(2).map(|(f, _)| f.as_str()).collect::<Vec<_>>().join(" · ");
                         let right_cluster = if wide { size_right } else { photos_right };
                         let fclip = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(name_right + 6.0, rect.top()), egui::pos2(right_cluster, rect.bottom())));
-                        fclip.text(egui::pos2(right_cluster, line2), egui::Align2::RIGHT_CENTER, formats, small.clone(), lr::TEXT_DIM);
+                        fclip.text(egui::pos2(right_cluster, line2), egui::Align2::RIGHT_CENTER, formats, small.clone(), lr::TEXT_DIM());
                         // full path on hover (the text may be shortened)
                         lr::hover_tip(ui, &resp, &e.path().display().to_string());
                         // not gold: the one main button of the library is "Import …" on the left
@@ -614,7 +614,7 @@ impl LibraryView {
             self.import_folder(&ctx, e.path());
         }
         ui.add_space(4.0);
-        ui.label(egui::RichText::new(crate::tr("Doppelklick auf eine Zeile zeigt den Ordner.")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Doppelklick auf eine Zeile zeigt den Ordner.")).small().color(lr::TEXT_DIM()));
     }
 
     /// Text for the filmstrip header while the overview is shown (instead of "0 Bilder").

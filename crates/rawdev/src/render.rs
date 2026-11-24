@@ -39,6 +39,12 @@ pub struct Params {
     highlights: f32,
     whites: f32,
     blacks: f32,
+    /// Highlight roll of a lowered Whites slider: reach in stops (0 = off) and the scene white of the curve
+    /// ([`raw::tone::whites_roll`])
+    roll_reach: f32,
+    roll_white: f32,
+    /// camera profile (DCP): HueSatMap and LookTable in the working space (CPU only)
+    dcp: Option<raw::dcp::Stage>,
     /// total exposure in EV (for the luminance map)
     ev: f32,
     look: Option<Arc<raw::looks::Look>>,
@@ -90,8 +96,16 @@ impl Params {
         let n_target = doc.target_neutral(s).unwrap_or(n_shot);
         let scale_wb = [n_shot[0] / n_target[0], n_shot[1] / n_target[1], n_shot[2] / n_target[2]];
         let ab = doc.info.analog_balance.map(color::diag).unwrap_or(color::diag([1.0; 3]));
-        let cam_xyz = color::determine(n_target, &doc.info.calibration, &ab).map(|f| f.camera_to_xyz_d50).unwrap_or(doc.cam_xyz_shot);
         let ws_xyz = color::rec2020_to_xyz_d65();
+        // a camera profile (DCP) brings its own matrices and tables; without it (or unreadable) the file's matrices
+        // linear scene rendering: no tone curve (contrast as for finished images), no camera profile tables, look, hue
+        // table or saturation correction
+        let linear = doc.is_linear(s);
+        let profile = if doc.finished || doc.apple.is_some() || linear { None } else { r.camera_profile.as_deref().and_then(camera_profile) };
+        let cal = profile.as_ref().map_or(&doc.info.calibration, |p| &p.calibration);
+        let det = color::determine(n_target, cal, &ab);
+        let cam_xyz = det.map(|f| f.camera_to_xyz_d50).unwrap_or(doc.cam_xyz_shot);
+        let dcp = profile.as_ref().and_then(|p| raw::dcp::Stage::new(p, &ws_xyz, det.map_or(0.5, |d| d.weight), s.exposure as f32, std::env::var_os("GRAINEO_DCP_NO_LOOK").is_none()));
         let cam_ws = color::mul(&color::xyz_d50_to(&ws_xyz), &cam_xyz);
         let ws_srgb = color::mul(&color::inv(&color::srgb_to_xyz_d65()).expect("sRGB"), &ws_xyz);
         let ev = doc.base_ev_for(s) + s.exposure as f32;
@@ -106,33 +120,41 @@ impl Params {
         // contains the camera's saturation, so on top of the correction it desaturated twice (Ricoh GR IIIx
         // "Positivfilm" ΔC* -4 against the camera JPEG). With such a look both are left out, as in the fit.
         // Film profiles are not fitted on graineo's development: unchanged.
-        let mut camera_look = look.is_some() && doc.look_name(s).is_some_and(|n| !n.starts_with("film:"));
+        // a camera profile is the colour of the development: no per-camera saturation or hue table on top
+        let mut camera_look = profile.is_some() || (look.is_some() && doc.look_name(s).is_some_and(|n| !n.starts_with("film:")));
         let mut look_amount = s.profile_amount.clamp(0.0, 1.0);
         // A learned look (`crate::learn`) is the standard of its camera and style: it stands in for the hue table and
         // the saturation correction (it was fitted on the development without them), so they never act twice; its
         // strength is its own. Only for a neutral photo without film; a chosen look or film wins.
-        if look.is_none() && !s.film.is_active() {
+        if look.is_none() && !s.film.is_active() && !linear {
             if let Some((l, a)) = doc.learned_look() {
                 look = Some(l);
                 look_amount = a.clamp(0.0, 1.0);
                 camera_look = true;
             }
         }
-        let plain = doc.plain.load(std::sync::atomic::Ordering::Relaxed);
+        let plain = doc.plain.load(std::sync::atomic::Ordering::Relaxed) || linear;
         // per-camera saturation of the standard development (only for RAWs; finished images skip the curve)
         let saturation = if doc.finished || doc.apple.is_some() || camera_look || plain { 1.0 } else { raw::development::camera_saturation(&doc.info.maker, &doc.info.model) };
         let tone = Sigmoid { contrast: 1.8 * (0.55 * c).exp2(), saturation, ..raw::development::default_tone() };
         let std_look = if camera_look || plain { None } else { doc.std_look.clone() };
+        let curve = ToneCurve::new(tone);
+        // finished images have no sigmoid (no white to roll towards)
+        let roll_reach = if doc.finished { 0.0 } else { raw::tone::whites_roll_reach(r.whites.clamp(-1.0, 1.0)) };
+        let roll_white = if roll_reach > 0.0 && !linear { curve.scene_white(raw::tone::ROLL_WHITE_LEVEL) } else { 1.0 };
         Params {
             m,
             lum: ws_xyz[1],
             ws_srgb,
-            curve: ToneCurve::new(tone),
-            finished: doc.finished.then_some(c),
+            curve,
+            finished: (doc.finished || linear).then_some(c),
             shadows: s.shadow.clamp(-1.0, 1.0) as f32,
             highlights: s.highlight.clamp(-1.0, 1.0) as f32,
             whites: r.whites.clamp(-1.0, 1.0),
             blacks: r.blacks.clamp(-1.0, 1.0),
+            roll_reach,
+            roll_white,
+            dcp,
             ev,
             look,
             look_amount,
@@ -151,7 +173,7 @@ impl Params {
     /// None: this slider state needs features only the CPU has (finished image without sigmoid).
     pub fn gpu_data(&self, camera_lum: [f32; 3]) -> Option<crate::gpu::OutputData> {
         // the black & white mixer only exists in the CPU stage
-        if self.finished.is_some() || self.shadow_tint != 0.0 || self.tone_eq || (self.mono && self.gray_mix.iter().any(|v| *v != 0.0)) {
+        if self.finished.is_some() || self.dcp.is_some() || self.shadow_tint != 0.0 || self.tone_eq || (self.mono && self.gray_mix.iter().any(|v| *v != 0.0)) {
             return None;
         }
         let flatten_table = |t: &[[f32; 3]]| -> Vec<f32> { t.iter().flatten().copied().collect() };
@@ -169,6 +191,8 @@ impl Params {
             highlights: self.highlights,
             whites: self.whites,
             blacks: self.blacks,
+            roll_reach: self.roll_reach,
+            roll_white: self.roll_white,
             saturation: self.saturation,
             vibrance: self.vibrance,
             mono: self.mono,
@@ -201,7 +225,7 @@ impl Params {
             ev += 1.1 * self.whites * smoothstep(0.3, 2.8, x);
         }
         if self.blacks != 0.0 {
-            ev += 1.4 * self.blacks * (1.0 - smoothstep(-6.5, -2.5, x));
+            ev += blacks_ev(self.blacks, x);
         }
         ev
     }
@@ -218,7 +242,10 @@ impl Params {
     /// Scene-linear pixel in the working space (after exposure and equalizer).
     #[inline]
     fn scene(&self, p: [f32; 3], m: f32) -> [f32; 3] {
-        let v = color::mulv(&self.m, p);
+        let mut v = color::mulv(&self.m, p);
+        if let Some(d) = &self.dcp {
+            v = d.apply(v);
+        }
         let y = (self.lum[0] * v[0] + self.lum[1] * v[1] + self.lum[2] * v[2]).max(1e-9);
         let x = (y / raw::tone::MID_GRAY).log2();
         let k = self.equalizer(x, m);
@@ -228,6 +255,10 @@ impl Params {
             let g = k.exp2();
             [v[0] * g, v[1] * g, v[2] * g]
         };
+        // Whites down: also bring lights over white back under it (one gain, hue kept)
+        if self.roll_reach > 0.0 {
+            v = raw::tone::whites_roll(v, self.roll_reach, self.roll_white);
+        }
         if self.shadow_tint != 0.0 {
             // shadow tint: lower (+) or raise (−) green in the shadows (below about 2 EV under middle gray)
             v[1] *= (-self.shadow_tint * (1.0 - smoothstep(-4.0, 0.0, x))).exp2();
@@ -310,6 +341,21 @@ impl Params {
         }
         e
     }
+}
+
+/// Camera profile (DCP) at `path`, read once per process and kept (profiles are small; the file is only read).
+pub fn camera_profile(path: &str) -> Option<Arc<raw::dcp::Profile>> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Option<Arc<raw::dcp::Profile>>>>> = std::sync::OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(p) = cache.lock().ok()?.get(path) {
+        return p.clone();
+    }
+    let p = raw::dcp::Profile::load(std::path::Path::new(path)).map(Arc::new);
+    if p.is_none() {
+        eprintln!("camera profile not readable: {path}");
+    }
+    cache.lock().ok()?.insert(path.to_string(), p.clone());
+    p
 }
 
 /// Contrast for finished images: slope in log space around middle gray, softly
@@ -606,4 +652,16 @@ pub fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
         }
     });
     out
+}
+
+/// The blacks slider's curve, shared with the local corrections (same numbers for global and masked blacks).
+pub use masks::{blacks_ev, BLACKS_OFFSET};
+
+#[cfg(test)]
+mod blacks_tests {
+    /// The masks crate has no `raw` dependency: its middle gray must stay the same.
+    #[test]
+    fn middle_gray_shared() {
+        assert_eq!(masks::MID_GRAY, raw::tone::MID_GRAY);
+    }
 }

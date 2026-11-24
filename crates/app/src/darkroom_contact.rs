@@ -353,9 +353,9 @@ impl App {
                 } else {
                     String::new()
                 };
-                child.label(egui::RichText::new(text).color(lr::TEXT_DIM));
+                child.label(egui::RichText::new(text).color(lr::TEXT_DIM()));
             } else if model.is_ok() && computing {
-                child.label(egui::RichText::new(crate::trf!("RECHNET {done}/{total}", done = done, total = total)).color(lr::TEXT_DIM));
+                child.label(egui::RichText::new(crate::trf!("RECHNET {done}/{total}", done = done, total = total)).color(lr::TEXT_DIM()));
             }
             let mut export = false;
             let mut print = false;
@@ -366,7 +366,7 @@ impl App {
                 }
                 let r = ui.add(egui::Slider::new(zoom, 1.0..=4.0).show_value(false).step_by(0.05));
                 lr::hover_tip(ui, &r, crate::tr("Felder vergrößern (⌘ + Mausrad oder Zusammenziehen)"));
-                ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM()));
             };
             let export_ready = self.darkroom.contact.print.complete();
             child.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -397,7 +397,7 @@ impl App {
                 let left = Rect::from_min_max(line2.min, Pos2::new(row.min_rect().left() - 10.0, line2.max.y));
                 if left.width() > 20.0 {
                     let mut l = ui.new_child(egui::UiBuilder::new().max_rect(left).layout(egui::Layout::left_to_right(egui::Align::Center)));
-                    l.add(egui::Label::new(egui::RichText::new(info).color(lr::TEXT_DIM)).truncate());
+                    l.add(egui::Label::new(egui::RichText::new(info).color(lr::TEXT_DIM())).truncate());
                 }
             }
             // Pinch or ⌘ + mouse wheel zooms when the mouse is over the sheet
@@ -424,7 +424,7 @@ impl App {
             let m = match &model {
                 Ok(m) => m,
                 Err(hint) => {
-                    p.text(rect.center(), egui::Align2::CENTER_CENTER, *hint, egui::FontId::proportional(13.0), lr::TEXT_DIM);
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, *hint, egui::FontId::proportional(13.0), lr::TEXT_DIM());
                     return;
                 }
             };
@@ -452,7 +452,7 @@ impl App {
                 if header_h > 0.0 {
                     for (sp, f) in wide.iter().enumerate() {
                         let x = grid.left() + sp as f32 * (zw + gap) + zw / 2.0;
-                        p.text(Pos2::new(x, top - header_h / 2.0), egui::Align2::CENTER_CENTER, &f.name, egui::FontId::monospace(11.0), lr::TEXT_DIM);
+                        p.text(Pos2::new(x, top - header_h / 2.0), egui::Align2::CENTER_CENTER, &f.name, egui::FontId::monospace(11.0), lr::TEXT_DIM());
                     }
                 }
                 for (z, row) in m.rows.iter().enumerate() {
@@ -471,7 +471,7 @@ impl App {
                         if let Some(t) = self.darkroom.contact.tex.get(&(z, sp)) {
                             p.image(t.id(), image, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
                         } else {
-                            p.text(image.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM);
+                            p.text(image.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM());
                         }
                         let active = m.current == Some((z, sp));
                         let outline = if active { Stroke::new(2.0, lr::ACCENT) } else if resp.hovered() { Stroke::new(1.0, Color32::from_gray(0x78)) } else { Stroke::new(1.0, Color32::from_gray(0x2e)) };

@@ -103,7 +103,7 @@ pub fn sigma_sharpness_locked_tip(prepared: bool) -> &'static str {
 }
 
 /// Tooltip of the Quattro detail slider.
-pub const DETAIL_TIP: &str = "Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen";
+pub const DETAIL_TIP: &str = "Wie viel Detail die Rauschminderung der Quattro ab ISO 400 stehen lässt: sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Feindetail und Struktur wirken danach auf das Ergebnis";
 
 /// Tooltip of the detail slider greyed out for a Quattro photo (`multi_shot`: an X3I file).
 pub fn detail_locked_tip(lock: QuattroNoiseLock, multi_shot: bool) -> &'static str {

@@ -89,11 +89,14 @@ pub fn refusal(rows: &[SourceRow]) -> Option<String> {
     if rows.len() > MAX {
         return Some(crate::trf!("Höchstens {n} Fotos.", n = MAX));
     }
-    if let Some(r) = rows.iter().find(|r| r.format == "X3F") {
-        return Some(crate::trf!("{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.", a = r.name));
+    // Foveon single frames (X3F) merge among themselves, never with mosaic RAWs (another sensor, other colour)
+    let foveon = rows.iter().filter(|r| r.format == "X3F").count();
+    if foveon > 0 && foveon < rows.len() {
+        let r = rows.iter().find(|r| r.format == "X3F").unwrap_or(&rows[0]);
+        return Some(crate::trf!("{a} ist ein Foveon-Foto (X3F): es lässt sich nur mit anderen X3F-Fotos derselben Kamera zusammenfügen.", a = r.name));
     }
     if let Some(r) = rows.iter().find(|r| !library::is_raw(&r.format)) {
-        return Some(crate::trf!("{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.", a = r.name));
+        return Some(crate::trf!("{a}: nur RAW-Fotos (Bayer, X-Trans oder Foveon).", a = r.name));
     }
     let distinct = |v: Vec<String>| {
         let mut out: Vec<String> = Vec::new();
@@ -104,11 +107,13 @@ pub fn refusal(rows: &[SourceRow]) -> Option<String> {
         }
         out
     };
-    let cameras = distinct(rows.iter().map(|r| r.camera.clone().unwrap_or_else(|| crate::tr("unbekannt").to_string())).collect());
+    // only what is known is compared: a camera or size not read yet (metadata of a freshly added photo come in the
+    // background) is no proof of a different camera – the merge itself checks the sensor data again
+    let cameras = distinct(rows.iter().filter_map(|r| r.camera.clone()).collect());
     if cameras.len() > 1 {
         return Some(crate::trf!("Die Fotos stammen von verschiedenen Kameras: {a}.", a = cameras.join(", ")));
     }
-    let sizes = distinct(rows.iter().map(|r| format!("{}×{}", r.width.unwrap_or(0), r.height.unwrap_or(0))).collect());
+    let sizes = distinct(rows.iter().filter_map(|r| Some(format!("{}×{}", r.width.filter(|w| *w > 0)?, r.height.filter(|h| *h > 0)?))).collect());
     if sizes.len() > 1 {
         return Some(crate::trf!("Die Fotos haben verschiedene Größen: {a}.", a = sizes.join(", ")));
     }
@@ -1273,6 +1278,10 @@ mod tests {
         let mut b = row("b", 0.04);
         b.camera = Some("Nikon".into());
         assert!(refusal(&[row("a", 0.01), b]).unwrap().contains("Kameras"));
+        // a camera not read yet is no other camera
+        let mut u = row("u", 0.02);
+        u.camera = None;
+        assert!(!refusal(&[row("a", 0.01), u]).unwrap().contains("Kameras"));
         let mut j = row("c.jpg", 0.04);
         j.format = "JPG".into();
         assert!(refusal(&[row("a", 0.01), j]).is_some());
@@ -1351,7 +1360,17 @@ mod tests {
         assert!(refusal(&[x3i, row("b", 0.04)]).unwrap().contains("SFD"));
         let mut x3f = row("SDQH0001.X3F", 0.01);
         x3f.format = "X3F".into();
-        assert!(refusal(&[x3f, row("b", 0.04)]).unwrap().contains("Foveon"));
+        // with a mosaic RAW: refused; a bracket of X3F frames alone merges (Foveon single frames, 1.5.1)
+        assert!(refusal(&[x3f.clone(), row("b", 0.04)]).unwrap().contains("Foveon"));
+        let mut x3f2 = row("SDQH0002.X3F", 0.04);
+        x3f2.format = "X3F".into();
+        let (a, b) = (std::env::temp_dir().join("graineo-refusal-a.X3F"), std::env::temp_dir().join("graineo-refusal-b.X3F"));
+        std::fs::write(&a, b"FOVb").unwrap();
+        std::fs::write(&b, b"FOVb").unwrap();
+        x3f.path = a.clone();
+        x3f2.path = b.clone();
+        assert_eq!(refusal(&[x3f, x3f2]), None);
+        let _ = (std::fs::remove_file(a), std::fs::remove_file(b));
         let mut nikon = row("b", 0.04);
         nikon.camera = Some("Nikon D7200".into());
         assert_eq!(refusal(&[row("a", 0.01), nikon]).unwrap(), "Die Fotos stammen von verschiedenen Kameras: Canon, Nikon D7200.");

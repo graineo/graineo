@@ -9,6 +9,8 @@ license.workspace = true
 sysdirs = { path = "../sysdirs" }
 graineo-color = { path = "../color" }
 masks = { path = "../masks" }
+# output sharpening of the export (unsharp mask shared with printing)
+print = { path = "../print" }
 retouch = { path = "../retouch" }
 x3f = { path = "../x3f" }
 rayon = "1"
@@ -36,6 +38,10 @@ legacy_names = { path = "../legacy_names" }
 wgpu = { version = "30", features = ["wgsl"] }
 pollster = "0.4"
 bytemuck = "1.25"
+
+[build-dependencies]
+# packs the film data for embedding (build.rs), no network
+flate2 = "1"
 
 [features]
 default = []

@@ -1238,10 +1238,10 @@ impl LibraryView {
         let st = crate::series_job::empty_state(crate::series_job::enabled(), phase, done, total, crate::series_job::passed(), crate::perf_mode::power() == crate::perf_mode::Power::LowPower);
         ui.add_space(36.0);
         ui.vertical_centered(|ui| {
-            ui.label(egui::RichText::new(&st.title).size(16.0).color(lr::TEXT));
+            ui.label(egui::RichText::new(&st.title).size(16.0).color(lr::TEXT()));
             ui.add_space(6.0);
             for t in st.tip.lines() {
-                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(t).color(lr::TEXT_DIM()));
             }
         });
         if phase != crate::series_job::Phase::Idle {
@@ -1420,7 +1420,7 @@ pub fn series_all_button(ui: &mut egui::Ui, state: SeriesAll, w: f32, h: f32) ->
     let hot = usable && resp.hovered();
     let p = ui.painter();
     p.rect_filled(rect, 0.0, if hot { Color32::from_gray(0x2e) } else { lr::GROUP_FILL });
-    let color = if !usable { Color32::from_gray(0x5a) } else if hot { Color32::WHITE } else { lr::TEXT };
+    let color = if !usable { Color32::from_gray(0x5a) } else if hot { Color32::WHITE } else { lr::TEXT() };
     lr::paint_icon(p, egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0)), icon, color);
     lr::hover_tip(ui, &resp, &tip);
     usable && resp.clicked()

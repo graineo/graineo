@@ -83,7 +83,7 @@ impl App {
                         egui::Align2::CENTER_CENTER,
                         format!("{:+} EV", i - 2),
                         egui::FontId::proportional(11.5),
-                        lr::TEXT_DIM,
+                        lr::TEXT_DIM(),
                     );
                 }
                 let (r, _) =

@@ -194,7 +194,7 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
             |ui| {
                 dialog::chip(ui, &d.ident.title());
                 ui.add_space(4.0);
-                ui.label(egui::RichText::new(crate::tr("PROFIL")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("PROFIL")).small().color(lr::TEXT_DIM()));
                 let rule = d.scope == Scope::Rule;
                 let auto_label = if rule { crate::tr("Vorgabe entfernen (automatisch nach Objektivname)") } else { crate::tr("Automatisch (nach Objektivname)") };
                 ui.radio_value(&mut d.choice, Choice::Automatic, auto_label);
@@ -206,13 +206,13 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
                     }
                 });
                 if d.candidates.is_empty() {
-                    ui.label(egui::RichText::new(crate::tr("Noch kein eigenes Profil für diese Kamera")).small().color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch kein eigenes Profil für diese Kamera")).small().color(lr::TEXT_DIM()));
                 }
                 if ui.button(crate::tr("Neues Objektiv vermessen …")).clicked() {
                     open_wizard = true;
                 }
                 ui.add_space(6.0);
-                ui.label(egui::RichText::new(crate::tr("GILT FÜR")).small().color(lr::TEXT_DIM));
+                ui.label(egui::RichText::new(crate::tr("GILT FÜR")).small().color(lr::TEXT_DIM()));
                 ui.radio_value(&mut d.scope, Scope::Photo, crate::tr("dieses Foto"));
                 if has_selection {
                     ui.radio_value(&mut d.scope, Scope::Selection, crate::trf!("die Auswahl ({n} Fotos)", n = d.selected));
@@ -277,16 +277,16 @@ pub fn section(ui: &mut egui::Ui, s: &mut develop::Settings, ident: &Identity) {
     }
     let state = state_text(ident, s.raw.lens_profile.as_deref());
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(crate::tr("Profil")).small().color(lr::TEXT_DIM));
-        ui.add(egui::Label::new(egui::RichText::new(state).small().color(lr::TEXT)).truncate());
+        ui.label(egui::RichText::new(crate::tr("Profil")).small().color(lr::TEXT_DIM()));
+        ui.add(egui::Label::new(egui::RichText::new(state).small().color(lr::TEXT())).truncate());
     });
     // fixed second row: lens of the photo, or the note for Sigma
     let note = if ident.foveon {
         crate::tr("Sigma-X3F: Wirkung folgt").to_string()
     } else {
-        ident.lens.clone().unwrap_or_else(|| crate::tr("ohne Objektivangabe").to_string())
+        ident.lens.as_deref().map(crate::cell_info::lens_label).unwrap_or_else(|| crate::tr("ohne Objektivangabe").to_string())
     };
-    ui.label(egui::RichText::new(note).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(note).small().color(lr::TEXT_DIM()));
     ui.horizontal(|ui| {
         let r = ui.button(crate::tr("Zuweisen …"));
         lr::hover_tip(ui, &r, "Eigenes Profil für dieses Foto, die Auswahl oder alle Fotos dieses Objektivs wählen");

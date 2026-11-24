@@ -140,7 +140,7 @@ pub fn text(field: Field, z: &Row, name: &str, lang: Language) -> Option<String>
         Field::Name => Some(name.to_string()).filter(|n| !n.is_empty()),
         Field::Date => capture_text(z.capture.as_deref()?, lang),
         Field::Camera => z.camera.clone().filter(|c| !c.trim().is_empty()),
-        Field::Lens => z.lens.clone().filter(|c| !c.trim().is_empty()),
+        Field::Lens => z.lens.as_deref().filter(|c| !c.trim().is_empty()).map(lens_label),
         Field::Exposure => exposure(z.focal, z.aperture, z.time, z.iso, lang),
         Field::Pixels => pixels(z.width?, z.height?, lang),
         Field::FileSize => Some(file_size(z.size.filter(|s| *s >= 0)? as u64, lang)),
@@ -148,8 +148,17 @@ pub fn text(field: Field, z: &Row, name: &str, lang: Language) -> Option<String>
     }
 }
 
+/// A lens name as shown: the stored suffix " (fest)" of a built-in lens (see `library::exif::fixed_lens`)
+/// in the UI language. The stored value stays as it is, so search and the lens filter keep matching.
+pub(crate) fn lens_label(lens: &str) -> String {
+    match lens.strip_suffix(" (fest)") {
+        Some(name) => format!("{name} ({})", crate::tr("fest")),
+        None => lens.to_string(),
+    }
+}
+
 /// "15.03.2013 15:19" from 'YYYY-MM-DDThh:mm:ss' (date only when the time is missing).
-fn capture_text(a: &str, lang: Language) -> Option<String> {
+pub(crate) fn capture_text(a: &str, lang: Language) -> Option<String> {
     let num = |r: std::ops::Range<usize>| a.get(r).and_then(|s| s.parse::<u32>().ok());
     let d = date(lang, num(0..4)? as i32, num(5..7)? as u8, num(8..10)? as u8)?;
     match (num(11..13), num(14..16)).0.zip(num(14..16)).and_then(|(h, m)| time(h as u8, m as u8, None)) {
@@ -262,6 +271,11 @@ mod tests {
         let z = row();
         assert_eq!(text(Field::Name, &z, "IMG_0042.CR2", Language::De).as_deref(), Some("IMG_0042.CR2"));
         assert_eq!(text(Field::Date, &z, "", Language::De).as_deref(), Some("11.05.2024 14:03"));
+        assert_eq!(capture_text("2024-05-11T14:03:22", Language::En).as_deref(), Some("2024-05-11 14:03"));
+        assert_eq!(capture_text("2024-05-11T14:03:22", Language::Fr).as_deref(), Some("11/05/2024 14:03"));
+        assert_eq!(capture_text("2024-05-11", Language::Ja).as_deref(), Some("2024/05/11"));
+        assert_eq!(lens_label("SIGMA 30mm f/2.8"), "SIGMA 30mm f/2.8");
+        assert!(lens_label("SIGMA 30mm f/2.8 (fest)").starts_with("SIGMA 30mm f/2.8 ("));
         assert_eq!(text(Field::Date, &z, "", Language::En).as_deref(), Some("2024-05-11 14:03"));
         assert_eq!(text(Field::Date, &Row { capture: Some("2024-05-11".into()), ..Row::default() }, "", Language::De).as_deref(), Some("11.05.2024"));
         assert_eq!(text(Field::Pixels, &z, "", Language::De).as_deref(), Some("6240 × 4160 · 26 MP"));

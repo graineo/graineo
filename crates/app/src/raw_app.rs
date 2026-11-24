@@ -434,6 +434,9 @@ pub fn look_name(n: &str) -> String {
     if n == rawdev::learn::MATCHED_LOOK {
         return crate::tr("An Kamera-JPEG angleichen").to_string();
     }
+    if n == rawdev::learn::LINEAR_LOOK {
+        return crate::tr("Linear (Szene)").to_string();
+    }
     let style = n.rsplit('/').next().unwrap_or(n);
     let s = match style {
         "faithful" | "natural" => crate::tr("Natürlich").to_string(),
@@ -496,6 +499,7 @@ pub fn profile_card(doc: &RawDoc, s: &Settings) -> (String, String, String) {
             look_name(n),
             if doc.matched_error().is_some() { crate::tr("Kein passendes Kamera-JPEG – neutral entwickelt") } else { crate::tr("Tonkurve dieses Fotos aus seinem Kamera-JPEG") }.into(),
         ),
+        n if n == rawdev::learn::LINEAR_LOOK => (format!("look:{n}"), look_name(n), crate::tr("Ohne Kurve, Look, Schärfen, Entrauschen").into()),
         // a camera look stored by name that is neither in the data folder nor bundled (e.g. a personal style whose
         // file is missing): the photo develops neutral, say so instead of naming the look as if it acted
         n if n != rawdev::learn::IDENTITY_LOOK && rawdev::looks::source(n).is_none() => {
@@ -519,6 +523,9 @@ pub fn profile_entries(doc: &RawDoc) -> Vec<(String, String, String)> {
     // tone curve matched per photo to the camera's rendering (every camera, also without a look of its own)
     if !doc.finished {
         let n = rawdev::learn::MATCHED_LOOK;
+        v.push((format!("look:{n}"), look_name(n), n.to_string()));
+        // linear scene rendering: what the sensor measured, as a starting point
+        let n = rawdev::learn::LINEAR_LOOK;
         v.push((format!("look:{n}"), look_name(n), n.to_string()));
     }
     v
@@ -589,7 +596,7 @@ pub fn lightroom_hint(ui: &mut egui::Ui, s: &mut Settings) {
         return;
     }
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(crate::tr("Startwerte aus Lightroom")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Startwerte aus Lightroom")).small().color(lr::TEXT_DIM()));
         crate::help::info(ui, "lr-start", "Startwerte aus Lightroom", &crate::help::RAW_LR_START);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Zurücksetzen")).small()).min_size(egui::vec2(0.0, 18.0))).clicked() {
@@ -810,7 +817,7 @@ pub fn lens(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc) {
     };
     // two fixed rows (profile, reason) – no jumping
     ui.allocate_ui(egui::vec2(ui.available_width(), 30.0), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM)).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).wrap());
     });
     ui.add_space(4.0);
 }
@@ -851,6 +858,6 @@ pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool, 
         }
     });
     if !possible {
-        ui.label(egui::RichText::new(crate::tr("Für dieses Format nicht verfügbar (bereits entwickelte Daten)")).small().color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::tr("Für dieses Format nicht verfügbar (bereits entwickelte Daten)")).small().color(lr::TEXT_DIM()));
     }
 }

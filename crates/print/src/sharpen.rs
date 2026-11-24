@@ -67,6 +67,55 @@ pub fn apply(img: &mut Image16, ppi: f64, s: Sharpen) {
     }
 }
 
+/// Unsharp mask on the brightness of an encoded RGB image (`data`, 16 bit, `w`×`h`) as used for export output
+/// sharpening: the luminance is taken on the encoded values, its difference from the blur (Gaussian `sigma` in pixels)
+/// moves it, and the result goes back as one ratio on the **linear** channels (`decode`/`encode` = transfer of the
+/// image's colour space), so hue and saturation stay. Brightening stops where the largest linear channel reaches 1.
+/// Fringe guard: next to blown highlights (largest channel ≥ 98 %) a dark halo cannot be balanced by a light one on the
+/// clipped side, so darkening is faded out there (share of clipped pixels within about two radii).
+pub fn unsharp_linear_ratio(data: &mut [u16], w: usize, h: usize, sigma: f64, amount: f32, decode: &(dyn Fn(f32) -> f32 + Sync), encode: &(dyn Fn(f32) -> f32 + Sync)) {
+    if w < 3 || h < 3 || sigma < 0.2 || amount <= 0.0 || data.len() != w * h * 3 {
+        return;
+    }
+    let Some(mut luma) = zeros(w * h) else { return };
+    let Some(mut clipped) = zeros(w * h) else { return };
+    for ((l, c), p) in luma.iter_mut().zip(clipped.iter_mut()).zip(data.chunks_exact(3)) {
+        *l = (0.2126 * p[0] as f32 + 0.7152 * p[1] as f32 + 0.0722 * p[2] as f32) / 65535.0;
+        *c = if p[0].max(p[1]).max(p[2]) as f32 >= 0.98 * 65535.0 { 1.0 } else { 0.0 };
+    }
+    let Some(blur) = gaussian(&luma, w, h, sigma) else { return };
+    let near_clip = if clipped.iter().any(|&c| c > 0.0) { gaussian(&clipped, w, h, (2.0 * sigma).max(1.0)) } else { None };
+    drop(clipped);
+    let lut: Vec<f32> = (0..=65535u32).map(|v| decode(v as f32 / 65535.0)).collect();
+    for (i, p) in data.chunks_exact_mut(3).enumerate() {
+        let y = luma[i];
+        let d = y - blur[i];
+        if d.abs() <= THRESHOLD {
+            continue;
+        }
+        let mut d = amount * (d - THRESHOLD * d.signum());
+        if d < 0.0 {
+            if let Some(n) = &near_clip {
+                d *= (1.0 - 3.0 * n[i]).clamp(0.0, 1.0);
+            }
+        }
+        let target = (y + d.clamp(-LIMIT, LIMIT)).clamp(0.0, 1.0);
+        let (yl, tl) = (decode(y), decode(target));
+        if yl <= 1e-6 {
+            continue;
+        }
+        let lin = [lut[p[0] as usize], lut[p[1] as usize], lut[p[2] as usize]];
+        let mx = lin[0].max(lin[1]).max(lin[2]);
+        let mut k = tl / yl;
+        if k > 1.0 && mx > 0.0 {
+            k = k.min((1.0 / mx).max(1.0));
+        }
+        for (c, l) in p.iter_mut().zip(lin) {
+            *c = (encode(l * k).clamp(0.0, 1.0) * 65535.0).round() as u16;
+        }
+    }
+}
+
 /// `n` zeros, or `None` when the memory is not there.
 fn zeros(n: usize) -> Option<Vec<f32>> {
     let mut v = Vec::new();
@@ -110,6 +159,57 @@ fn gaussian(src: &[f32], w: usize, h: usize, sigma: f64) -> Option<Vec<f32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn srgb_decode(x: f32) -> f32 {
+        if x <= 0.04045 { x / 12.92 } else { ((x + 0.055) / 1.055).powf(2.4) }
+    }
+    fn srgb_encode(x: f32) -> f32 {
+        if x <= 0.0031308 { x * 12.92 } else { 1.055 * x.powf(1.0 / 2.4) - 0.055 }
+    }
+
+    /// Image with a vertical edge between two colours (`a` left, `b` right), 40×8.
+    fn colour_edge(a: [u16; 3], b: [u16; 3]) -> Vec<u16> {
+        let (w, h) = (40, 8);
+        let mut d = vec![0u16; w * h * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let c = if x < w / 2 { a } else { b };
+                d[(y * w + x) * 3..(y * w + x) * 3 + 3].copy_from_slice(&c);
+            }
+        }
+        d
+    }
+
+    #[test]
+    fn linear_ratio_sharpens_and_keeps_hue() {
+        let mut d = colour_edge([12000, 8000, 4000], [40000, 26667, 13333]);
+        let before = d.clone();
+        unsharp_linear_ratio(&mut d, 40, 8, 1.0, 1.0, &srgb_decode, &srgb_encode);
+        assert_ne!(d, before, "nothing sharpened");
+        // the dark side next to the edge got darker, the light side lighter
+        let px = |d: &[u16], x: usize| [d[(3 * 40 + x) * 3], d[(3 * 40 + x) * 3 + 1], d[(3 * 40 + x) * 3 + 2]];
+        assert!(px(&d, 19)[0] < px(&before, 19)[0]);
+        assert!(px(&d, 20)[0] > px(&before, 20)[0]);
+        // ratios of the linear channels stay (hue and saturation)
+        for x in [18, 19, 20, 21] {
+            let (o, n) = (px(&before, x), px(&d, x));
+            let r = |p: [u16; 3]| srgb_decode(p[0] as f32 / 65535.0) / srgb_decode(p[2] as f32 / 65535.0);
+            assert!((r(o) - r(n)).abs() / r(o) < 0.01, "x {x}: {} vs {}", r(o), r(n));
+        }
+        // flat areas untouched
+        assert_eq!(px(&d, 2), px(&before, 2));
+    }
+
+    #[test]
+    fn no_dark_fringe_next_to_blown_highlights() {
+        let mut guarded = colour_edge([30000; 3], [65535; 3]);
+        unsharp_linear_ratio(&mut guarded, 40, 8, 1.0, 1.0, &srgb_decode, &srgb_encode);
+        let mut unguarded = colour_edge([30000; 3], [64000; 3]);
+        unsharp_linear_ratio(&mut unguarded, 40, 8, 1.0, 1.0, &srgb_decode, &srgb_encode);
+        let at = |d: &[u16]| d[(3 * 40 + 19) * 3];
+        assert!(at(&unguarded) < 29000, "control edge without clipping must get a dark halo: {}", at(&unguarded));
+        assert!(at(&guarded) >= 29900, "dark halo next to the blown area: {}", at(&guarded));
+    }
 
     /// A soft edge (a few pixels wide) across a test strip printed 30 mm wide.
     fn edge(ppi: f64) -> Image16 {

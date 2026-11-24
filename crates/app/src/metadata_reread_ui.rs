@@ -150,7 +150,11 @@ impl LibraryView {
             &title,
             crate::dialog::WIDTH,
             |ui| {
-                crate::dialog::text(ui, crate::tr("Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien."));
+                ui.horizontal_top(|ui| {
+                    let w = ui.available_width() - 24.0;
+                    ui.allocate_ui(egui::vec2(w, 0.0), |ui| crate::dialog::text(ui, crate::tr("Liest Datum, Kamera, Objektiv, Belichtung, Ort, Maße und Ausrichtung neu aus den Dateien.")));
+                    crate::help::info(ui, "metadata-reread", "Metadaten neu einlesen", &crate::help::METADATA_REREAD);
+                });
                 crate::dialog::hint(ui, &crate::trf!("Neben {a} liegt eine XMP-Begleitdatei.", a = crate::dialog::count(sidecars, crate::tr("Foto"), crate::tr("Fotos"))));
                 crate::dialog::options(ui, |ui| {
                     crate::dialog::option(ui, &mut take, crate::tr("Bewertung, Stichwörter, Etikett aus XMP"), crate::tr("Ersetzt die Werte der Bibliothek; Entwicklung bleibt."), None);

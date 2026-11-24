@@ -249,7 +249,7 @@ impl crate::App {
             // camera, title and black-and-white: as chips when they fit, otherwise in a "more" menu (never a second line)
             let font = egui::TextStyle::Small.resolve(ui.style());
             let rest = [(crate::tr("Kamera"), "{camera}", "{camera}"), (crate::tr("Titel"), crate::tr("Titel aus der Bibliothek, falls vorhanden"), "{title}"), (crate::tr("S/W"), crate::tr("„_mono“ bei Schwarzweiß"), "{mono}")];
-            let need: f32 = rest.iter().map(|(l, _, _)| ui.painter().layout_no_wrap(l.to_string(), font.clone(), lr::TEXT).size().x + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x).sum();
+            let need: f32 = rest.iter().map(|(l, _, _)| ui.painter().layout_no_wrap(l.to_string(), font.clone(), lr::TEXT()).size().x + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x).sum();
             if need <= ui.available_width() {
                 for (label, tip, value) in rest {
                     if chip(ui, label, tip) {
@@ -308,10 +308,10 @@ impl crate::App {
         });
         let digits = names::number_digits(&self.export_naming.pattern);
         crate::export_ui::row_if(ui, crate::tr("Nummer"), digits.is_some(), |ui| {
-            ui.label(egui::RichText::new(crate::tr("Start")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Start")).color(lr::TEXT_DIM()));
             lr::text_field(ui, egui::DragValue::new(&mut self.export_naming.start).range(0..=999_999).speed(1.0));
             ui.add_space(8.0);
-            ui.label(egui::RichText::new(crate::tr("Stellen")).color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("Stellen")).color(lr::TEXT_DIM()));
             let mut d = digits.unwrap_or(3);
             if lr::text_field(ui, egui::DragValue::new(&mut d).range(1..=9).speed(0.1)).changed() {
                 self.export_naming.pattern = names::with_number_digits(&self.export_naming.pattern, d);
@@ -398,7 +398,7 @@ impl crate::App {
         let mut remove: Option<PathBuf> = None;
         ui.horizontal(|ui| {
             if let Some(name) = self.export_names_ui.replacing.clone() {
-                ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es schon.", a = name)).color(lr::TEXT));
+                ui.label(egui::RichText::new(crate::trf!("„{a}“ gibt es schon.", a = name)).color(lr::TEXT()));
                 if ui.button(crate::tr("Ersetzen")).clicked() {
                     self.export_names_ui.replacing = None;
                     save = Some((name, true));
@@ -429,11 +429,11 @@ impl crate::App {
             let shown = self.export_names_ui.chosen.clone().unwrap_or_else(|| crate::tr("– keine –").into());
             // the list takes the room the two buttons leave
             let font = egui::TextStyle::Button.resolve(ui.style());
-            let buttons: f32 = [crate::tr("Sichern …"), crate::tr("Löschen")].iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT).size().x + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x).sum();
+            let buttons: f32 = [crate::tr("Sichern …"), crate::tr("Löschen")].iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT()).size().x + 2.0 * ui.spacing().button_padding.x + ui.spacing().item_spacing.x).sum();
             let w = (ui.available_width() - buttons - 2.0 * ui.spacing().item_spacing.x + 12.0).clamp(60.0, 400.0);
             egui::ComboBox::from_id_salt("export-template").selected_text(shown).width(w).show_ui(ui, |ui| {
                 if list.is_empty() {
-                    ui.label(egui::RichText::new(crate::tr("Noch keine Vorlagen")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("Noch keine Vorlagen")).color(lr::TEXT_DIM()));
                 }
                 for (_, t) in &list {
                     if ui.selectable_label(self.export_names_ui.chosen.as_deref() == Some(t.name.as_str()), &t.name).clicked() {

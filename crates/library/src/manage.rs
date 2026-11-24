@@ -332,6 +332,53 @@ pub fn exclusions(conn: &Connection, root: i64) -> HashSet<String> {
     st.query_map([root], |r| r.get::<_, String>(0)).map(|rows| rows.flatten().collect()).unwrap_or_default()
 }
 
+/// An export target inside a root folder of the library (e.g. the suggested `<photo folder>/export`): remembered as
+/// excluded, so the sync never takes the exported files in as new photos. Only a subfolder the library holds no
+/// photos in yet; a folder with photos of the library and a root folder itself stay as they are (nothing is removed).
+/// Returns whether the folder is excluded now.
+pub fn exclude_export_folder(db: &Db, dir: &std::path::Path) -> R<bool> {
+    let mut path = crate::nfc(&dir.to_string_lossy());
+    if !path.ends_with('/') {
+        path.push('/');
+    }
+    let roots: Vec<(i64, String)> = {
+        let mut st = db.conn.prepare("SELECT id, path FROM root_folder").map_err(f)?;
+        let v = st.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))).map_err(f)?.collect::<rusqlite::Result<Vec<_>>>().map_err(f)?;
+        v
+    };
+    // the innermost root folder that holds the target
+    let Some((root, rel)) = roots
+        .into_iter()
+        .filter_map(|(id, rp)| {
+            let rp = crate::nfc(&rp);
+            let rp = if rp.ends_with('/') { rp } else { format!("{rp}/") };
+            path.strip_prefix(rp.as_str()).map(|rel| (id, rel.to_string()))
+        })
+        .min_by_key(|(_, rel)| rel.len())
+    else {
+        return Ok(false);
+    };
+    if rel.is_empty() {
+        return Ok(false);
+    }
+    if is_excluded(&exclusions(&db.conn, root), &rel) {
+        return Ok(true);
+    }
+    let photos: i64 = db
+        .conn
+        .query_row(
+            "SELECT COUNT(*) FROM file d JOIN folder o ON o.id = d.folder WHERE o.root = ?1 AND substr(o.path, 1, length(?2)) = ?2",
+            params![root, rel],
+            |r| r.get(0),
+        )
+        .map_err(f)?;
+    if photos > 0 {
+        return Ok(false);
+    }
+    db.conn.execute("INSERT OR IGNORE INTO excluded_path(root, rel, time) VALUES(?1, ?2, ?3)", params![root, rel, crate::now()]).map_err(f)?;
+    Ok(true)
+}
+
 /// Is `rel` (folder 'a/b/' or file 'a/b/x.jpg') excluded or inside an excluded folder?
 pub fn is_excluded(excluded: &HashSet<String>, rel: &str) -> bool {
     if excluded.is_empty() {
@@ -976,6 +1023,43 @@ mod tests {
             )
             .unwrap();
         (d, db)
+    }
+
+    #[test]
+    fn an_export_folder_in_the_library_is_excluded_from_the_sync() {
+        let (_d, db) = library();
+        let p = std::path::Path::new;
+        assert!(exclude_export_folder(&db, p("/fotos/reise/export")).unwrap(), "new export folder below a photo folder");
+        assert!(is_excluded(&exclusions(&db.conn, 1), "reise/export/x.jpg"));
+        assert!(exclude_export_folder(&db, p("/fotos/reise/export/")).unwrap(), "second export: already excluded");
+        assert!(!exclude_export_folder(&db, p("/fotos/reise")).unwrap(), "folder with photos of the library stays");
+        assert!(!exclude_export_folder(&db, p("/fotos")).unwrap(), "the root folder itself stays");
+        assert!(!exclude_export_folder(&db, p("/anderswo/export")).unwrap(), "outside the library: nothing to do");
+        assert!(!is_excluded(&exclusions(&db.conn, 1), "reise/b.jpg"));
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM file"), 3, "no photo removed");
+    }
+
+    /// End to end: exports written into `<photo folder>/export` of a library folder do not come in with the next sync.
+    #[test]
+    fn the_sync_skips_an_export_folder() {
+        let d = tempdir::Dir::new();
+        let db = Db::open(&d.0.join("library.sqlite")).unwrap();
+        let photos = d.0.join("Fotos");
+        std::fs::create_dir_all(&photos).unwrap();
+        image::RgbImage::from_pixel(8, 6, image::Rgb([90, 90, 90])).save(photos.join("a.jpg")).unwrap();
+        crate::reconcile::add_root(&db, &photos, &|_| {}).unwrap();
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM file"), 1);
+        let export = photos.join("export");
+        assert!(exclude_export_folder(&db, &export).unwrap());
+        std::fs::create_dir_all(&export).unwrap();
+        image::RgbImage::from_pixel(8, 6, image::Rgb([20, 20, 20])).save(export.join("a.jpg")).unwrap();
+        crate::reconcile::reconcile(&db, None, &|_| {}).unwrap();
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM file"), 1, "the export is not a new photo");
+        // a folder next to it still comes in
+        std::fs::create_dir_all(photos.join("neu")).unwrap();
+        image::RgbImage::from_pixel(8, 6, image::Rgb([20, 20, 20])).save(photos.join("neu/b.jpg")).unwrap();
+        crate::reconcile::reconcile(&db, None, &|_| {}).unwrap();
+        assert_eq!(count(&db, "SELECT COUNT(*) FROM file"), 2);
     }
 
     fn count(db: &Db, sql: &str) -> i64 {

@@ -6,14 +6,51 @@ use eframe::egui;
 use egui::{Color32, Stroke};
 
 /// Colors (near-black dark theme).
+static HIGH_CONTRAST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SANS_FONT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// High contrast (Settings → Interface): brighter texts, clearer borders. Default off.
+pub fn high_contrast() -> bool {
+    HIGH_CONTRAST.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Interface font: false = IBM Plex Mono (default), true = IBM Plex Sans.
+pub fn sans_font() -> bool {
+    SANS_FONT.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Set the readability options and re-apply fonts and theme.
+pub fn set_readability(ctx: &egui::Context, sans: bool, contrast: bool) {
+    SANS_FONT.store(sans, std::sync::atomic::Ordering::Relaxed);
+    HIGH_CONTRAST.store(contrast, std::sync::atomic::Ordering::Relaxed);
+    apply_theme(ctx);
+    ctx.request_repaint();
+}
+
 pub const PANEL: Color32 = Color32::from_rgb(0x17, 0x18, 0x1a);
 pub const PANEL_DARK: Color32 = Color32::from_rgb(0x0f, 0x10, 0x11);
 pub const IMAGE_BG: Color32 = Color32::from_rgb(0x0c, 0x0c, 0x0d);
-pub const TEXT: Color32 = Color32::from_gray(0xd0);
-pub const TEXT_DIM: Color32 = Color32::from_gray(0xa6);
-/// Slider names: brighter than TEXT_DIM so the panels read less grey in grey.
-pub const CATEGORY_LABEL: Color32 = Color32::from_gray(0xbc);
-pub const SLIDER_LABEL: Color32 = Color32::from_gray(0xc4);
+#[allow(non_snake_case)]
+#[inline]
+pub fn TEXT() -> Color32 {
+    Color32::from_gray(if high_contrast() { 0xf2 } else { 0xd0 })
+}
+#[allow(non_snake_case)]
+#[inline]
+pub fn TEXT_DIM() -> Color32 {
+    Color32::from_gray(if high_contrast() { 0xd6 } else { 0xa6 })
+}
+/// Slider names: brighter than TEXT_DIM() so the panels read less grey in grey.
+#[allow(non_snake_case)]
+#[inline]
+pub fn CATEGORY_LABEL() -> Color32 {
+    Color32::from_gray(if high_contrast() { 0xe4 } else { 0xbc })
+}
+#[allow(non_snake_case)]
+#[inline]
+pub fn SLIDER_LABEL() -> Color32 {
+    Color32::from_gray(if high_contrast() { 0xe8 } else { 0xc4 })
+}
 /// Extra vertical space per slider row.
 pub const SLIDER_AIR: f32 = 4.0;
 /// Grouped controls (variant C): a slightly lighter surface, no frame.
@@ -24,7 +61,11 @@ pub const ACTIVE_MARK: Color32 = Color32::from_gray(0xa8);
 /// Secondary button surface (no frame) and input fields (darker than the surroundings).
 pub const BUTTON_FILL: Color32 = Color32::from_gray(0x2b);
 pub const FIELD_FILL: Color32 = Color32::from_gray(0x0f);
-pub const FIELD_STROKE: Color32 = Color32::from_gray(0x33);
+#[allow(non_snake_case)]
+#[inline]
+pub fn FIELD_STROKE() -> Color32 {
+    Color32::from_gray(if high_contrast() { 0x78 } else { 0x33 })
+}
 pub const ACCENT: Color32 = Color32::from_gray(0xb8);
 /// Gold tone for "active" and "selected" (underline of the active area, active toggles, selection frame).
 /// The app's blue for "on" and "chosen" (switch on, progress bar, chosen mode, links) – never gold.
@@ -51,6 +92,9 @@ fn load_fonts(ctx: &egui::Context) {
     let plex = [
         ("plex", &include_bytes!("../assets/fonts/IBMPlexMono-Regular.ttf")[..]),
         ("plex-medium", &include_bytes!("../assets/fonts/IBMPlexMono-Medium.ttf")[..]),
+        // optional proportional interface font (Settings → Interface → Font)
+        ("plex-sans", &include_bytes!("../assets/fonts/IBMPlexSans-Regular.ttf")[..]),
+        ("plex-sans-medium", &include_bytes!("../assets/fonts/IBMPlexSans-Medium.ttf")[..]),
         ("phosphor", &include_bytes!("../assets/fonts/Phosphor-Light.ttf")[..]),
         // Japanese glyphs (Plex Mono has none): IBM Plex Sans JP Regular (SIL OFL), last in every chain
         ("plex-jp", &include_bytes!("../assets/fonts/IBMPlexSansJP-Regular.ttf")[..]),
@@ -79,9 +123,10 @@ fn load_fonts(ctx: &egui::Context) {
     }
     // Plex first, then SF and the egui default for glyphs Plex lacks (arrows, symbols)
     let chain = |first: &str| -> Vec<String> { std::iter::once(first.to_string()).chain(sf.iter().cloned()).chain(defaults.iter().cloned()).chain(std::iter::once("plex-jp".to_string())).collect() };
-    defs.families.insert(FontFamily::Proportional, chain("plex"));
+    let (regular, medium) = if sans_font() { ("plex-sans", "plex-sans-medium") } else { ("plex", "plex-medium") };
+    defs.families.insert(FontFamily::Proportional, chain(regular));
     defs.families.insert(FontFamily::Monospace, chain("plex"));
-    defs.families.insert(FontFamily::Name("semibold".into()), chain("plex-medium"));
+    defs.families.insert(FontFamily::Name("semibold".into()), chain(medium));
     defs.families.insert(FontFamily::Name("icons".into()), vec!["phosphor".to_string()]);
     defs.families.insert(FontFamily::Name("brand".into()), chain("syne"));
     defs.families.insert(FontFamily::Name("sans".into()), sf.iter().cloned().chain(defaults.iter().cloned()).chain(std::iter::once("plex-jp".to_string())).collect());
@@ -134,17 +179,24 @@ pub fn apply_theme(ctx: &egui::Context) {
     v.window_fill = Color32::from_rgb(0x1e, 0x1f, 0x22);
     v.extreme_bg_color = PANEL_DARK;
     v.faint_bg_color = Color32::from_rgb(0x1c, 0x1d, 0x1f);
-    v.override_text_color = Some(TEXT);
+    v.override_text_color = Some(TEXT());
     v.selection.bg_fill = Color32::from_gray(0x68);
     v.selection.stroke = Stroke::new(1.0, Color32::from_gray(0xe0));
     v.widgets.noninteractive.bg_fill = PANEL;
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_gray(0x34));
+    let hc = high_contrast();
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_gray(if hc { 0x6a } else { 0x34 }));
     v.widgets.inactive.bg_fill = BUTTON_FILL;
     v.widgets.inactive.weak_bg_fill = BUTTON_FILL;
     // Basic rule: anything with a fill or a frame is clickable; plain text is a label. Secondary buttons: surface, no frame.
     v.widgets.inactive.bg_stroke = Stroke::NONE;
     v.widgets.hovered.bg_stroke = Stroke::NONE;
     v.widgets.active.bg_stroke = Stroke::NONE;
+    if hc {
+        // high contrast: buttons get a visible frame, disabled controls stay legible
+        v.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_gray(0x5a));
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_gray(0x8a));
+        v.disabled_alpha = 0.75;
+    }
     // input fields darker than the surroundings with a fine frame
     v.text_edit_bg_color = Some(FIELD_FILL);
     // Mac convention: arrow cursor on controls (hand only on the web); brightening shows clickability
@@ -245,7 +297,7 @@ pub fn slider_plain(ui: &mut egui::Ui, label: &str, value: &mut f64, range: std:
 pub fn note(ui: &mut egui::Ui, text: &str) -> egui::Response {
     egui::Frame::NONE
         .inner_margin(egui::Margin { left: TEXT_INSET as i8, ..Default::default() })
-        .show(ui, |ui| ui.add(egui::Label::new(egui::RichText::new(text).small().color(TEXT_DIM)).wrap()))
+        .show(ui, |ui| ui.add(egui::Label::new(egui::RichText::new(text).small().color(TEXT_DIM())).wrap()))
         .inner
 }
 
@@ -339,11 +391,11 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
     } else if changed {
         Color32::from_gray(0xe6)
     } else {
-        SLIDER_LABEL
+        SLIDER_LABEL()
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     let text = format!("{:.0} / {:.0}", value[0], value[1]);
-    painter.text(value_rect.right_center(), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { Color32::WHITE } else { TEXT_DIM });
+    painter.text(value_rect.right_center(), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { Color32::WHITE } else { TEXT_DIM() });
 
     // Track with gradient, darkened outside the range
     let y = track_rect.center().y;
@@ -462,7 +514,7 @@ fn slider_full(
     } else if changed {
         Color32::from_gray(0xe6)
     } else {
-        SLIDER_LABEL
+        SLIDER_LABEL()
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
 
@@ -530,7 +582,7 @@ fn slider_full(
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(value_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
     {
         let v = child.visuals_mut();
-        v.override_text_color = Some(if changed && enabled { Color32::WHITE } else { TEXT_DIM });
+        v.override_text_color = Some(if changed && enabled { Color32::WHITE } else { TEXT_DIM() });
         v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_stroke = Stroke::NONE;
@@ -656,7 +708,7 @@ fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, option
     let h = 20.0;
     let widths: Vec<f32> = options
         .iter()
-        .map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT).size().x + 2.0 * pad)
+        .map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT()).size().x + 2.0 * pad)
         .collect();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(widths.iter().sum(), h), egui::Sense::hover());
     let painter = ui.painter().clone();
@@ -681,7 +733,7 @@ fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, option
         if let Some(tip) = tips.get(i).filter(|t| !t.is_empty()) {
             hover_tip(ui, &resp, crate::tr(tip));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT } else { TEXT_DIM };
+        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.galley(seg.center() - galley.size() / 2.0, galley, color);
     }
@@ -735,7 +787,7 @@ pub fn main_button_min(ui: &mut egui::Ui, text: &str, active: bool, min_width: f
 pub fn secondary_button(ui: &mut egui::Ui, icon: Option<Icon>, text: &str) -> egui::Response {
     let text = crate::tr(text);
     let font = egui::TextStyle::Button.resolve(ui.style());
-    let galley = ui.painter().layout_no_wrap(text.to_string(), font, TEXT);
+    let galley = ui.painter().layout_no_wrap(text.to_string(), font, TEXT());
     let icon_w = if icon.is_some() { 18.0 } else { 0.0 };
     let size = egui::vec2(galley.size().x + 20.0 + icon_w, 24.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
@@ -754,10 +806,10 @@ pub fn secondary_button(ui: &mut egui::Ui, icon: Option<Icon>, text: &str) -> eg
     }
     let mut x = rect.left() + 10.0;
     if let Some(i) = icon {
-        paint_icon(painter, egui::Rect::from_center_size(egui::pos2(x + 6.0, rect.center().y), egui::vec2(12.0, 12.0)), i, TEXT);
+        paint_icon(painter, egui::Rect::from_center_size(egui::pos2(x + 6.0, rect.center().y), egui::vec2(12.0, 12.0)), i, TEXT());
         x += icon_w;
     }
-    painter.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, TEXT);
+    painter.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, TEXT());
     resp
 }
 
@@ -815,9 +867,9 @@ pub fn category_with<R>(ui: &mut egui::Ui, text: &str, right: f32, add: impl FnO
 }
 
 fn category_paint(painter: &egui::Painter, rect: egui::Rect, text: &str) {
-    let g = caps(painter, text, egui::FontId::proportional(10.5), CATEGORY_LABEL);
+    let g = caps(painter, text, egui::FontId::proportional(10.5), CATEGORY_LABEL());
     let links = rect.left() + TEXT_INSET;
-    painter.galley(egui::pos2(links, rect.center().y - g.size().y / 2.0), g.clone(), CATEGORY_LABEL);
+    painter.galley(egui::pos2(links, rect.center().y - g.size().y / 2.0), g.clone(), CATEGORY_LABEL());
     let x = links + g.size().x + 10.0;
     if x < rect.right() {
         painter.line_segment([egui::pos2(x, rect.center().y), egui::pos2(rect.right(), rect.center().y)], egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
@@ -840,7 +892,7 @@ fn middle_ellipsis(ui: &egui::Ui, text: &str, width: f32) -> String {
 
 /// [`middle_ellipsis`] for any font (e.g. a bold folder name or a small path line).
 pub fn middle_ellipsis_font(painter: &egui::Painter, text: &str, font: &egui::FontId, width: f32) -> String {
-    let measure = |s: &str| painter.layout_no_wrap(s.to_owned(), font.clone(), TEXT).size().x;
+    let measure = |s: &str| painter.layout_no_wrap(s.to_owned(), font.clone(), TEXT()).size().x;
     if measure(text) <= width { return text.to_owned(); }
     let chars: Vec<char> = text.chars().collect();
     let mut lo = 0;
@@ -864,7 +916,7 @@ pub fn value_field(ui: &mut egui::Ui, value: Option<&str>, empty: &str) -> egui:
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
-    p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, FIELD_STROKE), egui::StrokeKind::Inside);
+    p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, FIELD_STROKE()), egui::StrokeKind::Inside);
     let font = egui::FontId::proportional(UI_SIZE - 0.5);
     let (text, color) = match value {
         Some(v) => (middle_ellipsis_font(p, v, &font, rect.width() - 14.0), Color32::from_gray(0xe6)),
@@ -889,13 +941,13 @@ pub fn section_rule(ui: &mut egui::Ui) {
 /// Does `text` fit into `width` on one line (body font)?
 pub fn fits_width(ui: &egui::Ui, text: &str, width: f32) -> bool {
     let font = egui::TextStyle::Body.resolve(ui.style());
-    ui.painter().layout_no_wrap(text.to_owned(), font, TEXT).size().x <= width
+    ui.painter().layout_no_wrap(text.to_owned(), font, TEXT()).size().x <= width
 }
 
 /// `text` shortened at the start ("…/Fotos/2024/Rom") so that it fits into `width`: for paths, whose end says most.
 fn start_ellipsis(ui: &egui::Ui, text: &str, width: f32) -> String {
     let font = egui::TextStyle::Body.resolve(ui.style());
-    let measure = |s: &str| ui.painter().layout_no_wrap(s.to_owned(), font.clone(), TEXT).size().x;
+    let measure = |s: &str| ui.painter().layout_no_wrap(s.to_owned(), font.clone(), TEXT()).size().x;
     if measure(text) <= width {
         return text.to_owned();
     }
@@ -939,7 +991,7 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
     // never past the visible edge of the panel (its clip can end before the available width)
     let width = ui.available_width().min(ui.clip_rect().right() - ui.cursor().left()).max(0.0);
     let font = egui::TextStyle::Body.resolve(ui.style());
-    let key_w = ui.painter().layout_no_wrap(key.to_owned(), font.clone(), TEXT_DIM).size().x;
+    let key_w = ui.painter().layout_no_wrap(key.to_owned(), font.clone(), TEXT_DIM()).size().x;
     let key_col = kv_key_column(ui, key_w, width);
     let value_width = (width - key_col - KV_GAP).max(0.0);
     let path = value.contains('/') && !value.contains(" · ") || value.contains('\\');
@@ -971,14 +1023,14 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
     } else {
         display.clone()
     };
-    let lines = if wrap { ui.painter().layout(shown.clone(), font.clone(), TEXT, value_width).rows.len().max(1) } else { 1 };
+    let lines = if wrap { ui.painter().layout(shown.clone(), font.clone(), TEXT(), value_width).rows.len().max(1) } else { 1 };
     let row_h = 20.0 + (lines as f32 - 1.0) * (font.size + 4.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, row_h), egui::Sense::hover());
     let key_rect = egui::Rect::from_min_size(rect.min, egui::vec2(key_col, 20.0));
     let value_rect = egui::Rect::from_min_max(egui::pos2(rect.left() + key_col + KV_GAP, rect.top()), rect.max);
     let key_response = ui
         .scope_builder(egui::UiBuilder::new().max_rect(key_rect).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
-            ui.add(egui::Label::new(egui::RichText::new(key).color(TEXT_DIM)).truncate().selectable(false))
+            ui.add(egui::Label::new(egui::RichText::new(key).color(TEXT_DIM())).truncate().selectable(false))
         })
         .inner;
     if key_w > key_col + 0.5 {
@@ -989,7 +1041,7 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
         .scope_builder(egui::UiBuilder::new().max_rect(value_rect).layout(egui::Layout::left_to_right(egui::Align::Min)), |ui| {
             ui.set_min_height(20.0);
             let hot = clickable && ui.rect_contains_pointer(value_rect);
-            let text = egui::RichText::new(shown).color(if hot { Color32::WHITE } else { TEXT });
+            let text = egui::RichText::new(shown).color(if hot { Color32::WHITE } else { TEXT() });
             let text = if hot { text.underline() } else { text };
             let label = egui::Label::new(text).selectable(!clickable);
             let label = if wrap { label.wrap() } else { label.truncate() };
@@ -1056,7 +1108,7 @@ pub fn list_item(ui: &mut egui::Ui, text: &str, active: bool) -> egui::Response 
     } else if resp.hovered() {
         painter.rect_filled(rect, 0.0, Color32::from_gray(0x38));
     }
-    let color = if active || resp.hovered() { Color32::WHITE } else { TEXT };
+    let color = if active || resp.hovered() { Color32::WHITE } else { TEXT() };
     let galley = painter.layout_no_wrap(text.to_owned(), egui::TextStyle::Body.resolve(ui.style()), color);
     let text_rect = rect.shrink2(egui::vec2(8.0, 0.0));
     painter.with_clip_rect(text_rect).galley(egui::pos2(text_rect.left(), text_rect.center().y - galley.size().y / 2.0), galley.clone(), color);
@@ -1236,7 +1288,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
         if hov {
             painter.rect_filled(reset_rect, 0.0, Color32::from_gray(0x44));
         }
-        painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { Color32::WHITE } else { TEXT_DIM });
+        painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { Color32::WHITE } else { TEXT_DIM() });
         if let Some(r) = reset_resp {
             hover_tip(ui, &r, crate::tr("Abschnitt zurücksetzen"));
             if r.clicked() {
@@ -1382,7 +1434,7 @@ pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, he
         let (a, b) = r.span();
         let band = egui::Rect::from_x_y_ranges(rect.left() + rect.width() * a..=rect.left() + rect.width() * b, rect.y_range());
         painter.rect_filled(band, 0.0, Color32::from_white_alpha(10));
-        painter.text(rect.left_bottom() + egui::vec2(6.0, -4.0), egui::Align2::LEFT_BOTTOM, r.label(), egui::TextStyle::Small.resolve(ui.style()), TEXT);
+        painter.text(rect.left_bottom() + egui::vec2(6.0, -4.0), egui::Align2::LEFT_BOTTOM, r.label(), egui::TextStyle::Small.resolve(ui.style()), TEXT());
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         if resp.dragged() {
             out.drag = Some((r, resp.drag_delta().x / rect.width()));
@@ -1576,7 +1628,7 @@ pub fn color_wheel(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], size: f
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
         let txt = if value[1] > 0.0 { format!("{label}  {:.0}° · {:.0} %", value[0], value[1] * 100.0) } else { label.to_string() };
-        ui.vertical_centered(|ui| ui.label(egui::RichText::new(txt).small().color(if value[1] > 0.0 { TEXT } else { TEXT_DIM })));
+        ui.vertical_centered(|ui| ui.label(egui::RichText::new(txt).small().color(if value[1] > 0.0 { TEXT() } else { TEXT_DIM() })));
     });
     *value != before
 }
@@ -1601,7 +1653,7 @@ pub fn subsection<R>(ui: &mut egui::Ui, title: &str, count: usize, open: bool, a
     painter.add(egui::Shape::convex_polygon(arrow, if resp.hovered() { Color32::from_gray(0xe0) } else { Color32::from_gray(0x8a) }, Stroke::NONE));
     let color = if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xd0) };
     painter.text(egui::pos2(rect.left() + 20.0, rect.center().y), egui::Align2::LEFT_CENTER, crate::tr(title), semibold(12.5), color);
-    painter.text(egui::pos2(rect.right() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, count.to_string(), egui::TextStyle::Small.resolve(ui.style()), TEXT_DIM);
+    painter.text(egui::pos2(rect.right() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, count.to_string(), egui::TextStyle::Small.resolve(ui.style()), TEXT_DIM());
     state.show_body_unindented(ui, |ui| {
         ui.indent(id.with("body"), |ui| {
             ui.spacing_mut().indent = 10.0;
@@ -1792,7 +1844,7 @@ pub fn tone_curve(ui: &mut egui::Ui, curve: &mut develop::ToneCurve, channel: us
         ("Klicken: Punkt · Ziehen · Doppelklick entfernt".to_string(), false)
     };
     ui.allocate_ui_with_layout(egui::vec2(size, 16.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(crate::tr(&text)).small().color(if bright { TEXT } else { TEXT_DIM })).truncate());
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr(&text)).small().color(if bright { TEXT() } else { TEXT_DIM() })).truncate());
     });
     *curve != before
 }
@@ -2204,7 +2256,7 @@ pub fn orientation_toggle(ui: &mut egui::Ui, landscape: &mut bool) -> bool {
         } else if resp.hovered() {
             painter.rect_filled(seg.shrink(2.0), 0.0, Color32::from_gray(0x3c));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT } else { TEXT_DIM };
+        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let size = if value { egui::vec2(13.0, 9.0) } else { egui::vec2(9.0, 13.0) };
         painter.rect_stroke(egui::Rect::from_center_size(seg.center(), size), 0.0, Stroke::new(1.2, color), egui::StrokeKind::Middle);
         if resp.clicked() && !active {
@@ -2290,7 +2342,7 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         job
     };
     let row_h = |size: f32| ui.painter().layout_no_wrap("Ag".into(), egui::FontId::proportional(size), Color32::WHITE).size().y;
-    let name_rows = tiles.iter().map(|t| ui.painter().layout_job(name_job(t.name, TEXT)).rows.len()).max().unwrap_or(1).clamp(1, 2);
+    let name_rows = tiles.iter().map(|t| ui.painter().layout_job(name_job(t.name, TEXT())).rows.len()).max().unwrap_or(1).clamp(1, 2);
     let with_sub = tiles.iter().any(|t| !t.sub.is_empty());
     let sub_h = row_h(SUB_SIZE);
     let text_h = NAME_TOP + name_rows as f32 * row_h(NAME_SIZE) + if with_sub { 1.0 + sub_h } else { 0.0 };
@@ -2327,7 +2379,7 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
             let k = (img.width() / s.x).min(img.height() / s.y);
             painter.image(tex.id(), egui::Rect::from_center_size(img.center(), s * k), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), if available { Color32::WHITE } else { Color32::from_gray(80) });
         } else {
-            painter.text(img.center(), egui::Align2::CENTER_CENTER, if available { "…" } else { crate::tr("Nicht verfügbar") }, egui::FontId::proportional(if available { 12.0 } else { 8.5 }), TEXT_DIM);
+            painter.text(img.center(), egui::Align2::CENTER_CENTER, if available { "…" } else { crate::tr("Nicht verfügbar") }, egui::FontId::proportional(if available { 12.0 } else { 8.5 }), TEXT_DIM());
         }
         let hot = resp.hovered() || star_hovered;
         if on {
@@ -2375,7 +2427,7 @@ pub fn icon_toggle(ui: &mut egui::Ui, icon: Icon, label: &str, on: bool, width: 
     } else if resp.hovered() && enabled {
         (Color32::from_gray(0x2a), Color32::from_gray(0xe0))
     } else {
-        (Color32::from_gray(0x1e), if enabled { TEXT } else { Color32::from_gray(0x5c) })
+        (Color32::from_gray(0x1e), if enabled { TEXT() } else { Color32::from_gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     // the brighter fill already shows "on" clearly; only focus gets a frame
@@ -2441,7 +2493,7 @@ pub fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str, siz
     } else if resp.hovered() && enabled {
         (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT } else { Color32::from_gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { Color32::from_gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
@@ -2545,7 +2597,7 @@ pub fn cell_group_enabled(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &
         }
         match cell {
             Cell::Symbol(icon, c) => paint_icon(painter, egui::Rect::from_center_size(r.center(), egui::vec2(16.0, 16.0)), *icon, if !on { CELL_DISABLED } else if *active { Color32::WHITE } else { *c }),
-            Cell::Flag(f) => paint_flag(painter, r.center(), 17.0, *f, *active, if *active { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { TEXT }),
+            Cell::Flag(f) => paint_flag(painter, r.center(), 17.0, *f, *active, if *active { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { TEXT() }),
             Cell::Text(t, size_pt, c) => {
                 painter.text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size_pt), if on { *c } else { CELL_DISABLED });
             }
@@ -2650,7 +2702,7 @@ fn hover_tip_at(ui: &egui::Ui, resp: &egui::Response, text: &str, above: bool) {
             };
             tip.show(|ui| {
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                ui.label(egui::RichText::new(crate::tr(text)).size(UI_SIZE - 0.5).color(TEXT))
+                ui.label(egui::RichText::new(crate::tr(text)).size(UI_SIZE - 0.5).color(TEXT()))
             });
             ui.ctx().request_repaint_after(std::time::Duration::from_secs_f32(TIP_WARM));
         } else {
@@ -2726,7 +2778,7 @@ pub fn bar_pad(ui: &mut egui::Ui, entries: &[BarEntry], accent: Color32, pad: f3
             } else if hover {
                 p.rect_filled(r, 0.0, Color32::from_gray(0x22));
             }
-            let color = if e.active { Color32::WHITE } else if !e.enabled { Color32::from_gray(0x78) } else if hover { TEXT } else { TEXT_DIM };
+            let color = if e.active { Color32::WHITE } else if !e.enabled { Color32::from_gray(0x78) } else if hover { TEXT() } else { TEXT_DIM() };
             let g2 = p.layout_no_wrap(crate::tr(e.text).to_string(), font.clone(), color);
             p.galley(egui::pos2(r.center().x - g2.size().x / 2.0, r.center().y - g2.size().y / 2.0 - 1.0), g2, color);
             if !e.hover_tip.is_empty() {
@@ -2809,7 +2861,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     if let Some(i) = sel {
-        let c = if !enabled { Color32::from_gray(0x5c) } else if changed { Color32::WHITE } else { TEXT_DIM };
+        let c = if !enabled { Color32::from_gray(0x5c) } else if changed { Color32::WHITE } else { TEXT_DIM() };
         painter.text(value_rect.right_center() - egui::vec2(13.0, 0.0), egui::Align2::RIGHT_CENTER, crate::tr(options[i].1), egui::FontId::proportional(UI_SIZE), c);
     }
 
@@ -2877,7 +2929,7 @@ pub fn choice<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut 
 pub fn choice_state<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, state: &str, value: &mut T, options: &[(T, &str)], hint: &str) -> bool {
     let (row, text, id) = label_above(ui, label);
     if !state.is_empty() {
-        ui.painter().text(row.right_center(), egui::Align2::RIGHT_CENTER, state, egui::TextStyle::Small.resolve(ui.style()), TEXT_DIM);
+        ui.painter().text(row.right_center(), egui::Align2::RIGHT_CENTER, state, egui::TextStyle::Small.resolve(ui.style()), TEXT_DIM());
     }
     let (changed, seg) = segmented_full_rect(ui, value, options);
     let hot = ui.is_enabled() && ui.rect_contains_pointer(row.union(seg));
@@ -2915,7 +2967,7 @@ fn segmented_full_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, o
     let font = egui::TextStyle::Button.resolve(ui.style());
     let h = 20.0;
     let w = ui.available_width();
-    let natural: Vec<f32> = options.iter().map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT).size().x + 8.0).collect();
+    let natural: Vec<f32> = options.iter().map(|(_, l)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT()).size().x + 8.0).collect();
     let sum: f32 = natural.iter().sum();
     let widths: Vec<f32> = if sum >= w {
         natural.iter().map(|x| x * w / sum.max(1.0)).collect()
@@ -2950,7 +3002,7 @@ fn segmented_full_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, o
         if i > 0 && !active {
             painter.vline(seg.left(), seg.y_range().shrink(4.0), Stroke::new(1.0, Color32::from_gray(0x40)));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT } else { TEXT_DIM };
+        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.with_clip_rect(seg.shrink(1.0)).galley(seg.center() - galley.size() / 2.0, galley, color);
     }
@@ -3241,7 +3293,7 @@ mod tests {
         let plain = cursor_over(|ui| ui.add(egui::Label::new("Anna").sense(egui::Sense::click())));
         assert_eq!(plain, egui::CursorIcon::Text);
         // fix: arrow pointer
-        let link = cursor_over(|ui| link_text(ui, egui::RichText::new("Anna"), TEXT));
+        let link = cursor_over(|ui| link_text(ui, egui::RichText::new("Anna"), TEXT()));
         assert_eq!(link, egui::CursorIcon::Default);
     }
 
@@ -3413,7 +3465,7 @@ pub fn drawn_icon_button_at(ui: &mut egui::Ui, rect: egui::Rect, salt: &str, ico
     } else if resp.hovered() && enabled {
         (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT } else { Color32::from_gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { Color32::from_gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
@@ -3431,7 +3483,7 @@ pub fn drawn_icon_button_at(ui: &mut egui::Ui, rect: egui::Rect, salt: &str, ico
 pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool) -> bool {
     let mut b = egui::Button::new(text);
     if !shortcut.is_empty() {
-        b = b.shortcut_text(egui::RichText::new(shortcut).color(TEXT_DIM));
+        b = b.shortcut_text(egui::RichText::new(shortcut).color(TEXT_DIM()));
     }
     let clicked = ui.add_enabled(enabled, b).clicked();
     if clicked {
@@ -3445,7 +3497,7 @@ pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool) -
 pub fn menu_item_why(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool, why: &str) -> bool {
     let mut b = egui::Button::new(text);
     if !shortcut.is_empty() {
-        b = b.shortcut_text(egui::RichText::new(shortcut).color(TEXT_DIM));
+        b = b.shortcut_text(egui::RichText::new(shortcut).color(TEXT_DIM()));
     }
     let resp = ui.add_enabled(enabled, b);
     if !enabled && !why.is_empty() {
@@ -3461,7 +3513,7 @@ pub fn menu_item_why(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: boo
 }
 
 /// Input field (text or number) like the search field: dark surface [`FIELD_FILL`] with a 1 px frame
-/// [`FIELD_STROKE`], lighter while it has the focus. Buttons stay frameless (surface only).
+/// [`FIELD_STROKE()`], lighter while it has the focus. Buttons stay frameless (surface only).
 pub fn text_field(ui: &mut egui::Ui, widget: impl egui::Widget) -> egui::Response {
     let r = ui
         .scope(|ui| {
@@ -3484,7 +3536,7 @@ pub fn edit_field(ui: &mut egui::Ui, widget: egui::TextEdit<'_>) -> egui::Respon
 /// The 1 px frame of an input field around `r` (focus lighter).
 pub fn field_outline(ui: &egui::Ui, r: &egui::Response) {
     if ui.is_rect_visible(r.rect) {
-        let colour = if r.has_focus() { Color32::from_gray(0x9a) } else { FIELD_STROKE };
+        let colour = if r.has_focus() { Color32::from_gray(0x9a) } else { FIELD_STROKE() };
         ui.painter().rect_stroke(r.rect, 0.0, egui::Stroke::new(1.0, colour), egui::StrokeKind::Inside);
     }
 }
@@ -3495,9 +3547,9 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, salt: &str, hint: &str
     let id = ui.scope_id().with(("lr-search", salt));
     let (frame, _) = ui.allocate_exact_size(egui::vec2(width, BAR_H), egui::Sense::hover());
     let focus = ui.memory(|m| m.has_focus(id));
-    ui.painter().rect(frame, 0.0, FIELD_FILL, egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { FIELD_STROKE }), egui::StrokeKind::Inside);
+    ui.painter().rect(frame, 0.0, FIELD_FILL, egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { FIELD_STROKE() }), egui::StrokeKind::Inside);
     let loupe = egui::pos2(frame.left() + 14.0, frame.center().y - 1.0);
-    let lf = egui::Stroke::new(1.4, if focus { TEXT } else { TEXT_DIM });
+    let lf = egui::Stroke::new(1.4, if focus { TEXT() } else { TEXT_DIM() });
     ui.painter().circle_stroke(loupe, 4.5, lf);
     ui.painter().line_segment([loupe + egui::vec2(3.4, 3.4), loupe + egui::vec2(7.5, 7.5)], lf);
     let empty = text.is_empty();
@@ -3507,15 +3559,15 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, salt: &str, hint: &str
         egui::TextEdit::singleline(text)
             .id(id)
             .frame(egui::Frame::NONE)
-            .text_color(TEXT)
+            .text_color(TEXT())
             .align(egui::Align2::LEFT_CENTER)
-            .hint_text(egui::RichText::new(hint).color(TEXT_DIM))
+            .hint_text(egui::RichText::new(hint).color(TEXT_DIM()))
             .desired_width(input.width()),
     );
     if !empty {
         let cross = egui::Rect::from_center_size(egui::pos2(frame.right() - 14.0, frame.center().y), egui::vec2(18.0, 18.0));
         let resp = ui.interact(cross, id.with("clear"), egui::Sense::click());
-        let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { TEXT_DIM });
+        let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { TEXT_DIM() });
         let c = cross.center();
         ui.painter().line_segment([c + egui::vec2(-3.5, -3.5), c + egui::vec2(3.5, 3.5)], kf);
         ui.painter().line_segment([c + egui::vec2(-3.5, 3.5), c + egui::vec2(3.5, -3.5)], kf);
@@ -3561,7 +3613,7 @@ pub fn arrow_button_gold(ui: &mut egui::Ui, text: &str, width: f32, primary: boo
     let (fill, fg) = if gold {
         (if resp.is_pointer_button_down_on() { Color32::from_rgb(0xa8, 0x8e, 0x50) } else if resp.hovered() { Color32::from_rgb(0xdc, 0xbf, 0x76) } else { GOLD }, dark)
     } else {
-        (if resp.hovered() { Color32::from_gray(0x36) } else { BUTTON_FILL }, TEXT)
+        (if resp.hovered() { Color32::from_gray(0x36) } else { BUTTON_FILL }, TEXT())
     };
     let p = ui.painter();
     p.rect_filled(rect, 0.0, fill);

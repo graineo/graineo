@@ -198,7 +198,7 @@ impl LibraryView {
         let focus = ui.memory(|m| m.has_focus(id));
         ui.painter().rect(frame, 0.0, Color32::from_gray(0x1c), egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { Color32::from_gray(0x4a) }), egui::StrokeKind::Inside);
         let loupe = egui::pos2(frame.left() + 14.0, frame.center().y - 1.0);
-        let lf = egui::Stroke::new(1.4, if focus { lr::TEXT } else { lr::TEXT_DIM });
+        let lf = egui::Stroke::new(1.4, if focus { lr::TEXT() } else { lr::TEXT_DIM() });
         ui.painter().circle_stroke(loupe, 4.5, lf);
         ui.painter().line_segment([loupe + egui::vec2(3.4, 3.4), loupe + egui::vec2(7.5, 7.5)], lf);
         let empty = self.filter.text.is_empty();
@@ -213,9 +213,9 @@ impl LibraryView {
                 .id(id)
                 .frame(egui::Frame::NONE)
                 .font(egui::FontId::proportional(12.5))
-                .text_color(lr::TEXT)
+                .text_color(lr::TEXT())
                 .vertical_align(egui::Align::Center)
-                .hint_text(egui::RichText::new(crate::tr("Suche")).color(lr::TEXT_DIM))
+                .hint_text(egui::RichText::new(crate::tr("Suche")).color(lr::TEXT_DIM()))
                 // Tab takes a suggestion instead of moving the focus on
                 .lock_focus(!suggestions.is_empty())
                 .desired_width(input.width()),
@@ -231,7 +231,7 @@ impl LibraryView {
         if !empty {
             let cross = egui::Rect::from_center_size(egui::pos2(help.left() - 14.0, frame.center().y), egui::vec2(18.0, 18.0));
             let resp = ui.interact(cross, id.with("leeren"), egui::Sense::click());
-            let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM });
+            let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
             let c = cross.center();
             ui.painter().line_segment([c + egui::vec2(-3.5, -3.5), c + egui::vec2(3.5, 3.5)], kf);
             ui.painter().line_segment([c + egui::vec2(-3.5, 3.5), c + egui::vec2(3.5, -3.5)], kf);
@@ -308,7 +308,7 @@ impl LibraryView {
         if open {
             painter.rect_filled(egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - 2.0), rect.max), 0.0, lr::ACTIVE_MARK);
         }
-        let fg = if hovered || open { Color32::WHITE } else { lr::TEXT };
+        let fg = if hovered || open { Color32::WHITE } else { lr::TEXT() };
         let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 18.0, rect.center().y), egui::vec2(16.0, 16.0));
         lr::paint_icon(&painter, icon, lr::Icon::Funnel, fg);
         let word = lr::caps(&painter, crate::tr("Filter"), egui::FontId::proportional(11.5), fg);
@@ -324,19 +324,19 @@ impl LibraryView {
             // chips with the column names, as many as fit; "+N" for the rest
             let room = rect.right() - 8.0 - x;
             let font = egui::FontId::proportional(11.0);
-            let galleys: Vec<_> = columns.iter().map(|(t, _)| painter.layout_no_wrap(crate::tr(t).to_string(), font.clone(), lr::TEXT)).collect();
+            let galleys: Vec<_> = columns.iter().map(|(t, _)| painter.layout_no_wrap(crate::tr(t).to_string(), font.clone(), lr::TEXT())).collect();
             let widths: Vec<f32> = galleys.iter().map(|g| g.size().x + 14.0).collect();
             let shown = chips_fitting(&widths, room, 36.0);
             for (g, cw) in galleys.into_iter().zip(&widths).take(shown) {
                 let chip = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 10.0), egui::vec2(*cw, 20.0));
                 painter.rect_filled(chip, 0.0, lr::BLUE.gamma_multiply(CHIP_WASH));
-                painter.galley(egui::pos2(chip.left() + 7.0, chip.center().y - g.size().y / 2.0), g, lr::TEXT);
+                painter.galley(egui::pos2(chip.left() + 7.0, chip.center().y - g.size().y / 2.0), g, lr::TEXT());
                 x = chip.right() + 5.0;
             }
             if shown < n && room > 0.0 {
-                let g = painter.layout_no_wrap(format!("+{}", n - shown), font, lr::TEXT_DIM);
+                let g = painter.layout_no_wrap(format!("+{}", n - shown), font, lr::TEXT_DIM());
                 let chip = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 10.0), egui::vec2(g.size().x + 14.0, 20.0));
-                painter.galley(egui::pos2(chip.left() + 7.0, chip.center().y - g.size().y / 2.0), g, lr::TEXT_DIM);
+                painter.galley(egui::pos2(chip.left() + 7.0, chip.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
             }
         }
         // tooltip: what the button does, with active filters the columns with their values
@@ -361,7 +361,7 @@ impl LibraryView {
     fn filter_reset(&mut self, ui: &mut egui::Ui) {
         let usable = !self.filter_columns().is_empty();
         let tip = crate::tr("Metadaten-Filter zurücksetzen");
-        let cells = [(lr::Cell::Symbol(lr::Icon::X, lr::TEXT), false, tip)];
+        let cells = [(lr::Cell::Symbol(lr::Icon::X, lr::TEXT()), false, tip)];
         let r = ui.allocate_ui_with_layout(egui::vec2(RESET_W, lr::BAR_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add_enabled_ui(usable, |ui| {
                 if !usable {
@@ -399,7 +399,7 @@ impl LibraryView {
             ui.add_space(6.0);
             let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), crate::library_filter::HEIGHT + 22.0), egui::Sense::hover());
             ui.painter().rect_filled(r, 0.0, egui::Color32::from_gray(0x16));
-            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Filter werden geladen …"), egui::FontId::proportional(10.5), lr::TEXT_DIM);
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Filter werden geladen …"), egui::FontId::proportional(10.5), lr::TEXT_DIM());
         }
         if let Some(f) = &mut self.facets {
             ui.add_space(6.0);
@@ -443,7 +443,7 @@ impl LibraryView {
     fn sort_controls(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing.x = 0.0;
         let (arrow, hint) = if self.sort_reversed { (lr::Icon::SortUp, "Aufsteigend sortiert · Klick kehrt um") } else { (lr::Icon::SortDown, "Absteigend sortiert · Klick kehrt um") };
-        if lr::cell_group(ui, "bib-sort-richtung", &[(lr::Cell::Symbol(arrow, lr::TEXT), false, hint)], 30.0).is_some() {
+        if lr::cell_group(ui, "bib-sort-richtung", &[(lr::Cell::Symbol(arrow, lr::TEXT()), false, hint)], 30.0).is_some() {
             self.sort_reversed = !self.sort_reversed;
             self.refilter = true;
         }
@@ -515,9 +515,9 @@ impl LibraryView {
     /// Photos, videos or both (exactly one).
     fn kind_group(&mut self, ui: &mut egui::Ui) {
         let cells = [
-            (lr::Cell::Symbol(lr::Icon::Image, lr::TEXT), self.kind == 0, "Nur Fotos"),
-            (lr::Cell::Symbol(lr::Icon::Video, lr::TEXT), self.kind == 1, "Nur Videos"),
-            (lr::Cell::Symbol(lr::Icon::Images, lr::TEXT), self.kind == 2, "Fotos und Videos"),
+            (lr::Cell::Symbol(lr::Icon::Image, lr::TEXT()), self.kind == 0, "Nur Fotos"),
+            (lr::Cell::Symbol(lr::Icon::Video, lr::TEXT()), self.kind == 1, "Nur Videos"),
+            (lr::Cell::Symbol(lr::Icon::Images, lr::TEXT()), self.kind == 2, "Fotos und Videos"),
         ];
         if let Some(i) = lr::cell_group(ui, "bib-art", &cells, 30.0) {
             if i as u8 != self.kind {
@@ -532,7 +532,7 @@ impl LibraryView {
     fn stack_group(&mut self, ui: &mut egui::Ui) {
         let hint = if self.stack { "RAW+JPEG zusammen (ein Foto)" } else { "RAW+JPEG einzeln (zwei Fotos)" };
         // second cell: only merged (HDR) photos – no stacks, no sources
-        let cells = [(lr::Cell::Symbol(lr::Icon::Stack, lr::TEXT), self.stack, hint), (lr::Cell::Text("HDR", 11.0, lr::TEXT), self.filter.hdr, "Nur zusammengefügte Fotos (HDR)")];
+        let cells = [(lr::Cell::Symbol(lr::Icon::Stack, lr::TEXT()), self.stack, hint), (lr::Cell::Text("HDR", 11.0, lr::TEXT()), self.filter.hdr, "Nur zusammengefügte Fotos (HDR)")];
         match lr::cell_group_w(ui, "bib-raw-jpeg", &cells, &[30.0, 38.0]) {
             Some(0) => {
                 self.stack = !self.stack;
@@ -683,9 +683,9 @@ impl LibraryView {
             // without a search index (being built in the background) the full text finds nothing yet: say so
             let indexing = !self.filter.text.trim().is_empty() && super::INDEX_MISSING.load(Ordering::Relaxed);
             let heading = if indexing { crate::tr("Suchindex wird aufgebaut …") } else { crate::tr("Keine Treffer") };
-            ui.label(egui::RichText::new(heading).font(lr::semibold(14.0)).color(lr::TEXT));
+            ui.label(egui::RichText::new(heading).font(lr::semibold(14.0)).color(lr::TEXT()));
             ui.add_space(6.0);
-            ui.add(egui::Label::new(egui::RichText::new(reasons.join("  ·  ")).size(lr::UI_SIZE).color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(reasons.join("  ·  ")).size(lr::UI_SIZE).color(lr::TEXT_DIM())).truncate());
             ui.add_space(18.0);
         });
         // buttons centred as one row (their widths from the text, so the row is centred exactly)
@@ -694,7 +694,7 @@ impl LibraryView {
         if self.search_in_source {
             labels.push(crate::tr("In der gesamten Bibliothek suchen"));
         }
-        let widths: Vec<f32> = labels.iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT).size().x + 28.0).collect();
+        let widths: Vec<f32> = labels.iter().map(|t| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT()).size().x + 28.0).collect();
         let total = widths.iter().sum::<f32>() + 8.0 * (widths.len() as f32 - 1.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
@@ -783,25 +783,25 @@ impl LibraryView {
     pub(super) fn status_left(&mut self, ui: &mut egui::Ui, left_text: String) {
         let font = egui::FontId::proportional(lr::UI_SIZE);
         if !self.filtering() {
-            ui.add(egui::Label::new(egui::RichText::new(left_text).font(font).color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(left_text).font(font).color(lr::TEXT_DIM())).truncate());
             return;
         }
         let rule = self.smart_rule();
-        let count_w = ui.painter().layout_no_wrap(left_text.clone(), font.clone(), lr::TEXT_DIM).size().x;
+        let count_w = ui.painter().layout_no_wrap(left_text.clone(), font.clone(), lr::TEXT_DIM()).size().x;
         // Only the symbol, never a sentence; the text lives in the tooltip.
-        let text_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT).size().x + 16.0;
+        let text_w = |t: &str| ui.painter().layout_no_wrap(t.to_string(), font.clone(), lr::TEXT()).size().x + 16.0;
         let label: Option<&str> = None;
         let button_w = label.map_or(ACTION_W, text_w);
         let count_room = (ui.available_width() - button_w - 12.0).max(0.0);
         ui.allocate_ui_with_layout(egui::vec2(count_room.min(count_w + 1.0), ACTION_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.add(egui::Label::new(egui::RichText::new(left_text).font(font.clone()).color(lr::TEXT_DIM)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(left_text).font(font.clone()).color(lr::TEXT_DIM())).truncate());
         });
         ui.add_space(12.0);
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(button_w, ACTION_H), egui::Sense::click());
         let usable = rule.is_ok();
         let hot = usable && resp.hovered();
         ui.painter().rect_filled(rect, 0.0, if hot { Color32::from_gray(0x36) } else { lr::BUTTON_FILL });
-        let color = if !usable { Color32::from_gray(0x6a) } else if hot { Color32::WHITE } else { lr::TEXT };
+        let color = if !usable { Color32::from_gray(0x6a) } else if hot { Color32::WHITE } else { lr::TEXT() };
         match label {
             Some(t) => {
                 ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, t, font, color);
@@ -853,7 +853,7 @@ impl LibraryView {
         // right to left: the jump first, so it ends up at the far right
         let outside = usable && self.active_outside_view();
         let tip = lr::with_shortcut("Zur Auswahl springen", "jump_to_selection");
-        let cells = [(lr::Cell::Symbol(lr::Icon::Crosshair, lr::TEXT), outside, tip.as_str())];
+        let cells = [(lr::Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), outside, tip.as_str())];
         let jump = ui
             .allocate_ui_with_layout(egui::vec2(ACTION_W, ACTION_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(usable, |ui| {
@@ -870,7 +870,7 @@ impl LibraryView {
         }
         ui.add_space(4.0);
         let (t_l, t_r) = (lr::with_shortcut("Nach links drehen", "rotate_left"), lr::with_shortcut("Nach rechts drehen", "rotate_right"));
-        let cells = [(lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT), false, t_l.as_str()), (lr::Cell::Symbol(lr::Icon::RotCw, lr::TEXT), false, t_r.as_str())];
+        let cells = [(lr::Cell::Symbol(lr::Icon::RotCcw, lr::TEXT()), false, t_l.as_str()), (lr::Cell::Symbol(lr::Icon::RotCw, lr::TEXT()), false, t_r.as_str())];
         let turn = ui
             .allocate_ui_with_layout(egui::vec2(2.0 * ACTION_W, ACTION_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(usable, |ui| {

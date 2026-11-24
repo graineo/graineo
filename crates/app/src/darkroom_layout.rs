@@ -132,7 +132,7 @@ impl App {
             w += 80.0;
         }
         if self.darkroom.grain_check && self.zoom > 1.001 {
-            w += ui.painter().layout_no_wrap("Ausschnitt 00,00 mm".to_string(), egui::TextStyle::Small.resolve(ui.style()), lr::TEXT).size().x + 3.0;
+            w += ui.painter().layout_no_wrap("Ausschnitt 00,00 mm".to_string(), egui::TextStyle::Small.resolve(ui.style()), lr::TEXT()).size().x + 3.0;
         }
         w
     }
@@ -198,12 +198,12 @@ impl App {
         let resp_id = ui.id().with("dk-griff");
         let hovered_before = ui.ctx().read_response(resp_id).is_some_and(|r| r.hovered());
         let open = self.darkroom.recipes.drawer;
-        let text_color = if hovered_before || open { Color32::from_gray(0xee) } else { lr::TEXT };
+        let text_color = if hovered_before || open { Color32::from_gray(0xee) } else { lr::TEXT() };
 
         // Text in the centre; both sides keep room for bookmark and help, so the text stays centred
         let side = 12.0 + CHEVRON_W + SAVE_W + 12.0;
         let room = (row.width() - 2.0 * side).max(60.0);
-        let changed_suffix = matches!(state, LookState::Changed(_)).then(|| ui.painter().layout_no_wrap(crate::tr("geändert").to_string(), egui::FontId::proportional(10.5), lr::TEXT_DIM));
+        let changed_suffix = matches!(state, LookState::Changed(_)).then(|| ui.painter().layout_no_wrap(crate::tr("geändert").to_string(), egui::FontId::proportional(10.5), lr::TEXT_DIM()));
         let suffix_w = changed_suffix.as_ref().map_or(0.0, |g| g.size().x + 6.0);
         let mut job = egui::text::LayoutJob::simple_singleline(self.darkroom_handle_text(index, &state), egui::FontId::proportional(12.0), text_color);
         job.wrap = egui::text::TextWrapping { max_width: (room - suffix_w).max(40.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
@@ -213,13 +213,13 @@ impl App {
         let text_left = row.center().x - text_w / 2.0;
         ui.painter().galley(Pos2::new(text_left, y - name.size().y / 2.0), name.clone(), text_color);
         if let Some(g) = changed_suffix {
-            ui.painter().galley(Pos2::new(text_left + name.size().x + 6.0, y - g.size().y / 2.0 + 1.0), g, lr::TEXT_DIM);
+            ui.painter().galley(Pos2::new(text_left + name.size().x + 6.0, y - g.size().y / 2.0 + 1.0), g, lr::TEXT_DIM());
         }
 
         // Chevron beside the text; open it points upward
         let c = Pos2::new(text_left + text_w + 10.0, y);
         let d = if open { -2.0 } else { 2.0 };
-        let stroke = egui::Stroke::new(1.0, if hovered_before || open { Color32::from_gray(0xcc) } else { lr::TEXT_DIM });
+        let stroke = egui::Stroke::new(1.0, if hovered_before || open { Color32::from_gray(0xcc) } else { lr::TEXT_DIM() });
         ui.painter().line_segment([c + Vec2::new(-3.5, -d), c + Vec2::new(0.0, d)], stroke);
         ui.painter().line_segment([c + Vec2::new(0.0, d), c + Vec2::new(3.5, -d)], stroke);
 
@@ -250,7 +250,7 @@ impl App {
         let save = Rect::from_center_size(Pos2::new(area.right() + 8.0 + SAVE_W / 2.0, y), Vec2::new(SAVE_W, 22.0));
         if matches!(state, LookState::Combination | LookState::Changed(_)) {
             let save_resp = ui.interact(save, ui.id().with("dk-speichern"), egui::Sense::click());
-            let color = if save_resp.hovered() { Color32::from_gray(0xee) } else { lr::TEXT_DIM };
+            let color = if save_resp.hovered() { Color32::from_gray(0xee) } else { lr::TEXT_DIM() };
             ui.painter().text(save.left_center(), egui::Align2::LEFT_CENTER, crate::tr("Speichern"), egui::FontId::proportional(12.0), color);
             lr::hover_tip(ui, &save_resp, crate::tr("Als neuen Filmlook speichern"));
             if save_resp.clicked() {
@@ -308,7 +308,7 @@ impl App {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.set_height(STRIP_HEAD - 8.0);
-            ui.label(egui::RichText::new(crate::tr("FILMLOOKS")).small().color(lr::TEXT_DIM));
+            ui.label(egui::RichText::new(crate::tr("FILMLOOKS")).small().color(lr::TEXT_DIM()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 10.0;
                 if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Verwalten …"))).min_size(Vec2::new(0.0, 20.0))).clicked() {

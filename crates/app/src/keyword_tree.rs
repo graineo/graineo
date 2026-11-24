@@ -150,7 +150,7 @@ pub fn show(
                 p.rect_filled(r, 0.0, Color32::from_gray(0x2a));
             }
             let dim = row.count == 0 || !row.hit;
-            let color = if dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT };
+            let color = if dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
             let font = egui::FontId::proportional(10.5);
             if row.has_children {
                 let c = if over_arrow { Color32::WHITE } else { Color32::from_gray(0x8a) };
@@ -160,7 +160,7 @@ pub fn show(
                 p.add(egui::Shape::convex_polygon(pts, c, egui::Stroke::NONE));
             }
             let right = r.right() - 2.0;
-            let count_galley = p.layout_no_wrap(crate::library_ui::thousands(row.count), font.clone(), lr::TEXT_DIM);
+            let count_galley = p.layout_no_wrap(crate::library_ui::thousands(row.count), font.clone(), lr::TEXT_DIM());
             let space = egui::Rect::from_min_max(egui::pos2(arrow.right() + 2.0, r.top()), egui::pos2(right - count_galley.size().x - 4.0, r.bottom()));
             let name_galley = p.layout_no_wrap(name_of(row), font, color);
             let name_pos = egui::pos2(space.left(), r.center().y - name_galley.size().y / 2.0);
@@ -171,7 +171,7 @@ pub fn show(
                 let y = r.bottom() - 2.5;
                 p.with_clip_rect(space).line_segment([egui::pos2(name_pos.x, y), egui::pos2(name_pos.x + name_w, y)], egui::Stroke::new(1.0, Color32::from_gray(0xb0)));
             }
-            p.galley(egui::pos2(right - count_galley.size().x, r.center().y - count_galley.size().y / 2.0), count_galley, lr::TEXT_DIM);
+            p.galley(egui::pos2(right - count_galley.size().x, r.center().y - count_galley.size().y / 2.0), count_galley, lr::TEXT_DIM());
             if over_arrow {
                 let tip = if row.open { "Zuklappen (⌥-Klick: mit allen Unterbegriffen)" } else { "Aufklappen (⌥-Klick: mit allen Unterbegriffen)" };
                 lr::hover_tip(ui, &resp, crate::tr(tip));

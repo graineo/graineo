@@ -221,10 +221,10 @@ pub fn settings(ui: &mut egui::Ui) {
                         ""
                     };
                     if !state.is_empty() {
-                        ui.label(egui::RichText::new(state).small().color(lr::TEXT_DIM));
+                        ui.label(egui::RichText::new(state).small().color(lr::TEXT_DIM()));
                     }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        let r = ui.add(egui::Label::new(egui::RichText::new(path.display().to_string()).color(if *available { lr::TEXT } else { lr::TEXT_DIM })).truncate());
+                        let r = ui.add(egui::Label::new(egui::RichText::new(path.display().to_string()).color(if *available { lr::TEXT() } else { lr::TEXT_DIM() })).truncate());
                         lr::hover_tip(ui, &r, &path.display().to_string());
                     });
                 });
@@ -234,7 +234,7 @@ pub fn settings(ui: &mut egui::Ui) {
         for package in &s.packages {
             row(ui, |ui| {
                 let mut visible = package.visible;
-                let name = egui::RichText::new(&package.name).color(if package.available > 0 { lr::TEXT } else { lr::TEXT_DIM });
+                let name = egui::RichText::new(&package.name).color(if package.available > 0 { lr::TEXT() } else { lr::TEXT_DIM() });
                 if ui.checkbox(&mut visible, name).changed() {
                     let name = package.name.clone();
                     if visible {
@@ -245,7 +245,7 @@ pub fn settings(ui: &mut egui::Ui) {
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let n = if package.available == package.count { dialog::number(package.count) } else { crate::trf!("{a} von {b}", a = package.available, b = package.count) };
-                    ui.label(egui::RichText::new(n).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(n).color(lr::TEXT_DIM()));
                 });
             });
         }
@@ -267,7 +267,7 @@ pub fn settings(ui: &mut egui::Ui) {
     });
     // a fixed slot: says when the sources are being read
     ui.add_space(6.0);
-    ui.label(egui::RichText::new(if s.running { crate::tr("Wird gelesen …") } else { "" }).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(if s.running { crate::tr("Wird gelesen …") } else { "" }).small().color(lr::TEXT_DIM()));
 }
 
 /// A framed row of the look settings (same look for sources and packages).

@@ -19,9 +19,12 @@
 
 pub mod analysis;
 pub mod auto;
+pub mod auto_look;
 pub mod calib;
 pub mod classic_new;
 pub mod curve;
+pub mod output_sharpen;
+pub mod foveon_texture;
 pub mod damaged;
 pub mod defects;
 pub mod defringe;
@@ -36,6 +39,7 @@ pub mod exr;
 pub mod filllight;
 pub mod film;
 pub mod grain_detail;
+pub mod highlight_post;
 pub mod highlight_rebuild;
 pub mod merrill_highlights;
 pub mod geometry;
@@ -84,7 +88,7 @@ pub use x3f_core::merrill_new;
 pub use curve::ToneCurve;
 use matrix::Mat3;
 pub use session::Session;
-pub use settings::{Binning, HighlightSliders, NoiseBrake, Settings, SppKey, View, NR_OFF};
+pub use settings::{Binning, HighlightSliders, NoiseBrake, Settings, SppKey, View, NR_OFF, TEXTURE_NEUTRAL};
 
 /// Linear camera image: three planes, black = 0, sensor saturation = 1.
 #[derive(Clone)]
@@ -315,18 +319,8 @@ pub fn render_scene(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Opt
 fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&[f32]>, mode_out: Out) -> RenderOut {
     let mode = cal.mode(s.color_mode.as_deref());
     // sd Quattro colour mode fine correction (preview of the own pipeline, on the gamma-encoded image as an approximation)
-    let axes = mode.axes.as_deref().filter(|_| std::env::var("GRAINEO_MULTIAXIS").map_or(true, |v| v != "0"));
-    let tone = {
-        let shifted;
-        let ts = match quattro_exposure_offset(cal, s) {
-            0.0 => s,
-            off => {
-                shifted = Settings { exposure: s.exposure + off, ..s.clone() };
-                &shifted
-            }
-        };
-        cached_tone_lut(&mode.tone, ts, if s.monochrome { 0.0 } else { mode.contrast }, cal.pixel_saturation, cal.is_prepared())
-    };
+    let axes = mode.axes.as_deref().filter(|_| !s.is_linear() && std::env::var("GRAINEO_MULTIAXIS").map_or(true, |v| v != "0"));
+    let tone = output_tone(cal, s, mode);
     let (max_count, mono_max) = (cal.max_count(), if cal.is_prepared() { 65535.0 } else { 32767.0 });
     let gamma = gamma_lut();
     // Monochrome: Sigma multiplies the luminance by the ISO factor (CaptureISO/SensorISO); in the colour path it is part of the matrix
@@ -354,7 +348,7 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
         None => Mat3::diag(calib::temp_tint_gains(s.wb_temp, s.wb_tint)).mul(&cal.cam_to_srgb(s.color_mode.as_deref(), s.white_balance.as_deref())).to_f32(),
     };
     let mix = s.normalized_mix();
-    let dq = cal.color_dq.as_ref().filter(|_| layer_m.is_none());
+    let dq = cal.color_dq.as_ref().filter(|_| layer_m.is_none() && !s.is_linear());
     let fill = fill_map.filter(|_| s.fill_light != 0.0).map(|map| (map, filllight::FillLightCurve::new(s.fill_light)));
     // Optional highlight neutralisation (SPP: Highlight Control; default 1 = off).
     let k = s.highlight_neutralize.clamp(0.0, 1.0);
@@ -502,7 +496,7 @@ fn render_counts_impl(
 ) -> RenderOut {
     let mode = cal.mode(s.color_mode.as_deref());
     // sd Quattro colour mode fine correction: already part of the counts (linear colour stage, see `quattro::to_counts`)
-    let classic_sigma = mode_out.is_tone() && !s.monochrome;
+    let classic_sigma = mode_out.is_tone() && !s.monochrome && !s.is_linear();
     let classic_new_from = mode.classic.as_deref().zip(mode.classic_output.as_deref()).filter(|_| classic_sigma).map(|(c, basis)| {
         let k: [f64; 3] = std::array::from_fn(|i| c.wb_gain[i] / (c.k_raw[i] * cal.wb_gain[i]));
         let g: [f64; 3] = std::array::from_fn(|i| cal.count_scale * cal.wb_gain[i] * cal.saturation);
@@ -526,17 +520,7 @@ fn render_counts_impl(
         let magnitude = classic_new::detail::magnitude(sharpness::quantize(s.sigma_sharpness));
         (basis.output(&slider, false), m, hp.filter(|_| magnitude != 1 << 14), magnitude)
     });
-    let tone = {
-        let shifted;
-        let ts = match quattro_exposure_offset(cal, s) {
-            0.0 => s,
-            off => {
-                shifted = Settings { exposure: s.exposure + off, ..s.clone() };
-                &shifted
-            }
-        };
-        cached_tone_lut(&mode.tone, ts, if s.monochrome { 0.0 } else { mode.contrast }, cal.pixel_saturation, cal.is_prepared())
-    };
+    let tone = output_tone(cal, s, mode);
     let (max_count, mono_max) = (cal.max_count(), if cal.is_prepared() { 65535.0 } else { 32767.0 });
     let gamma = gamma_lut();
     // Quattro: bright colours beyond the output range are brought into it by desaturating towards white instead of
@@ -1117,6 +1101,39 @@ pub(crate) fn gamma_lut() -> &'static [u16] {
     LUT.get_or_init(sigma_out::srgb_gamma_lut)
 }
 
+/// Tone table of the output stage: Sigma's tone curve of the colour mode, or for the linear rendering
+/// ([`Settings::is_linear`]) a straight line through the scene-linear values (middle grey where the film simulation puts
+/// it, white = 1, clipped above), with the contrast slider as a slope around middle grey.
+fn output_tone(cal: &Calibration, s: &Settings, mode: &calib::ColorMode) -> std::sync::Arc<Vec<u16>> {
+    let shifted;
+    let ts = match quattro_exposure_offset(cal, s) {
+        0.0 => s,
+        off => {
+            shifted = Settings { exposure: s.exposure + off, ..s.clone() };
+            &shifted
+        }
+    };
+    if s.is_linear() {
+        return linear_tone_lut(film::scene_gain(cal, ts), s.contrast as f32);
+    }
+    cached_tone_lut(&mode.tone, ts, if s.monochrome { 0.0 } else { mode.contrast }, cal.pixel_saturation, cal.is_prepared())
+}
+
+/// Straight tone table: count `i` → linear light `i · gain` (0 … 65535), contrast `c` (−1 … +1) as a slope in log
+/// space around middle grey 0.184.
+fn linear_tone_lut(gain: f32, c: f32) -> std::sync::Arc<Vec<u16>> {
+    let k = 1.0 + 0.6 * c.clamp(-1.0, 1.0);
+    std::sync::Arc::new(
+        (0..65536)
+            .map(|i| {
+                let y = i as f32 * gain;
+                let y = if k == 1.0 || y <= 0.0 { y } else { 0.184 * (y / 0.184).powf(k) };
+                (y.clamp(0.0, 1.0) * 65535.0 + 0.5) as u16
+            })
+            .collect(),
+    )
+}
+
 /// Tone curve LUT with a small cache (generating it costs a few ms).
 pub(crate) fn cached_tone_lut(row: &calib::ToneRow, s: &Settings, mode_contrast: f64, psat: f64, quattro: bool) -> std::sync::Arc<Vec<u16>> {
     use std::sync::{Arc, Mutex};
@@ -1317,6 +1334,38 @@ mod gamut_tests {
     fn white_of_the_tone_curve() {
         let tone: Vec<u16> = (0..1000u32).map(|i| (i * 100).min(60_000) as u16).collect();
         assert_eq!(tone_white(&tone, 999.0), 600.0);
+    }
+}
+
+#[cfg(test)]
+mod linear_tests {
+    use super::*;
+
+    /// The straight tone table: proportional below white, clipped above, contrast 0 leaves it straight, contrast
+    /// keeps middle grey.
+    #[test]
+    fn linear_table_is_straight_and_keeps_middle_grey() {
+        let g = 1.0 / 10000.0;
+        let t = linear_tone_lut(g, 0.0);
+        assert_eq!(t[0], 0);
+        assert_eq!(t[5000], 32768);
+        assert_eq!(t[10000], 65535);
+        assert_eq!(t[40000], 65535);
+        assert!(t.windows(2).all(|w| w[0] <= w[1]));
+        let c = linear_tone_lut(g, 0.5);
+        let grey = (0.184 / g) as usize;
+        assert!((c[grey] as i32 - t[grey] as i32).abs() <= 8);
+        assert!(c[grey / 4] < t[grey / 4], "more contrast: shadows darker");
+    }
+
+    #[test]
+    fn linear_mode_takes_the_neutral_matrix() {
+        assert_eq!(settings::matrix_mode(Some(settings::LINEAR_MODE)), Some(profile::NEUTRAL_MODE));
+        assert_eq!(settings::matrix_mode(Some("Vivid")), Some("Vivid"));
+        let s = Settings { color_mode: Some(settings::LINEAR_MODE.into()), ..Settings::default() };
+        assert!(s.is_linear());
+        assert!(!Settings { monochrome: true, ..s.clone() }.is_linear());
+        assert_eq!(s.spp_key_class(false).mode.as_deref(), Some(profile::NEUTRAL_MODE), "same base as the neutral mode");
     }
 }
 

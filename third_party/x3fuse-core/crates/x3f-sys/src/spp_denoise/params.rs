@@ -44,6 +44,9 @@ const ADDITIONAL: [[f32; 13]; 7] = [
 pub struct NoiseSliders {
     pub luma: f64,
     pub chroma: f64,
+    /// graineo addition: gain of the fine and the structure band of the luminance residual
+    /// (`[1, 1]` = unchanged, bit-identical; see `residual::texture_bands`). Not part of SPP.
+    pub texture: [f32; 2],
 }
 
 impl NoiseSliders {
@@ -51,6 +54,7 @@ impl NoiseSliders {
     pub const NEUTRAL: Self = Self {
         luma: 0.5,
         chroma: 0.5,
+        texture: [1.0, 1.0],
     };
 
     /// graineo step "Off" below SPP's minimum (every value < 0 acts like this):
@@ -125,6 +129,8 @@ pub(crate) struct NoiseParams {
     /// graineo addition: colour slider "Off": after the residual, restore the colour component of the
     /// unsmoothed image (`Pipeline::restore_chroma`). Not part of SPP.
     pub chroma_off: bool,
+    /// graineo addition: band gains of the luminance residual (fine, structure); `[1, 1]` = off.
+    pub texture: [f32; 2],
 }
 
 impl Default for NoiseParams {
@@ -177,6 +183,7 @@ impl Default for NoiseParams {
             intensity_model: [0.; 3],
             fpn_suppression: 0,
             chroma_off: false,
+            texture: [1.0, 1.0],
         }
     }
 }
@@ -241,6 +248,7 @@ impl NoiseParams {
             || !self.color_model.iter().flatten().all(|v| v.is_finite())
             || !position.luma.is_finite()
             || !position.chroma.is_finite()
+            || !position.texture.iter().all(|v| v.is_finite() && *v >= 0.)
         {
             return Err(invalid());
         }
@@ -323,6 +331,7 @@ impl NoiseParams {
             self.mixing = 0.;
         }
         self.chroma_off = position.chroma < 0.;
+        self.texture = position.texture;
 
         let log_iso = (f64::from(self.iso.ln()) + f64::from_bits(0xc0126bb1bbb55516))
             / f64::from_bits(0xc010a2b23f3bab72);
@@ -761,7 +770,7 @@ mod tests {
     fn slider_steps_follow_spp_rows() {
         let run = |luma, chroma| {
             let mut n = NoiseParams::default();
-            n.setup(6400., 6400., &[], &[], &[], NoiseSliders { luma, chroma })
+            n.setup(6400., 6400., &[], &[], &[], NoiseSliders { luma, chroma, texture: [1.0, 1.0] })
                 .unwrap();
             n
         };

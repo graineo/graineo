@@ -186,7 +186,7 @@ impl App {
             if w != ToolTab::Info {
                 if let Some(t) = self.compare_panel_head() {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM)).truncate());
+                        ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).truncate());
                     });
                 }
             }
@@ -220,10 +220,10 @@ impl App {
                 } else if resp.hovered() {
                     p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
                 }
-                let color = if *i == active { Color32::WHITE } else { lr::TEXT };
+                let color = if *i == active { Color32::WHITE } else { lr::TEXT() };
                 p.text(rect.left_center() + egui::vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, crate::tr(name), egui::TextStyle::Body.resolve(ui.style()), color);
                 if *edited {
-                    lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), egui::vec2(13.0, 13.0)), lr::Icon::Pencil, lr::TEXT_DIM);
+                    lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), egui::vec2(13.0, 13.0)), lr::Icon::Pencil, lr::TEXT_DIM());
                 }
                 if resp.clicked() {
                     pick = Some(*i);

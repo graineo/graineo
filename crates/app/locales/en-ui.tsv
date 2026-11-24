@@ -295,7 +295,7 @@ Einzelwerte	Individual values
 Kein	None
 LICHTPUNKTE	HIGHLIGHT POINTS
 Vergrößerer	Enlarger
-Automatisch	Automatic
+Automatisch	Auto
 LOOK ALS LUT SPEICHERN …	SAVE LOOK AS LUT…
 Für diesen Film gibt es keine Varianten	No variants for this film
 Minuten	Minutes
@@ -1068,7 +1068,6 @@ Vorher | Nachher nebeneinander	Before | After side by side
 Dunkelkammer ein/aus (dort: F6 Miniaturleiste, Tab nur Bild, Esc zurück)	Toggle Darkroom (there: F6 thumbnail strip, Tab image only, Esc back)
 Dunkelkammer: nächste Körnungs-Lupenstufe	Darkroom: next grain loupe level
 Dunkelkammer: nächste Körnungs-Lupenstufe (US-Tastatur)	Darkroom: next grain loupe level (US keyboard)
-Dunkelkammer: nächste Körnungs-Lupenstufe (⇧+)	Darkroom: next grain loupe level (⇧+)
 Dunkelkammer: vorherige Körnungs-Lupenstufe	Darkroom: previous grain loupe level
 obere Leiste ein/aus	toggle top bar
 Filmstreifen ein/aus	toggle filmstrip
@@ -1146,7 +1145,7 @@ Film → Papier → Abzug	Film → Paper → Print
 Probe · Lichtpunkte	Test · highlight points
 Rand & Rahmen	Border & Frame
 Papierrand	Paper Border
-Rand unten	Bottom Border
+Rand unten	Bottom margin
 Aktuelle Einstellungen speichern	Save Current Settings
 Stärke der aktiven Wiedergabe	Strength of the active rendering
 Vorgaben	Presets
@@ -3875,7 +3874,7 @@ Farbproof: Voller Umfang ↔ zuletzt gewählter Farbraum	Soft proof: full gamut 
 Farbumfang-Warnung: Pixel außerhalb des Proof-Farbraums markieren	Gamut warning: highlight pixels outside the proof space
 Entwickeln zeigt die Farben ohne Beschneiden auf sRGB, wenn der Bildschirm mehr kann (MacBook Pro, EIZO): eingepasst, vergrößert, Lupe und Vergleich. Gilt für Foveon und alle anderen Formate, nicht für Film, Schwarzweiß und ältere Foveon-Kameras (DP1, DP2, SD15 …)	On wide-gamut displays (MacBook Pro, EIZO), Develop shows colors without clipping them to sRGB: fit, zoomed, loupe and compare. Applies to Foveon and all other formats, except film, black & white and older Foveon cameras (DP1, DP2, SD15…)
 • **Farbproof** – Ansicht → Farbproof: Voller Umfang, sRGB, Display P3, Adobe RGB oder ProPhoto. Farben außerhalb des gewählten Raums werden auf seinen Rand gesetzt. ⌘Y wechselt zwischen vollem Umfang und dem zuletzt gewählten Raum.\n• **Farbumfang-Warnung** – ⇧⌘Y färbt Bildpunkte magenta, die außerhalb des Proof-Raums liegen.\n\nGilt überall, wo Entwickeln das Foto zeigt: eingepasst, vergrößert, in der Lupe, im Navigator und beim Vergleichen, auch in der Dunkelkammer. Miniaturen (Bibliothek, Filmstreifen) sowie Film und Schwarzweiß sind sRGB-Bilder; sie liegen in jedem Proof-Raum, dort ändert der Proof nichts. Die Wahl gilt bis zum Beenden; hier stellst du ein, womit graineo startet.	• **Soft proof** – View → Soft Proof: full gamut, sRGB, Display P3, Adobe RGB or ProPhoto. Colors outside the chosen space are clipped to its edge. ⌘Y toggles between full gamut and the last-used space.\n• **Gamut warning** – ⇧⌘Y paints pixels that fall outside the proof space magenta.\n\nApplies wherever Develop shows the photo: fit to window, zoomed, in the loupe, in the navigator and when comparing, including the Darkroom. Thumbnails (Library, filmstrip), film and black & white are sRGB images; they fall inside every proof space, so proofing doesn’t change them. The setting lasts until you quit; here you choose what graineo starts with.
-Automatisch (natürlich)	Automatic (natural)
+Automatisch (natürlich)	Auto (natural)
 ohne Wirkung unter ISO 800	no effect below ISO 800
 {w} × {h} · Binning ×{n}	{w} × {h} · binning ×{n}
 Binning ×{n}	Binning ×{n}
@@ -3977,7 +3976,7 @@ Profil fehlt	Profile missing
 Objektiv zuweisen	Assign Lens
 PROFIL	PROFILE
 Vorgabe entfernen (automatisch nach Objektivname)	Remove assignment (automatic by lens name)
-Automatisch (nach Objektivname)	Automatic (by lens name)
+Automatisch (nach Objektivname)	Auto (by lens name)
 Kein eigenes Profil	No custom profile
 Noch kein eigenes Profil für diese Kamera	No custom profile for this camera yet
 Neues Objektiv vermessen …	Measure New Lens…
@@ -6368,14 +6367,14 @@ Für diese Kamera nur graineo – Apple kennt das Modell nicht	This camera: grai
 nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren	not possible (HE): graineo cannot decode Nikon “High Efficiency” yet
 Dieses Foto mit graineos eigener Pipeline entwickeln	Develop this photo with graineo's own pipeline
 Dieses Foto mit der RAW-Engine von macOS dekodieren; Farbe, Ton, Looks, Film und Masken rechnet graineo	Decode this photo with the macOS RAW engine; graineo computes colour, tone, looks, film and masks
-Automatik	Automatic
+Automatik	Auto
 Zurück auf Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Back to automatic: graineo, Apple only for files graineo cannot decode
 Entwickelt mit	Developed with
 Apple RAW {a} fehlt – mit {b} gerechnet	Apple RAW {a} missing – computed with {b}
-Automatik · HE-Rückfall	Automatic · HE fallback
+Automatik · HE-Rückfall	Auto · HE fallback
 festgehalten · HE	pinned · HE
 Apple RAW {a} nicht verfügbar – graineo	Apple RAW {a} not available – graineo
-Automatik · nur graineo	Automatic · graineo only
+Automatik · nur graineo	Auto · graineo only
 unbekannte Pipeline „{a}“ – graineo	unknown pipeline “{a}” – graineo
 Für dieses Foto bietet macOS die festgehaltene Version nicht mehr an; gerechnet mit Apple RAW {a}. Das Bild kann abweichen. Der Eintrag bleibt, bis du eine Version wählst.	macOS no longer offers the pinned version for this photo; computed with Apple RAW {a}. The image may differ. The entry stays until you choose a version.
 Dieses Foto ist für Apple RAW {a} eingestellt. {b}. Entwickelt mit graineo – das Bild kann abweichen. Der Eintrag bleibt erhalten.	This photo is set to Apple RAW {a}. {b}. Developed with graineo – the image may differ. The entry is kept.
@@ -6391,7 +6390,7 @@ Die Entwicklung dieses Fotos	The development of this photo
 Decoder-Version für dieses Foto festhalten (ändert die Entwicklung)	Pin the decoder version for this photo (changes the development)
 Decoder-Version für den Vergleich; „Neueste“ folgt macOS-Updates	Decoder version for the comparison; “Newest” follows macOS updates
 linear	linear
-Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Automatic: graineo, Apple only for files graineo cannot decode
+Automatik: graineo, Apple nur für Dateien, die graineo nicht dekodieren kann	Auto: graineo, Apple only for files graineo cannot decode
 Apple-Version für Nikon HE	Apple version for Nikon HE
 Nikon „Hohe Effizienz“ kann graineo noch nicht dekodieren; dann dekodiert macOS. „Bis RAW 8“ ist schneller und entrauscht nicht zusätzlich, „Neueste“ nimmt RAW 9, wo macOS es anbietet (3- bis 7-mal langsamer). Gilt für Fotos ohne festgehaltene Version	graineo cannot decode Nikon “High Efficiency” yet; macOS decodes it then. “Up to RAW 8” is faster and does not denoise on its own, “Newest” takes RAW 9 where macOS offers it (3 to 7 times slower). Applies to photos without a pinned version
 Bis RAW 8	Up to RAW 8
@@ -6530,7 +6529,7 @@ Keine automatische Installation auf diesem System	No automatic installation on t
 Apple RAW {a} · Rückfall	Apple RAW {a} · fallback
 entwickelt mit Apple RAW {a} (graineos Dekodierung unbrauchbar)	developed with Apple RAW {a} (graineo's decoding unusable)
 graineos Dekodierung liefert für diese Datei kein brauchbares Bild (Werte weit über dem Weißpunkt). macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Die Version ist für dieses Foto festgehalten; wechseln im Sensor-Fach unter „Pipeline“.	graineo's decoding gives no usable image for this file (values far above the white point). macOS decodes this photo (Apple RAW {a}); color, tone, looks, film and masks are computed by graineo. The version is pinned for this photo; change it in the Sensor panel under “Pipeline”.
-Automatik · Rückfall	Automatic · fallback
+Automatik · Rückfall	Auto · fallback
 festgehalten · Rückfall	pinned · fallback
 nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild	not possible: graineo's decoding gives no usable image for this file
 Ordner wählen und exportieren …	Choose folder and export …
@@ -6595,7 +6594,7 @@ Mehr	More
 # HDR merge (hdr_ui.rs)
 Mindestens zwei Fotos einer Belichtungsreihe wählen.	Choose at least two photos of an exposure bracket.
 Höchstens {n} Fotos.	At most {n} photos.
-{a}: nur RAW-Fotos mit Bayer- oder X-Trans-Sensor.	{a}: only RAW photos with a Bayer or X-Trans sensor.
+{a}: nur RAW-Fotos (Bayer, X-Trans oder Foveon).	{a}: RAW photos only (Bayer, X-Trans or Foveon).
 Die Fotos stammen von verschiedenen Kameras oder haben verschiedene Größen.	The photos come from different cameras or have different sizes.
 {a} ist nicht erreichbar.	{a} is not reachable.
 {a} → {b}: Helligkeit weicht {e} EV von den Aufnahmedaten ab – Licht verändert?	{a} → {b}: brightness differs by {e} EV from the shooting data – did the light change?
@@ -6730,7 +6729,7 @@ Vergleich: bis zu 4 Fotos groß	Compare: up to 4 photos large
 Entkoppelt: jedes Feld wird einzeln verschoben	Unlinked: each field pans on its own
 Gekoppelt: Zoom und Verschieben in allen Feldern gleich (einzeln: ⇧-Ziehen)	Linked: zoom and pan the same in all fields (single field: ⇧-drag)
 Ausrichten: Einzel-Versätze zurücksetzen	Align: reset individual offsets
-Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	Automatic: portrait in one row, landscape 2 × 2
+Automatisch: Hochformate in einer Reihe, Querformate 2 × 2	Auto: portrait in one row, landscape 2 × 2
 Eine Reihe	One row
 Messen: Rechteck ziehen, Schärfe je Feld	Measure: drag a rectangle, sharpness per field
 Fokussiertes Foto als Referenz festhalten	Hold the focused photo as reference
@@ -6826,7 +6825,7 @@ Stapel · {n} Fotos	Stack · {n} photos
 Im Vergleich öffnen	Open in the comparison
 Anordnung: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Arrangement: auto · 1 row · 1 column · 2 × 2 · chosen large
 Anordnung weiterschalten: Auto · 1 Reihe · 1 Spalte · 2 × 2 · Gewähltes groß	Next arrangement: auto · 1 row · 1 column · 2 × 2 · chosen large
-Automatisch: gleich große Felder, so groß wie möglich	Automatic: equal fields, as large as possible
+Automatisch: gleich große Felder, so groß wie möglich	Auto: equal fields, as large as possible
 Eine Spalte	One column
 Gewähltes groß, die anderen klein daneben	Chosen one large, the others small beside it
 Vorschau · Speicher knapp	Preview · memory low
@@ -6847,7 +6846,7 @@ Diese Fotos sehen nicht nach einer Belichtungsreihe aus. Trotzdem zusammenfügen
 Zwischen zwei Aufnahmen liegen {n} Minuten.	There are {n} minutes between two shots.
 Die Bildinhalte unterscheiden sich deutlich.	The pictures differ clearly in content.
 {a} ist eine SFD-Aufnahme: ihre Belichtungen fügt graineo beim Entwickeln selbst zusammen. Das Foto einzeln in Entwickeln öffnen.	{a} is an SFD shot: graineo merges its exposures itself when developing it. Open the photo on its own in Develop.
-{a} ist ein Foveon-Foto (X3F). Für HDR eignen sich die Mehrfachaufnahmen der Kamera (X3I) – sie öffnen sich direkt als ein Foto – und RAW-Reihen anderer Kameras.	{a} is a Foveon photo (X3F). For HDR, use the camera's multi-shot files (X3I) – they open directly as one photo – or RAW brackets from other cameras.
+{a} ist ein Foveon-Foto (X3F): es lässt sich nur mit anderen X3F-Fotos derselben Kamera zusammenfügen.	{a} is a Foveon photo (X3F): it can only be merged with other X3F photos from the same camera.
 Die Fotos stammen von verschiedenen Kameras: {a}.	The photos come from different cameras: {a}.
 Die Fotos haben verschiedene Größen: {a}.	The photos have different sizes: {a}.
 Aus diesen Aufnahmen gibt es schon ein HDR: {a}.	There is already an HDR of these shots: {a}.
@@ -6985,7 +6984,7 @@ Es werden gerade Reihen zusammengefügt – weitere Reihen danach	Brackets are b
 Bricht die Berechnung ab; das neue HDR wird wieder entfernt	Stops the computation; the new HDR is removed again
 Bricht die Berechnung ab; das Foto bleibt, wie es gezeigt wird	Stops the computation; the photo stays as it is shown
 die Berechnung wurde abgebrochen	the computation was cancelled
-Detail der Quattro ab ISO 400: von sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Am besten in 100 % beurteilen	Quattro detail from ISO 400 on: from soft (−3) to strong (+3), 0 = the camera's setting. Best judged at 100 %
+Wie viel Detail die Rauschminderung der Quattro ab ISO 400 stehen lässt: sanft (−3) bis stark (+3), 0 = Einstellung der Kamera. Feindetail und Struktur wirken danach auf das Ergebnis	How much detail the Quattro noise reduction keeps from ISO 400 on: soft (−3) to strong (+3), 0 = the camera's setting. Fine detail and Structure act on the result afterwards
 Der volle Quattro-Weg ist ausgeschaltet; nur er wertet den Detail-Regler aus.	The full Quattro path is switched off; only it evaluates the detail slider.
 Bei Mehrfachaufnahmen (X3I) ist das Detail fest; die Foveon-Schärfe oben wirkt weiter.	For multi-shot files (X3I) the detail is fixed; the Foveon sharpness above still applies.
 Unter ISO 400 ist das Detail der Quattro fest; die Foveon-Schärfe oben wirkt weiter.	Below ISO 400 the Quattro's detail is fixed; the Foveon sharpness above still applies.
@@ -7023,8 +7022,8 @@ Turnier nicht übernommen: hier lassen sich keine Bewertungen setzen	Tournament 
 Turnier übernommen: Sieger als Auswahl – ⌘Z nimmt es zurück	Tournament applied: winner picked – ⌘Z undoes it
 HDR abgebrochen und entfernt (Quellen bleiben)	HDR cancelled and removed (sources stay)
 Lichter-Farbe	Highlight Color
-Lichter-Struktur	Highlight Structure
-Lichter neutral, Lichter-Farbe, Lichter-Struktur	Neutral highlights, highlight color, highlight structure
+Lichter-Detail	Highlight Detail
+Lichter neutral, Lichter-Farbe, Lichter-Detail	Neutral highlights, highlight color, highlight detail
 Farbe der rekonstruierten Lichter: 0 neutral, 50 wie rekonstruiert, 100 kräftiger (nur deutliche Farben)	Color of the reconstructed highlights: 0 neutral, 50 as reconstructed, 100 stronger (clear colours only)
 Zeichnung in den rekonstruierten Lichtern: 0 glatt, 50 wie rekonstruiert, 100 dreifach	Detail in the reconstructed highlights: 0 smooth, 50 as reconstructed, 100 tripled
 Nur für Farbe	Color only
@@ -7049,7 +7048,6 @@ Foveon: Lichter	Foveon: Highlights
 KI-Entrauschen gibt es nur in Farbe.	AI denoise works in color only.
 KI-Entrauschen wirkt nur mit eingeschalteter Rauschminderung.	AI denoise works only with noise reduction switched on.
 Nur für Merrill und Quattro	Only for Merrill and Quattro
-Bei Merrill ohne Regler, die Rekonstruktion wirkt automatisch	No sliders for Merrill, the reconstruction works automatically
 Bei diesem Foto (hohe ISO) ohne Regler, die Rekonstruktion wirkt automatisch	No sliders for this photo (high ISO), the reconstruction works automatically
 Lichter werden rekonstruiert …	Reconstructing highlights …
 Lichter werden rekonstruiert … (seit {n} s)	Reconstructing highlights … ({n} s)
@@ -7058,4 +7056,56 @@ Baut ausgebrannte Schichten aus den noch gültigen Schichten neu auf (Zeichnung 
 Lichterrekonstruktion für Merrill ist in den Einstellungen aus (Entwickeln → „Merrill: Lichter rekonstruieren“)	Highlight reconstruction for Merrill is off in the preferences (Develop → “Merrill: reconstruct highlights”)
 Lichterrekonstruktion für Quattro ist in den Einstellungen aus (Entwickeln → „Quattro: Lichter rekonstruieren“)	Highlight reconstruction for Quattro is off in the preferences (Develop → “Quattro: reconstruct highlights”)
 Quattro: Lichter rekonstruieren	Quattro: reconstruct highlights
-Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Struktur“. Aus: bisheriger Weg	Compute-heavy on strongly overexposed photos (they open a few seconds slower). dp, sd and sd H Quattro: rebuilds the blown top layer from the lower ones, with the sliders “Highlight Color” and “Highlight Structure”. Off: previous path
+Rechenintensiv bei stark überbelichteten Fotos (sie öffnen einige Sekunden langsamer). dp, sd und sd H Quattro: baut die ausgebrannte obere Schicht aus den unteren neu auf, mit den Reglern „Lichter-Farbe“ und „Lichter-Detail“. Aus: bisheriger Weg	Compute-heavy on strongly overexposed photos (they open a few seconds slower). dp, sd and sd H Quattro: rebuilds the blown top layer from the lower ones, with the sliders “Highlight Color” and “Highlight Detail”. Off: previous path
+Oberfläche vergrößern	Enlarge interface
+Oberfläche verkleinern	Reduce interface
+Oberfläche auf 100 %	Interface at 100 %
+Oberfläche vergrößern (US-Tastatur)	Enlarge interface (US keyboard)
+Zerlegt das Bild in Grund- und Detailebene, entrauscht und schärft dabei – das ergibt den typischen Foveon-Eindruck, abgestimmt auf das Aussehen von SIGMA Photo Pro in der Grundeinstellung. Ausgeschaltet wird das Bild deutlich weicher. Luminanz und Farbe regeln das Rauschen.\n\nDie Regler **Feindetail** und **Struktur** ersetzen diesen Schalter (Merrill, Quattro, Classic).	Splits the image into base and detail layer, denoising and sharpening along the way – this gives the typical Foveon look, matched to the default look of SIGMA Photo Pro. Switched off, the image becomes noticeably softer. Luminance and Colour control the noise.\n\nThe **Fine detail** and **Structure** sliders replace this switch (Merrill, Quattro, Classic).
+Wie viel der feinsten Foveon-Detailebene zurückkommt.	How much of the finest Foveon detail band comes back.
+Sigmas Entrauschen trennt ein glattes Grundbild von der Detailebene und setzt das Detail danach wieder ein. graineo teilt diese Detailebene in zwei Bänder:\n• **Feindetail** – kleinste Strukturen bis etwa 3 Pixel: Poren, Hauttextur, Restrauschen\n• **Struktur** – gröbere Strukturen bis etwa 30 Pixel: Wimpern, Haare, Augen, Kanten\n\n**100** = Sigmas Detail unverändert (wie SIGMA Photo Pro). Weniger Feindetail glättet Haut, ohne Augen und Haare weich zu machen; mehr betont feinste Textur samt Rauschen. Das Rauschen selbst regeln weiter Luminanz und Farbe.\n\n### Tipp\nFür Porträts: Feindetail niedrig, Struktur etwas höher (Vorgabe „Porträt (natürlich)“). Bei 100 % beurteilen.	Sigma's noise reduction separates a smooth base image from the detail layer and puts the detail back afterwards. graineo splits this detail layer into two bands:\n• **Fine detail** – smallest structures up to about 3 pixels: pores, skin texture, residual noise\n• **Structure** – coarser structures up to about 30 pixels: eyelashes, hair, eyes, edges\n\n**100** = Sigma's detail unchanged (as in SIGMA Photo Pro). Less fine detail smooths skin without softening eyes and hair; more emphasises the finest texture including noise. Luminance and Colour still control the noise itself.\n\n### Tip\nFor portraits: fine detail low, structure a little higher (preset “Portrait (natural)”). Judge at 100 %.
+Wie viel der gröberen Foveon-Detailebene zurückkommt.	How much of the coarser Foveon detail band comes back.
+Das gröbere der beiden Detailbänder (etwa 3 bis 30 Pixel): Wimpern, Haare, Augen, Kanten und das Relief der Haut. **100** = Sigmas Detail unverändert; weniger wirkt weicher und flacher, mehr plastischer. Großflächige Helligkeitsverläufe bleiben immer unverändert. Gegenstück: **Feindetail**.	The coarser of the two detail bands (about 3 to 30 pixels): eyelashes, hair, eyes, edges and the relief of the skin. **100** = Sigma's detail unchanged; less looks softer and flatter, more looks more sculpted. Broad brightness gradients always stay unchanged. Counterpart: **Fine detail**.
+Feinste Foveon-Ebene: Poren, Hauttextur, Restrauschen. 100 = Sigmas Detail, weniger = glattere Haut	Finest Foveon band: pores, skin texture, residual noise. 100 = Sigma's detail, less = smoother skin
+Gröbere Foveon-Ebene: Wimpern, Haare, Augen, Kanten. 100 = Sigmas Detail	Coarser Foveon band: eyelashes, hair, eyes, edges. 100 = Sigma's detail
+Wirkt nur in Farbe	Only works in colour
+Porträt (natürlich)	Portrait (natural)
+Foveon: feinste Detailebene zurückgenommen, Struktur betont – ruhige, natürliche Haut, klare Augen und Wimpern	Foveon: finest detail band reduced, structure emphasised – calm, natural skin, clear eyes and eyelashes
+fest	fixed
+Schrift	Font
+Feindetail (Detailband)	Fine detail
+Struktur (Detailband)	Structure
+Hoch (Kontrast)	High
+Unten zusätzlich	Extra at bottom
+Wird zum Papierrand addiert: unten etwas breiter wirkt ausgewogener (klassisch 10–25 % mehr).	Added to the paper border: a slightly wider bottom looks more balanced (classically 10–25 % more).
+Filmdaten nicht gefunden – der Ordner „spektrafilm“ muss neben dem Programm liegen.	Film data not found – the “spektrafilm” folder must be next to the program.
+Schärfen für	Sharpen for
+Bildschirm	Screen
+Druck matt	Matte print
+Druck glänzend	Glossy print
+Nach dem Verkleinern auf die Ausgabegröße geschärft, Radius in Ausgabepixeln	Sharpened after downscaling to the output size, radius in output pixels
+Für Drucke auf mattem Papier: etwas größerer Radius, kräftiger	For prints on matte paper: slightly larger radius, stronger
+Für Drucke auf glänzendem Papier: feiner Radius	For prints on glossy paper: fine radius
+Hoch (Schärfe)	High
+Foto vergrößern (in der Dunkelkammer: Körnungs-Lupe)	Zoom in on the photo (in the darkroom: grain loupe)
+Foto vergrößern (US-Tastatur)	Zoom in on the photo (US keyboard)
+Foto verkleinern (in der Dunkelkammer: Körnungs-Lupe)	Zoom out of the photo (in the darkroom: grain loupe)
+Foto einpassen	Fit photo
+Oberfläche vergrößern (deutsche Tastatur)	Enlarge interface (German keyboard)
+Oberfläche verkleinern (deutsche Tastatur)	Reduce interface (German keyboard)
+Vollbild	Full screen
+Vollbild beenden	Exit full screen
+nutzbar	usable
+adaptiv	adaptive
+Linear (Szene)	Linear (scene)
+Ohne Kurve, Look, Schärfen, Entrauschen	No curve, look, sharpening, noise reduction
+Sensordaten ohne Kurve, Look, Schärfen, Entrauschen – flacher Ausgangspunkt	Raw sensor data: no curve, look, sharpening or noise reduction – flat starting point
+Liest die Aufnahmedaten der gewählten Fotos neu aus den Dateien.	Reads the shooting data of the selected photos again from the files.
+• **Was die Datei trägt, gewinnt** – Datum, Kamera, Objektiv, Belichtung, Ort, Maße\n• **Was fehlt, bleibt** – z. B. ein Objektiv aus Lightroom; eine korrigierte Aufnahmezeit bleibt immer\n• **Aus XMP** (nur wenn eine Begleitdatei daneben liegt und du es einschaltest) – Bewertung, Etikett und Stichwörter ersetzen die Werte der Bibliothek\n\nNie geändert: Entwicklung, virtuelle Kopien, Sammlungen und die Dateien selbst. ⌘Z nimmt den ganzen Lauf zurück, auch dabei neu angelegte Stichwörter.	• **What the file holds wins** – date, camera, lens, exposure, location, dimensions\n• **What is missing stays** – e.g. a lens from Lightroom; a corrected capture time always stays\n• **From XMP** (only when a sidecar lies beside the photo and you switch it on) – rating, label and keywords replace the library's values\n\nNever changed: develop settings, virtual copies, collections and the files themselves. ⌘Z takes back the whole run, including keywords it created.
+HDR-Reihe: nächste Aufnahme wird vorbereitet	HDR series: preparing the next bracket
+Warten auf die HDR-Berechnung …	Waiting for the HDR merge …
+HDR wird noch berechnet	HDR is still being merged
+graineo beendet sich, sobald die Berechnung fertig ist.	graineo quits as soon as the merge is done.
+Beim Beenden geht die laufende Berechnung verloren.	Quitting now loses the merge in progress.
+Warten	Wait
+Abbrechen und beenden	Cancel and quit

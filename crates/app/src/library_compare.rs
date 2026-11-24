@@ -720,8 +720,8 @@ impl LibraryView {
             crate::tr("Mindestens 2 Fotos auswählen (⌘-Klick)").to_string()
         };
         let grid_tip = lr::with_shortcut("Zurück zum Raster", if comparing { "cmp_back" } else { "" });
-        let dim = if can { lr::TEXT } else { Color32::from_gray(0x60) };
-        let cells = [(lr::Cell::Text(crate::tr("Raster"), 12.0, lr::TEXT), !comparing, grid_tip.as_str()), (lr::Cell::Text(crate::tr("Vergleichen"), 12.0, dim), comparing, compare_tip.as_str())];
+        let dim = if can { lr::TEXT() } else { Color32::from_gray(0x60) };
+        let cells = [(lr::Cell::Text(crate::tr("Raster"), 12.0, lr::TEXT()), !comparing, grid_tip.as_str()), (lr::Cell::Text(crate::tr("Vergleichen"), 12.0, dim), comparing, compare_tip.as_str())];
         match lr::cell_group_w(ui, "bib-ansicht", &cells, &super::library_filter_bar::VIEW_CELLS) {
             Some(0) if comparing => Some(false),
             Some(1) if !comparing && can => Some(true),

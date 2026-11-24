@@ -439,13 +439,43 @@ A small update after the first reports from users.
 - **Faster thumbnails** for Samsung SRW and Phase One IIQ files.
 - **Smaller things.** A clearer scroll indicator on the filmstrip. The mask overlay stays hidden for as long as you hold a slider. Buttons follow one consistent hierarchy.
 
----
+## 1.5.1 · Menu on Linux, Larger Interface, Foveon Detail Controls
+
+- **Menu on Linux.** The full menu (File, Edit, Library, Photo, View, Window, Help) now appears in the window on Linux, with the same entries and shortcuts as on Windows.
+- **Larger interface.** Interface size from 90 % to 200 % (Settings → Interface), and Shift+Ctrl/⌘ + Plus, Minus, and 0 to enlarge, reduce, or reset it. Ctrl/⌘ + Plus, Minus, and 0 zoom the photo in Develop and in the comparison; in the darkroom they keep switching the grain loupe.
+- **Full-screen button.** A button at the right end of the top bar puts the window in full screen and back, like the F key.
+- **Merrill: Fine detail and Structure instead of the Foveon detail switch.** The detail that the Foveon processing restores after noise reduction is split into two bands: fine detail (pores, skin texture, residual noise) and structure (eyelashes, hair, eyes, edges), each 0–200 %. Noise reduction now runs independently of how much detail comes back; 100/100 is the previous result, unchanged. New preset “Portrait (natural)” for calm, natural skin with clear eyes. Photos saved with the switch off keep their look.
+- **More readable interface.** Settings → Interface: font IBM Plex Mono or IBM Plex Sans, and contrast Standard or High (brighter texts, clearer borders).
+- Fixed lenses show “(fixed)” instead of “(fest)”, and capture dates follow the interface language.
+- **Fine detail and Structure for Quattro and Classic.** The two detail sliders now also work for all Quattro models and the older Foveon cameras (SD9 to DP2x). Edges, hair and eyelashes stay crisp while skin and fine texture follow the sliders; 100/100 is unchanged. The preset “Portrait (natural)” works for every Foveon camera.
+- **Fine detail and Structure on the GPU.** Changed detail values no longer move the noise reduction to the processor; the base is computed on the graphics card as fast as at 100/100.
+- **Linear (scene).** A new entry in the camera profiles of Film & Look shows what the sensor measured: no tone curve, no camera look, no sharpening or noise reduction, white balance kept to the light of the scene. It looks flat on purpose – a starting point for your own editing; every slider stays available. Works for Bayer, X-Trans and Sigma photos.
+- **HDR from Foveon single shots.** Exposure series of single X3F files (Merrill, Quattro and the older Foveon cameras) now merge like Bayer and X-Trans series: in Merge to HDR, in the Merge tool and in Merge All Series, with alignment, motion handling and a virtual result you can develop and export as floating point. Blown areas stay neutral white.
+- **Darkroom:** "Bottom border" is now called "Extra at bottom" and explains that it is added to the paper border.
+- Linux: the film list stays filled even when the program was copied on its own (the film data are now built in), and the package has `./install.sh` for the application menu (`--uninstall` keeps your library). If film data are ever missing, the darkroom and Film & Look say so instead of showing an empty list.
+- Full screen and maximized windows: the top bar is no longer hidden under the title bar.
+- “Highlight Structure” is now called “Highlight Detail”.
+- Exports into a subfolder of a library folder are no longer added to the library as new photos.
+- The filmstrip of a viewed folder shows thumbnails instead of placeholders.
+- Detail controls inspired by Foveonic by H Dot.
+- **New Auto (⌘U).** Auto now sets all tone and colour sliders together for a livelier result: a little more light in dark photos, deeper blacks, more separation and richer colour, while the mood of the photo stays. It works the same for Sigma and all other cameras.
+- **Robustness.** All readers of files and texts from elsewhere (X3F, makernotes, imported catalogs and presets, XMP sidecars, EXIF, the face model) are now fuzz-tested. Damaged Sigma files no longer crash the app or reserve huge amounts of memory.
+- **Foveon highlights.** White surfaces no longer keep yellow edges where they are blown; small specular highlights stay free of coloured dots (also on short exposures of the sd Quattro H). The sliders “Highlight Color” and “Highlight Detail” now also work for Merrill photos and at high ISO on Quattro, and the reconstruction of strongly overexposed Quattro photos is several times faster.
+- **Camera profiles with their look tables.** Installed camera profiles (DCP) are read with their hue/saturation map and look table, so the profiles of one camera now look different from each other (inspired by greycard).
+- **Whites down recovers highlights.** Lowering Whites now also brings bright areas just over white back into range, keeping their colour (inspired by greycard).
+- **Output sharpening on export.** New export section “Output sharpening” for screen, matte or glossy print, three strengths, off by default (inspired by greycard).
+- The Edit panel keeps its scroll position when a switch reopens the photo (for example Binning in Details) or while another photo loads; it no longer jumps back to the top.
+- **Stronger Blacks slider.** Blacks now really sets the black point: −100 takes the darkest tones to black, +100 opens deep shadows clearly, mid-tones stay almost unchanged. Values imported from other raw converters act about as strongly as there. Auto uses Blacks for the black point of non-Sigma photos instead of a tone curve. Note: existing edits with Blacks changed will look different.
+- Blacks in masks (local corrections) now works like the global Blacks slider. Note: existing masks with Blacks changed act noticeably stronger.
+- Quitting while an HDR merge runs now asks whether to wait for it or cancel it and quit.
+- “Reread metadata” has a help card, and undo also removes keywords the run created.
 
 ## Thanks
 
 - **spektrafilm** by Andrea Volpato (GPL-3.0), film profiles CC BY-SA 4.0
 - **spektrafilm-rs** by turbasvin (GPL-3.0)
 - **x3fuse-core** by sagwaco (Apache-2.0)
+- **Foveonic** by H Dot: idea of separate fine and coarse detail controls
 - **dcraw** by Dave Coffin
 - **darktable**, tone equalizer by Aurélien Pierre
 - **rawler** (LGPL-2.1), **lensfun** (data CC BY-SA 3.0), **RCD**, **Markesteijn**

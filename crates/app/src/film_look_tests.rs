@@ -139,15 +139,36 @@ fn sigma_black_and_white_offers_the_colour_modes() {
     let mono = Settings { monochrome: true, ..Settings::default() };
     let groups = look_groups(&mono, None, "Standard", &modes);
     let keys: Vec<_> = groups[0].entries.iter().map(|e| e.key.as_str()).collect();
-    assert_eq!(keys, [SIGMA_MONO_KEY, "sigma:", "sigma:Neutral", "sigma:Vivid"]);
+    assert_eq!(keys, [SIGMA_MONO_KEY, "sigma:", "sigma:Neutral", "sigma:Vivid", "sigma:Linear"]);
     assert!(matches!(groups[0].entries[0].choice, Choice::SigmaMono));
     assert!(groups[0].entries[1..].iter().all(|e| matches!(e.choice, Choice::Sigma(_))));
     assert_eq!(look_card(&mono, None, "Standard").0, SIGMA_MONO_KEY, "black and white is the selected tile");
     // in colour: only the colour modes, as before
     let colour = look_groups(&Settings::default(), None, "Standard", &modes);
     let keys: Vec<_> = colour[0].entries.iter().map(|e| e.key.as_str()).collect();
-    assert_eq!(keys, ["sigma:", "sigma:Neutral", "sigma:Vivid"]);
+    assert_eq!(keys, ["sigma:", "sigma:Neutral", "sigma:Vivid", "sigma:Linear"]);
     assert_eq!(look_card(&Settings::default(), None, "Standard").0, "sigma:");
+}
+/// "Linear (Szene)": RAW look and Sigma mode set their start values (white balance kept to the scene light, no noise
+/// reduction or sharpening); everything else stays as it was.
+#[test]
+fn linear_scene_sets_start_values() {
+    let mut s = Settings::default();
+    s.exposure = 0.3;
+    s.sharpen = 0.5;
+    let raw = Choice::Look(rawdev::learn::LINEAR_LOOK.into()).apply(&s);
+    assert_eq!(raw.raw.look, "linear");
+    assert_eq!((raw.raw.wb_mode.as_str(), raw.raw.temperature, raw.raw.tint), ("custom", 6504.0, 0.0));
+    assert_eq!((raw.raw.nr_luma, raw.raw.nr_color, raw.sharpen), (0.0, 0.0, 0.0));
+    assert_eq!(raw.exposure, 0.3);
+    let sigma = Choice::Sigma(develop::settings::LINEAR_MODE.into()).apply(&s);
+    assert!(sigma.is_linear());
+    assert_eq!(sigma.white_balance.as_deref(), Some("Sunlight"));
+    assert_eq!((sigma.nr_luma, sigma.nr_chroma, sigma.sigma_sharpness), (develop::NR_OFF, develop::NR_OFF, -2.0));
+    // other modes and looks leave these sliders alone
+    let other = Choice::Sigma("Vivid".into()).apply(&s);
+    assert_eq!((other.nr_luma, other.sharpen, other.white_balance.clone()), (s.nr_luma, s.sharpen, s.white_balance.clone()));
+    assert_eq!(look_card(&sigma, None, "Standard").0, "sigma:Linear");
 }
 #[test]
 fn fold_state_persisted_in_english_and_foreign_version_kept() {

@@ -763,7 +763,7 @@ impl LibraryView {
                     // the kind of source, clearly at the top: card or camera · folder · Lightroom catalog (own dialog)
                     ui.add_enabled_ui(!running && !done, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(egui::RichText::new(crate::tr("Quelle")).color(lr::TEXT_DIM));
+                            ui.label(egui::RichText::new(crate::tr("Quelle")).color(lr::TEXT_DIM()));
                             ui.add_space(6.0);
                             let mut k = imp.kind;
                             let opts = [(SourceKind::Card, crate::tr("Karte oder Kamera")), (SourceKind::Folder, crate::tr("Ordner")), (SourceKind::Lightroom, crate::tr("Lightroom-Katalog"))];
@@ -814,7 +814,7 @@ impl LibraryView {
                                 }
                                 s
                             };
-                            ui.label(egui::RichText::new(t).color(lr::TEXT));
+                            ui.label(egui::RichText::new(t).color(lr::TEXT()));
                             ui.add_space(12.0);
                             if ui.button(crate::tr("Alle")).clicked() {
                                 grid::check_all(imp, true);
@@ -1274,7 +1274,7 @@ fn column(ui: &mut egui::Ui, w: f32, h: f32, add: impl FnOnce(&mut egui::Ui)) {
 
 fn divider(ui: &mut egui::Ui, h: f32) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(14.0, h), egui::Sense::hover());
-    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(1.0, lr::FIELD_STROKE));
+    ui.painter().vline(r.center().x, r.y_range(), egui::Stroke::new(1.0, lr::FIELD_STROKE()));
 }
 
 /// Column heading in capitals (like the panels of the library).
@@ -1326,7 +1326,7 @@ fn progress_view(ui: &mut egui::Ui, l: &Arc<Mutex<Run>>, mode: Mode, camera: boo
     let t = crate::trf!("Foto {a} von {b} · {c} von {d}", a = dialog::number((st.file + 1).min(st.files)), b = dialog::number(st.files), c = dialog::size(st.bytes), d = dialog::size(st.bytes_total));
     dialog::progress(ui, Some(fraction), &t);
     if let Some(rest) = rest_secs(&st, secs) {
-        ui.label(egui::RichText::new(crate::trf!("{a}/s · noch etwa {b}", a = dialog::size((st.bytes as f64 / secs) as u64), b = remaining_time(rest))).color(lr::TEXT_DIM));
+        ui.label(egui::RichText::new(crate::trf!("{a}/s · noch etwa {b}", a = dialog::size((st.bytes as f64 / secs) as u64), b = remaining_time(rest))).color(lr::TEXT_DIM()));
     }
     let mut c = crate::trf!("✓ geprüft {a} · Fehler {b}", a = dialog::number(st.verified), b = dialog::number(st.errors));
     if st.second > 0 {
@@ -1335,7 +1335,7 @@ fn progress_view(ui: &mut egui::Ui, l: &Arc<Mutex<Run>>, mode: Mode, camera: boo
     if mode == Mode::MoveFiles {
         c += &crate::trf!(" · Originale im Papierkorb: {a} (nur geprüfte)", a = dialog::number(st.trashed));
     }
-    ui.label(egui::RichText::new(c).color(lr::TEXT));
+    ui.label(egui::RichText::new(c).color(lr::TEXT()));
     ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
 }
 
@@ -1360,10 +1360,10 @@ fn result_view(ui: &mut egui::Ui, f: &Finished) -> bool {
             }
             match &f.ejected {
                 Some(Ok(())) => {
-                    ui.label(egui::RichText::new(crate::tr("ausgeworfen")).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(crate::tr("ausgeworfen")).color(lr::TEXT_DIM()));
                 }
                 Some(Err(e)) => {
-                    ui.label(egui::RichText::new(e).color(lr::TEXT_DIM));
+                    ui.label(egui::RichText::new(e).color(lr::TEXT_DIM()));
                 }
                 None => {}
             }

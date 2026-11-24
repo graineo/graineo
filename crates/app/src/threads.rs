@@ -112,7 +112,11 @@ fn pool(lane: Lane) -> &'static Pool {
 
 /// Run `task` on a worker of `lane`; returns at once.
 pub fn spawn(lane: Lane, task: impl FnOnce() + Send + 'static) {
-    let p = pool(lane);
+    spawn_in(pool(lane), task);
+}
+
+fn spawn_in(p: &'static Pool, task: impl FnOnce() + Send + 'static) {
+    let lane = p.lane;
     let mut s = p.state.lock().unwrap_or_else(|e| e.into_inner());
     s.queue.push_back(Box::new(task));
     if s.idle >= s.queue.len() {
@@ -178,7 +182,8 @@ mod tests {
         for (lane, want) in [(Lane::Front, pools::Intent::Visible), (Lane::Ahead, pools::Intent::Soon), (Lane::Back, pools::Intent::Idle)] {
             let (tx, rx) = std::sync::mpsc::channel();
             spawn(lane, move || tx.send(pools::intent()).unwrap());
-            assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), want, "{lane:?}");
+            // generous bound: a background-priority thread may wait long on a loaded machine (other tests, builds)
+            assert_eq!(rx.recv_timeout(Duration::from_secs(60)).unwrap(), want, "{lane:?}");
         }
     }
 
@@ -186,12 +191,17 @@ mod tests {
     /// blocked one), and the workers above the kept number end again.
     #[test]
     fn all_tasks_run_without_waiting_behind_blocked_ones() {
+        // own pools: tasks of other tests running at the same time on the shared lanes must not change the counts
+        let own = |lane: Lane| -> &'static Pool { Box::leak(Box::new(Pool { lane, state: Mutex::new(State::default()), signal: Condvar::new() })) };
+        let (back, ahead) = (own(Lane::Back), own(Lane::Ahead));
+        // bounds only against hanging: background-priority threads may wait long on a loaded machine
+        let limit = Duration::from_secs(60);
         let done = Arc::new(AtomicUsize::new(0));
         let gate = Arc::new((Mutex::new(false), Condvar::new()));
         // five tasks block until released
         for _ in 0..5 {
             let (d, g) = (done.clone(), gate.clone());
-            spawn(Lane::Back, move || {
+            spawn_in(back, move || {
                 let (m, cv) = &*g;
                 let mut open = m.lock().unwrap();
                 while !*open {
@@ -203,35 +213,35 @@ mod tests {
         // a sixth one finishes although all others are blocked
         let quick = Arc::new(AtomicUsize::new(0));
         let q = quick.clone();
-        spawn(Lane::Back, move || {
+        spawn_in(back, move || {
             q.fetch_add(1, Ordering::SeqCst);
         });
         let t = std::time::Instant::now();
         while quick.load(Ordering::SeqCst) == 0 {
-            assert!(t.elapsed() < Duration::from_secs(5), "task waited behind blocked ones");
+            assert!(t.elapsed() < limit, "task waited behind blocked ones");
             std::thread::sleep(Duration::from_millis(5));
         }
         *gate.0.lock().unwrap() = true;
         gate.1.notify_all();
         while done.load(Ordering::SeqCst) < 5 {
-            assert!(t.elapsed() < Duration::from_secs(5), "blocked tasks did not finish");
+            assert!(t.elapsed() < limit, "blocked tasks did not finish");
             std::thread::sleep(Duration::from_millis(5));
         }
         // many short tasks, a few milliseconds apart like jobs from the window, reuse the workers (no thread per task)
         let many = Arc::new(AtomicUsize::new(0));
-        let before = pool(Lane::Ahead).state.lock().unwrap().started;
+        let before = ahead.state.lock().unwrap().started;
         for _ in 0..100 {
             let m = many.clone();
-            spawn(Lane::Ahead, move || {
+            spawn_in(ahead, move || {
                 m.fetch_add(1, Ordering::SeqCst);
             });
             std::thread::sleep(Duration::from_millis(5));
         }
         while many.load(Ordering::SeqCst) < 100 {
-            assert!(t.elapsed() < Duration::from_secs(20));
+            assert!(t.elapsed() < limit * 2);
             std::thread::sleep(Duration::from_millis(5));
         }
-        let started = pool(Lane::Ahead).state.lock().unwrap().started - before;
+        let started = ahead.state.lock().unwrap().started - before;
         assert!(started <= 10, "a thread per task: {started} threads for 100 tasks");
     }
 }

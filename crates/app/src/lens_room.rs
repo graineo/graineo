@@ -112,7 +112,7 @@ fn camera_identity(row: &LensRow) -> Identity {
 }
 
 fn lens_title(row: &LensRow) -> String {
-    if row.lens.is_empty() { crate::tr("ohne Objektivangabe").to_string() } else { row.lens.clone() }
+    if row.lens.is_empty() { crate::tr("ohne Objektivangabe").to_string() } else { crate::cell_info::lens_label(&row.lens) }
 }
 
 /// Which profile counts for photos of this lens (without opening photos): rule, else own profile by lens name.
@@ -145,8 +145,8 @@ fn list_two_lines(ui: &mut egui::Ui, title: &str, detail: &str, active: bool) ->
     let width = (rect.width() - 16.0).max(0.0);
     let first = egui::Rect::from_min_size(egui::pos2(x, rect.top() + 1.0), egui::vec2(width, 18.0));
     let second = egui::Rect::from_min_size(egui::pos2(x, rect.top() + 19.0), egui::vec2(width, 18.0));
-    ui.put(first, egui::Label::new(egui::RichText::new(title).color(lr::TEXT)).truncate().selectable(false));
-    ui.put(second, egui::Label::new(egui::RichText::new(detail).small().color(lr::TEXT_DIM)).truncate().selectable(false));
+    ui.put(first, egui::Label::new(egui::RichText::new(title).color(lr::TEXT())).truncate().selectable(false));
+    ui.put(second, egui::Label::new(egui::RichText::new(detail).small().color(lr::TEXT_DIM())).truncate().selectable(false));
     lr::hover_tip(ui, &response, &format!("{title}\n{detail}"));
     response
 }
@@ -183,11 +183,11 @@ fn action_text(a: &RevisionAction) -> String {
 }
 
 fn caption(ui: &mut egui::Ui, t: &str) {
-    ui.label(egui::RichText::new(crate::tr(t).to_uppercase()).small().color(lr::TEXT_DIM));
+    ui.label(egui::RichText::new(crate::tr(t).to_uppercase()).small().color(lr::TEXT_DIM()));
 }
 
 fn dim(ui: &mut egui::Ui, t: impl Into<String>) {
-    ui.add(egui::Label::new(egui::RichText::new(t.into()).small().color(lr::TEXT_DIM)).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(t.into()).small().color(lr::TEXT_DIM())).wrap());
 }
 
 /// Draw the window every frame.
@@ -250,13 +250,13 @@ pub fn ui(ctx: &egui::Context) {
             ui.horizontal(|ui| {
                 ui.add(egui::Label::new(egui::RichText::new(crate::tr("OBJEKTIVE")).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(crate::tr("Schließen")).min_size(egui::vec2(90.0, 26.0)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE))).clicked() {
+                    if ui.add(egui::Button::new(crate::tr("Schließen")).min_size(egui::vec2(90.0, 26.0)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE()))).clicked() {
                         close = true;
                     }
                     if lr::main_button_min(ui, crate::tr("Objektiv hinzufügen …"), true, 170.0).clicked() {
                         add = true;
                     }
-                    if ui.add(egui::Button::new(crate::tr("Importieren …")).min_size(egui::vec2(100.0, 26.0)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE))).clicked() {
+                    if ui.add(egui::Button::new(crate::tr("Importieren …")).min_size(egui::vec2(100.0, 26.0)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE()))).clicked() {
                         import = true;
                     }
                 });
@@ -273,7 +273,7 @@ pub fn ui(ctx: &egui::Context) {
             ui.separator();
             // one fixed line for the result of the last action
             let (ok, text) = r.message.clone().unwrap_or((true, String::new()));
-            ui.add_sized([W, 16.0], egui::Label::new(egui::RichText::new(text).small().color(if ok { lr::TEXT_DIM } else { Color32::from_rgb(0xe0, 0x5c, 0x50) })).truncate());
+            ui.add_sized([W, 16.0], egui::Label::new(egui::RichText::new(text).small().color(if ok { lr::TEXT_DIM() } else { Color32::from_rgb(0xe0, 0x5c, 0x50) })).truncate());
         });
         let top = modal.is_top_modal;
         if top && (modal.should_close() || ctx.input(|i| i.key_pressed(egui::Key::Escape))) && r.ask.is_none() && r.rename.is_none() {
