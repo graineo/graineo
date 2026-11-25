@@ -7,9 +7,11 @@
 //! the calculation interpolates it ([`Curve`]); the base shape alone dashed, behind both the histogram of the zone
 //! brightness of the photo (the same mask and exposure offset the equalizer uses, collected while the preview is
 //! rendered, see `develop::tone_eq::collect`). Every interaction changes only the zone values (stored as before in
-//! `zones`), never the main slider: click selects a point, dragging moves it, ↑/↓ step it, ←/→ change the zone (only
-//! while the graph has the keyboard focus), the mouse wheel steps the zone under the pointer, a double-click on a point
-//! sets it to 0 and a double-click on the value row opens a number field. Graph after the tone equalizer of darktable
+//! `zones`), never the main slider. The mouse wheel is never taken: it scrolls the panel. Nothing is selected until a
+//! click or a drag selects a point (gold); dragging moves it relative to where it was grabbed (⌥ fine, catches at 0),
+//! ↑/↓ step it (⇧ coarse, ⌥ fine), ←/→ select the neighbour, a double-click on the point sets it to 0 and a
+//! double-click on the value rows opens a number field. Esc, a click outside the graph, another photo or a collapsed
+//! section end the selection. Graph after the tone equalizer of darktable
 //! (Aurélien Pierre); own implementation.
 //!
 //! The section sits in Edit and not in the tool rail: it has no interaction in the image (sliders belong to a
@@ -130,14 +132,18 @@ const SHOW_MIN: f32 = -8.5;
 const SHOW_MAX: f32 = 0.5;
 /// Shown range of the correction in EV (main slider and zones together; beyond it the line is clipped).
 const SHOW_RANGE: f32 = 3.0;
-/// Step of the arrow keys and the mouse wheel in EV (⇧ with the arrow keys: [`BIG_STEP`]).
-const WHEEL_STEP: f32 = 0.05;
+/// Steps of the arrow keys in EV: plain, with ⇧ and with ⌥.
+const KEY_STEP: f32 = 0.05;
 const BIG_STEP: f32 = 0.25;
-/// Height of the value row below the graph.
-const VALUE_HEIGHT: f32 = 20.0;
+const FINE_STEP: f32 = 0.01;
+/// Dragging with ⌥: the point moves a fifth of the pointer movement.
+const FINE_FACTOR: f32 = 0.2;
+/// Dragging without ⌥ catches the value at 0 within this distance (EV).
+const ZERO_CATCH: f32 = 0.04;
+/// Height of the two value lines below the graph.
+const VALUE_HEIGHT: f32 = 34.0;
 /// Height of the mask row.
 const MASK_ROW_HEIGHT: f32 = 30.0;
-const WHEEL_POINTS: f32 = 20.0;
 
 /// Zone histogram of the open photo and when the graph was last drawn (the render job collects the histogram only
 /// while the graph is on screen).
@@ -191,10 +197,10 @@ fn number(v: f32, places: usize) -> String {
     format!("{:.places$}", v.abs()).de_comma()
 }
 
-/// Signed value as the sliders show it ("+1,10", "-0,50", "0,00" in German).
+/// Signed value ("+1,10", "−0,50", "0,00" in German), with the typographic minus of the EV labels.
 fn signed(v: f32) -> String {
     use crate::menu::i18n::DeComma;
-    if v.abs() >= 0.005 { format!("{v:+.2}").de_comma() } else { number(0.0, 2) }
+    if v.abs() >= 0.005 { format!("{v:+.2}").replace('-', "−").de_comma() } else { number(0.0, 2) }
 }
 
 /// Histogram folded onto `columns` columns over the shown range (counts outside go to the outer columns).
@@ -228,6 +234,15 @@ pub fn keyboard_focus() -> bool {
     f != 0 && clock().saturating_sub(f) < 500
 }
 
+/// When Esc last ended the selection of a point (milliseconds since [`clock`]; 0 = never).
+static ESC_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Did the graph just take Esc to end its selection? Then the global Esc (back to the grid, leave fullscreen) waits.
+pub fn took_escape() -> bool {
+    let f = ESC_MS.load(Ordering::Relaxed);
+    f != 0 && clock().saturating_sub(f) < 300
+}
+
 /// Parse a typed value ("+1,25", "−0.5", "2").
 fn parse_value(t: &str) -> Option<f32> {
     t.trim().replace('−', "-").replace(',', ".").trim_start_matches('+').parse::<f32>().ok().filter(|v| v.is_finite())
@@ -237,7 +252,6 @@ fn parse_value(t: &str) -> Option<f32> {
 /// slider dashed. One point is always selected; every interaction changes only zone values, the neighbours are not
 /// moved (between the zones the line is the curve the calculation uses).
 fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
-    state().drawn = Some(Instant::now());
     let width = ui.available_width();
     let (outer, _) = ui.allocate_exact_size(egui::vec2(width, GRAPH_HEIGHT + SCALE_HEIGHT), egui::Sense::hover());
     let rect = egui::Rect::from_min_size(outer.min, egui::vec2(width, GRAPH_HEIGHT));
@@ -254,8 +268,19 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
     let amount = s.tone_eq.amount;
     let base = move |ev: f32| if amount == 0.0 { 0.0 } else { balance_ev(amount, ev, ev) };
     let sel_id = id.with("selected");
-    let mut sel: usize = ui.data(|d| d.get_temp(sel_id)).unwrap_or(4).min(ZONES - 1);
-
+    let editing_id = egui::Id::unique("tone-eq-value-edit");
+    let editing = ui.data(|d| d.get_temp::<String>(editing_id)).is_some();
+    // the selected point lives only as long as the graph keeps the keyboard focus (or its number field is open), for
+    // this photo, and while the graph stays on screen (a collapsed section or another view ends it)
+    let prev: Option<Selection> = ui.data(|d| d.get_temp(sel_id));
+    let seen = state().drawn.is_some_and(|t| t.elapsed() < Duration::from_millis(500));
+    state().drawn = Some(Instant::now());
+    let mut sel: Option<usize> = prev.and_then(|p| p.keep(index, seen));
+    if let Some(z) = test_select() {
+        // test aid: what a click on the point does (select it, focus the graph)
+        sel = Some(z);
+        ui.memory_mut(|m| m.request_focus(id));
+    }
     // background, histogram, grid
     painter.rect_filled(rect, 0.0, lr::PANEL_DARK());
     let hist = state().hist.as_ref().filter(|(i, _)| *i == index).map(|(_, h)| h.clone());
@@ -294,40 +319,52 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
         painter.text(egui::pos2(x, rect.bottom() + SCALE_HEIGHT / 2.0 + 1.0), align, t, small.clone(), lr::TEXT_DIM());
     }
 
-    // interaction
+    // interaction: the mouse wheel is never taken (it scrolls the panel); only a click or a drag selects a point and
+    // only a selected point changes (drag, arrow keys, double-click, number field)
     let pointer = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos()));
-    let zones_before = s.tone_eq.zones;
     let near = |q: egui::Pos2, zones: &[f32; ZONES]| -> Option<usize> {
         let i = zone_at(ev_of(q.x));
         (egui::pos2(x_of(ZONE_EV[i]), y_of(base(ZONE_EV[i]) + zones[i])).distance(q) <= 10.0).then_some(i)
     };
+    let drag_id = id.with("drag");
     if resp.clicked() || resp.drag_started() || resp.double_clicked() {
         resp.request_focus();
         // the nearest point, or the zone under the pointer (a column is easy to hit)
         if let Some(q) = pointer {
-            sel = near(q, &s.tone_eq.zones).unwrap_or_else(|| zone_at(ev_of(q.x)));
+            let z = near(q, &s.tone_eq.zones).unwrap_or_else(|| zone_at(ev_of(q.x)));
+            sel = Some(z);
+            if resp.drag_started() {
+                // relative drag: the point never jumps to the pointer, it follows the movement from here
+                ui.data_mut(|d| d.insert_temp(drag_id, (s.tone_eq.zones[z], q.y)));
+            }
         }
     }
-    if resp.double_clicked() {
-        if pointer.and_then(|q| near(q, &s.tone_eq.zones)) == Some(sel) {
-            s.tone_eq.zones[sel] = 0.0;
-            crate::history::reset_gesture();
-        }
-    } else if resp.dragged() {
-        if let Some(q) = ui.input(|inp| inp.pointer.interact_pos()) {
-            // only the zone value changes: the difference to the base shape of the main slider
-            let v = v_of(q.y) - base(ZONE_EV[sel]);
-            s.tone_eq.zones[sel] = ((v / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV);
+    if let Some(z) = sel {
+        if resp.double_clicked() {
+            if pointer.and_then(|q| near(q, &s.tone_eq.zones)) == Some(z) {
+                s.tone_eq.zones[z] = 0.0;
+                crate::history::reset_gesture();
+            }
+        } else if resp.dragged() {
+            let start: Option<(f32, f32)> = ui.data(|d| d.get_temp(drag_id));
+            if let (Some((v0, y0)), Some(q)) = (start, ui.input(|inp| inp.pointer.interact_pos())) {
+                let fine = ui.input(|i| i.modifiers.alt);
+                s.tone_eq.zones[z] = drag_value(v0, v_of(q.y) - v_of(y0), fine);
+            }
         }
     }
-    // keyboard (only while the graph has the focus): ↑/↓ step the selected zone, ←/→ select the neighbour
+    if resp.drag_stopped() {
+        ui.data_mut(|d| d.remove::<(f32, f32)>(drag_id));
+    }
+    // keyboard (only while the graph has the focus): ↑/↓ step the selected zone, ←/→ select the neighbour, Esc ends
     if resp.has_focus() {
         FOCUS_MS.store(clock(), Ordering::Relaxed);
-        ui.memory_mut(|m| m.set_focus_lock_filter(id, egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, ..Default::default() }));
+        ui.memory_mut(|m| m.set_focus_lock_filter(id, egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, escape: true, ..Default::default() }));
         let mut step = 0.0;
         let mut moved = 0i32;
+        let mut esc = false;
         ui.input_mut(|i| {
-            for (m, k) in [(egui::Modifiers::NONE, WHEEL_STEP), (egui::Modifiers::SHIFT, BIG_STEP)] {
+            for (m, k) in [(egui::Modifiers::NONE, KEY_STEP), (egui::Modifiers::SHIFT, BIG_STEP), (egui::Modifiers::ALT, FINE_STEP)] {
                 while i.consume_key(m, egui::Key::ArrowUp) {
                     step += k;
                 }
@@ -341,44 +378,32 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
             while i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowLeft) {
                 moved -= 1;
             }
+            esc = i.consume_key(egui::Modifiers::NONE, egui::Key::Escape);
         });
-        sel = (sel as i32 + moved).clamp(0, ZONES as i32 - 1) as usize;
-        if step != 0.0 {
-            let v = s.tone_eq.zones[sel] + step;
-            s.tone_eq.zones[sel] = ((v / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV);
-        }
-    }
-    // mouse wheel: the zone under the pointer (it becomes the selected one); the panel does not scroll meanwhile
-    if resp.hovered() && !resp.dragged() {
-        // only real wheel/trackpad events (a programmatic scroll of the panel is no zone change)
-        let dy: f32 = ui.input(|i| {
-            i.raw
-                .events
-                .iter()
-                .map(|e| match e {
-                    egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, .. } => delta.y,
-                    egui::Event::MouseWheel { delta, .. } => delta.y * WHEEL_POINTS,
-                    _ => 0.0,
-                })
-                .sum()
-        });
-        if dy != 0.0 {
-            if let Some(q) = pointer {
-                sel = zone_at(ev_of(q.x));
-                let acc_id = id.with("wheel");
-                let acc: f32 = ui.data(|d| d.get_temp(acc_id)).unwrap_or(0.0) + dy;
-                let steps = (acc / WHEEL_POINTS).trunc();
-                ui.data_mut(|d| d.insert_temp(acc_id, acc - steps * WHEEL_POINTS));
-                if steps != 0.0 {
-                    let v = s.tone_eq.zones[sel] + steps * WHEEL_STEP;
-                    s.tone_eq.zones[sel] = ((v / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV);
-                }
+        if esc && !editing {
+            sel = None;
+            ESC_MS.store(clock(), Ordering::Relaxed);
+            ui.memory_mut(|m| m.surrender_focus(id));
+        } else if moved != 0 || step != 0.0 || sel.is_some() {
+            // focus without a selection (reached with Tab): the arrow keys start at the middle zone
+            let z = (sel.unwrap_or(ZONES / 2) as i32 + moved).clamp(0, ZONES as i32 - 1) as usize;
+            sel = Some(z);
+            if step != 0.0 {
+                s.tone_eq.zones[z] = snap(s.tone_eq.zones[z] + step);
             }
         }
-        ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
+    } else if !editing && !resp.dragged() {
+        // focus elsewhere (click outside the graph, another control, Tab): nothing stays selected
+        sel = None;
     }
-    ui.data_mut(|d| d.insert_temp(sel_id, sel));
-    let _ = zones_before;
+    ui.data_mut(|d| match sel {
+        Some(zone) => {
+            d.insert_temp(sel_id, Selection { index, zone });
+        }
+        None => {
+            d.remove::<Selection>(sel_id);
+        }
+    });
 
     // the base shape of the main slider alone, dashed (what comes from "Ausgleich")
     let steps = (rect.width() / 2.0).max(16.0) as usize;
@@ -396,53 +421,81 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
         })
         .collect();
     painter.add(egui::Shape::line(line, Stroke::new(1.5, lr::GOLD())));
-    // the points (base shape plus zone value); the selected one gold, a hovered one lighter
+    // the points (base shape plus zone value); the selected one gold, a hovered one lighter (display only)
     let hovered = if resp.hovered() && !resp.dragged() { pointer.and_then(|q| near(q, &s.tone_eq.zones)) } else { None };
+    let hovered_col = if resp.hovered() { pointer.map(|q| zone_at(ev_of(q.x))) } else { None };
     for i in 0..ZONES {
         let c = egui::pos2(x_of(ZONE_EV[i]), y_of(base(ZONE_EV[i]) + s.tone_eq.zones[i]));
-        if i == sel {
+        if sel == Some(i) {
             painter.circle(c, 4.5, lr::GOLD(), Stroke::new(1.0, lr::PANEL_DARK()));
         } else {
             let fill = if hovered == Some(i) { crate::lr::gray(0xf0) } else { crate::lr::gray(0xb8) };
             painter.circle(c, 3.5, fill, Stroke::new(1.0, lr::PANEL_DARK()));
         }
     }
-    // no tooltip: it would cover the value row; the controls are in the help card of the section
-    value_row(ui, s, sel, base(ZONE_EV[sel]));
+    // no tooltip: it would cover the value rows; the controls are in the help card of the section.
+    // The value rows show the selected zone; without a selection the zone under the pointer (dimmed, read only).
+    let shown = sel.map(|z| (z, true)).or_else(|| hovered_col.map(|z| (z, false)));
+    if value_row(ui, s, shown.map(|(z, active)| (z, base(ZONE_EV[z]), active))) {
+        // back to the graph after Enter/Esc in the number field: the point stays selected
+        ui.memory_mut(|m| m.request_focus(id));
+    }
 }
 
-/// Row below the graph: the selected zone, the correction that acts there and the part of the zone value.
-/// Double-click opens a number field for the zone value (Enter takes it, Esc cancels).
-fn value_row(ui: &mut egui::Ui, s: &mut Settings, sel: usize, base: f32) {
+/// Rows below the graph (two fixed lines, no layout jump, short enough for every language): the zone and the
+/// correction that acts there, below it the parts (main slider and point). `shown`: zone, base shape there and
+/// whether it is the selected point (else the zone under the pointer, dimmed). Double-click on the selected point's
+/// rows opens a number field for the zone value (Enter takes it, Esc cancels). Returns whether a field just closed.
+fn value_row(ui: &mut egui::Ui, s: &mut Settings, shown: Option<(usize, f32, bool)>) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), VALUE_HEIGHT), egui::Sense::click());
     let edit_id = egui::Id::unique("tone-eq-value-edit");
     let mut editing: Option<String> = ui.data(|d| d.get_temp(edit_id));
-    let v = s.tone_eq.zones[sel];
-    if resp.double_clicked() && editing.is_none() {
-        editing = Some(signed(v));
-    }
-    match editing.as_mut() {
-        Some(text) => {
-            let label = crate::trf!("Zone {z} · Punkt", z = ZONE_LABELS[sel]);
-            ui.painter().text(egui::pos2(rect.left(), rect.center().y), egui::Align2::LEFT_CENTER, &label, egui::FontId::proportional(lr::UI_SIZE - 0.5), lr::TEXT_DIM());
-            let field = egui::Rect::from_min_max(egui::pos2(rect.right() - 72.0, rect.top()), rect.right_bottom());
-            let te = ui.put(field, egui::TextEdit::singleline(text).desired_width(68.0).align(egui::Align2::RIGHT_CENTER).id(edit_id.with("field")));
-            if !te.has_focus() && !te.lost_focus() {
-                te.request_focus();
+    let mut closed = false;
+    let font = egui::FontId::proportional(lr::UI_SIZE - 0.5);
+    let line1 = egui::pos2(rect.left(), rect.top() + VALUE_HEIGHT * 0.27);
+    let line2 = egui::pos2(rect.left(), rect.top() + VALUE_HEIGHT * 0.75);
+    let painter = ui.painter_at(rect);
+    match shown {
+        None => {
+            editing = None;
+            painter.text(line1, egui::Align2::LEFT_CENTER, "–", font, lr::TEXT_DIM());
+        }
+        Some((sel, base, active)) => {
+            let v = s.tone_eq.zones[sel];
+            if !active {
+                editing = None;
+            } else if resp.double_clicked() && editing.is_none() {
+                editing = Some(signed(v));
             }
-            let (enter, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
-            if te.lost_focus() || enter || esc {
-                if !esc {
-                    if let Some(x) = parse_value(text) {
-                        s.tone_eq.zones[sel] = ((x / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV);
+            let head = crate::trf!("Zone {z}", z = ZONE_LABELS[sel]);
+            match editing.as_mut() {
+                Some(text) => {
+                    painter.text(line1, egui::Align2::LEFT_CENTER, &head, font.clone(), lr::TEXT_DIM());
+                    painter.text(line2, egui::Align2::LEFT_CENTER, crate::tr("Punkt"), font, lr::TEXT_DIM());
+                    let field = egui::Rect::from_min_max(egui::pos2(rect.right() - 72.0, rect.center().y - 10.0), egui::pos2(rect.right(), rect.center().y + 10.0));
+                    let te = ui.put(field, egui::TextEdit::singleline(text).desired_width(68.0).align(egui::Align2::RIGHT_CENTER).id(edit_id.with("field")));
+                    if !te.has_focus() && !te.lost_focus() {
+                        te.request_focus();
+                    }
+                    let (enter, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+                    if te.lost_focus() || enter || esc {
+                        if !esc {
+                            if let Some(x) = parse_value(text) {
+                                s.tone_eq.zones[sel] = snap(x);
+                            }
+                        }
+                        editing = None;
+                        closed = true;
                     }
                 }
-                editing = None;
+                None => {
+                    let strong = if active { crate::lr::gray(0xd0) } else { lr::TEXT_DIM() };
+                    painter.text(line1, egui::Align2::LEFT_CENTER, &head, font.clone(), strong);
+                    painter.text(egui::pos2(rect.right(), line1.y), egui::Align2::RIGHT_CENTER, signed(base + v), font.clone(), strong);
+                    let parts = crate::trf!("Ausgleich {b} · Punkt {v}", b = signed(base), v = signed(v));
+                    painter.text(line2, egui::Align2::LEFT_CENTER, parts, font, lr::TEXT_DIM());
+                }
             }
-        }
-        None => {
-            let text = crate::trf!("Zone {z} · {t} (Ausgleich {b}, Punkt {v})", z = ZONE_LABELS[sel], t = signed(base + v), b = signed(base), v = signed(v));
-            ui.painter().text(egui::pos2(rect.left(), rect.center().y), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(lr::UI_SIZE - 0.5), crate::lr::gray(0xd0));
         }
     }
     ui.data_mut(|d| match editing {
@@ -453,6 +506,37 @@ fn value_row(ui: &mut egui::Ui, s: &mut Settings, sel: usize, base: f32) {
             d.remove::<String>(edit_id);
         }
     });
+    closed
+}
+
+/// The selected point: photo and zone (temporary UI state, never stored with the photo).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Selection {
+    index: usize,
+    zone: usize,
+}
+
+impl Selection {
+    /// Does the selection survive into this frame? Only for the same photo and while the graph stayed on screen.
+    fn keep(self, index: usize, seen: bool) -> Option<usize> {
+        (self.index == index && seen).then_some(self.zone.min(ZONES - 1))
+    }
+}
+
+/// Zone value rounded to 0.01 EV and limited.
+fn snap(v: f32) -> f32 {
+    ((v / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV)
+}
+
+/// Zone value while dragging: start value plus the vertical movement (in EV of the graph), with ⌥ a fifth of it.
+/// Without ⌥ the value catches at 0 (within [`ZERO_CATCH`]), so the neutral point is easy to hit.
+fn drag_value(start: f32, moved: f32, fine: bool) -> f32 {
+    let v = start + if fine { moved * FINE_FACTOR } else { moved };
+    if !fine && v.abs() < ZERO_CATCH {
+        0.0
+    } else {
+        snap(v)
+    }
 }
 
 /// Test aid (own data folder only): `GRAINEO_TONE_EQ_TEST="amount=1.5;zones=…;mask=1"` sets the main slider, the
@@ -478,6 +562,24 @@ fn test_preset(s: &mut Settings) {
     }
 }
 
+/// Test aid (own data folder only): `select=<zone 0–8>@<seconds>` in `GRAINEO_TONE_EQ_TEST` selects that point once,
+/// the given seconds after the first call (as a click would), for screenshots of the selected state.
+fn test_select() -> Option<usize> {
+    static FIRST: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if crate::env::var_os("GRAINEO_DATA_DIR").is_none() || DONE.load(Ordering::Relaxed) {
+        return None;
+    }
+    let v = crate::env::var("GRAINEO_TONE_EQ_TEST").ok()?;
+    let (z, t) = v.split(';').find_map(|p| p.strip_prefix("select="))?.split_once('@')?;
+    let (z, t): (usize, f32) = (z.trim().parse().ok()?, t.trim().parse().ok()?);
+    if FIRST.get_or_init(Instant::now).elapsed().as_secs_f32() < t {
+        return None;
+    }
+    DONE.store(true, Ordering::Relaxed);
+    Some(z.min(ZONES - 1))
+}
+
 /// The mask view is for the screen only: jobs that write files or thumbnails never show it.
 pub fn without_mask(s: &mut Settings) {
     s.tone_eq_mask = false;
@@ -495,6 +597,31 @@ mod tests {
             assert!(ZONE_LABELS[i].contains(&format!("{n} EV")));
             assert_eq!(zone_at(*ev), i);
         }
+    }
+
+    #[test]
+    fn selection_ends_with_photo_or_hidden_graph() {
+        let s = Selection { index: 3, zone: 5 };
+        assert_eq!(s.keep(3, true), Some(5));
+        assert_eq!(s.keep(4, true), None);
+        assert_eq!(s.keep(3, false), None);
+    }
+
+    #[test]
+    fn drag_is_relative_fine_and_catches_zero() {
+        assert_eq!(drag_value(0.5, 0.0, false), 0.5);
+        assert!((drag_value(0.5, 0.25, false) - 0.75).abs() < 1e-6);
+        assert!((drag_value(0.5, 0.25, true) - 0.55).abs() < 1e-6);
+        assert_eq!(drag_value(0.2, -0.17, false), 0.0);
+        assert!((drag_value(0.2, -0.17, true) - 0.17).abs() < 1e-6);
+        assert_eq!(drag_value(0.0, 10.0, false), MAX_EV);
+    }
+
+    #[test]
+    fn signed_uses_typographic_minus() {
+        assert!(!signed(-0.15).contains('-'));
+        assert!(signed(-0.15).starts_with('−'));
+        assert_eq!(parse_value(&signed(-0.15)), Some(-0.15));
     }
 
     #[test]

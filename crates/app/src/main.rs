@@ -3892,6 +3892,10 @@ impl App {
         self.darkroom_loupe_shortcuts(ctx);
         let (cmd, shift, alt) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift, i.modifiers.alt));
         let pressed = |k: egui::Key| ctx.input(|i| i.key_pressed(k));
+        // Esc that ended the selection of a tone equalizer point (or arrives while the graph has the focus) does nothing else
+        if pressed(egui::Key::Escape) && (tone_eq_ui::took_escape() || tone_eq_ui::keyboard_focus()) {
+            return;
+        }
         // Esc back to the grid – only if no tool needs Esc for itself (state before anything else)
         if pressed(egui::Key::Escape) && (masks_ui::finish(ctx) | remove_ui::finish(ctx)) {
             self.navigation.click.cancel();

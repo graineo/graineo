@@ -518,3 +518,8 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 ## 1.5.3 · Fixes
 
 - **Sigma Quattro: Shade and Fluorescent white balance.** X3F files from the dp Quattro, sd Quattro and sd Quattro H shot with the Shade or Fluorescent preset can be opened and developed again (thanks for the report on the DPReview forum). A preset the file has no data for now falls back to Auto instead of failing. The “Auto (Natural)” preset of the sd Quattro H is now recognised correctly.
+
+## 1.5.4 · Tone Equalizer Handling
+
+- **Tone Equalizer: scrolling no longer changes points.** The mouse wheel over the graph now only scrolls the panel. Click or drag a point to select it; arrow keys adjust it (⇧ coarse, ⌥ fine), ←/→ move to the next zone, Esc or a click elsewhere ends the selection, double-click resets a point.
+- The value line of the Tone Equalizer fits in every language (two fixed lines).
