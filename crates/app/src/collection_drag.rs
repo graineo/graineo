@@ -174,7 +174,7 @@ impl LibraryView {
         if let Some((id, since)) = self.collection_drag.flash {
             let t = since.elapsed().as_secs_f32();
             if id == s.id && t < FLASH {
-                ui.painter().rect_filled(resp.rect, 0.0, Color32::from_white_alpha((28.0 * (1.0 - t / FLASH)) as u8));
+                ui.painter().rect_filled(resp.rect, 0.0, crate::lr::overlay((28.0 * (1.0 - t / FLASH)) as u8));
                 ui.ctx().request_repaint();
             }
         }
@@ -290,12 +290,12 @@ impl LibraryView {
                 match h {
                     Hit::Line { y, depth, .. } => {
                         let x0 = left + 4.0 + depth as f32 * 12.0 + 8.0;
-                        painter.line_segment([egui::pos2(x0, y), egui::pos2(right - 4.0, y)], egui::Stroke::new(2.0, Color32::from_gray(0xc8)));
-                        painter.circle_stroke(egui::pos2(x0, y), 2.5, egui::Stroke::new(1.5, Color32::from_gray(0xc8)));
+                        painter.line_segment([egui::pos2(x0, y), egui::pos2(right - 4.0, y)], egui::Stroke::new(2.0, crate::lr::gray(0xc8)));
+                        painter.circle_stroke(egui::pos2(x0, y), 2.5, egui::Stroke::new(1.5, crate::lr::gray(0xc8)));
                     }
                     Hit::Into { set } => {
                         if let Some(r) = rows.iter().find(|r| r.id == set) {
-                            painter.rect_stroke(r.rect, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xe0)), egui::StrokeKind::Inside);
+                            painter.rect_stroke(r.rect, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xe0)), egui::StrokeKind::Inside);
                         }
                     }
                 }
@@ -330,12 +330,12 @@ fn paint_drag_image(ctx: &egui::Context, pos: egui::Pos2, d: &CollectionDrag) {
     let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("collection-drag")));
     let galley = painter.layout_no_wrap(d.name.clone(), egui::TextStyle::Body.resolve(&ctx.global_style()), lr::TEXT());
     let r = egui::Rect::from_min_size(pos + egui::vec2(14.0, 8.0), galley.size() + egui::vec2(16.0, 8.0));
-    painter.rect_filled(r, 0.0, Color32::from_gray(0x26));
-    painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x60)), egui::StrokeKind::Outside);
+    painter.rect_filled(r, 0.0, crate::lr::gray(0x26));
+    painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x60)), egui::StrokeKind::Outside);
     painter.galley(r.min + egui::vec2(8.0, 4.0), galley, lr::TEXT());
     if d.kind == SET {
         // a set takes its content along: a second edge behind it
-        painter.rect_stroke(r.translate(egui::vec2(3.0, 3.0)), 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x48)), egui::StrokeKind::Outside);
+        painter.rect_stroke(r.translate(egui::vec2(3.0, 3.0)), 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x48)), egui::StrokeKind::Outside);
     }
 }
 

@@ -192,9 +192,9 @@ fn scale(ui: &mut egui::Ui, n: u8) -> egui::Response {
     for i in 0..5u8 {
         let b = egui::Rect::from_min_size(egui::pos2(r.left() + f32::from(i) * 10.0, r.center().y - 3.5), egui::vec2(7.0, 7.0));
         if i < n {
-            ui.painter().rect_filled(b, 0.0, Color32::from_gray(0xc8));
+            ui.painter().rect_filled(b, 0.0, crate::lr::gray(0xc8));
         } else {
-            ui.painter().rect_stroke(b, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x5a)), egui::StrokeKind::Inside);
+            ui.painter().rect_stroke(b, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x5a)), egui::StrokeKind::Inside);
         }
     }
     resp
@@ -205,8 +205,8 @@ fn card(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, facts: Option<&Facts>,
     let installed = facts.and_then(|f| f.installed.iter().find(|x| x.0 == s).map(|x| x.1.clone()));
     let vectors = facts.and_then(|f| f.vectors.iter().find(|x| x.0 == s).map(|x| (x.1, x.2)));
     let is_active = s == active;
-    let frame_color = if is_active { Color32::from_gray(0x55) } else { Color32::from_gray(0x2e) };
-    egui::Frame::new().fill(Color32::from_gray(0x19)).stroke(egui::Stroke::new(1.0, frame_color)).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
+    let frame_color = if is_active { crate::lr::gray(0x55) } else { crate::lr::gray(0x2e) };
+    egui::Frame::new().fill(crate::lr::gray(0x19)).stroke(egui::Stroke::new(1.0, frame_color)).inner_margin(egui::Margin::symmetric(12, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing.y = 1.0;
         // heading: name, recommendation, quality scale
@@ -295,7 +295,7 @@ fn state_row(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, installed: Option
     ui.horizontal(|ui| {
         match (&installed, is_active) {
             (_, true) => {
-                ui.label(egui::RichText::new("●").color(Color32::from_rgb(0x4c, 0xc2, 0x6a)));
+                ui.label(egui::RichText::new("●").color(crate::lr::ui_accent(Color32::from_rgb(0x4c, 0xc2, 0x6a))));
                 let more = vectors.filter(|(d, t)| d < t).map(|(d, t)| crate::trf!(" · {n} neue Fotos folgen", n = crate::dialog::number((t - d) as usize))).unwrap_or_default();
                 ui.label(egui::RichText::new(format!("{}{more}", crate::tr("Aktiv"))).color(lr::TEXT()));
             }
@@ -341,7 +341,7 @@ fn state_row(ui: &mut egui::Ui, ctx: &egui::Context, s: Stage, installed: Option
         });
     });
     if let Some((_, _, true, Some(e), _)) = download {
-        ui.label(egui::RichText::new(crate::trf!("Installieren fehlgeschlagen: {e}", e = crate::menu::i18n::tr_msg(&e))).small().color(Color32::from_rgb(0xe0, 0x5c, 0x50)));
+        ui.label(egui::RichText::new(crate::trf!("Installieren fehlgeschlagen: {e}", e = crate::menu::i18n::tr_msg(&e))).small().color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0x5c, 0x50))));
     }
 }
 

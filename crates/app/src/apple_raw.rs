@@ -425,7 +425,7 @@ impl AppleView {
                 pane_message(&clip, r.intersect(rect), &text);
             }
             None => {
-                clip.rect_filled(r.intersect(rect), 0.0, Color32::from_gray(24));
+                clip.rect_filled(r.intersect(rect), 0.0, crate::lr::gray(24));
                 crate::spinner(painter, r.intersect(rect).center(), 6.5, now, 1.0);
                 loading = true;
             }
@@ -541,7 +541,7 @@ fn covers(s: [f32; 4], r: [usize; 4]) -> bool {
 
 /// A message in a pane without a picture (not supported, error).
 fn pane_message(painter: &egui::Painter, area: Rect, text: &str) {
-    painter.rect_filled(area, 0.0, Color32::from_gray(24));
+    painter.rect_filled(area, 0.0, crate::lr::gray(24));
     let g = painter.layout(text.to_string(), egui::FontId::proportional(13.0), crate::lr::TEXT(), (area.width() - 40.0).max(120.0));
     painter.galley(area.center() - g.size() / 2.0, g, crate::lr::TEXT());
 }
@@ -748,6 +748,7 @@ impl crate::App {
                 let current = if dev.is_some() { EngineSel::Apple } else { EngineSel::Graineo };
                 let graineo_tip = match &graineo_blocked {
                     Some(why) if why == raw::DECODE_IMPLAUSIBLE => crate::tr("nicht möglich: graineos Dekodierung ergibt für diese Datei kein brauchbares Bild").to_string(),
+                    Some(why) if raw::unknown_camera(why).is_some() => crate::tr("nicht möglich: graineo unterstützt diese Kamera noch nicht").to_string(),
                     Some(_) => crate::tr("nicht möglich (HE): graineo kann Nikon „Hohe Effizienz“ noch nicht dekodieren").to_string(),
                     None => crate::tr("Dieses Foto mit graineos eigener Pipeline entwickeln").to_string(),
                 };
@@ -927,7 +928,7 @@ fn engine_switch(ui: &mut egui::Ui, current: EngineSel, options: &[(EngineSel, &
     let widths: Vec<f32> = options.iter().map(|(_, l, ..)| ui.painter().layout_no_wrap(crate::tr(l).to_string(), font.clone(), TEXT()).size().x + 2.0 * pad).collect();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(widths.iter().sum(), h), egui::Sense::hover());
     let painter = ui.painter().clone();
-    painter.rect_filled(rect, 0.0, crate::lr::BUTTON_FILL);
+    painter.rect_filled(rect, 0.0, crate::lr::BUTTON_FILL());
     let mut x = rect.left();
     let mut chosen = None;
     for (i, ((v, label, available, tip), w)) in options.iter().zip(&widths).enumerate() {
@@ -940,14 +941,14 @@ fn engine_switch(ui: &mut egui::Ui, current: EngineSel, options: &[(EngineSel, &
         }
         let active = *v == current;
         if active {
-            painter.rect_filled(seg, 0.0, if enabled || !available { crate::lr::ACTIVE_FILL } else { crate::lr::ACTIVE_FILL.gamma_multiply(0.5) });
+            painter.rect_filled(seg, 0.0, if enabled || !available { crate::lr::ACTIVE_FILL() } else { crate::lr::ACTIVE_FILL().gamma_multiply(0.5) });
         } else if enabled && resp.hovered() {
-            painter.rect_filled(seg, 0.0, Color32::from_gray(0x33));
+            painter.rect_filled(seg, 0.0, crate::lr::gray(0x33));
         }
         if !tip.is_empty() {
             crate::lr::hover_tip(ui, &resp, tip);
         }
-        let color = if active { Color32::WHITE } else if !enabled { TEXT_DIM().gamma_multiply(0.5) } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
+        let color = if active { crate::lr::TEXT_STRONG() } else if !enabled { TEXT_DIM().gamma_multiply(0.5) } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.galley(seg.center() - galley.size() / 2.0, galley, color);
     }
@@ -961,7 +962,8 @@ fn engine_status(dev: Option<&rawdev::apple::AppleDev>, choice: &rawdev::apple::
         if let Some(m) = &a.pinned_missing {
             return (crate::trf!("Apple RAW {a} fehlt – mit {b} gerechnet", a = apple::version_label(m), b = apple::version_label(&a.used)), true);
         }
-        let implausible = a.graineo_blocked.as_deref() == Some(raw::DECODE_IMPLAUSIBLE);
+        // every fallback but Nikon HE (implausible decoder result, unknown camera) is a plain "Rückfall"
+        let implausible = a.graineo_blocked.as_deref().is_some_and(|w| !w.contains(raw::NIKON_HE));
         if a.graineo_blocked.is_some() && matches!(choice, Choice::Auto) {
             return (if implausible { crate::tr("Automatik · Rückfall") } else { crate::tr("Automatik · HE-Rückfall") }.to_string(), false);
         }

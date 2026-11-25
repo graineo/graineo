@@ -761,35 +761,35 @@ fn frame_row(ui: &mut egui::Ui, w: f32, label: &str, ev: Option<f64>, thumb: Opt
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, ROW_H), egui::Sense::click_and_drag());
     let p = ui.painter().clone();
     if resp.is_pointer_button_down_on() && used {
-        p.rect_filled(rect, 0.0, Color32::from_gray(0x34));
+        p.rect_filled(rect, 0.0, crate::lr::gray(0x34));
     } else if resp.hovered() {
-        p.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+        p.rect_filled(rect, 0.0, crate::lr::gray(0x22));
     }
     let tick = egui::Rect::from_min_size(rect.min, egui::vec2(26.0, ROW_H));
     let tr = ui.interact(tick, ui.id().with(("hdr-tick", id)), egui::Sense::click());
     let b = egui::Rect::from_center_size(tick.center(), egui::vec2(13.0, 13.0));
-    p.rect_stroke(b, 0.0, egui::Stroke::new(1.0, if tr.hovered() { Color32::WHITE } else { lr::TEXT_DIM() }), egui::StrokeKind::Inside);
+    p.rect_stroke(b, 0.0, egui::Stroke::new(1.0, if tr.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() }), egui::StrokeKind::Inside);
     if used {
         lr::paint_icon(&p, b.shrink(1.0), lr::Icon::Check, lr::TEXT());
     }
     let th = egui::Rect::from_min_size(egui::pos2(tick.right() + 2.0, rect.center().y - 12.0), egui::vec2(36.0, 24.0));
-    p.rect_filled(th, 0.0, Color32::from_gray(0x0c));
+    p.rect_filled(th, 0.0, crate::lr::gray(0x0c));
     if let Some(t) = thumb {
         p.image(t, th, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), if used { Color32::WHITE } else { Color32::from_gray(120) });
     }
     let star = egui::Rect::from_min_size(egui::pos2(rect.right() - 28.0, rect.top()), egui::vec2(26.0, ROW_H));
     let sr = ui.interact(star, ui.id().with(("hdr-star", id)), if used { egui::Sense::click() } else { egui::Sense::hover() });
     if used {
-        let sc = if is_ref { lr::GOLD } else if sr.hovered() { Color32::WHITE } else { Color32::from_gray(0x5a) };
+        let sc = if is_ref { lr::GOLD() } else if sr.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x5a) };
         lr::paint_icon(&p, egui::Rect::from_center_size(star.center(), egui::vec2(14.0, 14.0)), lr::Icon::Star, sc);
     }
     let font = egui::TextStyle::Body.resolve(ui.style());
-    let tc = if used { lr::TEXT() } else { Color32::from_gray(0x78) };
+    let tc = if used { lr::TEXT() } else { crate::lr::gray(0x78) };
     let room = (star.left() - 60.0 - th.right() - 8.0).max(20.0);
     let shown = lr::middle_ellipsis_font(&p, label, &font, room);
     p.text(egui::pos2(th.right() + 8.0, rect.center().y), egui::Align2::LEFT_CENTER, shown, font, tc);
     if let Some(e) = ev {
-        p.text(egui::pos2(star.left() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, format!("{} EV", crate::hdr_ui::ev_label(e)), egui::TextStyle::Small.resolve(ui.style()), if used { lr::TEXT_DIM() } else { Color32::from_gray(0x66) });
+        p.text(egui::pos2(star.left() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, format!("{} EV", crate::hdr_ui::ev_label(e)), egui::TextStyle::Small.resolve(ui.style()), if used { lr::TEXT_DIM() } else { crate::lr::gray(0x66) });
     }
     (resp, tr, sr)
 }
@@ -963,13 +963,13 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 32.0), egui::Sense::hover());
         let dragging = egui::DragAndDrop::has_payload_of_type::<crate::library_ui::PhotoDrag>(&ctx);
         let over = dragging && resp.contains_pointer();
-        let stroke = egui::Stroke::new(1.0, if over { Color32::WHITE } else { Color32::from_gray(0x3a) });
+        let stroke = egui::Stroke::new(1.0, if over { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x3a) });
         let p = ui.painter();
         let r = rect.shrink2(egui::vec2(0.0, 4.0));
         for (a, b) in [(r.left_top(), r.right_top()), (r.right_top(), r.right_bottom()), (r.right_bottom(), r.left_bottom()), (r.left_bottom(), r.left_top())] {
             p.extend(egui::Shape::dashed_line(&[a, b], stroke, 4.0, 3.0));
         }
-        p.text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Foto aus dem Filmstreifen hierher ziehen"), egui::TextStyle::Small.resolve(ui.style()), if over { Color32::WHITE } else { lr::TEXT_DIM() });
+        p.text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Foto aus dem Filmstreifen hierher ziehen"), egui::TextStyle::Small.resolve(ui.style()), if over { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
         if let Some(d) = resp.dnd_release_payload::<crate::library_ui::PhotoDrag>() {
             if info.in_step {
                 take_in = Some(d.file);
@@ -1100,19 +1100,19 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 26.0), egui::Sense::click());
         let p = ui.painter().clone();
         if s.selected == Some(i) {
-            p.rect_filled(rect, 0.0, Color32::from_gray(0x34));
+            p.rect_filled(rect, 0.0, crate::lr::gray(0x34));
         } else if resp.hovered() {
-            p.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+            p.rect_filled(rect, 0.0, crate::lr::gray(0x22));
         }
         let er = ui.interact(egui::Rect::from_min_size(rect.min, egui::vec2(24.0, 26.0)), ui.id().with(("hdr-area-eye", i)), egui::Sense::click());
         let hidden = s.hidden.get(i).copied().unwrap_or(false);
-        lr::paint_icon(&p, egui::Rect::from_center_size(er.rect.center(), egui::vec2(14.0, 14.0)), if hidden { lr::Icon::EyeSlash } else { lr::Icon::Eye }, if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+        lr::paint_icon(&p, egui::Rect::from_center_size(er.rect.center(), egui::vec2(14.0, 14.0)), if hidden { lr::Icon::EyeSlash } else { lr::Icon::Eye }, if er.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
         lr::hover_tip(ui, &er, crate::tr(if hidden { "Bereich wieder einsetzen" } else { "Bereich ausblenden (vorher sehen)" }));
         let xr = ui.interact(egui::Rect::from_min_size(egui::pos2(rect.right() - 24.0, rect.top()), egui::vec2(24.0, 26.0)), ui.id().with(("hdr-area-x", i)), egui::Sense::click());
-        lr::paint_icon(&p, egui::Rect::from_center_size(xr.rect.center(), egui::vec2(12.0, 12.0)), lr::Icon::X, if xr.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+        lr::paint_icon(&p, egui::Rect::from_center_size(xr.rect.center(), egui::vec2(12.0, 12.0)), lr::Icon::X, if xr.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
         lr::hover_tip(ui, &xr, crate::tr("Bereich löschen"));
         let text = crate::trf!("Bereich {k} · aus {f}", k = i + 1, f = recipe_number(info, a.frame));
-        p.text(egui::pos2(rect.left() + 30.0, rect.center().y), egui::Align2::LEFT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if hidden { Color32::from_gray(0x6a) } else { lr::TEXT() });
+        p.text(egui::pos2(rect.left() + 30.0, rect.center().y), egui::Align2::LEFT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if hidden { crate::lr::gray(0x6a) } else { lr::TEXT() });
         if er.clicked() {
             eye = Some(i);
         } else if xr.clicked() {
@@ -1471,11 +1471,11 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
         if let Some(t) = motion_texture(&ctx, &info.base_key) {
             crate::paint_src_quad(painter, t, [0.0, 0.0, full[0], full[1]], frame, rect, Color32::WHITE);
             if let Some(l) = motion_label(&info.base_key) {
-                let g = painter.layout_no_wrap(l, egui::FontId::proportional(11.5), Color32::WHITE);
+                let g = painter.layout_no_wrap(l, egui::FontId::proportional(11.5), crate::lr::TEXT_STRONG());
                 let r = egui::Rect::from_min_size(avail.left_top() + egui::vec2(12.0, 12.0), g.size() + egui::vec2(12.0, 6.0));
                 painter.rect_filled(r, 0.0, Color32::from_black_alpha(150));
                 painter.rect_filled(egui::Rect::from_min_size(r.left_top(), egui::vec2(3.0, r.height())), 0.0, Color32::from_rgb(0xe0, 0x30, 0xc0));
-                painter.galley(r.min + egui::vec2(8.0, 3.0), g, Color32::WHITE);
+                painter.galley(r.min + egui::vec2(8.0, 3.0), g, crate::lr::TEXT_STRONG());
             }
         }
     }
@@ -1487,7 +1487,7 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
     // the areas: thin outlines, the selected one light
     for (i, a) in s.settings.regions.iter().enumerate() {
         let sel = s.selected == Some(i);
-        let c = if sel { Color32::from_white_alpha(235) } else { Color32::from_white_alpha(120) };
+        let c = if sel { crate::lr::overlay(235) } else { crate::lr::overlay(120) };
         for [a0, b0] in outline_cached(a, aspect) {
             painter.line_segment([to_screen(a0), to_screen(b0)], egui::Stroke::new(if sel { 1.5 } else { 1.0 }, c));
         }
@@ -1525,9 +1525,9 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
             let ar = bounds[2] as f32 / bounds[3] as f32;
             let tile = if ar >= 1.0 { egui::vec2(110.0, 110.0 / ar) } else { egui::vec2(80.0 * ar, 80.0) };
             let n = crops.len();
-            let title = ctx.fonts_mut(|f| f.layout_no_wrap(crate::tr("Aus Aufnahme").to_string(), egui::FontId::proportional(10.5), Color32::WHITE)).size().x;
+            let title = ctx.fonts_mut(|f| f.layout_no_wrap(crate::tr("Aus Aufnahme").to_string(), egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG())).size().x;
             // wide enough for the title and the longest label below a tile
-            let label_w = ctx.fonts_mut(|f| f.layout_no_wrap("00 · +0,0 ★".to_string(), egui::FontId::proportional(10.5), Color32::WHITE)).size().x;
+            let label_w = ctx.fonts_mut(|f| f.layout_no_wrap("00 · +0,0 ★".to_string(), egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG())).size().x;
             let box_size = egui::vec2(tile.x.max(title).max(label_w) + 20.0, 26.0 + n as f32 * (tile.y + 22.0));
             let mut at = egui::pos2(screen_bb.right() + 14.0, screen_bb.top());
             if at.x + box_size.x > avail.right() - 8.0 {
@@ -1539,7 +1539,7 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
             chooser_rect = Some(r);
             let p = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("hdr-chooser"))).with_clip_rect(avail);
             p.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(0x18, 0x18, 0x18, 238));
-            p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x44)), egui::StrokeKind::Inside);
+            p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x44)), egui::StrokeKind::Inside);
             p.text(r.left_top() + egui::vec2(8.0, 7.0), egui::Align2::LEFT_TOP, crate::tr("Aus Aufnahme"), egui::FontId::proportional(10.5), lr::TEXT_DIM());
             let reference = s.settings.reference.unwrap_or(info.reference);
             let (pos, clicked) = ctx.input(|i| (i.pointer.hover_pos(), i.pointer.primary_clicked()));
@@ -1549,11 +1549,11 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
                 let chosen = a.frame == k;
                 let hovered = pos.is_some_and(|q| tr.contains(q));
                 if chosen || hovered {
-                    p.rect_stroke(tr, 0.0, egui::Stroke::new(if chosen { 2.0 } else { 1.0 }, if chosen { Color32::WHITE } else { Color32::from_gray(0x99) }), egui::StrokeKind::Outside);
+                    p.rect_stroke(tr, 0.0, egui::Stroke::new(if chosen { 2.0 } else { 1.0 }, if chosen { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x99) }), egui::StrokeKind::Outside);
                 }
                 let ev = info.ev.get(k).map(|e| crate::hdr_ui::ev_label(*e)).unwrap_or_default();
                 let label = format!("{} · {}{}", number_of(info, k), ev, if k == reference { " ★" } else { "" });
-                p.text(egui::pos2(tr.left(), tr.bottom() + 3.0), egui::Align2::LEFT_TOP, label, egui::FontId::proportional(10.5), if chosen { Color32::WHITE } else { lr::TEXT_DIM() });
+                p.text(egui::pos2(tr.left(), tr.bottom() + 3.0), egui::Align2::LEFT_TOP, label, egui::FontId::proportional(10.5), if chosen { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
                 // (the crops are the frames of the picture shown: while a change of the frames is computed they are not
                 // the frames of the recipe any more – the index would name another frame, or none)
                 if hovered && clicked && !chosen && info.in_step {
@@ -1566,11 +1566,11 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
     let over_chooser = |p: Pos2| chooser_rect.is_some_and(|r| r.contains(p));
     let hovering = resp.hover_pos().filter(|p| rect.contains(*p) && avail.contains(*p) && !over_chooser(*p));
     if let Some(pos) = hovering {
-        painter.circle_stroke(pos, s.brush, egui::Stroke::new(1.5, Color32::from_white_alpha(210)));
+        painter.circle_stroke(pos, s.brush, egui::Stroke::new(1.5, crate::lr::overlay(210)));
         painter.circle_stroke(pos, s.brush + 1.5, egui::Stroke::new(1.0, Color32::from_black_alpha(150)));
-        painter.line_segment([pos - egui::vec2(5.0, 0.0), pos + egui::vec2(5.0, 0.0)], egui::Stroke::new(1.5, Color32::WHITE));
+        painter.line_segment([pos - egui::vec2(5.0, 0.0), pos + egui::vec2(5.0, 0.0)], egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()));
         if !s.erase {
-            painter.line_segment([pos - egui::vec2(0.0, 5.0), pos + egui::vec2(0.0, 5.0)], egui::Stroke::new(1.5, Color32::WHITE));
+            painter.line_segment([pos - egui::vec2(0.0, 5.0), pos + egui::vec2(0.0, 5.0)], egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()));
         }
         ctx.set_cursor_icon(egui::CursorIcon::None);
     }
@@ -1610,7 +1610,7 @@ pub fn overlay(ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter, re
         }
     }
     if !s.pending.is_empty() {
-        let c = Color32::from_white_alpha(if s.erase { 35 } else { 60 });
+        let c = crate::lr::overlay(if s.erase { 35 } else { 60 });
         for p in &s.pending {
             painter.circle_filled(to_screen(*p), s.brush, c);
         }

@@ -30,11 +30,23 @@ const THUMB_CHUNK: usize = 4;
 
 /// Height of the band "Selection: n photos" (the same while applying: nothing moves).
 pub const BAND_H: f32 = 84.0;
-const BAND_FILL: egui::Color32 = egui::Color32::from_gray(0x21);
-const BAND_STROKE: egui::Color32 = egui::Color32::from_gray(0x3a);
+#[allow(non_snake_case)]
+fn BAND_FILL() -> egui::Color32 {
+    crate::lr::gray(0x21)
+}
+#[allow(non_snake_case)]
+fn BAND_STROKE() -> egui::Color32 {
+    crate::lr::gray(0x3a)
+}
 /// Accent of the band: the theme's light accent (gold is kept for the main button of the window)
-const BAND_ACCENT: egui::Color32 = lr::ACCENT;
-const BAND_BUTTON: egui::Color32 = egui::Color32::from_gray(0x4a);
+#[allow(non_snake_case)]
+fn BAND_ACCENT() -> egui::Color32 {
+    lr::ACCENT()
+}
+#[allow(non_snake_case)]
+fn BAND_BUTTON() -> egui::Color32 {
+    crate::lr::gray(0x4a)
+}
 
 /// Settings key of the chosen way of applying.
 const MODE_KEY: &str = "multiApplyMode";
@@ -501,7 +513,7 @@ impl App {
     /// progress with a cancel button in the same place (same height).
     fn multi_band(&mut self, ui: &mut egui::Ui, n: usize) {
         let rect = ui.max_rect();
-        ui.painter().rect(rect, 2.0, BAND_FILL, egui::Stroke::new(1.0, BAND_STROKE), egui::StrokeKind::Inside);
+        ui.painter().rect(rect, 2.0, BAND_FILL(), egui::Stroke::new(1.0, BAND_STROKE()), egui::StrokeKind::Inside);
         let inner = rect.shrink2(egui::vec2(8.0, 6.0));
         let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)));
         let ui = &mut ui;
@@ -524,7 +536,7 @@ impl App {
         }
         // rows 2 and 3: progress and cancel, or what is waiting and the button
         if let Some((done, total)) = self.multi.progress() {
-            ui.add(egui::Label::new(egui::RichText::new(crate::trf!("{k} von {n} gespeichert", k = crate::library_ui::thousands(done), n = crate::library_ui::thousands(total))).small().color(BAND_ACCENT)).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(crate::trf!("{k} von {n} gespeichert", k = crate::library_ui::thousands(done), n = crate::library_ui::thousands(total))).small().color(BAND_ACCENT())).truncate());
             ui.allocate_ui_with_layout(egui::vec2(width, 22.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = if self.multi.undo_after { crate::tr("Wird abgebrochen …") } else { crate::tr("Abbrechen") };
                 if ui.add_enabled(!self.multi.undo_after, egui::Button::new(label).min_size(egui::vec2(0.0, 22.0))).clicked() {
@@ -539,16 +551,16 @@ impl App {
         let list = change.as_ref().map(|(_, b, now)| describe(b, now)).unwrap_or_default();
         let (text, color) = match list.len() {
             0 => (crate::tr("Keine Änderung am aktiven Foto").to_string(), lr::TEXT_DIM()),
-            1 => (crate::trf!("1 Änderung noch nicht angewendet: {a}", a = list[0]), BAND_ACCENT),
-            m => (crate::trf!("{m} Änderungen noch nicht angewendet", m = m), BAND_ACCENT),
+            1 => (crate::trf!("1 Änderung noch nicht angewendet: {a}", a = list[0]), BAND_ACCENT()),
+            m => (crate::trf!("{m} Änderungen noch nicht angewendet", m = m), BAND_ACCENT()),
         };
         let r = ui.add(egui::Label::new(egui::RichText::new(text).small().color(color)).truncate());
         if !list.is_empty() {
             lr::hover_tip(ui, &r, &list.join("\n"));
         }
         let ok = change.is_some() && others > 0;
-        let fill = if ok { BAND_BUTTON } else { lr::BUTTON_FILL };
-        let b = ui.add_enabled(ok, egui::Button::new(egui::RichText::new(crate::trf!("Auf {n} Fotos anwenden", n = crate::library_ui::thousands(others))).color(if ok { egui::Color32::WHITE } else { lr::TEXT_DIM() })).fill(fill).min_size(egui::vec2(width, 22.0)));
+        let fill = if ok { BAND_BUTTON() } else { lr::BUTTON_FILL() };
+        let b = ui.add_enabled(ok, egui::Button::new(egui::RichText::new(crate::trf!("Auf {n} Fotos anwenden", n = crate::library_ui::thousands(others))).color(if ok { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() })).fill(fill).min_size(egui::vec2(width, 22.0)));
         let why = if ok {
             crate::trf!("Überträgt {a} auf die übrigen ausgewählten Fotos. Läuft im Hintergrund; ⌘Z nimmt es in einem Schritt zurück.", a = list.join(", "))
         } else {

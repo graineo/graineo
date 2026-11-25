@@ -12,10 +12,13 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod camera_defaults;
+mod theme;
 mod highlight_ui;
 mod edit_marks;
 mod detail_filter;
 mod detail_ui;
+mod skin_ui;
 mod print_job;
 mod print_dialog;
 mod print_room;
@@ -537,7 +540,7 @@ fn zoom_label(fit: bool, fit_pct: f32, pct: f32) -> String {
 /// so the field never changes its width.
 fn zoom_field_width(ui: &egui::Ui) -> f32 {
     let font = egui::TextStyle::Button.resolve(ui.style());
-    ui.painter().layout_no_wrap("1600 %".to_string(), font, egui::Color32::WHITE).size().x.ceil() + 40.0
+    ui.painter().layout_no_wrap("1600 %".to_string(), font, crate::lr::TEXT_STRONG()).size().x.ceil() + 40.0
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -995,6 +998,7 @@ impl App {
         });
         lr::apply_theme(ctx);
         prefs::apply_scale(ctx);
+        theme::load(ctx);
         binning_ui::init();
         prefs::apply_gpu_setting(); // "Grafikkarte verwenden"
         highlight_ui::apply_setting();
@@ -1874,6 +1878,21 @@ impl App {
                     if let Some(b) = self.saved.get_mut(&e.image).filter(|(s, _)| *s == sidecar_settings(&Settings::default())) {
                         b.0 = now;
                     }
+                }
+            }
+        }
+        // first opening of an unedited photo: global start-value preferences and the camera default on top
+        // (camera_defaults.rs; the file is read once, nothing waits here)
+        {
+            let e = &self.entries[index];
+            if crate::camera_defaults::eligible(&loaded, e.stored, e.loaded, e.copy.is_some(), &e.path) {
+                let camera = crate::camera_defaults::camera_of(&loaded);
+                let foreign_raw = loaded.previews.foreign.as_ref().is_some_and(|d| !d.finished);
+                let new = crate::camera_defaults::start_values(&e.settings, camera.as_deref(), foreign_raw);
+                if new != e.settings {
+                    let e = &mut self.entries[index];
+                    e.settings = new;
+                    e.stored = true;
                 }
             }
         }
@@ -3127,6 +3146,10 @@ impl App {
             self.worker.send(Job::Prepare { index: c.index, session, settings: s });
             return;
         }
+        // the tone equalizer graph is shown without a zone histogram of this photo: render once more to collect it
+        if tone_eq_ui::needs_render(c.index) {
+            self.rendered_for = None;
+        }
         if self.rendered_for.as_ref() != Some(&(c.index, s.clone())) {
             if crate::env::var_os("GRAINEO_LOG").is_some() {
                 let from = match c.loaded.previews.spp.as_ref().filter(|_| develop::Session::uses_spp(&s)).and_then(|p| p.spp.as_ref()) {
@@ -3898,9 +3921,10 @@ impl App {
         }
         // ←/→ and rating keys: in event order in `shortcuts_ordered` (wertung.rs);
         // here only if that did not take them (e.g. crop)
-        if !cmd && pressed(egui::Key::ArrowRight) {
+        let arrows_free = !tone_eq_ui::keyboard_focus();
+        if arrows_free && !cmd && pressed(egui::Key::ArrowRight) {
             self.step(true, alt);
-        } else if !cmd && pressed(egui::Key::ArrowLeft) {
+        } else if arrows_free && !cmd && pressed(egui::Key::ArrowLeft) {
             self.step(false, alt);
         }
         if self.grid && !cmd && (pressed(egui::Key::ArrowDown) || pressed(egui::Key::ArrowUp)) {
@@ -4368,7 +4392,7 @@ impl App {
         let tex = pending.or_else(|| self.current.as_ref().and_then(|c| c.texture.clone().or_else(|| self.entries[c.index].thumb.clone())));
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, H), egui::Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, lr::PANEL_DARK);
+        painter.rect_filled(rect, 0.0, lr::PANEL_DARK());
         let Some(tex) = tex else {
             self.zoom_presets(ui);
             return;
@@ -4405,7 +4429,7 @@ impl App {
                 img.min + (center - half).clamp(egui::Vec2::ZERO, egui::Vec2::splat(1.0)) * img.size(),
                 img.min + (center + half).clamp(egui::Vec2::ZERO, egui::Vec2::splat(1.0)) * img.size(),
             );
-            painter.rect_stroke(r, 0.0, egui::Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Middle);
+            painter.rect_stroke(r, 0.0, egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()), egui::StrokeKind::Middle);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged() || resp.clicked()) {
                 let u = ((p - img.min) / img.size()).clamp(egui::Vec2::ZERO, egui::Vec2::splat(1.0));
                 self.pan = (egui::vec2(0.5, 0.5) - u) * full;
@@ -4500,6 +4524,7 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         frame_watch::begin(ui.ctx()); // Test hook: frame times with GRAINEO_FRAME_LOG
         frame_watch::repaint_causes(ui.ctx()); // Test hook: GRAINEO_REPAINT_LOG
+        theme::follow_system(ui.ctx()); // appearance "System": follow the OS theme live
         // End-of-pass callbacks are kept by egui until the program ends: register them once, not every frame
         // (registered per frame they piled up – after an hour most of the UI thread went into calling them)
         static END_PASS: std::sync::Once = std::sync::Once::new();
@@ -4770,7 +4795,7 @@ impl eframe::App for App {
             // same panel as elsewhere – so nothing jumps when switching and the panels look the same everywhere
             // In the fullscreen preview (F) Develop has no edge strip either: the panel starts at the very top
             if !full {
-                egui::Panel::top("dk-rand").show_separator_line(false).resizable(false).exact_size(12.0).frame(egui::Frame::new().fill(lr::PANEL_DARK)).show(ui, |_| {});
+                egui::Panel::top("dk-rand").show_separator_line(false).resizable(false).exact_size(12.0).frame(egui::Frame::new().fill(lr::PANEL_DARK())).show(ui, |_| {});
             }
             egui::Panel::top("top").resizable(false).show(ui, |ui| self.top_bar(ui));
         } else if self.show_top || self.peek[0] {
@@ -4863,13 +4888,13 @@ impl eframe::App for App {
         let t_left = lr::slide(&ctx, "dk-left", darkroom && !self.darkroom.image_only && !self.darkroom.left_collapsed);
         if darkroom && t_left > 0.001 {
             let w = tool_rail::WIDTH + column_w;
-            let r = egui::Panel::left("dk-links").resizable(false).exact_size(w * t_left).frame(egui::Frame::new().fill(lr::PANEL)).show(ui, |ui| {
+            let r = egui::Panel::left("dk-links").resizable(false).exact_size(w * t_left).frame(egui::Frame::new().fill(lr::PANEL())).show(ui, |ui| {
                 lr::slid(ui, egui::vec2(w, 0.0), true, |ui| {
                     ui.horizontal_top(|ui| {
                         ui.spacing_mut().item_spacing.x = 0.0;
                         let h = ui.available_height();
                         let (rail, _) = ui.allocate_exact_size(egui::vec2(tool_rail::WIDTH, h), egui::Sense::hover());
-                        ui.painter().rect_filled(rail, 0.0, lr::PANEL_DARK);
+                        ui.painter().rect_filled(rail, 0.0, lr::PANEL_DARK());
                         ui.scope_builder(egui::UiBuilder::new().max_rect(rail).layout(egui::Layout::top_down(egui::Align::Min)), |ui| self.darkroom_left_rail(ui));
                         let col = egui::Rect::from_min_size(egui::pos2(rail.right() + 8.0, rail.top() + 6.0), egui::vec2(column_w - 16.0, h - 12.0));
                         ui.scope_builder(egui::UiBuilder::new().max_rect(col).layout(egui::Layout::top_down(egui::Align::Min)), |ui| self.darkroom_left(ui));
@@ -4906,14 +4931,14 @@ impl eframe::App for App {
         let t_tools = lr::slide(&ctx, "tools", !darkroom && (self.show_right || self.peek[3]));
         if !darkroom && t_tools > 0.001 && t_tools < 0.999 {
             // while it glides only the frame moves; the panel content follows once it is in place
-            egui::Panel::right("rechts-gleiten").resizable(false).exact_size((340.0 + tool_rail::WIDTH) * t_tools).frame(egui::Frame::new().fill(lr::PANEL)).show(ui, |_| {});
+            egui::Panel::right("rechts-gleiten").resizable(false).exact_size((340.0 + tool_rail::WIDTH) * t_tools).frame(egui::Frame::new().fill(lr::PANEL())).show(ui, |_| {});
         } else if !darkroom && t_tools >= 0.999 {
             let mut actions = Vec::new();
             // the tool rail on the far right, the selected tool's panel to its left
             let tool_rail = egui::Panel::right("rechts-schiene").show_separator_line(false)
                 .resizable(false)
                 .exact_size(tool_rail::WIDTH)
-                .frame(egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(0, 0)))
+                .frame(egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(0, 0)))
                 .show(ui, |ui| self.tool_rail(ui))
                 .response
                 .rect;
@@ -4970,7 +4995,7 @@ impl eframe::App for App {
         // the comparison has its tools in the same bar, in the library too (photo_compare_ui.rs)
         let comparing = self.compare_shown();
         if (comparing && !full) || (self.show_toolbar && !full && !raster && !(darkroom && self.darkroom.image_only) && toolbar_image.is_some()) {
-            egui::Panel::bottom("toolbar").resizable(false).frame(egui::Frame::new().fill(lr::PANEL).inner_margin(egui::Margin::symmetric(10, 5))).show(ui, |ui| self.toolbar(ui));
+            egui::Panel::bottom("toolbar").resizable(false).frame(egui::Frame::new().fill(lr::PANEL()).inner_margin(egui::Margin::symmetric(10, 5))).show(ui, |ui| self.toolbar(ui));
         }
         // Sensor view (Bayer/X-Trans): operated in the "Sensor" tray of the tool rail, nothing above or below the image
         if raster {
@@ -4982,9 +5007,9 @@ impl eframe::App for App {
             let mut actions = Vec::new();
             if self.lib.compare_open() && !self.in_people() {
                 // the comparison instead of the grid (photo_compare_ui.rs)
-                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| self.compare_center(ui));
+                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG()).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| self.compare_center(ui));
             } else {
-                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| actions = self.lib.grid_center(ui));
+                egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG()).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| actions = self.lib.grid_center(ui));
             }
             self.library_actions(actions);
             let a = self.lib.after(&ctx);
@@ -4993,7 +5018,7 @@ impl eframe::App for App {
             let a = self.lib.after(&ctx);
             self.library_actions(a);
         }
-        let bg = if full { Color32::BLACK } else { lr::IMAGE_BG };
+        let bg = if full { Color32::BLACK } else { lr::IMAGE_BG() };
         self.image_rect = None;
         let central = if raster {
             ctx.content_rect()
@@ -5171,7 +5196,7 @@ impl App {
             .flat_map(|c| c.presets.into_iter().map(move |p| (format!("{}/{}", c.name, p.name), p)))
             .chain(self.presets.iter().filter(|p| p.scope != presets::Scope::Film).map(|p| (format!("Eigene/{}", p.name), p.clone())))
             .collect();
-        let typing = ui.ctx().egui_wants_keyboard_input();
+        let typing = ui.ctx().egui_wants_keyboard_input() || tone_eq_ui::keyboard_focus();
         let mut moved = false;
         if let (Some(key), false, false) = (self.preset_cursor.clone(), typing, self.grid) {
             let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
@@ -5382,7 +5407,7 @@ impl App {
                 self.lib.toggle_flag_filter(k);
             }
             let (r, _) = ui.allocate_exact_size(egui::vec2(16.0, filmstrip_layout::HEADER_H), egui::Sense::hover());
-            lr::paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0)), lr::Icon::Funnel, if f != 0 { Color32::WHITE } else { lr::TEXT_DIM() });
+            lr::paint_icon(ui.painter(), egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0)), lr::Icon::Funnel, if f != 0 { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
             // expand / collapse all series (⇧S), the same button as above the grid (library_series.rs)
             if library_ui::series_all_button(ui, self.lib.series_all(), 26.0, filmstrip_layout::HEADER_H - 2.0) {
                 self.lib.series_all_click();
@@ -5543,15 +5568,15 @@ impl App {
                 let is_active = active == Some(i);
                 let picked = e.selected || lib_sel.contains(&e.image);
                 // Selection as a ring with a gap to the photo, so it does not merge with the picture
-                let fill = if resp.hovered() && !is_active && !picked { Color32::from_gray(0x3c) } else { Color32::TRANSPARENT };
+                let fill = if resp.hovered() && !is_active && !picked { crate::lr::gray(0x3c) } else { Color32::TRANSPARENT };
                 let recede = multi && !is_active && !picked && !resp.hovered();
                 ui.painter().rect_filled(r, 0.0, fill);
                 if is_active {
-                    ui.painter().rect_stroke(r.expand(1.0), 0.0, egui::Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Inside);
+                    ui.painter().rect_stroke(r.expand(1.0), 0.0, egui::Stroke::new(2.0, crate::lr::TEXT_STRONG()), egui::StrokeKind::Inside);
                 } else if picked {
-                    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xc6)), egui::StrokeKind::Inside);
+                    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xc6)), egui::StrokeKind::Inside);
                     if self.strip_ext.is_some_and(|(anchor, head)| active == Some(anchor) && head == i) {
-                        ui.painter().line_segment([r.left_bottom() + egui::vec2(3.0, -2.0), r.right_bottom() + egui::vec2(-3.0, -2.0)], egui::Stroke::new(2.0, Color32::from_gray(0xb0)));
+                        ui.painter().line_segment([r.left_bottom() + egui::vec2(3.0, -2.0), r.right_bottom() + egui::vec2(-3.0, -2.0)], egui::Stroke::new(2.0, crate::lr::gray(0xb0)));
                     }
                 }
                 let img_area = egui::Rect::from_min_size(r.min + egui::vec2(pad, pad), egui::vec2(r.width() - 2.0 * pad, thumb_h));
@@ -5649,18 +5674,18 @@ impl App {
                     }
                     None => {
                         wanted.push(e.image);
-                        ui.painter().rect_filled(img_area, 0.0, Color32::from_gray(0x16));
-                        ui.painter().text(img_area.center(), egui::Align2::CENTER_CENTER, &e.format, egui::FontId::proportional(10.0), Color32::from_gray(0x82));
+                        ui.painter().rect_filled(img_area, 0.0, crate::lr::gray(0x16));
+                        ui.painter().text(img_area.center(), egui::Align2::CENTER_CENTER, &e.format, egui::FontId::proportional(10.0), crate::lr::gray(0x82));
                     }
                 }
                 // stars and flag only from a certain height on (the row grows in, see `filmstrip_layout::metrics`)
                 if meta_h >= filmstrip_layout::META - 3.0 {
                     let y = img_area.bottom() + meta_h / 2.0 + 0.5;
-                    let text = Color32::from_gray(0xdd);
+                    let text = crate::lr::gray(0xdd);
                     // stars and flag in fixed zones; narrow cells "★5" (`cell_label.rs`)
                     let zone = r.width() - 2.0 * pad - 2.0 - crate::cell_label::FLAG_W - crate::cell_label::GAP;
                     if let Some(stars) = crate::cell_label::stars(e.meta.rating, zone, &crate::cell_label::measurer(ui.painter(), 10.0)) {
-                        ui.painter().text(egui::pos2(r.left() + pad + 2.0, y), egui::Align2::LEFT_CENTER, stars, egui::FontId::proportional(10.0), if e.meta.rating > 0 || is_active { text } else { Color32::from_gray(0x78) });
+                        ui.painter().text(egui::pos2(r.left() + pad + 2.0, y), egui::Align2::LEFT_CENTER, stars, egui::FontId::proportional(10.0), if e.meta.rating > 0 || is_active { text } else { crate::lr::gray(0x78) });
                     }
                     // flag: filled tick / cross, nothing without a flag
                     let f = match e.meta.flag {
@@ -5855,24 +5880,24 @@ impl App {
                         let inner = rect.shrink(3.0);
                         let active = current == Some(i);
                         let fill = if active {
-                            Color32::from_gray(0x4a)
+                            crate::lr::gray(0x4a)
                         } else if e.selected {
-                            Color32::from_gray(0x34)
+                            crate::lr::gray(0x34)
                         } else if resp.hovered() {
-                            Color32::from_gray(0x26)
+                            crate::lr::gray(0x26)
                         } else {
-                            Color32::from_gray(0x1a)
+                            crate::lr::gray(0x1a)
                         };
                         p.rect_filled(inner, 0.0, fill);
                         // large, pale number at the top left
                         let n = vis.iter().position(|&v| v == i).unwrap_or(0) + 1;
-                        p.text(inner.left_top() + egui::vec2(6.0, 2.0), egui::Align2::LEFT_TOP, n.to_string(), egui::FontId::proportional(cell * 0.16), Color32::from_gray(0x33));
+                        p.text(inner.left_top() + egui::vec2(6.0, 2.0), egui::Align2::LEFT_TOP, n.to_string(), egui::FontId::proportional(cell * 0.16), crate::lr::gray(0x33));
                         let img_area = egui::Rect::from_min_max(inner.min + egui::vec2(10.0, 22.0), inner.max - egui::vec2(10.0, 30.0));
                         if let Some(t) = &e.thumb {
                             let s = t.size_vec2();
                             let k = (img_area.width() / s.x).min(img_area.height() / s.y);
                             let r = egui::Rect::from_center_size(img_area.center(), s * k);
-                            p.rect_filled(r.expand(1.0), 0.0, Color32::from_gray(0x18));
+                            p.rect_filled(r.expand(1.0), 0.0, crate::lr::gray(0x18));
                             p.image(t.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
                         }
                         // stars, name and flag in fixed zones, never overlapping (`cell_label.rs`)
@@ -5880,7 +5905,7 @@ impl App {
                         let zone_right = inner.right() - 8.0 - crate::cell_label::FLAG_W - crate::cell_label::GAP;
                         let mut name_left = bottom.x;
                         if let Some(stars) = crate::cell_label::stars(e.meta.rating, zone_right - bottom.x, &crate::cell_label::measurer(&p, 11.0)) {
-                            let g = p.text(bottom, egui::Align2::LEFT_BOTTOM, stars, egui::FontId::proportional(11.0), if e.meta.rating > 0 { Color32::from_gray(0xdd) } else { Color32::from_gray(0x74) });
+                            let g = p.text(bottom, egui::Align2::LEFT_BOTTOM, stars, egui::FontId::proportional(11.0), if e.meta.rating > 0 { crate::lr::gray(0xdd) } else { crate::lr::gray(0x74) });
                             name_left = g.right() + crate::cell_label::GAP;
                         }
                         // flag: filled tick / cross
@@ -5890,7 +5915,7 @@ impl App {
                             sidecar::Flag::None => 0,
                         };
                         if f != 0 {
-                            lr::paint_flag(&p, inner.right_bottom() + egui::vec2(-15.0, -15.0), 15.0, f, true, Color32::from_gray(0xe8));
+                            lr::paint_flag(&p, inner.right_bottom() + egui::vec2(-15.0, -15.0), 15.0, f, true, crate::lr::gray(0xe8));
                         }
                         let edited_film = if e.loaded { binning_ui::edited(&e.settings).then(|| e.settings.film.is_active()) } else { edit_marks::get(e.file, e.copy.as_deref()) };
                         if let Some(film) = edited_film {
@@ -6795,14 +6820,14 @@ impl App {
                 if ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO) {
                     self.loupe_moved_at = now;
                 }
-                painter.rect_stroke(lens, 0.0, egui::Stroke::new(2.0, Color32::from_white_alpha(200)), egui::StrokeKind::Outside);
+                painter.rect_stroke(lens, 0.0, egui::Stroke::new(2.0, crate::lr::overlay(200)), egui::StrokeKind::Outside);
                 painter.rect_stroke(lens.expand(2.0), 0.0, egui::Stroke::new(1.0, Color32::from_black_alpha(160)), egui::StrokeKind::Outside);
                 // Step at the bottom left of the loupe, shortly after switching on also the hint
                 let pill = |at: egui::Pos2, align: egui::Align2, text: &str, alpha: f32| {
-                    let g = painter.layout_no_wrap(text.to_owned(), egui::FontId::proportional(11.5), Color32::from_white_alpha((235.0 * alpha) as u8));
+                    let g = painter.layout_no_wrap(text.to_owned(), egui::FontId::proportional(11.5), crate::lr::overlay((235.0 * alpha) as u8));
                     let r = align.anchor_size(at, g.size());
                     painter.rect_filled(r.expand2(egui::vec2(6.0, 3.0)), 0.0, Color32::from_black_alpha((150.0 * alpha) as u8));
-                    painter.galley(r.min, g, Color32::WHITE);
+                    painter.galley(r.min, g, crate::lr::TEXT_STRONG());
                 };
                 pill(lens.left_bottom() + egui::vec2(10.0, -8.0), egui::Align2::LEFT_BOTTOM, &format!("{:.0} %", scale * 100.0), 1.0);
                 if !sharp {
@@ -6846,7 +6871,7 @@ impl App {
             if crate::env::var_os("GRAINEO_SPINNER_TEST").is_some() && crate::env::var_os("GRAINEO_DATA_DIR").is_some() {
                 for (i, g) in [250u8, 128, 8].into_iter().enumerate() {
                     let c = area.left_top() + egui::vec2(18.0 + 40.0 * (i as f32 + 1.0), 18.0);
-                    painter.rect_filled(egui::Rect::from_center_size(c, egui::vec2(36.0, 36.0)), 0.0, Color32::from_gray(g));
+                    painter.rect_filled(egui::Rect::from_center_size(c, egui::vec2(36.0, 36.0)), 0.0, crate::lr::gray(g));
                     spinner(&painter, c, 6.5, now, 1.0);
                 }
                 spinner(&painter, area.center(), 6.5, now, 1.0);
@@ -7140,7 +7165,6 @@ impl App {
                 || s.clarity != d.clarity
                 || s.saturation != d.saturation;
             let mut reset_tone = false;
-            let brake_key = egui::Id::unique(("noise-brake-shown", &lens_path));
             let reset_basic = lr::section_switch(ui, "Grundeinstellungen", true, basic_changed, &mut bp.basic, |ui| {
                 lr::choice(ui, "Behandlung", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
                 // White balance: one drop-down list (as shot, camera presets) with the picker beside it
@@ -7227,7 +7251,7 @@ impl App {
                 }
                 // Sigma brakes the noise only when brightening with Fill Light (develop: brake with fill_light > 0)
                 let lifted = s.fill_light > 0.0;
-                raw_app::noise_brake(ui, &mut s.noise_brake, lifted, brake_key, "");
+                raw_app::noise_brake(ui, &mut s.noise_brake, lifted, "");
                 ui.add_space(4.0);
                 if lr::group_label(ui, "Präsenz") {
                     s.clarity = d.clarity;
@@ -7299,7 +7323,7 @@ impl App {
         }
 
         // Tone equalizer: exposure per brightness zone (all cameras), before the creative tone curve
-        tone_eq_ui::section(ui, s);
+        tone_eq_ui::section(ui, s, c.index);
 
         // Tone curve (point curve) on the output values
         let curve_changed = !s.tone_curve.is_identity() || s.tone_curve != d.tone_curve;
@@ -7342,7 +7366,7 @@ impl App {
                     n if n.starts_with("Grün") => Color32::from_rgb(0x4f, 0xbf, 0x5a),
                     n if n.starts_with("Blau") => Color32::from_rgb(0x3f, 0x73, 0xe0),
                     "Nur oben" => Color32::from_rgb(0x7f, 0x9c, 0xd8),
-                    _ => Color32::from_gray(0x9a),
+                    _ => crate::lr::gray(0x9a),
                 } };
                 let tips: Vec<String> = filters.iter().map(|(n, h, _)| if h.is_empty() { n.clone() } else { format!("{n}: {h}") }).collect();
                 let items: Vec<(Color32, &str)> = filters.iter().zip(&tips).map(|((n, _, _), t)| (chip(n), t.as_str())).collect();
@@ -7375,7 +7399,7 @@ impl App {
                     let col = |h: f32, s: f32, v: f32| Color32::from(egui::ecolor::Hsva::new(h.rem_euclid(360.0) / 360.0, s, v, 1.0));
                     let grad = match tab {
                         0 => [col(h - 30.0, 0.7, 0.75), col(h + 30.0, 0.7, 0.75)],
-                        1 => [Color32::from_gray(0x70), col(h, 0.8, 0.8)],
+                        1 => [crate::lr::gray(0x70), col(h, 0.8, 0.8)],
                         _ => [col(h, 0.7, 0.25), col(h, 0.35, 0.95)],
                     };
                     let mut v = s.hsl[i][tab] as f64;
@@ -7388,6 +7412,7 @@ impl App {
             if reset_hsl {
                 s.hsl = d.hsl;
             }
+            skin_ui::section(ui, s, &d);
         } else if foreign.is_some() {
             // Black & white mixer: brightness per colour range when converting to grey
             if lr::group_label(ui, crate::tr("Schwarzweiß-Mischer")) {
@@ -7758,9 +7783,54 @@ impl App {
             lr::hover_tip(&cols[1], &e, &crate::shortcuts::display("paste_settings"));
             paste = e.clicked();
         });
-        let reset_button = ui.add_sized([ui.available_width(), 24.0], egui::Button::new(crate::tr("Alle Einstellungen zurücksetzen")));
-        lr::hover_tip(ui, &reset_button, &crate::shortcuts::display("reset_all"));
-        let reset = reset_button.clicked();
+        let mut reset = false;
+        let mut reset_camera = false;
+        let camera = self.current.as_ref().and_then(|c| crate::camera_defaults::camera_of(&c.loaded));
+        let has_default = camera.as_deref().and_then(crate::camera_defaults::find).is_some();
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let reset_button = ui.add_sized([ui.available_width() - 26.0, 24.0], egui::Button::new(crate::tr("Alle Einstellungen zurücksetzen")));
+            lr::hover_tip(ui, &reset_button, &crate::shortcuts::display("reset_all"));
+            reset = reset_button.clicked();
+            // "Zurücksetzen ▾": camera default entries (camera_defaults.rs)
+            let more = ui.add_sized([24.0, 24.0], egui::Button::new("▾"));
+            lr::hover_tip(ui, &more, crate::tr("Weitere Möglichkeiten zum Zurücksetzen"));
+            // test hooks for screenshots (own data folder only): GRAINEO_DIALOG=reset-menu shows the menu open,
+            // GRAINEO_DIALOG=camera-default opens "Set as default for …" once
+            let hook = if crate::env::var_os("GRAINEO_DATA_DIR").is_some() { crate::env::var("GRAINEO_DIALOG").ok() } else { None };
+            let mut popup = egui::Popup::menu(&more);
+            if hook.as_deref() == Some("reset-menu") {
+                popup = popup.open(true);
+            }
+            if hook.as_deref() == Some("camera-default") {
+                static HOOK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if let Some(c) = camera.as_deref().filter(|_| !HOOK.swap(true, Ordering::Relaxed)) {
+                    if let Some(cur) = self.current.as_ref() { crate::camera_defaults::open_set(c, &self.entries[index].settings, &cur.loaded); }
+                }
+            }
+            popup.show(|ui| {
+                ui.set_min_width(260.0);
+                if ui.add_enabled(has_default, egui::Button::new(crate::tr("Auf Kamera-Standard zurücksetzen"))).clicked() {
+                    reset_camera = true;
+                }
+                ui.separator();
+                let set_text = match &camera {
+                    Some(c) => crate::trf!("Als Standard für {c} festlegen …", c = c),
+                    None => crate::tr("Als Kamera-Standard festlegen …").to_string(),
+                };
+                if ui.add_enabled(camera.is_some(), egui::Button::new(set_text)).clicked() {
+                    if let Some(c) = &camera {
+                        if let Some(cur) = self.current.as_ref() { crate::camera_defaults::open_set(c, &self.entries[index].settings, &cur.loaded); }
+                    }
+                }
+                if ui.button(crate::tr("Kamera-Standards verwalten …")).clicked() {
+                    crate::prefs::open_section("Kamera-Standards");
+                }
+            });
+        });
+        if reset_camera {
+            self.reset_to_camera_default();
+        }
         if copy {
             self.copy_dialog = true;
         }
@@ -7796,7 +7866,7 @@ impl App {
             }
             if let (Some(a), Some(b)) = (self.measure_start, resp.interact_pointer_pos()) {
                 if resp.dragged() {
-                    painter.rect_stroke(egui::Rect::from_two_pos(a, b), 0.0, egui::Stroke::new(1.5, lr::ACCENT), egui::StrokeKind::Middle);
+                    painter.rect_stroke(egui::Rect::from_two_pos(a, b), 0.0, egui::Stroke::new(1.5, lr::ACCENT()), egui::StrokeKind::Middle);
                 }
                 if resp.drag_stopped() {
                     let (p, q) = (to_img(a), to_img(b));
@@ -7816,7 +7886,7 @@ impl App {
             if i == index && self.measure && self.measure_start.is_none() {
                 let pts = vec![to_screen(x, y), to_screen(x + w, y), to_screen(x + w, y + h), to_screen(x, y + h)];
                 painter.add(egui::Shape::closed_line(pts.clone(), egui::Stroke::new(2.5, Color32::BLACK)));
-                painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.2, Color32::WHITE)));
+                painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.2, crate::lr::TEXT_STRONG())));
             }
         }
     }
@@ -7882,7 +7952,7 @@ impl App {
             let cells: Vec<_> = icons
                 .iter()
                 .enumerate()
-                .map(|(n, ic)| (Cell::Symbol(*ic, if n == 4 && !can_compare { Color32::from_gray(0x60) } else { lr::TEXT() }), n == view, tips[n].as_str()))
+                .map(|(n, ic)| (Cell::Symbol(*ic, if n == 4 && !can_compare { crate::lr::gray(0x60) } else { lr::TEXT() }), n == view, tips[n].as_str()))
                 .collect();
             let view_click = if has(Group::View) {
                 let r = ui.add_enabled_ui(loaded, |ui| {
@@ -7948,7 +8018,7 @@ impl App {
                 let cells: Vec<_> = (1..=5u8)
                     .map(|n| {
                         let an = n <= rating;
-                        (Cell::Text(if an { "★" } else { "☆" }, 14.0, if an { Color32::from_rgb(0xe8, 0xc5, 0x5a) } else { Color32::from_gray(0x8a) }), false, star_tips[n as usize - 1].as_str())
+                        (Cell::Text(if an { "★" } else { "☆" }, 14.0, if an { Color32::from_rgb(0xe8, 0xc5, 0x5a) } else { crate::lr::gray(0x8a) }), false, star_tips[n as usize - 1].as_str())
                     })
                     .collect();
                 let (c, r) = lr::cell_group_rect(ui, "sterne", &cells, 22.0);
@@ -8018,7 +8088,7 @@ impl App {
                         (Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), self.show_faces, "Gesichter anzeigen"),
                         (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), self.show_focus, t_focus.as_str()),
                         (Cell::Symbol(lr::Icon::Warning, lr::TEXT()), self.show_clipping, t_clip.as_str()),
-                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { Color32::from_gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
+                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { crate::lr::gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
                         (Cell::Symbol(lr::Icon::Info, lr::TEXT()), self.info_level > 0, t_info.as_str()),
                     ];
                     let (c, r) = lr::cell_group_rect(ui, "anzeigen", &cells, 30.0);
@@ -8062,13 +8132,13 @@ impl App {
     /// "MEHR": the hidden groups, one function per row with symbol and name; switched-on toggles get a check mark.
     fn toolbar_more(&mut self, ui: &mut egui::Ui, i: usize, hidden: &[toolbar_plan::Group]) {
         use toolbar_plan::Group;
-        let resp = ui.add(egui::Button::new(crate::tr("MEHR")).min_size(egui::vec2(toolbar_plan::MORE_W, lr::BAR_H)).fill(lr::GROUP_FILL));
+        let resp = ui.add(egui::Button::new(crate::tr("MEHR")).min_size(egui::vec2(toolbar_plan::MORE_W, lr::BAR_H)).fill(lr::GROUP_FILL()));
         egui::Popup::menu(&resp).align(egui::RectAlign::TOP_START).show(|ui| {
             ui.set_min_width(230.0);
             let item = |ui: &mut egui::Ui, icon: Option<lr::Icon>, swatch: Option<Color32>, name: &str, on: bool| -> bool {
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), egui::Sense::click());
                 if resp.hovered() {
-                    ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x36));
+                    ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x36));
                 }
                 let icon_rect = egui::Rect::from_center_size(egui::pos2(r.left() + 14.0, r.center().y), egui::vec2(15.0, 15.0));
                 if let Some(ic) = icon {
@@ -8265,7 +8335,7 @@ impl App {
             // square cells over the whole crop, for comparison with edges in the image
             let nx = 12usize;
             let ny = ((nx as f32 * crop.h / crop.w).round() as usize).max(2);
-            let stroke = egui::Stroke::new(1.0, Color32::from_white_alpha(70));
+            let stroke = egui::Stroke::new(1.0, crate::lr::overlay(70));
             for k in 1..nx {
                 let t = k as f32 / nx as f32;
                 painter.line_segment([at([t, 0.0]), at([t, 1.0])], stroke);
@@ -8278,10 +8348,10 @@ impl App {
         } else {
             // selected grid (thirds, golden ratio, diagonals)
             for (a, b) in self.crop_raster.lines() {
-                painter.line_segment([at(a), at(b)], egui::Stroke::new(1.0, Color32::from_white_alpha(90)));
+                painter.line_segment([at(a), at(b)], egui::Stroke::new(1.0, crate::lr::overlay(90)));
             }
         }
-        painter.add(egui::Shape::closed_line(corners.to_vec(), egui::Stroke::new(1.5, Color32::WHITE)));
+        painter.add(egui::Shape::closed_line(corners.to_vec(), egui::Stroke::new(1.5, crate::lr::TEXT_STRONG())));
         let handles: [([f32; 2], [f32; 2]); 8] = [
             ([0.0, 0.0], [-1.0, -1.0]),
             ([1.0, 0.0], [1.0, -1.0]),
@@ -8308,16 +8378,16 @@ impl App {
         // the grip under the pointer (or being dragged) is highlighted: a thicker edge, a larger corner
         if let Some([sx, sy]) = active_grip {
             if sx != 0.0 && sy != 0.0 {
-                painter.rect_filled(egui::Rect::from_center_size(at([(sx + 1.0) / 2.0, (sy + 1.0) / 2.0]), egui::vec2(13.0, 13.0)), 0.0, Color32::WHITE);
+                painter.rect_filled(egui::Rect::from_center_size(at([(sx + 1.0) / 2.0, (sy + 1.0) / 2.0]), egui::vec2(13.0, 13.0)), 0.0, crate::lr::TEXT_STRONG());
             } else {
                 let (a, b) = if sx != 0.0 { let x = (sx + 1.0) / 2.0; ([x, 0.0], [x, 1.0]) } else { let y = (sy + 1.0) / 2.0; ([0.0, y], [1.0, y]) };
-                painter.line_segment([at(a), at(b)], egui::Stroke::new(3.0, Color32::WHITE));
+                painter.line_segment([at(a), at(b)], egui::Stroke::new(3.0, crate::lr::TEXT_STRONG()));
             }
         }
         for (u, side) in &handles {
             let corner = side[0] != 0.0 && side[1] != 0.0;
             let size = if corner { 9.0 } else { 7.0 };
-            painter.rect_filled(egui::Rect::from_center_size(at(*u), egui::vec2(size, size)), 0.0, Color32::WHITE);
+            painter.rect_filled(egui::Rect::from_center_size(at(*u), egui::vec2(size, size)), 0.0, crate::lr::TEXT_STRONG());
         }
 
         // Straighten: place a line along the horizon or an edge → angle. Two clicks
@@ -8348,16 +8418,16 @@ impl App {
             if let (Some(a), Some(p)) = (self.straighten_from, resp.interact_pointer_pos().or(resp.hover_pos())) {
                 let b = src(p);
                 let long = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt() > 0.02 * ow.max(oh);
-                let stroke = egui::Stroke::new(1.5, Color32::WHITE);
+                let stroke = egui::Stroke::new(1.5, crate::lr::TEXT_STRONG());
                 painter.line_segment([scr(a), p], egui::Stroke::new(3.5, Color32::from_black_alpha(120)));
                 painter.line_segment([scr(a), p], stroke);
-                painter.circle_filled(scr(a), 3.0, Color32::WHITE);
+                painter.circle_filled(scr(a), 3.0, crate::lr::TEXT_STRONG());
                 if long {
                     let w = align::line_angles(a, b);
                     let center = scr(a).lerp(p, 0.5) + egui::vec2(0.0, -12.0);
-                    let g = painter.layout_no_wrap(format!("{w:+.1}°").de_comma(), egui::FontId::proportional(12.0), Color32::WHITE);
+                    let g = painter.layout_no_wrap(format!("{w:+.1}°").de_comma(), egui::FontId::proportional(12.0), crate::lr::TEXT_STRONG());
                     painter.rect_filled(egui::Rect::from_center_size(center, g.size() + egui::vec2(8.0, 4.0)), 0.0, Color32::from_black_alpha(170));
-                    painter.galley(center - g.size() / 2.0, g, Color32::WHITE);
+                    painter.galley(center - g.size() / 2.0, g, crate::lr::TEXT_STRONG());
                 }
                 let done = !just_set && ((self.straighten_drag && resp.drag_stopped()) || (!self.straighten_drag && (resp.clicked() || resp.drag_stopped())));
                 if done && long {
@@ -8490,10 +8560,10 @@ impl App {
         }
         if matches!(drag, CropDrag::Rotate { .. }) {
             let t = format!("{:+.1}°", angle).de_comma();
-            let g = painter.layout_no_wrap(t, egui::FontId::proportional(12.0), Color32::WHITE);
+            let g = painter.layout_no_wrap(t, egui::FontId::proportional(12.0), crate::lr::TEXT_STRONG());
             let pos = p + egui::vec2(16.0, 14.0);
             painter.rect_filled(egui::Rect::from_min_size(pos - egui::vec2(4.0, 2.0), g.size() + egui::vec2(8.0, 4.0)), 0.0, Color32::from_black_alpha(170));
-            painter.galley(pos, g, Color32::WHITE);
+            painter.galley(pos, g, crate::lr::TEXT_STRONG());
         }
     }
 
@@ -8936,7 +9006,7 @@ impl App {
                     lr::toggle(ui, &mut s.view_rescue, crate::tr("Gerettete Bereiche zeigen"));
                     if s.view_rescue {
                         ui.horizontal(|ui| {
-                            for (color, text) in [(Color32::from_rgb(0xe0, 0xc0, 0x40), crate::tr("geschätzt")), (Color32::from_gray(0x9a), crate::tr("grau gefüllt"))] {
+                            for (color, text) in [(Color32::from_rgb(0xe0, 0xc0, 0x40), crate::tr("geschätzt")), (crate::lr::gray(0x9a), crate::tr("grau gefüllt"))] {
                                 let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
                                 ui.painter().rect_filled(r, 0.0, color);
                                 ui.label(egui::RichText::new(text).small().color(lr::TEXT_DIM()));
@@ -9152,7 +9222,7 @@ enum Edge {
 /// temporarily" via the context data. Returns: clicked.
 /// Fixed width, not resizable (otherwise egui shows a handle with a resize cursor at the edge).
 fn edge_strip(ui: &mut egui::Ui, id: &str, edge: Edge, shown: bool) -> bool {
-    let frame = egui::Frame::new().fill(lr::PANEL_DARK);
+    let frame = egui::Frame::new().fill(lr::PANEL_DARK());
     let size = 12.0;
     let body = |ui: &mut egui::Ui| -> bool {
         let rect = ui.available_rect_before_wrap();
@@ -9173,7 +9243,7 @@ fn edge_strip(ui: &mut egui::Ui, id: &str, edge: Edge, shown: bool) -> bool {
         if id.starts_with("edge-") {
             ui.data_mut(|d| d.insert_temp(egui::Id::new(("edge-rect", side)), Some(rect)));
         }
-        let col = if hovered { Color32::from_gray(0x9a) } else { Color32::from_gray(0x3a) };
+        let col = if hovered { crate::lr::gray(0x9a) } else { crate::lr::gray(0x3a) };
         ui.painter().add(egui::Shape::convex_polygon(vec![a, b, d], col, egui::Stroke::NONE));
         resp.clicked()
     };
@@ -9246,14 +9316,14 @@ fn rotate_cursor(painter: &egui::Painter, p: egui::Pos2, center: egui::Pos2) {
         [end + r * 5.0, end - r * 3.0 + n * 5.0, end - r * 3.0 - n * 5.0]
     };
     let (a, b) = (tip(arc[0], arc[1]), tip(arc[12], arc[11]));
-    for (width, color) in [(4.5, Color32::from_black_alpha(220)), (1.8, Color32::WHITE)] {
+    for (width, color) in [(4.5, Color32::from_black_alpha(220)), (1.8, crate::lr::TEXT_STRONG())] {
         painter.add(egui::Shape::line(arc.clone(), egui::Stroke::new(width, color)));
         for t in [a, b] {
             painter.add(egui::Shape::closed_line(t.to_vec(), egui::Stroke::new(width, color)));
         }
     }
-    painter.add(egui::Shape::convex_polygon(a.to_vec(), Color32::WHITE, egui::Stroke::NONE));
-    painter.add(egui::Shape::convex_polygon(b.to_vec(), Color32::WHITE, egui::Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(a.to_vec(), crate::lr::TEXT_STRONG(), egui::Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(b.to_vec(), crate::lr::TEXT_STRONG(), egui::Stroke::NONE));
 }
 
 /// Draws a texture showing the source rectangle `src` (x, y, w, h in source pixels)
@@ -9514,7 +9584,7 @@ fn quiet_spinner(state: &mut (f32, f64, Option<f64>), ctx: &egui::Context, paint
                         c + egui::vec2(t.cos(), t.sin()) * 10.5
                     }).collect();
                     painter.add(egui::Shape::line(pts.clone(), egui::Stroke::new(3.0, Color32::from_black_alpha((90.0 * a) as u8))));
-                    painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, Color32::from_white_alpha((200.0 * a) as u8))));
+                    painter.add(egui::Shape::line(pts, egui::Stroke::new(1.5, crate::lr::overlay((200.0 * a) as u8))));
                 }
             }
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
@@ -9529,7 +9599,7 @@ const STRIP_NUMBER_BUTTON_H: f32 = 56.0;
 
 fn spinner(painter: &egui::Painter, center: egui::Pos2, radius: f32, now: f64, alpha: f32) {
     let dark = |a: f32| Color32::from_black_alpha((255.0 * a * alpha) as u8);
-    let light = |a: f32| Color32::from_white_alpha((255.0 * a * alpha) as u8);
+    let light = |a: f32| crate::lr::overlay((255.0 * a * alpha) as u8);
     painter.circle_filled(center, radius + 3.5, dark(0.20));
     painter.circle_stroke(center, radius, egui::Stroke::new(3.5, dark(0.35)));
     painter.circle_stroke(center, radius, egui::Stroke::new(2.0, light(0.18)));
@@ -9721,7 +9791,7 @@ fn badge(painter: &egui::Painter, area: egui::Rect, text: &str, progress: Option
 }
 
 fn badge_alpha(painter: &egui::Painter, area: egui::Rect, text: &str, progress: Option<f32>, alpha: f32) -> egui::Rect {
-    let galley = painter.layout_no_wrap(crate::menu::i18n::tr_msg(text).into_owned(), egui::FontId::proportional(12.5), Color32::from_white_alpha((235.0 * alpha) as u8));
+    let galley = painter.layout_no_wrap(crate::menu::i18n::tr_msg(text).into_owned(), egui::FontId::proportional(12.5), crate::lr::overlay((235.0 * alpha) as u8));
     let pad = egui::vec2(10.0, 6.0);
     let bar = if progress.is_some() { 5.0 } else { 0.0 };
     let size = galley.size() + pad * 2.0 + egui::vec2(0.0, bar);
@@ -9729,13 +9799,13 @@ fn badge_alpha(painter: &egui::Painter, area: egui::Rect, text: &str, progress: 
     let rect = egui::Rect::from_min_size(min, size);
     navigator::note_corner(painter.ctx(), rect);
     painter.rect_filled(rect, 0.0, Color32::from_black_alpha((165.0 * alpha) as u8));
-    painter.galley(rect.min + pad, galley, Color32::WHITE);
+    painter.galley(rect.min + pad, galley, crate::lr::TEXT_STRONG());
     if let Some(p) = progress {
         let track = egui::Rect::from_min_max(
             egui::pos2(rect.left() + pad.x, rect.bottom() - pad.y - 2.0),
             egui::pos2(rect.right() - pad.x, rect.bottom() - pad.y + 1.0),
         );
-        painter.rect_filled(track, 0.0, Color32::from_white_alpha((50.0 * alpha) as u8));
+        painter.rect_filled(track, 0.0, crate::lr::overlay((50.0 * alpha) as u8));
         let done = egui::Rect::from_min_max(track.min, egui::pos2(track.left() + track.width() * p.clamp(0.0, 1.0), track.bottom()));
         painter.rect_filled(done, 0.0, Color32::from_rgba_unmultiplied(120, 170, 255, (230.0 * alpha) as u8));
     }
@@ -9773,14 +9843,19 @@ fn rgb_histogram(rgb: &[u8]) -> [Vec<u32>; 3] {
 fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], height: f32, sqrt: bool) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, Color32::from_gray(20));
+    let dark = crate::lr::theme() == crate::lr::Theme::Dark;
+    painter.rect_filled(rect, 0.0, if dark { crate::lr::gray(20) } else { crate::lr::SCOPE_BG() });
     // Do not use the outermost bins (pure black/white) for scaling
     let max = h.iter().flat_map(|v| v[1..v.len() - 1].iter()).copied().max().unwrap_or(1).max(1) as f32;
-    let colors = [
-        Color32::from_rgba_unmultiplied(255, 80, 80, 150),
-        Color32::from_rgba_unmultiplied(80, 255, 80, 150),
-        Color32::from_rgba_unmultiplied(90, 140, 255, 150),
-    ];
+    let colors = if dark {
+        [
+            Color32::from_rgba_unmultiplied(255, 80, 80, 150),
+            Color32::from_rgba_unmultiplied(80, 255, 80, 150),
+            Color32::from_rgba_unmultiplied(90, 140, 255, 150),
+        ]
+    } else {
+        crate::lr::HIST_CHANNELS()
+    };
     for (c, bins) in h.iter().enumerate() {
         let n = bins.len();
         let mut pts: Vec<egui::Pos2> = Vec::with_capacity(n + 2);
@@ -9798,7 +9873,7 @@ fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], height: f32, sqrt: bool) {
     let total: u32 = h[1].iter().sum::<u32>().max(1);
     let hi = h.iter().map(|v| v[v.len() - 1]).max().unwrap_or(0) as f32 / total as f32 * 100.0;
     if hi > 0.1 {
-        painter.text(rect.right_top() + egui::vec2(-6.0, 4.0), egui::Align2::RIGHT_TOP, crate::trf!("Lichter {hi} %", hi = format!("{:.1}", hi)), egui::FontId::proportional(10.0), Color32::from_gray(170));
+        painter.text(rect.right_top() + egui::vec2(-6.0, 4.0), egui::Align2::RIGHT_TOP, crate::trf!("Lichter {hi} %", hi = format!("{:.1}", hi)), egui::FontId::proportional(10.0), crate::lr::scope_gray(170));
     }
 }
 
@@ -10142,7 +10217,7 @@ mod zoom_field_tests {
                 let field = zoom_field_width(ui);
                 let r = egui::ComboBox::from_id_salt("zoom-test").selected_text(label.clone()).width(field).show_ui(ui, |_| {});
                 w = r.response.rect.width();
-                let text = ui.painter().layout_no_wrap(label.clone(), egui::TextStyle::Button.resolve(ui.style()), egui::Color32::WHITE).size().x;
+                let text = ui.painter().layout_no_wrap(label.clone(), egui::TextStyle::Button.resolve(ui.style()), crate::lr::TEXT_STRONG()).size().x;
                 assert!(text + 16.0 <= field, "{label} does not fit {field}");
             });
             widths.push(w);

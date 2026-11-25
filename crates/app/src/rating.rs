@@ -190,7 +190,8 @@ impl App {
                 if modifiers.command || modifiers.ctrl {
                     return true;
                 }
-                let arrow = !people && !review && (matches!(k, egui::Key::ArrowLeft | egui::Key::ArrowRight) || (raster && !loupe && matches!(k, egui::Key::ArrowUp | egui::Key::ArrowDown)));
+                // (the tone equalizer graph with keyboard focus keeps the arrow keys)
+                let arrow = !crate::tone_eq_ui::keyboard_focus() && !people && !review && (matches!(k, egui::Key::ArrowLeft | egui::Key::ArrowRight) || (raster && !loupe && matches!(k, egui::Key::ArrowUp | egui::Key::ArrowDown)));
                 let value = rating_allowed && !modifiers.alt && change(k).is_some() && !(review && modifiers.shift);
                 // B: quick collection
                 let quick = k == egui::Key::B && !modifiers.alt && !modifiers.shift;

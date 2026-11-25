@@ -197,7 +197,7 @@ fn damaged_head() -> String {
 
 /// Is `error` the message of a damaged Sigma file (also x3fuse-core's decoding errors of the exact base)?
 pub fn is_damaged(error: &str) -> bool {
-    error.starts_with("Datei beschädigt") || error.starts_with(&damaged_head()) || error.contains("invalid Huffman code") || error.contains("truncated entropy stream")
+    error.starts_with("Datei beschädigt") || error.starts_with(&damaged_head()) || error.contains("invalid Huffman code") || error.contains("truncated entropy stream") || error.contains(raw::DAMAGED)
 }
 
 /// [`load`] for an output (a print): a merged photo whose result is not in the cache is merged first – the reference
@@ -1305,13 +1305,26 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
         Job::Render { index, previews, cal, settings, before } => {
             if let Some(doc) = &previews.foreign {
                 let img = doc.render_preview(&settings);
+                let graph = !before && crate::tone_eq_ui::graph_wanted();
+                let hist_settings = graph.then(|| settings.clone());
                 send(JobResult::Rendered { index, settings, before, width: img.width, height: img.height, rgb: rgb8_for(doc, &img) });
+                // zone histogram of the tone equalizer graph: computed apart from the render (which may run on the GPU)
+                if let Some(s) = hist_settings {
+                    crate::tone_eq_ui::store_hist(index, doc.zone_histogram(&s));
+                }
                 return;
             }
             if settings.view.is_stage() {
                 // Pipeline inspection: only from the existing preview data, without session lock
                 let src = develop::inspect::Sources { raw: &previews.raw, sensor: &previews.sensor, developed: &previews.developed, spp: previews.spp.as_deref() };
                 let img = develop::inspect::render(&src, &cal, &settings);
+                send(JobResult::Rendered { index, settings, before, width: img.width, height: img.height, rgb: img.to_rgb8() });
+                return;
+            }
+            if !before && crate::tone_eq_ui::graph_wanted() {
+                // zone histogram of the tone equalizer graph, collected while rendering (same mask and exposure)
+                let (img, hist) = develop::tone_eq::collect(|| sigma_preview(&previews, &settings).render(&cal, &settings));
+                crate::tone_eq_ui::store_hist(index, hist);
                 send(JobResult::Rendered { index, settings, before, width: img.width, height: img.height, rgb: img.to_rgb8() });
                 return;
             }

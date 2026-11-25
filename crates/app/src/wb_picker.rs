@@ -365,7 +365,7 @@ pub fn paint_loupe(painter: &egui::Painter, area: egui::Rect, m: egui::Pos2, (px
     let y = if m.y + gap + size.y <= area.bottom() - 4.0 { m.y + gap } else { m.y - gap - size.y };
     let outer = egui::Rect::from_min_size(egui::pos2(x.max(area.left() + 4.0), y.max(area.top() + 4.0)), size);
     let lens = egui::Rect::from_min_size(outer.min, LENS);
-    painter.rect_filled(outer, 2.0, lr::PANEL_DARK);
+    painter.rect_filled(outer, 2.0, lr::PANEL_DARK());
     let ppp = painter.ctx().pixels_per_point();
     let grid = LoupeGrid::new(LENS, ppp, side, px, py, w, h);
     let lp = painter.with_clip_rect(lens);
@@ -384,11 +384,11 @@ pub fn paint_loupe(painter: &egui::Painter, area: egui::Rect, m: egui::Pos2, (px
     // the measured square: thin light line with a dark rim, outside of the measured pixels (visible on any colour)
     let sq = grid.frame(lens, ppp, px, py);
     let hair = 1.0 / ppp;
-    lp.rect_stroke(sq, 0.0, egui::Stroke::new(hair, Color32::from_white_alpha(235)), egui::StrokeKind::Outside);
+    lp.rect_stroke(sq, 0.0, egui::Stroke::new(hair, crate::lr::overlay(235)), egui::StrokeKind::Outside);
     lp.rect_stroke(sq.expand(hair), 0.0, egui::Stroke::new(hair, Color32::from_black_alpha(200)), egui::StrokeKind::Outside);
     // the clicked pixel: a small dot in its middle
     let dot = egui::Rect::from_center_size(grid.corner(lens, ppp, px, py, px as i64, py as i64) + egui::vec2(grid.cell, grid.cell) / 2.0, egui::vec2(grid.cell * 0.34, grid.cell * 0.34).max(egui::vec2(2.0, 2.0)));
-    lp.rect_filled(dot, 0.0, Color32::from_white_alpha(235));
+    lp.rect_filled(dot, 0.0, crate::lr::overlay(235));
     lp.rect_stroke(dot, 0.0, egui::Stroke::new(hair, Color32::from_black_alpha(220)), egui::StrokeKind::Outside);
     let (values, (state, color)) = lines(probe, side);
     let tp = painter.with_clip_rect(outer.shrink(2.0));

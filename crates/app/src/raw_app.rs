@@ -627,7 +627,6 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         || s.noise_brake != d.noise_brake;
     let mut bp = s.bypass;
     let mut reset_tone = false;
-    let brake_key = egui::Id::unique(("noise-brake-shown", &doc.path));
     let reset = lr::section_switch(ui, "Grundeinstellungen", true, changed, &mut bp.basic, |ui| {
         lr::choice(ui, "Behandlung", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
         // White balance: one drop-down list of the presets with the picker beside it; temperature/tint absolute.
@@ -699,7 +698,7 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         // Noise brake right under Shadows; it acts when brightening with exposure, shadows or whites
         // (rawdev::render::brake_active)
         let lifted = s.exposure > 0.0 || s.shadow > 0.0 || s.raw.whites > 0.0;
-        noise_brake(ui, &mut s.noise_brake, lifted, brake_key, "Wie stark Rauschen beim Aufhellen mitwächst.");
+        noise_brake(ui, &mut s.noise_brake, lifted, "Wie stark Rauschen beim Aufhellen mitwächst.");
         slider100_f32(ui, "Weiß", &mut s.raw.whites, "Weißpunkt: hellste Töne heller (+) oder zurückgenommen (−)", None);
         slider100_f32(ui, "Schwarz", &mut s.raw.blacks, "Schwarzpunkt: tiefste Töne heller (+) oder satter (−)", None);
         ui.add_space(4.0);
@@ -741,18 +740,10 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
 }
 
 /// Noise brake (Off · Colour · Colour + grain) as a steps control right under the brightening sliders, Sigma and other
-/// cameras. It appears once the image is brightened (`lifted`) and from then on stays for this image (`key`), so
-/// dragging a slider across 0 does not make the rows below jump; while it has no effect it is dimmed but stays
-/// adjustable. A brake that is switched on is always shown. `hint` selects the help card (empty: Sigma/Fill Light).
-pub fn noise_brake(ui: &mut egui::Ui, value: &mut develop::NoiseBrake, lifted: bool, key: egui::Id, hint: &str) {
-    let seen = ui.data_mut(|d| {
-        let v = d.get_temp_mut_or_insert_with(key, || false);
-        *v |= lifted;
-        *v
-    });
-    if !seen && *value == develop::NoiseBrake::Off {
-        return;
-    }
+/// cameras. It always has its fixed place, so neither brightening (a slider, Auto) nor undoing it changes the
+/// length of the panel; while the image is not brightened (`lifted`) it has no effect and is dimmed, but stays
+/// adjustable. `hint` selects the help card (empty: Sigma/Fill Light).
+pub fn noise_brake(ui: &mut egui::Ui, value: &mut develop::NoiseBrake, lifted: bool, hint: &str) {
     use develop::NoiseBrake as B;
     ui.scope(|ui| {
         if !lifted {

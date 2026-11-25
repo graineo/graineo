@@ -493,7 +493,7 @@ impl SensorRaw {
             if let Some(k) = self.crop_demosaic.clone() {
                 let method = if self.demosaic == 0 { if rb.period == 2 { 1 } else { 2 } } else { self.demosaic };
                 if let Some((t, Some(b))) = self.texture(ctx, &k, DEMOSAIC[method].0) {
-                    paint(&t, src(b), Color32::WHITE);
+                    paint(&t, src(b), crate::lr::TEXT_STRONG());
                 }
             }
         }
@@ -505,7 +505,7 @@ impl SensorRaw {
             }
             if let Some(k) = self.crop_mosaic.clone() {
                 if let Some((t, Some(b))) = self.texture(ctx, &k, "mosaic") {
-                    paint(&t, src(b), Color32::WHITE);
+                    paint(&t, src(b), crate::lr::TEXT_STRONG());
                 }
             }
         }
@@ -716,7 +716,7 @@ impl SensorRaw {
         if edge < 8.0 { return; }
         let center = corners[0] + (corners[2]-corners[0])*0.5;
         let inset = corners.map(|p| center + (p-center)*0.72);
-        painter.add(egui::Shape::closed_line(inset.to_vec(), egui::Stroke::new(1.0, Color32::WHITE)));
+        painter.add(egui::Shape::closed_line(inset.to_vec(), egui::Stroke::new(1.0, crate::lr::TEXT_STRONG())));
     }
 
     /// Concise, exact value for the sensor pixel beneath the pointer.
@@ -814,14 +814,14 @@ impl SensorRaw {
             if i > 0 {
                 job.append("  ·  ", 0.0, egui::TextFormat::simple(font.clone(), lr::TEXT_DIM()));
             }
-            job.append(t, 0.0, egui::TextFormat::simple(font.clone(), if *on { Color32::from_gray(0xe8) } else { lr::TEXT_DIM() }));
+            job.append(t, 0.0, egui::TextFormat::simple(font.clone(), if *on { crate::lr::gray(0xe8) } else { lr::TEXT_DIM() }));
         }
         job.wrap.max_width = (area.width() - 40.0 - reserve).max(60.0);
         job.wrap.max_rows = 1;
         let g = painter.layout_job(job);
         let r = egui::Rect::from_min_size(egui::pos2(area.left() + 10.0, area.bottom() - 10.0 - g.size().y - 8.0), g.size() + egui::vec2(16.0, 8.0));
         painter.rect_filled(r, 0.0, Color32::from_rgba_unmultiplied(0x12, 0x12, 0x12, 0xd8));
-        painter.galley(r.min + egui::vec2(8.0, 4.0), g, Color32::WHITE);
+        painter.galley(r.min + egui::vec2(8.0, 4.0), g, crate::lr::TEXT_STRONG());
         Some(r)
     }
 

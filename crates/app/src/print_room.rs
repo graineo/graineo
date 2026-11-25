@@ -147,8 +147,8 @@ fn exposure(r: &library::db::Row) -> String {
 fn ink_color(i: Ink) -> Color32 {
     match i {
         Ink::Black => Color32::BLACK,
-        Ink::White => Color32::WHITE,
-        Ink::Gray => Color32::from_gray(128),
+        Ink::White => crate::lr::TEXT_STRONG(),
+        Ink::Gray => crate::lr::gray(128),
     }
 }
 
@@ -591,7 +591,7 @@ impl App {
         }
         self.print_room.page = self.print_room.page.min(pages - 1);
 
-        egui::Panel::top("print-top").resizable(false).exact_size(lr::BAR_H + 8.0).frame(egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
+        egui::Panel::top("print-top").resizable(false).exact_size(lr::BAR_H + 8.0).frame(egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(12, 4))).show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 let g = lr::caps(ui.painter(), crate::tr("Drucken"), lr::semibold(12.0), lr::TEXT());
                 let (r, _) = ui.allocate_exact_size(g.size(), egui::Sense::hover());
@@ -614,12 +614,12 @@ impl App {
         // the filmstrip across the whole width below (fixed height, no handle)
         let mut action = None;
         self.print_room.wanted.clear();
-        egui::Panel::bottom("print-strip").resizable(false).exact_size(strip::STRIP_H).frame(egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(8, 3))).show(ui, |ui| {
+        egui::Panel::bottom("print-strip").resizable(false).exact_size(strip::STRIP_H).frame(egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(8, 3))).show(ui, |ui| {
             action = self.print_strip(ui, &l);
         });
-        egui::Panel::left("print-left").resizable(false).exact_size(LEFT_W).frame(egui::Frame::new().fill(lr::PANEL).inner_margin(egui::Margin::symmetric(10, 6))).show(ui, |ui| self.print_left(ui));
-        egui::Panel::right("print-right").resizable(false).exact_size(RIGHT_W).frame(egui::Frame::new().fill(lr::PANEL).inner_margin(egui::Margin::symmetric(10, 6))).show(ui, |ui| self.print_right(ui, &l));
-        egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG)).show(ui, |ui| self.print_preview(ui, &l));
+        egui::Panel::left("print-left").resizable(false).exact_size(LEFT_W).frame(egui::Frame::new().fill(lr::PANEL()).inner_margin(egui::Margin::symmetric(10, 6))).show(ui, |ui| self.print_left(ui));
+        egui::Panel::right("print-right").resizable(false).exact_size(RIGHT_W).frame(egui::Frame::new().fill(lr::PANEL()).inner_margin(egui::Margin::symmetric(10, 6))).show(ui, |ui| self.print_right(ui, &l));
+        egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(lr::IMAGE_BG())).show(ui, |ui| self.print_preview(ui, &l));
         // thumbnails of the visible cells and of the page shown, asked for once (they arrive in the background)
         let wanted = std::mem::take(&mut self.print_room.wanted);
         if !wanted.is_empty() {
@@ -775,7 +775,7 @@ impl App {
             });
         });
         let mut f = ui.new_child(egui::UiBuilder::new().max_rect(foot.shrink2(Vec2::new(0.0, 6.0))).layout(egui::Layout::top_down(egui::Align::Min)));
-        f.painter().hline(foot.x_range(), foot.top(), egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
+        f.painter().hline(foot.x_range(), foot.top(), egui::Stroke::new(1.0, crate::lr::gray(0x2a)));
         self.print_footer(&mut f, l);
         ui.allocate_rect(avail, egui::Sense::hover());
     }
@@ -828,7 +828,7 @@ impl App {
             row(ui, label, |ui| {
                 mm_field(ui, v, 0.0..=200.0);
                 if let Some(m) = min.filter(|m| *m > *v + 0.01) {
-                    ui.label(egui::RichText::new(crate::trf!("mind. {a} mm", a = fmt1(m))).color(lr::GOLD).small());
+                    ui.label(egui::RichText::new(crate::trf!("mind. {a} mm", a = fmt1(m))).color(lr::GOLD()).small());
                 }
             });
         };
@@ -1020,8 +1020,8 @@ impl App {
         let painter = ui.painter().with_clip_rect(full);
         painter.rect_filled(page_rect.translate(Vec2::new(3.0, 4.0)), 0.0, Color32::from_black_alpha(140));
         let paper = match l.background {
-            Background::White => Color32::from_gray(0xf4),
-            Background::Black => Color32::from_gray(0x08),
+            Background::White => crate::lr::gray(0xf4),
+            Background::Black => crate::lr::gray(0x08),
         };
         painter.rect_filled(page_rect, 0.0, paper);
         let room_page = self.print_room.page.min(l.pages.len().saturating_sub(1));
@@ -1063,14 +1063,14 @@ impl App {
                         if image != 0 {
                             self.print_room.wanted.push(image);
                         }
-                        painter.rect_filled(r, 0.0, Color32::from_gray(0x80));
+                        painter.rect_filled(r, 0.0, crate::lr::gray(0x80));
                     }
                 }
                 // "Drehen und einpassen" turned the photo for the print: a small mark at the corner says so
                 if p.turned && r.width() > 28.0 && r.height() > 28.0 {
                     let c = Pos2::new(r.right() - 11.0, r.top() + 11.0);
                     painter.circle_filled(c, 8.5, Color32::from_black_alpha(170));
-                    painter.text(c, egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.0), Color32::WHITE);
+                    painter.text(c, egui::Align2::CENTER_CENTER, "↻", egui::FontId::proportional(12.0), crate::lr::TEXT_STRONG());
                     let mark = ui.interact(Rect::from_center_size(c, Vec2::splat(18.0)), ui.scope_id().with(("print-turned", room_page, k)), egui::Sense::hover());
                     lr::hover_tip(ui, &mark, "Für den Druck um 90° gedreht („Drehen und einpassen“)");
                 }
@@ -1116,7 +1116,7 @@ impl App {
                 }
                 let font = egui::FontId::monospace(size);
                 let max = tx.max_w as f32 * s;
-                let fits = |t: &str| painter.layout_no_wrap(t.to_string(), font.clone(), Color32::WHITE).size().x <= max;
+                let fits = |t: &str| painter.layout_no_wrap(t.to_string(), font.clone(), crate::lr::TEXT_STRONG()).size().x <= max;
                 let mut text = tx.text.clone();
                 if !fits(&text) {
                     // shortened with "…" as in the print (raster.rs)
@@ -1156,9 +1156,9 @@ impl App {
                 }
             }
         } else if l.notes.contains(&Note::NoRoom) {
-            painter.text(page_rect.center(), egui::Align2::CENTER_CENTER, crate::tr("Kein Platz für eine Zelle: Ränder oder Abstände verkleinern"), egui::FontId::proportional(13.0), Color32::from_gray(0x60));
+            painter.text(page_rect.center(), egui::Align2::CENTER_CENTER, crate::tr("Kein Platz für eine Zelle: Ränder oder Abstände verkleinern"), egui::FontId::proportional(13.0), crate::lr::gray(0x60));
         } else if self.print_room.photos.is_empty() {
-            painter.text(page_rect.center(), egui::Align2::CENTER_CENTER, crate::tr("Wähle Fotos im Filmstreifen"), egui::FontId::proportional(13.0), Color32::from_gray(0x60));
+            painter.text(page_rect.center(), egui::Align2::CENTER_CENTER, crate::tr("Wähle Fotos im Filmstreifen"), egui::FontId::proportional(13.0), crate::lr::gray(0x60));
         }
         // page navigation
         let nav = Rect::from_min_max(Pos2::new(full.min.x, full.max.y - nav_h), full.max);

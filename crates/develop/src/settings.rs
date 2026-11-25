@@ -286,6 +286,12 @@ pub struct Settings {
     /// Colour mixer (HSL): per colour range (red, orange, yellow, green, aqua,
     /// blue, purple, magenta) [hue, saturation, luminance], each −1 … +1
     pub hsl: [[f32; 3]; 8],
+    /// Skin tones: hue shift −1 (rosier) … +1 (more golden) inside a fixed skin-tone region, see [`crate::skin`]
+    #[serde(skip_serializing_if = "is_zero")]
+    pub skin_hue: f32,
+    /// Skin tones: relative saturation −1 … +1 inside the same region
+    #[serde(skip_serializing_if = "is_zero")]
+    pub skin_sat: f32,
     /// Clarity (local contrast, −1 … +1)
     pub clarity: f32,
     /// Tone curve (point curve RGB/red/green/blue) on the output values, see [`crate::curve`]
@@ -609,6 +615,8 @@ impl Default for Settings {
             vignette: 0.0,
             vignette_mid: 0.5,
             hsl: [[0.0; 3]; 8],
+            skin_hue: 0.0,
+            skin_sat: 0.0,
             clarity: 0.0,
             tone_curve: crate::curve::ToneCurve::default(),
             sigma_sharpness: 0.0,

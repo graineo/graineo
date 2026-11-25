@@ -180,10 +180,10 @@ pub fn strictness_slider(ui: &mut egui::Ui, row: egui::Rect, y: f32, value: &mut
         }
     }
     let active = resp.hovered() || resp.dragged();
-    let line = if active { Color32::from_gray(0x8a) } else { Color32::from_gray(0x5a) };
+    let line = if active { crate::lr::gray(0x8a) } else { crate::lr::gray(0x5a) };
     ui.painter().line_segment([egui::pos2(track.left(), y), egui::pos2(track.right(), y)], egui::Stroke::new(1.0, line));
     let hx = track.left() + track.width() * *value;
-    ui.painter().circle_filled(egui::pos2(hx, y), if active { 5.0 } else { 4.0 }, Color32::from_gray(if active { 0xe0 } else { 0xb4 }));
+    ui.painter().circle_filled(egui::pos2(hx, y), if active { 5.0 } else { 4.0 }, crate::lr::gray(if active { 0xe0 } else { 0xb4 }));
     lr::hover_tip(ui, &resp, crate::tr("Strenge der Bedeutungssuche: weiter links zeigt mehr, weiter rechts nur die deutlichsten Treffer"));
     (changed, resp.drag_stopped() || (resp.clicked() && !resp.dragged()))
 }
@@ -202,7 +202,7 @@ pub fn cell_value(ui: &egui::Ui, header: egui::Rect, number_right: f32, percent:
     }
     let text = format!("{percent} %");
     let rect = egui::Rect::from_min_size(egui::pos2(x, header.top() + 3.0), egui::vec2(34.0, header.height() - 6.0));
-    ui.painter().text(rect.left_center(), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(10.0), Color32::from_gray(0x70));
+    ui.painter().text(rect.left_center(), egui::Align2::LEFT_CENTER, text, egui::FontId::proportional(10.0), crate::lr::gray(0x70));
     let resp = ui.interact(rect, ui.id().with(("sem-wert", header.min.x as i32, header.min.y as i32)), egui::Sense::hover());
     lr::hover_tip(ui, &resp, crate::tr("Übereinstimmung mit der Anfrage in Prozent des besten Treffers"));
 }

@@ -244,7 +244,7 @@ impl App {
         let n = if self.in_grid() && !self.in_people() { self.selection_count() } else { 0 };
         let text = if n > 1 && !active.editing() { crate::trf!("{n} Bilder ausgewählt", n = n) } else { String::new() };
         if !text.is_empty() {
-            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&text)).small().color(Color32::from_rgb(0xe0, 0xc0, 0x70))).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&text)).small().color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xc0, 0x70)))).truncate());
         }
         ui.add_space(2.0);
         ui.separator();
@@ -606,6 +606,10 @@ impl App {
     /// Short: file and exposure. Detailed: plus camera, lens, capture time, dimensions, HDR.
     /// If a look is missing, that is shown in both levels.
     pub(crate) fn info_overlay(&self, painter: &egui::Painter, area: egui::Rect) {
+        self.info_overlay_inner(painter, area)
+    }
+
+    fn info_overlay_inner(&self, painter: &egui::Painter, area: egui::Rect) {
         // own layer above the image (drawn last, the box stays over the photo)
         let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::new("info-overlay"));
         let painter = &painter.ctx().layer_painter(layer).with_clip_rect(painter.clip_rect());
@@ -613,20 +617,21 @@ impl App {
         // a single exposure of a merged photo is shown (held down in the tool): said in the box, thin gold frame
         let peek = self.merge_info().and_then(|mi| crate::hdr_paint::peek_label(painter.ctx(), &mi));
         if let Some(label) = &peek {
-            let g = painter.layout_no_wrap(label.clone(), lr::semibold(12.0), Color32::WHITE);
+            let g = painter.layout_no_wrap(label.clone(), lr::semibold(12.0), crate::lr::TEXT_STRONG());
             let extra = g.size().y + 2.0;
             rect = egui::Rect::from_min_max(egui::pos2(rect.left().min(rect.right() - g.size().x - 16.0), rect.top()), egui::pos2(rect.right(), rect.bottom() + extra));
             galleys.insert(0, g);
         }
-        painter.rect_filled(rect, 0.0, Color32::from_black_alpha(150));
+        let radius = if lr::theme() == lr::Theme::Dark { 0.0 } else { 3.0 };
+        painter.rect_filled(rect, radius, lr::info_box_fill());
         if peek.is_some() {
-            painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, lr::GOLD), egui::StrokeKind::Inside);
+            painter.rect_stroke(rect, radius, egui::Stroke::new(1.0, lr::GOLD()), egui::StrokeKind::Inside);
         }
         let right = rect.right() - 8.0;
         let mut y = rect.top() + 8.0;
         for g in galleys {
             let hh = g.size().y;
-            painter.galley(egui::pos2(right - g.size().x, y), g, Color32::WHITE);
+            painter.galley(egui::pos2(right - g.size().x, y), g, crate::lr::TEXT_STRONG());
             y += hh + 2.0;
         }
     }
@@ -699,7 +704,8 @@ impl App {
             .iter()
             .enumerate()
             .map(|(i, z)| {
-                let color = if i > name_row { crate::photo_state::YELLOW } else if i == name_row { Color32::from_gray(0x9a) } else { Color32::from_gray(0xd8) };
+                let (main, name, notice) = crate::lr::info_box_text();
+                let color = if i > name_row { notice } else if i == name_row { name } else { main };
                 painter.layout_no_wrap(z.clone(), egui::FontId::proportional(11.5), color)
             })
             .collect();

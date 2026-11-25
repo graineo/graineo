@@ -281,7 +281,7 @@ impl App {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     let (r, resp) = ui.allocate_exact_size(Vec2::new(b, h), egui::Sense::click());
                     let active = current == Some(i);
-                    ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x14));
+                    ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x14));
                     if let Some(t) = self.darkroom.probe.tex.get(name) {
                         let ts = t.size_vec2();
                         let fit = (r.width() / ts.x).min(r.height() / ts.y);
@@ -290,10 +290,10 @@ impl App {
                     } else {
                         ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM());
                     }
-                    let margin = if active { Stroke::new(1.5, lr::ACCENT) } else if resp.hovered() { Stroke::new(1.0, Color32::from_gray(0x70)) } else { Stroke::new(1.0, Color32::from_gray(0x2e)) };
+                    let margin = if active { Stroke::new(1.5, lr::ACCENT()) } else if resp.hovered() { Stroke::new(1.0, crate::lr::gray(0x70)) } else { Stroke::new(1.0, crate::lr::gray(0x2e)) };
                     ui.painter().rect_stroke(r, 0.0, margin, egui::StrokeKind::Inside);
                     let (lr_, _) = ui.allocate_exact_size(Vec2::new(b, 14.0), egui::Sense::hover());
-                    ui.painter().text(lr_.center(), egui::Align2::CENTER_CENTER, name, egui::FontId::monospace(10.5), if active { Color32::WHITE } else { lr::TEXT_DIM() });
+                    ui.painter().text(lr_.center(), egui::Align2::CENTER_CENTER, name, egui::FontId::monospace(10.5), if active { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
                     if resp.clicked() {
                         pick = Some(*value);
                     }

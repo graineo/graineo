@@ -89,12 +89,58 @@ pub const NIKON_HE: &str = "Nikon High Efficiency (HE/HE*): this NEF compression
 /// such files with the system engine instead, as for [`NIKON_HE`].
 pub const DECODE_IMPLAUSIBLE: &str = "decoded sensor data is implausible (values far above the white level)";
 
+/// Start of the error text for a camera the decoder does not know (yet): followed by ": <make> <model>". English
+/// (developer text); the app finds it with [`unknown_camera`] and shows its own translated message.
+pub const UNKNOWN_CAMERA: &str = "camera not supported by the decoder yet";
+
 /// rawler error → our error; known unsupported cases become [`Error::Unsupported`] with a plain text.
 fn classify(s: String) -> Error {
     if is_nikon_he_refusal(&s) {
         return Error::Unsupported(NIKON_HE.into());
     }
+    if let Some(camera) = unknown_camera_refusal(&s) {
+        return Error::Unsupported(format!("{UNKNOWN_CAMERA}: {camera}"));
+    }
+    if looks_damaged(&s) {
+        return Error::Rawler(format!("{DAMAGED}: {s}"));
+    }
     Error::Rawler(s)
+}
+
+/// Start of the error text for a file whose structure the decoder cannot follow although its format is one it reads:
+/// cut short (aborted copy, card error) or otherwise damaged. Followed by ": <rawler's text>".
+pub const DAMAGED: &str = "file damaged or incomplete";
+
+/// rawler's texts for a file it cannot follow: no decoder recognises the (cut) structure, "possibly corrupt image",
+/// or reads past the end of the data.
+fn looks_damaged(s: &str) -> bool {
+    ["No decoder found", "possibly corrupt image", "failed to fill whole buffer", "unexpected end of file", "out of bounds"].iter().any(|t| s.contains(t))
+}
+
+/// Camera name from rawler's refusal of a camera missing in its list. rawler 0.8 says
+/// "Error: Unknown camera, model 'X', make: 'Y', mode: 'Z'"; the name is "Y X" (model alone when it already starts
+/// with the make). Checked again on every rawler update (test `rawler_version_is_the_one_checked`).
+fn unknown_camera_refusal(s: &str) -> Option<String> {
+    if !s.contains("Unknown camera") {
+        return None;
+    }
+    let quoted = |key: &str| -> Option<String> {
+        let rest = &s[s.find(key)? + key.len()..];
+        let rest = rest.trim_start_matches([':', ' ']).strip_prefix('\'')?;
+        Some(rest[..rest.find('\'')?].trim().to_string())
+    };
+    let model = quoted("model").unwrap_or_default();
+    let make = quoted("make").unwrap_or_default();
+    let name = if model.is_empty() || make.is_empty() || !model.to_lowercase().starts_with(&make.to_lowercase()) { format!("{make} {model}") } else { model.clone() };
+    let name = name.trim().to_string();
+    Some(if name.is_empty() { "?".into() } else { name })
+}
+
+/// The camera of an error text of this layer when it says the decoder does not know the camera ([`UNKNOWN_CAMERA`]),
+/// e.g. "Sony ILCE-7Z9"; `None` for every other error (damaged file, unsupported compression …).
+pub fn unknown_camera(error: &str) -> Option<String> {
+    let rest = &error[error.find(UNKNOWN_CAMERA)? + UNKNOWN_CAMERA.len()..];
+    Some(rest.strip_prefix(": ").unwrap_or(rest).trim().to_string()).filter(|s| !s.is_empty())
 }
 
 /// Does a rawler error refuse Nikon's High Efficiency compression? rawler 0.8 says "NEF compression
@@ -980,6 +1026,19 @@ mod nikon_he_tests {
     /// updated, this test fails on purpose: check the refusal text of a High Efficiency NEF again (e.g.
     /// `GRAINEO_TEST_NEF_HE_DIR=… cargo test -p raw --test nikon_samples`, `is_nikon_he_refusal`), then update the
     /// version here.
+    #[test]
+    fn unknown_camera_is_named() {
+        let e = classify("Error: Unknown camera, model 'ILCE-7Z9', make: 'SONY', mode: ''".into());
+        assert!(matches!(&e, Error::Unsupported(_)), "{e}");
+        assert_eq!(unknown_camera(&e.to_string()).as_deref(), Some("SONY ILCE-7Z9"));
+        let e = classify("Error: Unknown camera, model 'Canon EOS R1', make: 'Canon', mode: 'raw'".into());
+        assert_eq!(unknown_camera(&e.to_string()).as_deref(), Some("Canon EOS R1"));
+        let damaged = classify("Failed to decode image, possibly corrupt image: x".into()).to_string();
+        assert_eq!(unknown_camera(&damaged), None);
+        assert!(damaged.contains(DAMAGED), "{damaged}");
+        assert!(classify("Error: No decoder found, model '', make: '', mode: ''".into()).to_string().contains(DAMAGED));
+    }
+
     #[test]
     fn rawler_version_is_the_one_checked() {
         let lock = include_str!("../../../Cargo.lock");

@@ -196,7 +196,7 @@ impl LibraryView {
         }
         let (frame, frame_resp) = ui.allocate_exact_size(egui::vec2(field_w, lr::BAR_H), egui::Sense::hover());
         let focus = ui.memory(|m| m.has_focus(id));
-        ui.painter().rect(frame, 0.0, Color32::from_gray(0x1c), egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { Color32::from_gray(0x4a) }), egui::StrokeKind::Inside);
+        ui.painter().rect(frame, 0.0, crate::lr::gray(0x1c), egui::Stroke::new(1.0, if focus { crate::lr::gray(0x9a) } else { crate::lr::gray(0x4a) }), egui::StrokeKind::Inside);
         let loupe = egui::pos2(frame.left() + 14.0, frame.center().y - 1.0);
         let lf = egui::Stroke::new(1.4, if focus { lr::TEXT() } else { lr::TEXT_DIM() });
         ui.painter().circle_stroke(loupe, 4.5, lf);
@@ -231,7 +231,7 @@ impl LibraryView {
         if !empty {
             let cross = egui::Rect::from_center_size(egui::pos2(help.left() - 14.0, frame.center().y), egui::vec2(18.0, 18.0));
             let resp = ui.interact(cross, id.with("leeren"), egui::Sense::click());
-            let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+            let kf = egui::Stroke::new(1.4, if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
             let c = cross.center();
             ui.painter().line_segment([c + egui::vec2(-3.5, -3.5), c + egui::vec2(3.5, 3.5)], kf);
             ui.painter().line_segment([c + egui::vec2(-3.5, 3.5), c + egui::vec2(3.5, -3.5)], kf);
@@ -253,7 +253,7 @@ impl LibraryView {
             egui::Area::new(id.with("vorschlaege")).order(egui::Order::Foreground).fixed_pos(pos).show(ui.ctx(), |ui| {
                 // exactly as wide as the field (never over the "?" beside it); height follows the rows, at most
                 // `ROWS` – an overlay, so nothing in the layout moves
-                egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x4a))).show(ui, |ui| {
+                egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x4a))).show(ui, |ui| {
                     ui.set_width((field_w - 10.0).max(0.0));
                     ui.spacing_mut().item_spacing.y = 0.0;
                     for (n, s) in suggestions.iter().enumerate() {
@@ -301,14 +301,14 @@ impl LibraryView {
         let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
         // same surface as the other groups; active filters lay the blue wash over it, the open panel the mark
         // at the lower edge like an active cell
-        painter.rect_filled(rect, 0.0, if hovered && n == 0 { Color32::from_gray(0x2e) } else { lr::GROUP_FILL });
+        painter.rect_filled(rect, 0.0, if hovered && n == 0 { crate::lr::gray(0x2e) } else { lr::GROUP_FILL() });
         if n > 0 {
-            painter.rect_filled(rect, 0.0, lr::BLUE.gamma_multiply(if hovered { WASH_HOVER } else { WASH }));
+            painter.rect_filled(rect, 0.0, lr::BLUE().gamma_multiply(if hovered { WASH_HOVER } else { WASH }));
         }
         if open {
-            painter.rect_filled(egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - 2.0), rect.max), 0.0, lr::ACTIVE_MARK);
+            painter.rect_filled(egui::Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - 2.0), rect.max), 0.0, lr::ACTIVE_MARK());
         }
-        let fg = if hovered || open { Color32::WHITE } else { lr::TEXT() };
+        let fg = if hovered || open { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
         let icon = egui::Rect::from_center_size(egui::pos2(rect.left() + 18.0, rect.center().y), egui::vec2(16.0, 16.0));
         lr::paint_icon(&painter, icon, lr::Icon::Funnel, fg);
         let word = lr::caps(&painter, crate::tr("Filter"), egui::FontId::proportional(11.5), fg);
@@ -316,10 +316,10 @@ impl LibraryView {
         painter.galley(egui::pos2(x, rect.center().y - word.size().y / 2.0), word.clone(), fg);
         x += word.size().x + 8.0;
         if n > 0 {
-            let g = painter.layout_no_wrap(n.to_string(), egui::FontId::proportional(10.5), Color32::WHITE);
+            let g = painter.layout_no_wrap(n.to_string(), egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG());
             let badge = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 8.5), egui::vec2((g.size().x + 8.0).max(17.0), 17.0));
-            painter.rect_filled(badge, 0.0, lr::BLUE);
-            painter.galley(badge.center() - g.size() / 2.0, g, Color32::WHITE);
+            painter.rect_filled(badge, 0.0, lr::BLUE());
+            painter.galley(badge.center() - g.size() / 2.0, g, crate::lr::TEXT_STRONG());
             x = badge.right() + 8.0;
             // chips with the column names, as many as fit; "+N" for the rest
             let room = rect.right() - 8.0 - x;
@@ -329,7 +329,7 @@ impl LibraryView {
             let shown = chips_fitting(&widths, room, 36.0);
             for (g, cw) in galleys.into_iter().zip(&widths).take(shown) {
                 let chip = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 10.0), egui::vec2(*cw, 20.0));
-                painter.rect_filled(chip, 0.0, lr::BLUE.gamma_multiply(CHIP_WASH));
+                painter.rect_filled(chip, 0.0, lr::BLUE().gamma_multiply(CHIP_WASH));
                 painter.galley(egui::pos2(chip.left() + 7.0, chip.center().y - g.size().y / 2.0), g, lr::TEXT());
                 x = chip.right() + 5.0;
             }
@@ -398,7 +398,7 @@ impl LibraryView {
             // being built in the background: the frame stays, nothing jumps when the lists appear
             ui.add_space(6.0);
             let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), crate::library_filter::HEIGHT + 22.0), egui::Sense::hover());
-            ui.painter().rect_filled(r, 0.0, egui::Color32::from_gray(0x16));
+            ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x16));
             ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, crate::tr("Filter werden geladen …"), egui::FontId::proportional(10.5), lr::TEXT_DIM());
         }
         if let Some(f) = &mut self.facets {
@@ -489,7 +489,7 @@ impl LibraryView {
         let cells: Vec<_> = (1..=5u8)
             .map(|k| {
                 let on = n >= k;
-                (lr::Cell::Text(if on { "★" } else { "☆" }, 14.0, if on { Color32::from_gray(0xee) } else { Color32::from_gray(0x8a) }), false, tips[k as usize - 1].as_str())
+                (lr::Cell::Text(if on { "★" } else { "☆" }, 14.0, if on { crate::lr::gray(0xee) } else { crate::lr::gray(0x8a) }), false, tips[k as usize - 1].as_str())
             })
             .collect();
         if let Some(i) = lr::cell_group(ui, "bib-sterne", &cells, 22.0) {
@@ -614,16 +614,16 @@ impl LibraryView {
             }
             let mut remove: Option<usize> = None;
             for (n, (_, text, color)) in chips.iter().enumerate() {
-                let g = clip.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), Color32::WHITE);
+                let g = clip.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), crate::lr::TEXT_STRONG());
                 let r = egui::Rect::from_min_size(egui::pos2(x, region.top() + 1.0), egui::vec2(g.size().x + 28.0, 20.0));
                 if r.left() > region.right() {
                     break;
                 }
                 clip.rect_filled(r, 0.0, *color);
-                clip.galley(r.left_center() + egui::vec2(9.0, -g.size().y / 2.0), g, Color32::WHITE);
+                clip.galley(r.left_center() + egui::vec2(9.0, -g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
                 let cross = egui::Rect::from_center_size(egui::pos2(r.right() - 10.0, r.center().y), egui::vec2(14.0, 14.0));
                 let resp = ui.interact(cross.intersect(region), id.with(("chip", n)), egui::Sense::click());
-                clip.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xc4) });
+                clip.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0xc4) });
                 if resp.clicked() {
                     remove = Some(n);
                 }
@@ -800,8 +800,8 @@ impl LibraryView {
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(button_w, ACTION_H), egui::Sense::click());
         let usable = rule.is_ok();
         let hot = usable && resp.hovered();
-        ui.painter().rect_filled(rect, 0.0, if hot { Color32::from_gray(0x36) } else { lr::BUTTON_FILL });
-        let color = if !usable { Color32::from_gray(0x6a) } else if hot { Color32::WHITE } else { lr::TEXT() };
+        ui.painter().rect_filled(rect, 0.0, if hot { crate::lr::gray(0x36) } else { lr::BUTTON_FILL() });
+        let color = if !usable { crate::lr::gray(0x6a) } else if hot { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
         match label {
             Some(t) => {
                 ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, t, font, color);
@@ -1012,7 +1012,7 @@ mod tests {
                 .shapes
                 .iter()
                 .filter_map(|shape| match &shape.shape {
-                    egui::Shape::Rect(rect) if rect.fill == lr::GROUP_FILL && rect.rect.height() >= lr::BAR_H - 0.5 && rect.rect.width() >= 29.0 => Some(rect.rect),
+                    egui::Shape::Rect(rect) if rect.fill == lr::GROUP_FILL() && rect.rect.height() >= lr::BAR_H - 0.5 && rect.rect.width() >= 29.0 => Some(rect.rect),
                     _ => None,
                 })
                 .collect();

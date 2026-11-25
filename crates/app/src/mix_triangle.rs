@@ -81,7 +81,7 @@ pub fn show(ui: &mut egui::Ui, mix: &mut [f32; 3]) -> bool {
     mesh.add_triangle(0, 1, 2);
     painter.add(egui::Shape::mesh(mesh));
     // Guide lines at 25/50/75 % per layer
-    let line = Stroke::new(1.0, Color32::from_white_alpha(28));
+    let line = Stroke::new(1.0, crate::lr::overlay(28));
     for k in 0..3 {
         for t in [0.25f32, 0.5, 0.75] {
             let (j, l) = ((k + 1) % 3, (k + 2) % 3);
@@ -94,7 +94,7 @@ pub fn show(ui: &mut egui::Ui, mix: &mut [f32; 3]) -> bool {
             painter.line_segment([point(&e, a), point(&e, b)], line);
         }
     }
-    painter.add(egui::Shape::closed_line(e.to_vec(), Stroke::new(1.2, Color32::from_gray(0x8a))));
+    painter.add(egui::Shape::closed_line(e.to_vec(), Stroke::new(1.2, crate::lr::gray(0x8a))));
 
     let mut changed = false;
     let free = ui.input(|i| i.modifiers.alt);
@@ -123,11 +123,11 @@ pub fn show(ui: &mut egui::Ui, mix: &mut [f32; 3]) -> bool {
         let on_target = q.distance(current) < 1.0;
         let near = pointer.is_some_and(|z| z.distance(q) < SNAP_POINT);
         let r = if near { 4.5 } else { 3.0 };
-        painter.circle(q, r, if on_target { Color32::from_gray(0xe8) } else { Color32::from_black_alpha(120) }, Stroke::new(1.0, Color32::from_gray(if near { 0xe8 } else { 0x9a })));
+        painter.circle(q, r, if on_target { crate::lr::gray(0xe8) } else { Color32::from_black_alpha(120) }, Stroke::new(1.0, crate::lr::gray(if near { 0xe8 } else { 0x9a })));
     }
     // current point
     painter.circle_stroke(current, 8.0, Stroke::new(3.0, Color32::from_black_alpha(160)));
-    painter.circle_stroke(current, 8.0, Stroke::new(1.6, Color32::WHITE));
+    painter.circle_stroke(current, 8.0, Stroke::new(1.6, crate::lr::TEXT_STRONG()));
     if resp.hovered() || resp.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }

@@ -42,7 +42,7 @@ pub(crate) struct Scope {
 /// Section heading ("BILDER", "FORMAT", "ZIEL" …): capitals with a thin line to the right edge. The dialog has only
 /// this one level (no column headings), "Advanced" looks the same.
 pub(crate) fn section(ui: &mut egui::Ui, title: &str) {
-    band(ui, title, 11.5, egui::Color32::from_gray(0xbc), egui::Color32::from_gray(0x36), 8.0);
+    band(ui, title, 11.5, crate::lr::gray(0xbc), crate::lr::gray(0x36), 8.0);
 }
 
 fn band(ui: &mut egui::Ui, title: &str, size: f32, color: egui::Color32, line: egui::Color32, before: f32) -> egui::Response {
@@ -226,7 +226,7 @@ impl App {
         // a sub-heading with a disclosure triangle; collapsed, the line carries what is set there
         ui.add_space(8.0);
         let (rect, r) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 19.5), egui::Sense::click());
-        let color = if r.hovered() { egui::Color32::from_gray(0xe2) } else { egui::Color32::from_gray(0xbc) };
+        let color = if r.hovered() { crate::lr::gray(0xe2) } else { crate::lr::gray(0xbc) };
         let title = format!("{} {}", if open { "▾" } else { "▸" }, crate::tr("Erweitert"));
         let mut line = rect;
         if !open && !set.is_empty() {
@@ -236,7 +236,7 @@ impl App {
             let summary = child.add(egui::Label::new(egui::RichText::new(set.join(" · ")).small().color(lr::TEXT_DIM())).truncate().selectable(false));
             line = rect.with_max_x(summary.rect.left() - 10.0);
         }
-        paint_band(ui.painter(), line, &title, 11.5, color, egui::Color32::from_gray(0x36));
+        paint_band(ui.painter(), line, &title, 11.5, color, crate::lr::gray(0x36));
         ui.add_space(2.0);
         lr::hover_tip(ui, &r, crate::tr("Abzug, Foveon, GPS, Stichwörter, Unterordner, Nummer"));
         if r.clicked() {

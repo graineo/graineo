@@ -175,7 +175,7 @@ pub fn button(ui: &mut egui::Ui, label: &str, busy: bool, enabled: bool, selecte
         return ui.add_enabled(enabled, egui::Button::new(crate::tr(label)).selected(selected));
     }
     let font = egui::TextStyle::Button.resolve(ui.style());
-    let w_label = ui.painter().layout_no_wrap(crate::tr(label).to_string(), font.clone(), Color32::WHITE).size().x;
+    let w_label = ui.painter().layout_no_wrap(crate::tr(label).to_string(), font.clone(), crate::lr::TEXT_STRONG()).size().x;
     let pad = ui.spacing().button_padding;
     let size = egui::vec2(w_label + 2.0 * pad.x, ui.spacing().interact_size.y);
     let r = ui.add_enabled(enabled, egui::Button::new("").min_size(size).selected(selected));
@@ -234,7 +234,7 @@ pub fn status_line(ui: &mut egui::Ui, path: &Path, tools: &[Tool], idle: Option<
 pub fn image_hint(ui: &egui::Ui, painter: &egui::Painter, area: egui::Rect, path: &Path) {
     let Some(s) = current(path, &[Tool::Subject, Tool::Person, Tool::Click, Tool::Remove, Tool::Depth, Tool::Sky, Tool::Sample, Tool::Parts]) else { return };
     let t = format!("{} · {}", crate::tr(s.tool.name()), text(&s));
-    let galley = painter.layout_no_wrap(t, egui::FontId::proportional(12.5), Color32::from_white_alpha(235));
+    let galley = painter.layout_no_wrap(t, egui::FontId::proportional(12.5), crate::lr::overlay(235));
     let pad = egui::vec2(10.0, 6.0);
     let spin = 14.0;
     let size = galley.size() + pad * 2.0 + egui::vec2(spin + 8.0, 0.0);
@@ -250,8 +250,8 @@ pub fn image_hint(ui: &egui::Ui, painter: &egui::Painter, area: egui::Rect, path
             c + (spin / 2.0 - 1.5) * egui::vec2(a.cos() as f32, a.sin() as f32)
         })
         .collect();
-    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, Color32::from_white_alpha(220))));
-    painter.galley(egui::pos2(rect.left() + pad.x + spin + 8.0, rect.top() + pad.y), galley, Color32::WHITE);
+    painter.add(egui::Shape::line(points, egui::Stroke::new(2.0, crate::lr::overlay(220))));
+    painter.galley(egui::pos2(rect.left() + pad.x + spin + 8.0, rect.top() + pad.y), galley, crate::lr::TEXT_STRONG());
     ui.ctx().request_repaint_after(std::time::Duration::from_millis(125));
 }
 

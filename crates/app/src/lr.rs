@@ -27,52 +27,420 @@ pub fn set_readability(ctx: &egui::Context, sans: bool, contrast: bool) {
     ctx.request_repaint();
 }
 
-pub const PANEL: Color32 = Color32::from_rgb(0x17, 0x18, 0x1a);
-pub const PANEL_DARK: Color32 = Color32::from_rgb(0x0f, 0x10, 0x11);
-pub const IMAGE_BG: Color32 = Color32::from_rgb(0x0c, 0x0c, 0x0d);
+/// Interface theme (Settings → Interface → Appearance). Only panels, menus and dialogs follow it;
+/// the area around the photo ([`IMAGE_BG()`], loupe, compare, light table) stays neutral and dark in every theme.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Theme {
+    Dark,
+    Medium,
+    Light,
+}
+
+static THEME: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+thread_local! {
+    /// > 0 while the image zone is drawn: theme colors fall back to the dark values there.
+    static IMAGE_ZONE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Effective theme of the interface (the dark theme inside [`image_zone`]).
+pub fn theme() -> Theme {
+    if IMAGE_ZONE.with(|z| z.get()) > 0 {
+        return Theme::Dark;
+    }
+    match THEME.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => Theme::Medium,
+        2 => Theme::Light,
+        _ => Theme::Dark,
+    }
+}
+
+/// Theme chosen for the interface, ignoring the image zone.
+pub fn ui_theme() -> Theme {
+    match THEME.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => Theme::Medium,
+        2 => Theme::Light,
+        _ => Theme::Dark,
+    }
+}
+
+/// Set the theme and re-apply the egui visuals.
+pub fn set_theme(ctx: &egui::Context, t: Theme) {
+    let v = match t {
+        Theme::Dark => 0,
+        Theme::Medium => 1,
+        Theme::Light => 2,
+    };
+    if THEME.swap(v, std::sync::atomic::Ordering::Relaxed) != v {
+        apply_theme(ctx);
+        ctx.request_repaint();
+    }
+}
+
+/// Draw `f` as part of the image zone (photo, light table, compare, loupe): all theme colors
+/// keep their dark values there, so the surroundings of the photo never turn light.
+pub fn image_zone<R>(f: impl FnOnce() -> R) -> R {
+    struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            IMAGE_ZONE.with(|z| z.set(z.get().saturating_sub(1)));
+        }
+    }
+    IMAGE_ZONE.with(|z| z.set(z.get() + 1));
+    let _g = Guard;
+    f()
+}
+
+/// Lightness levels of the palette (CIE L*, perceptually even). Each row maps a grey of the dark theme
+/// (the reference) to the L* it gets in the medium and the light theme; greys in between are interpolated in L*.
+/// Grounds (v < 0x60) form one ladder with fixed steps: field/deep panel < panel < window < group < button
+/// < active (medium: ΔL* 3–4 per level, light: ΔL* 4, active = two steps on light, one on medium because
+/// light text on it must keep 4.5:1). Texts (v ≥ 0x60) are fixed contrast targets: primary ≥ 4.5:1 on every
+/// ground including the active row, secondary (dim) ≥ 3:1 (contrast_tests).
+/// Rows: (dark grey, medium L*, light L*).
+const LEVELS_GROUND: [(u8, f32, f32); 8] = [
+    (0x00, 22.0, 95.0),
+    (0x0f, 27.0, 90.0), // FIELD_FILL, PANEL_DARK
+    (0x17, 31.0, 84.0), // PANEL
+    (0x1e, 34.0, 80.0), // window
+    (0x23, 37.0, 76.0), // GROUP_FILL
+    (0x2b, 40.0, 72.0), // BUTTON_FILL
+    (0x3d, 44.0, 64.0), // ACTIVE_FILL
+    (0x5f, 52.0, 54.0),
+];
+const LEVELS_TEXT: [(u8, f32, f32); 6] = [
+    (0x60, 62.0, 50.0),
+    (0xa6, 79.0, 31.0), // TEXT_DIM (secondary)
+    (0xbc, 87.5, 27.0), // CATEGORY_LABEL
+    (0xc4, 89.0, 24.0), // SLIDER_LABEL
+    (0xd0, 93.0, 19.0), // TEXT (primary)
+    (0xff, 100.0, 9.0), // TEXT_STRONG
+];
+
+/// 8-bit sRGB grey of CIE lightness `l`.
+fn gray_of_lstar(l: f32) -> u8 {
+    let l = l.clamp(0.0, 100.0);
+    let y = if l > 8.0 { ((l + 16.0) / 116.0).powi(3) } else { l / 903.3 };
+    let s = if y <= 0.003_130_8 { 12.92 * y } else { 1.055 * y.powf(1.0 / 2.4) - 0.055 };
+    (s * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+/// CIE lightness of an 8-bit sRGB grey.
+fn lstar_of_gray(v: u8) -> f32 {
+    let c = v as f32 / 255.0;
+    let y = if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) };
+    if y > 0.008_856 { 116.0 * y.cbrt() - 16.0 } else { 903.3 * y }
+}
+
+fn level_lut(light: bool) -> [u8; 256] {
+    let mut lut = [0u8; 256];
+    for v in 0..=255u8 {
+        let rows: &[(u8, f32, f32)] = if v < 0x60 { &LEVELS_GROUND } else { &LEVELS_TEXT };
+        let pick = |r: &(u8, f32, f32)| if light { r.2 } else { r.1 };
+        let x = lstar_of_gray(v);
+        let i = rows.iter().rposition(|r| r.0 <= v).unwrap_or(0).min(rows.len() - 2);
+        let (a, b) = (&rows[i], &rows[i + 1]);
+        let (xa, xb) = (lstar_of_gray(a.0), lstar_of_gray(b.0));
+        let f = if xb > xa { ((x - xa) / (xb - xa)).clamp(0.0, 1.0) } else { 0.0 };
+        lut[v as usize] = gray_of_lstar(pick(a) + (pick(b) - pick(a)) * f);
+    }
+    lut
+}
+
+/// Map a grey level of the dark theme to the current theme. The dark theme is the reference
+/// (identity), so every interface grey is written as its dark value and follows the theme
+/// along the lightness levels of [`LEVELS_GROUND`] / [`LEVELS_TEXT`].
+pub fn map_gray(v: u8) -> u8 {
+    static LUTS: std::sync::OnceLock<[[u8; 256]; 2]> = std::sync::OnceLock::new();
+    match theme() {
+        Theme::Dark => v,
+        Theme::Medium => LUTS.get_or_init(|| [level_lut(false), level_lut(true)])[0][v as usize],
+        Theme::Light => LUTS.get_or_init(|| [level_lut(false), level_lut(true)])[1][v as usize],
+    }
+}
+
+/// Interface grey given by its value in the dark theme.
+#[inline]
+pub fn gray(v: u8) -> Color32 {
+    let m = map_gray(v);
+    // grounds carry the same slight cool tint in every theme (dark: PANEL 17/18/1a), so pure greys next to
+    // them do not read warm; texts (v >= 0x60) and the image surroundings ([`IMAGE_BG`]) stay neutral
+    if v < 0x60 {
+        match theme() {
+            Theme::Medium => return Color32::from_rgb(m.saturating_sub(2), m, m.saturating_add(3)),
+            Theme::Light => return Color32::from_rgb(m.saturating_sub(1), m, m.saturating_add(2)),
+            Theme::Dark => {}
+        }
+    }
+    Color32::from_gray(m)
+}
+
+/// Interface color given in the dark theme (near-neutral tones: panels, frames, tinted text):
+/// the brightness follows the theme, the tint is kept.
+pub fn ui_rgb(r: u8, g: u8, b: u8) -> Color32 {
+    if theme() == Theme::Dark {
+        return Color32::from_rgb(r, g, b);
+    }
+    let l = ((r as i32 + g as i32 + b as i32) / 3) as i32;
+    let m = map_gray(l.clamp(0, 255) as u8) as i32;
+    let c = |x: u8| (m + (x as i32 - l)).clamp(0, 255) as u8;
+    Color32::from_rgb(c(r), c(g), c(b))
+}
+
+/// Interface grey with transparency, given by its dark-theme value.
+pub fn gray_alpha(v: u8, a: u8) -> Color32 {
+    Color32::from_rgba_unmultiplied(map_gray(v), map_gray(v), map_gray(v), a)
+}
+
+/// Light overlay on interface surfaces (hover, highlights): white on dark themes, black on the light one.
+pub fn overlay(a: u8) -> Color32 {
+    if theme() == Theme::Light { Color32::from_black_alpha(a) } else { Color32::from_white_alpha(a) }
+}
+
+/// Text color on an interface surface instead of plain white/black.
+#[allow(non_snake_case)]
+#[inline]
+pub fn TEXT_STRONG() -> Color32 {
+    gray(0xff)
+}
+
+/// Accent color for colored interface text (warnings, states) that must stay legible on light ground:
+/// on the light theme the tone is darkened, hue kept.
+pub fn ui_accent(c: Color32) -> Color32 {
+    if theme() != Theme::Light {
+        return c;
+    }
+    let k = |x: u8| (x as f32 * 0.62) as u8;
+    Color32::from_rgba_unmultiplied(k(c.r()), k(c.g()), k(c.b()), c.a())
+}
+
+/// Gold of a pressed / hovered main button.
+#[allow(non_snake_case)]
+pub fn GOLD_PRESSED() -> Color32 {
+    if theme() == Theme::Light { Color32::from_rgb(0x6e, 0x50, 0x12) } else { Color32::from_rgb(0xa8, 0x8e, 0x50) }
+}
+#[allow(non_snake_case)]
+pub fn GOLD_HOVER() -> Color32 {
+    if theme() == Theme::Light { Color32::from_rgb(0x7a, 0x58, 0x14) } else { Color32::from_rgb(0xdc, 0xbf, 0x76) }
+}
+
+/// Text on a gold surface (main button): dark on the light gold, white on the darker gold of the light theme.
+#[allow(non_snake_case)]
+#[inline]
+pub fn ON_GOLD() -> Color32 {
+    if theme() == Theme::Light { Color32::WHITE } else { Color32::from_rgb(0x16, 0x14, 0x10) }
+}
+
+#[allow(non_snake_case)]
+#[inline]
+pub fn PANEL() -> Color32 {
+    ui_rgb(0x17, 0x18, 0x1a)
+}
+#[allow(non_snake_case)]
+#[inline]
+pub fn PANEL_DARK() -> Color32 {
+    ui_rgb(0x0f, 0x10, 0x11)
+}
+/// Surroundings of the photo (develop centre, light table, compare, loupe, darkroom): follows the theme
+/// as a neutral ground without tint – near black, medium grey, or light grey (L* ≈ 82, never white).
+#[allow(non_snake_case)]
+#[inline]
+pub fn IMAGE_BG() -> Color32 {
+    match theme() {
+        Theme::Dark => Color32::from_rgb(0x0c, 0x0c, 0x0d),
+        Theme::Medium => Color32::from_gray(0x5c),
+        Theme::Light => Color32::from_gray(0xc0),
+    }
+}
+/// Ground of the measuring displays (histogram, parade/waveform, vectorscope): one step darker than the panel of the
+/// theme, so the displays sit in the panel instead of standing out as black boxes. Dark: as before.
+#[allow(non_snake_case)]
+#[inline]
+pub fn SCOPE_BG() -> Color32 {
+    match theme() {
+        Theme::Dark => PANEL_DARK(),
+        Theme::Medium => Color32::from_gray(0x30),
+        Theme::Light => Color32::from_gray(0xc8),
+    }
+}
+
+/// Lines and labels of the measuring displays, given by their dark-theme grey. The light theme maps them relative
+/// to [`SCOPE_BG`] (the plain mirror would put faint rings exactly on the ground).
+pub fn scope_gray(v: u8) -> Color32 {
+    match theme() {
+        Theme::Light => Color32::from_gray((0xc8 as f32 - (v as f32 - 0x0f as f32).max(0.0) * 1.1).round().max(0x10 as f32) as u8),
+        _ => gray(v),
+    }
+}
+
+/// Channel curves of the histograms (R, G, B), ≥ 3:1 against [`SCOPE_BG`] (see contrast_tests): dark theme as
+/// before, medium a little brighter, light dark saturated tones.
+#[allow(non_snake_case)]
+pub fn HIST_CHANNELS() -> [Color32; 3] {
+    match theme() {
+        Theme::Dark => [
+            Color32::from_rgba_unmultiplied(220, 70, 70, 120).to_opaque().gamma_multiply(0.9),
+            Color32::from_rgba_unmultiplied(70, 200, 90, 120).to_opaque().gamma_multiply(0.9),
+            Color32::from_rgba_unmultiplied(80, 120, 235, 120).to_opaque().gamma_multiply(0.9),
+        ],
+        Theme::Medium => [Color32::from_rgb(0xf4, 0x6c, 0x6c), Color32::from_rgb(0x5c, 0xd8, 0x6c), Color32::from_rgb(0x84, 0xa4, 0xff)],
+        Theme::Light => [Color32::from_rgb(0xb0, 0x18, 0x18), Color32::from_rgb(0x14, 0x70, 0x24), Color32::from_rgb(0x20, 0x3c, 0xc0)],
+    }
+}
+
+/// Opacity of the image info box on the photo (medium and light theme; dark keeps its black box).
+pub const INFO_BOX_ALPHA: f32 = 0.88;
+
+/// Ground of the image info box on the photo: panel color of the theme, slightly transparent, so the box belongs
+/// to the interface; dark theme: the former black box.
+pub fn info_box_fill() -> Color32 {
+    if theme() == Theme::Dark {
+        return Color32::from_black_alpha(150);
+    }
+    let p = PANEL();
+    Color32::from_rgba_unmultiplied(p.r(), p.g(), p.b(), (INFO_BOX_ALPHA * 255.0).round() as u8)
+}
+
+/// Text colors of the image info box: (main rows, file name, notices in yellow). Dark as before; the other themes
+/// use TEXT_STRONG and TEXT and a yellow of their own, all ≥ 4.5:1 over a black and a white photo through the box
+/// (contrast_tests).
+pub fn info_box_text() -> (Color32, Color32, Color32) {
+    match theme() {
+        Theme::Dark => (gray(0xd8), gray(0x9a), Color32::from_rgb(0xd2, 0xae, 0x52)),
+        Theme::Medium => (TEXT_STRONG(), TEXT(), Color32::from_rgb(0xf4, 0xd8, 0x8c)),
+        Theme::Light => (TEXT_STRONG(), TEXT(), Color32::from_rgb(0x3e, 0x2c, 0x00)),
+    }
+}
+
+/// Clipping triangle of the histogram: lit (clipped) and unlit.
+pub fn clip_triangle(lit: bool) -> Color32 {
+    if lit { scope_gray(0xee) } else { scope_gray(0x55) }
+}
+
+/// Pixel of a computed display image (parade/waveform/vectorscope) for theme `t`: `light` is the color the dark
+/// theme draws additively on black (0…1 per channel). Dark: opaque as before. Medium: the same light added to the
+/// ground (premultiplied, opacity = strongest channel). Light: dark ink on the light ground, opacity = density,
+/// hue kept (`ink` = the cell's tone darkened), so more pixels = stronger mark as on the dark ground.
+pub fn scope_pixel(t: Theme, light: [f32; 3]) -> Color32 {
+    let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0) as u8;
+    match t {
+        Theme::Dark => Color32::from_rgb(q(light[0]), q(light[1]), q(light[2])),
+        Theme::Medium => {
+            let a = light[0].max(light[1]).max(light[2]).min(1.0);
+            Color32::from_rgba_premultiplied(q(light[0].min(a)), q(light[1].min(a)), q(light[2].min(a)), q(a))
+        }
+        Theme::Light => {
+            let a = light[0].max(light[1]).max(light[2]).min(1.0);
+            if a <= 0.0 {
+                return Color32::TRANSPARENT;
+            }
+            // tone of the cell at full strength, darkened to an ink (max channel 0.42, others relative)
+            let ink = |x: f32| (x / a).min(1.0) * 0.42 * a;
+            Color32::from_rgba_premultiplied(q(ink(light[0])), q(ink(light[1])), q(ink(light[2])), q((a * 1.15).min(1.0)))
+        }
+    }
+}
+
 #[allow(non_snake_case)]
 #[inline]
 pub fn TEXT() -> Color32 {
-    Color32::from_gray(if high_contrast() { 0xf2 } else { 0xd0 })
+    gray(if high_contrast() { 0xf2 } else { 0xd0 })
 }
 #[allow(non_snake_case)]
 #[inline]
 pub fn TEXT_DIM() -> Color32 {
-    Color32::from_gray(if high_contrast() { 0xd6 } else { 0xa6 })
+    gray(if high_contrast() { 0xd6 } else { 0xa6 })
 }
 /// Slider names: brighter than TEXT_DIM() so the panels read less grey in grey.
 #[allow(non_snake_case)]
 #[inline]
 pub fn CATEGORY_LABEL() -> Color32 {
-    Color32::from_gray(if high_contrast() { 0xe4 } else { 0xbc })
+    gray(if high_contrast() { 0xe4 } else { 0xbc })
 }
 #[allow(non_snake_case)]
 #[inline]
 pub fn SLIDER_LABEL() -> Color32 {
-    Color32::from_gray(if high_contrast() { 0xe8 } else { 0xc4 })
+    gray(if high_contrast() { 0xe8 } else { 0xc4 })
 }
 /// Extra vertical space per slider row.
 pub const SLIDER_AIR: f32 = 4.0;
 /// Grouped controls (variant C): a slightly lighter surface, no frame.
-pub const GROUP_FILL: Color32 = Color32::from_gray(0x23);
+#[allow(non_snake_case)]
+#[inline]
+pub fn GROUP_FILL() -> Color32 {
+    gray(0x23)
+}
 /// Active choice: lighter surface with a fine light line at the bottom.
-pub const ACTIVE_FILL: Color32 = Color32::from_gray(0x3d);
-pub const ACTIVE_MARK: Color32 = Color32::from_gray(0xa8);
+#[allow(non_snake_case)]
+#[inline]
+pub fn ACTIVE_FILL() -> Color32 {
+    gray(0x3d)
+}
+#[allow(non_snake_case)]
+#[inline]
+pub fn ACTIVE_MARK() -> Color32 {
+    gray(0xa8)
+}
 /// Secondary button surface (no frame) and input fields (darker than the surroundings).
-pub const BUTTON_FILL: Color32 = Color32::from_gray(0x2b);
-pub const FIELD_FILL: Color32 = Color32::from_gray(0x0f);
+#[allow(non_snake_case)]
+#[inline]
+pub fn BUTTON_FILL() -> Color32 {
+    gray(0x2b)
+}
+#[allow(non_snake_case)]
+#[inline]
+pub fn FIELD_FILL() -> Color32 {
+    gray(0x0f)
+}
 #[allow(non_snake_case)]
 #[inline]
 pub fn FIELD_STROKE() -> Color32 {
-    Color32::from_gray(if high_contrast() { 0x78 } else { 0x33 })
+    // frames of controls: at least 3:1 against the panel on Medium and Light (WCAG 1.4.11)
+    match (theme(), high_contrast()) {
+        (Theme::Dark, hc) => Color32::from_gray(if hc { 0x78 } else { 0x64 }),
+        (Theme::Medium, hc) => Color32::from_gray(if hc { 0xba } else { 0xa2 }),
+        (Theme::Light, hc) => Color32::from_gray(if hc { 0x50 } else { 0x70 }),
+    }
 }
-pub const ACCENT: Color32 = Color32::from_gray(0xb8);
-/// Gold tone for "active" and "selected" (underline of the active area, active toggles, selection frame).
+#[allow(non_snake_case)]
+#[inline]
+pub fn ACCENT() -> Color32 {
+    gray(0xb8)
+}
 /// The app's blue for "on" and "chosen" (switch on, progress bar, chosen mode, links) – never gold.
-pub const BLUE: Color32 = Color32::from_rgb(0x3b, 0x7d, 0xd8);
-/// Lighter text variant of [`BLUE`] on dark ground (clickable lines).
-pub const BLUE_TEXT: Color32 = Color32::from_rgb(0x7f, 0xaa, 0xe6);
-pub const GOLD: Color32 = Color32::from_rgb(0xc8, 0xaa, 0x62);
+#[allow(non_snake_case)]
+#[inline]
+pub fn BLUE() -> Color32 {
+    // ≥ 3:1 against the panels of every theme (switches, chosen segments)
+    match theme() {
+        Theme::Dark => Color32::from_rgb(0x35, 0x74, 0xcc),
+        Theme::Medium => Color32::from_rgb(0x5a, 0x9a, 0xf0),
+        Theme::Light => Color32::from_rgb(0x2a, 0x64, 0xb8),
+    }
+}
+/// Text on a [`BLUE`] surface.
+#[allow(non_snake_case)]
+#[inline]
+pub fn ON_BLUE() -> Color32 {
+    if theme() == Theme::Medium { Color32::from_gray(0x10) } else { Color32::WHITE }
+}
+/// Text variant of [`BLUE`] (clickable lines): lighter on dark ground, darker on the light theme.
+#[allow(non_snake_case)]
+#[inline]
+pub fn BLUE_TEXT() -> Color32 {
+    match theme() {
+        Theme::Light => Color32::from_rgb(0x1a, 0x4c, 0x94),
+        Theme::Medium => Color32::from_rgb(0xb4, 0xd2, 0xff),
+        Theme::Dark => Color32::from_rgb(0x7f, 0xaa, 0xe6),
+    }
+}
+/// Gold tone for "active" and "selected" (underline of the active area, active toggles, selection frame);
+/// darker on the light theme for legibility.
+#[allow(non_snake_case)]
+#[inline]
+pub fn GOLD() -> Color32 {
+    if theme() == Theme::Light { Color32::from_rgb(0x8a, 0x64, 0x18) } else { Color32::from_rgb(0xc8, 0xaa, 0x62) }
+}
 
 /// Colored tracks as in common photo apps (muted so they don't shout).
 pub const GRADIENT_TEMP: [Color32; 2] = [Color32::from_rgb(0x4d, 0x7c, 0xc7), Color32::from_rgb(0xd9, 0xc0, 0x4a)];
@@ -173,38 +541,44 @@ fn label_caps(painter: &egui::Painter, at: egui::Pos2, text: &str, color: Color3
 
 pub fn apply_theme(ctx: &egui::Context) {
     load_fonts(ctx);
-    ctx.options_mut(|o| o.theme_preference = egui::ThemePreference::Dark);
-    let mut v = egui::Visuals::dark();
-    v.panel_fill = PANEL;
-    v.window_fill = Color32::from_rgb(0x1e, 0x1f, 0x22);
-    v.extreme_bg_color = PANEL_DARK;
-    v.faint_bg_color = Color32::from_rgb(0x1c, 0x1d, 0x1f);
+    let light = ui_theme() == Theme::Light;
+    ctx.options_mut(|o| o.theme_preference = if light { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
+    let mut v = if light { egui::Visuals::light() } else { egui::Visuals::dark() };
+    if light {
+        v.window_shadow.color = Color32::from_black_alpha(40);
+        v.popup_shadow.color = Color32::from_black_alpha(30);
+        v.hyperlink_color = BLUE_TEXT();
+    }
+    v.panel_fill = PANEL();
+    v.window_fill = ui_rgb(0x1e, 0x1f, 0x22);
+    v.extreme_bg_color = PANEL_DARK();
+    v.faint_bg_color = ui_rgb(0x1c, 0x1d, 0x1f);
     v.override_text_color = Some(TEXT());
-    v.selection.bg_fill = Color32::from_gray(0x68);
-    v.selection.stroke = Stroke::new(1.0, Color32::from_gray(0xe0));
-    v.widgets.noninteractive.bg_fill = PANEL;
+    v.selection.bg_fill = gray(0x68);
+    v.selection.stroke = Stroke::new(1.0, gray(0xe0));
+    v.widgets.noninteractive.bg_fill = PANEL();
     let hc = high_contrast();
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, Color32::from_gray(if hc { 0x6a } else { 0x34 }));
-    v.widgets.inactive.bg_fill = BUTTON_FILL;
-    v.widgets.inactive.weak_bg_fill = BUTTON_FILL;
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, gray(if hc { 0x6a } else { 0x34 }));
+    v.widgets.inactive.bg_fill = BUTTON_FILL();
+    v.widgets.inactive.weak_bg_fill = BUTTON_FILL();
     // Basic rule: anything with a fill or a frame is clickable; plain text is a label. Secondary buttons: surface, no frame.
     v.widgets.inactive.bg_stroke = Stroke::NONE;
     v.widgets.hovered.bg_stroke = Stroke::NONE;
     v.widgets.active.bg_stroke = Stroke::NONE;
     if hc {
         // high contrast: buttons get a visible frame, disabled controls stay legible
-        v.widgets.inactive.bg_stroke = Stroke::new(1.0, Color32::from_gray(0x5a));
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_gray(0x8a));
+        v.widgets.inactive.bg_stroke = Stroke::new(1.0, gray(0x5a));
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0, gray(0x8a));
         v.disabled_alpha = 0.75;
     }
     // input fields darker than the surroundings with a fine frame
-    v.text_edit_bg_color = Some(FIELD_FILL);
+    v.text_edit_bg_color = Some(FIELD_FILL());
     // Mac convention: arrow cursor on controls (hand only on the web); brightening shows clickability
     v.interact_cursor = None;
-    v.widgets.hovered.bg_fill = Color32::from_gray(0x36);
-    v.widgets.hovered.weak_bg_fill = Color32::from_gray(0x36);
-    v.widgets.active.bg_fill = ACTIVE_FILL;
-    v.widgets.active.weak_bg_fill = ACTIVE_FILL;
+    v.widgets.hovered.bg_fill = gray(0x36);
+    v.widgets.hovered.weak_bg_fill = gray(0x36);
+    v.widgets.active.bg_fill = ACTIVE_FILL();
+    v.widgets.active.weak_bg_fill = ACTIVE_FILL();
     v.slider_trailing_fill = false;
     // square throughout: buttons, fields, menus, switches, windows and tooltips
     for w in [&mut v.widgets.noninteractive, &mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
@@ -385,17 +759,17 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
     let painter = ui.painter();
     let changed = *value != default;
     let name_color = if !enabled {
-        Color32::from_gray(0x5c)
+        gray(0x5c)
     } else if hot {
-        Color32::WHITE
+        TEXT_STRONG()
     } else if changed {
-        Color32::from_gray(0xe6)
+        gray(0xe6)
     } else {
         SLIDER_LABEL()
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     let text = format!("{:.0} / {:.0}", value[0], value[1]);
-    painter.text(value_rect.right_center(), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { Color32::WHITE } else { TEXT_DIM() });
+    painter.text(value_rect.right_center(), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { TEXT_STRONG() } else { TEXT_DIM() });
 
     // Track with gradient, darkened outside the range
     let y = track_rect.center().y;
@@ -426,10 +800,10 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
         let r = if active { 7.0 } else if enabled && track.hovered() { 6.5 } else { 5.5 };
         let center = egui::pos2(x, y);
         if active {
-            painter.circle_filled(center, 12.0, Color32::from_white_alpha(28));
+            painter.circle_filled(center, 12.0, overlay(28));
         }
         painter.circle_filled(center + egui::vec2(0.0, 1.0), r + 1.0, Color32::from_black_alpha(110));
-        painter.circle_filled(center, r, if !enabled { Color32::from_gray(0x66) } else if hot { Color32::WHITE } else { Color32::from_gray(0xcf) });
+        painter.circle_filled(center, r, if !enabled { gray(0x66) } else if hot { TEXT_STRONG() } else { gray(0xcf) });
     }
     if enabled && (track.hovered() || track.dragged()) {
         ui.ctx().set_cursor_icon(if track.dragged() { egui::CursorIcon::Grabbing } else { egui::CursorIcon::Grab });
@@ -508,11 +882,11 @@ fn slider_full(
 
     // Name: double-click resets; changed sliders slightly brighter
     let name_color = if !enabled {
-        Color32::from_gray(0x5c)
+        gray(0x5c)
     } else if hot {
-        Color32::WHITE
+        TEXT_STRONG()
     } else if changed {
-        Color32::from_gray(0xe6)
+        gray(0xe6)
     } else {
         SLIDER_LABEL()
     };
@@ -527,7 +901,7 @@ fn slider_full(
         let tx = track_rect.left() + track_rect.width() * i as f32 / 20.0;
         let major = i % 5 == 0;
         let (t0, t1) = if major { (y + 3.0, y + 6.0) } else { (y + 3.0, y + 4.5) };
-        let c = Color32::from_gray(if major { 0x66 } else { 0x4a }).gamma_multiply(dim);
+        let c = gray(if major { 0x66 } else { 0x4a }).gamma_multiply(dim);
         painter.line_segment([egui::pos2(tx, t0), egui::pos2(tx, t1)], Stroke::new(1.0, c));
     }
     match grad {
@@ -544,32 +918,32 @@ fn slider_full(
             painter.add(egui::Shape::mesh(mesh));
         }
         None => {
-            painter.rect_filled(rail, 0.0, if hot { Color32::from_gray(0x5a) } else { Color32::from_gray(0x46) });
+            painter.rect_filled(rail, 0.0, if hot { gray(0x5a) } else { gray(0x46) });
         }
     }
     let x0 = x_of(default);
     let x = x_of(*value);
     if changed && grad.is_none() {
-        let fill = if enabled { if hot { Color32::from_gray(0xe0) } else { Color32::from_gray(0xb0) } } else { Color32::from_gray(0x5c) };
+        let fill = if enabled { if hot { gray(0xe0) } else { gray(0xb0) } } else { gray(0x5c) };
         painter.rect_filled(egui::Rect::from_min_max(egui::pos2(x0.min(x), y - 1.0), egui::pos2(x0.max(x), y + 1.0)), 0.0, fill);
     }
     // Centre mark on two-sided sliders
     if lo < default && default < hi {
-        painter.line_segment([egui::pos2(x0, y - 4.5), egui::pos2(x0, y + 6.0)], Stroke::new(1.0, Color32::from_gray(0x80).gamma_multiply(dim)));
+        painter.line_segment([egui::pos2(x0, y - 4.5), egui::pos2(x0, y + 6.0)], Stroke::new(1.0, gray(0x80).gamma_multiply(dim)));
     }
     // Knob: narrow vertical line, wider on hover, with a halo while dragging
     let (kw, kh) = if active { (3.0, 15.0) } else if knob_hot { (3.0, 14.0) } else { (2.0, 12.0) };
     let center = egui::pos2(x, y);
     if active {
-        painter.rect_filled(egui::Rect::from_center_size(center, egui::vec2(11.0, 19.0)), 0.0, Color32::from_white_alpha(22));
+        painter.rect_filled(egui::Rect::from_center_size(center, egui::vec2(11.0, 19.0)), 0.0, overlay(22));
     }
     painter.rect_filled(egui::Rect::from_center_size(center + egui::vec2(0.0, 0.5), egui::vec2(kw + 2.0, kh + 2.0)), 0.0, Color32::from_black_alpha(140));
     let knob = if !enabled {
-        Color32::from_gray(0x66)
+        gray(0x66)
     } else if knob_hot {
-        Color32::WHITE
+        TEXT_STRONG()
     } else {
-        Color32::from_gray(0xd8)
+        gray(0xd8)
     };
     painter.rect_filled(egui::Rect::from_center_size(center, egui::vec2(kw, kh)), 0.0, knob);
     if knob_hot {
@@ -582,7 +956,7 @@ fn slider_full(
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(value_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
     {
         let v = child.visuals_mut();
-        v.override_text_color = Some(if changed && enabled { Color32::WHITE } else { TEXT_DIM() });
+        v.override_text_color = Some(if changed && enabled { TEXT_STRONG() } else { TEXT_DIM() });
         v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_stroke = Stroke::NONE;
@@ -595,13 +969,16 @@ fn slider_full(
             // change); typed or dragged values are still clamped
             .clamp_existing_to_range(false)
             .speed(step)
+            // decimal separator of the language (comma in German, French, Spanish); typed values accept both
             .custom_formatter(move |v, _| {
+                use crate::menu::i18n::DeComma;
                 if signed && v.abs() >= 0.5 * 10f64.powi(-(dec as i32)) {
-                    format!("{v:+.dec$}")
+                    format!("{v:+.dec$}").de_comma()
                 } else {
-                    format!("{:.dec$}", v.abs())
+                    format!("{:.dec$}", v.abs()).de_comma()
                 }
-            }),
+            })
+            .custom_parser(|t| t.trim().replace('−', "-").replace(',', ".").parse::<f64>().ok()),
     );
     operated |= field.changed();
     name_hover(ui, name, name_text, id, hot, label, hint, SLIDER_CONTROLS);
@@ -656,7 +1033,7 @@ pub fn group_label(ui: &mut egui::Ui, text: &str) -> bool {
     remember_section(text);
     let alt = ui.input(|i| i.modifiers.alt);
     let shown = if alt { crate::trf!("{text} zurücksetzen", text = crate::tr(text)) } else { text.to_string() };
-    let color = if alt { ACCENT } else { Color32::from_gray(0xbc) };
+    let color = if alt { ACCENT() } else { gray(0xbc) };
     let g = caps_spaced(ui.painter(), &shown, egui::FontId::proportional(10.5), color, 1.0);
     let (rect, r) = ui.allocate_exact_size(egui::vec2(g.size().x, 16.0), egui::Sense::click());
     ui.painter().galley(egui::pos2(rect.left(), rect.center().y - g.size().y / 2.0), g, color);
@@ -664,8 +1041,8 @@ pub fn group_label(ui: &mut egui::Ui, text: &str) -> bool {
     let owned = text.to_string();
     let band = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.top() - 4.0), egui::pos2(rect.left() + ui.available_width().max(rect.width()), rect.bottom() + 4.0));
     crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.id().with(("gruppe", text)), band, move |p, bar, _| {
-        let g = caps_spaced(p, &owned, egui::FontId::proportional(10.5), Color32::from_gray(0xbc), 1.0);
-        p.galley(egui::pos2(bar.left(), bar.center().y - g.size().y / 2.0), g, Color32::from_gray(0xbc));
+        let g = caps_spaced(p, &owned, egui::FontId::proportional(10.5), gray(0xbc), 1.0);
+        p.galley(egui::pos2(bar.left(), bar.center().y - g.size().y / 2.0), g, gray(0xbc));
     });
     r.double_clicked() || (alt && r.clicked())
 }
@@ -694,13 +1071,13 @@ pub fn segmented_pad<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, opt
 
 /// Like [`segmented_pad`] with a tooltip per segment (`tips[i]`, German text, empty = none).
 pub fn segmented_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)], tips: &[&str], pad: f32) -> bool {
-    segmented_fill(ui, value, options, tips, pad, ACTIVE_FILL)
+    segmented_fill(ui, value, options, tips, pad, ACTIVE_FILL())
 }
 
 /// Like [`segmented`], the chosen segment filled in [`BLUE`]: for a choice that decides what happens (import mode,
 /// kind of source), so the setting is visible at a glance.
 pub fn segmented_blue<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) -> bool {
-    segmented_fill(ui, value, options, &[], 10.0, BLUE)
+    segmented_fill(ui, value, options, &[], 10.0, BLUE())
 }
 
 fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)], tips: &[&str], pad: f32, active_fill: Color32) -> bool {
@@ -712,7 +1089,7 @@ fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, option
         .collect();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(widths.iter().sum(), h), egui::Sense::hover());
     let painter = ui.painter().clone();
-    painter.rect_filled(rect, 0.0, BUTTON_FILL);
+    painter.rect_filled(rect, 0.0, BUTTON_FILL());
     let base = ui.scope_id().with(options.first().map(|o| o.1).unwrap_or_default());
     let mut x = rect.left();
     let mut changed = false;
@@ -728,12 +1105,12 @@ fn segmented_fill<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, option
         if active {
             painter.rect_filled(seg, 0.0, if ui.is_enabled() { active_fill } else { active_fill.gamma_multiply(0.5) });
         } else if resp.hovered() {
-            painter.rect_filled(seg, 0.0, Color32::from_gray(0x33));
+            painter.rect_filled(seg, 0.0, gray(0x33));
         }
         if let Some(tip) = tips.get(i).filter(|t| !t.is_empty()) {
             hover_tip(ui, &resp, crate::tr(tip));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
+        let color = if active { if active_fill == BLUE() { ON_BLUE() } else { TEXT_STRONG() } } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.galley(seg.center() - galley.size() / 2.0, galley, color);
     }
@@ -758,23 +1135,23 @@ pub fn main_button(ui: &mut egui::Ui, text: &str, active: bool) -> egui::Respons
 pub fn main_button_min(ui: &mut egui::Ui, text: &str, active: bool, min_width: f32) -> egui::Response {
     let text = crate::tr(text);
     let font = egui::TextStyle::Button.resolve(ui.style());
-    let dark = Color32::from_rgb(0x16, 0x14, 0x10);
+    let dark = ON_GOLD();
     let galley = ui.painter().layout_no_wrap(text.to_string(), font, dark);
     let size = egui::vec2((galley.size().x + 24.0).max(min_width), 24.0);
     let (rect, resp) = ui.allocate_exact_size(size, if active { egui::Sense::click() } else { egui::Sense::hover() });
     let (fill, fg) = if !active {
-        (Color32::from_gray(0x2a), Color32::from_gray(0x66))
+        (gray(0x2a), gray(0x66))
     } else if resp.is_pointer_button_down_on() {
-        (Color32::from_rgb(0xa8, 0x8e, 0x50), dark)
+        (GOLD_PRESSED(), dark)
     } else if resp.hovered() {
-        (Color32::from_rgb(0xdc, 0xbf, 0x76), dark)
+        (GOLD_HOVER(), dark)
     } else {
-        (GOLD, dark)
+        (GOLD(), dark)
     };
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, fill);
     if resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, TEXT_STRONG()), egui::StrokeKind::Inside);
     }
     let g = painter.layout_no_wrap(text.to_string(), egui::TextStyle::Button.resolve(ui.style()), fg);
     painter.galley(rect.center() - g.size() / 2.0, g, fg);
@@ -792,17 +1169,17 @@ pub fn secondary_button(ui: &mut egui::Ui, icon: Option<Icon>, text: &str) -> eg
     let size = egui::vec2(galley.size().x + 20.0 + icon_w, 24.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     let (fill, frame) = if resp.is_pointer_button_down_on() {
-        (Color32::from_gray(0x44), Color32::from_gray(0x9a))
+        (gray(0x44), gray(0x9a))
     } else if resp.hovered() {
-        (Color32::from_gray(0x3a), Color32::from_gray(0x8a))
+        (gray(0x3a), gray(0x8a))
     } else {
-        (Color32::from_gray(0x26), Color32::from_gray(0x5a))
+        (gray(0x26), gray(0x5a))
     };
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, fill);
     painter.rect_stroke(rect, 0.0, Stroke::new(1.0, frame), egui::StrokeKind::Inside);
     if resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, TEXT_STRONG()), egui::StrokeKind::Inside);
     }
     let mut x = rect.left() + 10.0;
     if let Some(i) = icon {
@@ -818,17 +1195,17 @@ pub fn secondary_button(ui: &mut egui::Ui, icon: Option<Icon>, text: &str) -> eg
 pub fn tool_rail_button(ui: &mut egui::Ui, icon: Icon, on: bool, available: bool, tip: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(36.0, 34.0), if available { egui::Sense::click() } else { egui::Sense::hover() });
     let (fill, fg) = if on {
-        (Color32::from_gray(0x3a), Color32::WHITE)
+        (gray(0x3a), TEXT_STRONG())
     } else if resp.hovered() && available {
-        (Color32::from_gray(0x26), Color32::from_gray(0xe8))
+        (gray(0x26), gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if available { Color32::from_gray(0xa4) } else { Color32::from_gray(0x56) })
+        (Color32::TRANSPARENT, if available { gray(0xa4) } else { gray(0x56) })
     };
     let painter = ui.painter();
     painter.rect_filled(rect.shrink2(egui::vec2(2.0, 1.0)), 0.0, fill);
     paint_icon(painter, egui::Rect::from_center_size(rect.center(), egui::vec2(20.0, 20.0)), icon, fg);
     if resp.has_focus() {
-        painter.rect_stroke(rect.shrink2(egui::vec2(2.0, 1.0)), 0.0, Stroke::new(1.5, ACCENT), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect.shrink2(egui::vec2(2.0, 1.0)), 0.0, Stroke::new(1.5, ACCENT()), egui::StrokeKind::Inside);
     }
     hover_tip(ui, &resp, tip);
     resp.clicked() && available
@@ -872,7 +1249,7 @@ fn category_paint(painter: &egui::Painter, rect: egui::Rect, text: &str) {
     painter.galley(egui::pos2(links, rect.center().y - g.size().y / 2.0), g.clone(), CATEGORY_LABEL());
     let x = links + g.size().x + 10.0;
     if x < rect.right() {
-        painter.line_segment([egui::pos2(x, rect.center().y), egui::pos2(rect.right(), rect.center().y)], egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
+        painter.line_segment([egui::pos2(x, rect.center().y), egui::pos2(rect.right(), rect.center().y)], egui::Stroke::new(1.0, gray(0x3a)));
     }
 }
 
@@ -915,12 +1292,12 @@ pub fn value_field(ui: &mut egui::Ui, value: Option<&str>, empty: &str) -> egui:
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+    p.rect_filled(rect, 0.0, gray(0x26));
     p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, FIELD_STROKE()), egui::StrokeKind::Inside);
     let font = egui::FontId::proportional(UI_SIZE - 0.5);
     let (text, color) = match value {
-        Some(v) => (middle_ellipsis_font(p, v, &font, rect.width() - 14.0), Color32::from_gray(0xe6)),
-        None => (crate::tr(empty).to_string(), Color32::from_gray(0x80)),
+        Some(v) => (middle_ellipsis_font(p, v, &font, rect.width() - 14.0), gray(0xe6)),
+        None => (crate::tr(empty).to_string(), gray(0x80)),
     };
     let g = p.layout_no_wrap(text, font, color);
     p.galley(egui::pos2(rect.left() + 7.0, rect.center().y - g.size().y / 2.0), g, color);
@@ -934,7 +1311,7 @@ pub fn value_field(ui: &mut egui::Ui, value: Option<&str>, empty: &str) -> egui:
 pub fn section_rule(ui: &mut egui::Ui) {
     ui.add_space(8.0);
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, Color32::from_gray(0x2c)));
+    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, gray(0x2c)));
     ui.add_space(4.0);
 }
 
@@ -1041,7 +1418,7 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
         .scope_builder(egui::UiBuilder::new().max_rect(value_rect).layout(egui::Layout::left_to_right(egui::Align::Min)), |ui| {
             ui.set_min_height(20.0);
             let hot = clickable && ui.rect_contains_pointer(value_rect);
-            let text = egui::RichText::new(shown).color(if hot { Color32::WHITE } else { TEXT() });
+            let text = egui::RichText::new(shown).color(if hot { TEXT_STRONG() } else { TEXT() });
             let text = if hot { text.underline() } else { text };
             let label = egui::Label::new(text).selectable(!clickable);
             let label = if wrap { label.wrap() } else { label.truncate() };
@@ -1073,11 +1450,11 @@ pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(36.0, 20.0), egui::Sense::click());
     if response.clicked() { *on = !*on; }
     let t = ui.ctx().animate_bool(response.id, *on);
-    let bg = Color32::from_gray(0x5c).lerp_to_gamma(BLUE, t);
+    let bg = gray(0x5c).lerp_to_gamma(BLUE(), t);
     let bg = if ui.is_enabled() { bg } else { bg.gamma_multiply(0.5) };
     ui.painter().rect_filled(rect, 10.0, bg);
     let x = egui::lerp(rect.left() + 10.0..=rect.right() - 10.0, t);
-    ui.painter().circle_filled(egui::pos2(x, rect.center().y), 8.0, if ui.is_enabled() { Color32::WHITE } else { Color32::from_gray(0x90) });
+    ui.painter().circle_filled(egui::pos2(x, rect.center().y), 8.0, if ui.is_enabled() { TEXT_STRONG() } else { gray(0x90) });
     response.clicked()
 }
 
@@ -1085,7 +1462,7 @@ pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
 pub fn field_label(ui: &mut egui::Ui, text: &str) {
     // left-aligned like the slider names, fixed width for a clean column
     let (rect, _) = ui.allocate_exact_size(egui::vec2(96.0, 20.0), egui::Sense::hover());
-    label_caps(ui.painter(), rect.left_center(), text, Color32::from_gray(0xa4));
+    label_caps(ui.painter(), rect.left_center(), text, gray(0xa4));
 }
 
 /// Clickable text (link): underlined on hover in `color`, normal arrow pointer. Not selectable: egui shows the
@@ -1104,11 +1481,11 @@ pub fn list_item(ui: &mut egui::Ui, text: &str, active: bool) -> egui::Response 
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::click());
     let painter = ui.painter();
     if active {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x4a));
+        painter.rect_filled(rect, 0.0, gray(0x4a));
     } else if resp.hovered() {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x38));
+        painter.rect_filled(rect, 0.0, gray(0x38));
     }
-    let color = if active || resp.hovered() { Color32::WHITE } else { TEXT() };
+    let color = if active || resp.hovered() { TEXT_STRONG() } else { TEXT() };
     let galley = painter.layout_no_wrap(text.to_owned(), egui::TextStyle::Body.resolve(ui.style()), color);
     let text_rect = rect.shrink2(egui::vec2(8.0, 0.0));
     painter.with_clip_rect(text_rect).galley(egui::pos2(text_rect.left(), text_rect.center().y - galley.size().y / 2.0), galley.clone(), color);
@@ -1191,9 +1568,9 @@ fn section_head_paint(painter: &egui::Painter, rect: egui::Rect, title: &str, op
     let a = openness * std::f32::consts::FRAC_PI_2;
     let rot = |p: egui::Vec2| c + egui::vec2(p.x * a.cos() - p.y * a.sin(), p.x * a.sin() + p.y * a.cos());
     let arrow = vec![rot(egui::vec2(-2.5, -4.0)), rot(egui::vec2(3.5, 0.0)), rot(egui::vec2(-2.5, 4.0))];
-    let arrow_color = if hovered { Color32::from_gray(0xe8) } else { Color32::from_gray(0x9a) };
+    let arrow_color = if hovered { gray(0xe8) } else { gray(0x9a) };
     painter.add(egui::Shape::convex_polygon(arrow, arrow_color, Stroke::NONE));
-    let title_color = if hovered { Color32::WHITE } else { Color32::from_gray(0xe2) };
+    let title_color = if hovered { TEXT_STRONG() } else { gray(0xe2) };
     let galley = caps(painter, title, semibold(UI_SIZE), title_color);
     let title_pos = egui::pos2(rect.left() + 22.0, rect.center().y - galley.size().y / 2.0);
     let title_w = galley.size().x.min((rect.right() - title_pos.x - 28.0).max(0.0));
@@ -1249,7 +1626,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     }
     let painter = ui.painter();
     if resp.hovered() && !reset_hovered {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+        painter.rect_filled(rect, 0.0, gray(0x22));
     }
     // Arrow, rotates when expanding
     let openness = state.openness(ui.ctx());
@@ -1259,11 +1636,11 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
         let owned = title.to_string();
         crate::sticky::register(crate::sticky::RANK_SECTION, id, rect, move |p, bar, hovered| {
             if hovered {
-                p.rect_filled(bar, 0.0, Color32::from_gray(0x22));
+                p.rect_filled(bar, 0.0, gray(0x22));
             }
             let (pos, w) = section_head_paint(p, bar, &owned, openness, hovered);
             if changed {
-                p.circle_filled(egui::pos2(pos.x + w + 8.0, bar.center().y), 2.5, if is_off { Color32::from_gray(0x70) } else { ACCENT });
+                p.circle_filled(egui::pos2(pos.x + w + 8.0, bar.center().y), 2.5, if is_off { gray(0x70) } else { ACCENT() });
             }
         });
     }
@@ -1276,19 +1653,19 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     if let Some(r) = &switch_resp {
         // small toggle: light = active, grey = disabled
         let on = !is_off;
-        let track = if on { ACCENT.gamma_multiply(0.8) } else { Color32::from_gray(0x62) };
+        let track = if on { ACCENT().gamma_multiply(0.8) } else { gray(0x62) };
         painter.rect_filled(switch_rect, 6.5, track);
         let knob_x = if on { switch_rect.right() - 6.5 } else { switch_rect.left() + 6.5 };
-        painter.circle_filled(egui::pos2(knob_x, switch_rect.center().y), 5.0, Color32::from_gray(if r.hovered() { 0xff } else { 0xe8 }));
+        painter.circle_filled(egui::pos2(knob_x, switch_rect.center().y), 5.0, gray(if r.hovered() { 0xff } else { 0xe8 }));
     }
     if changed {
         // subtle dot: something in this section is adjusted (grey when disabled)
-        painter.circle_filled(egui::pos2(title_pos.x + title_w + 8.0, rect.center().y), 2.5, if is_off { Color32::from_gray(0x70) } else { ACCENT });
+        painter.circle_filled(egui::pos2(title_pos.x + title_w + 8.0, rect.center().y), 2.5, if is_off { gray(0x70) } else { ACCENT() });
         let hov = reset_hovered;
         if hov {
-            painter.rect_filled(reset_rect, 0.0, Color32::from_gray(0x44));
+            painter.rect_filled(reset_rect, 0.0, gray(0x44));
         }
-        painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { Color32::WHITE } else { TEXT_DIM() });
+        painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { TEXT_STRONG() } else { TEXT_DIM() });
         if let Some(r) = reset_resp {
             hover_tip(ui, &r, crate::tr("Abschnitt zurücksetzen"));
             if r.clicked() {
@@ -1316,7 +1693,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     state.store(ui.ctx());
     // fine separator line between sections
     let y = ui.cursor().top() + 1.0;
-    ui.painter().line_segment([egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)], Stroke::new(1.0, Color32::from_gray(0x27)));
+    ui.painter().line_segment([egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)], Stroke::new(1.0, gray(0x27)));
     ui.add_space(3.0);
     reset
 }
@@ -1375,16 +1752,16 @@ pub fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool) -> H
 
 /// [`histogram`] with its own height (the pinned histogram gets smaller in low windows).
 pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32) -> HistResponse {
+    histogram_h_inner(ui, h, show_clipping, height)
+}
+
+fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32) -> HistResponse {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, PANEL_DARK);
+    painter.rect_filled(rect, 0.0, SCOPE_BG());
     let n = h[0].len();
     let max = h.iter().flat_map(|v| v[1..n - 1].iter()).copied().max().unwrap_or(1).max(1) as f32;
-    let colors = [
-        Color32::from_rgba_unmultiplied(220, 70, 70, 120),
-        Color32::from_rgba_unmultiplied(70, 200, 90, 120),
-        Color32::from_rgba_unmultiplied(80, 120, 235, 120),
-    ];
+    let colors = HIST_CHANNELS();
     for (c, bins) in h.iter().enumerate() {
         let mut pts = vec![rect.left_bottom()];
         for (i, &v) in bins.iter().enumerate() {
@@ -1392,7 +1769,7 @@ pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, he
             pts.push(egui::pos2(x, rect.bottom() - rect.height() * (v as f32 / max).min(1.0)));
         }
         pts.push(rect.right_bottom());
-        painter.add(egui::Shape::line(pts, Stroke::new(1.2, colors[c].to_opaque().gamma_multiply(0.9))));
+        painter.add(egui::Shape::line(pts, Stroke::new(1.2, colors[c])));
     }
     // Clipping triangles: bright when clipped; outlined when the display is active
     let total = h[1].iter().sum::<u32>().max(1) as f32;
@@ -1405,8 +1782,8 @@ pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, he
         } else {
             vec![at, at + egui::vec2(s, 0.0), at + egui::vec2(0.0, s)]
         };
-        let fill = if lit { Color32::from_gray(0xee) } else { Color32::from_gray(0x55) };
-        let stroke = if show_clipping { Stroke::new(1.0, ACCENT) } else { Stroke::NONE };
+        let fill = clip_triangle(lit);
+        let stroke = if show_clipping { Stroke::new(1.0, ACCENT()) } else { Stroke::NONE };
         painter.add(egui::Shape::convex_polygon(pts, fill, stroke));
     };
     tri(rect.left_top() + egui::vec2(3.0, 3.0), false, lo > 0.001);
@@ -1433,7 +1810,7 @@ pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, he
     if let Some(r) = region {
         let (a, b) = r.span();
         let band = egui::Rect::from_x_y_ranges(rect.left() + rect.width() * a..=rect.left() + rect.width() * b, rect.y_range());
-        painter.rect_filled(band, 0.0, Color32::from_white_alpha(10));
+        painter.rect_filled(band, 0.0, overlay(10));
         painter.text(rect.left_bottom() + egui::vec2(6.0, -4.0), egui::Align2::LEFT_BOTTOM, r.label(), egui::TextStyle::Small.resolve(ui.style()), TEXT());
         ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         if resp.dragged() {
@@ -1516,6 +1893,8 @@ pub fn scope_image(rgb: &[u8], width: usize, height: usize, scope: Scope) -> egu
     let mean = (width as f32 * height as f32 / (lane as f32 * rows as f32)).max(1.0);
     let lum = |n: u32| ((n as f32 / mean).sqrt() * 0.32).min(1.0);
     let tint: [[f32; 3]; 3] = [[1.0, 0.32, 0.30], [0.35, 1.0, 0.40], [0.38, 0.55, 1.0]];
+    // computed on a worker: the chosen theme of the interface decides the look of the image
+    let t = ui_theme();
     let pixels = counts
         .iter()
         .map(|c| {
@@ -1527,10 +1906,19 @@ pub fn scope_image(rgb: &[u8], width: usize, height: usize, scope: Scope) -> egu
                         o[j] += v * tint[k][j];
                     }
                 }
-                Color32::from_rgb((o[0].min(1.0) * 255.0) as u8, (o[1].min(1.0) * 255.0) as u8, (o[2].min(1.0) * 255.0) as u8)
+                if t == Theme::Dark {
+                    Color32::from_rgb((o[0].min(1.0) * 255.0) as u8, (o[1].min(1.0) * 255.0) as u8, (o[2].min(1.0) * 255.0) as u8)
+                } else {
+                    scope_pixel(t, o)
+                }
             } else {
                 let v = lum(c[0]);
-                Color32::from_rgb((v * 225.0) as u8, (v * 240.0) as u8, (v * 225.0) as u8)
+                match t {
+                    Theme::Dark => Color32::from_rgb((v * 225.0) as u8, (v * 240.0) as u8, (v * 225.0) as u8),
+                    // luminance trace: dark grey ink on the light ground
+                    Theme::Light => Color32::from_rgba_premultiplied((v * 0x30 as f32) as u8, (v * 0x34 as f32) as u8, (v * 0x30 as f32) as u8, (v * 255.0) as u8),
+                    Theme::Medium => scope_pixel(t, [v * 225.0 / 255.0, v * 240.0 / 255.0, v * 225.0 / 255.0]),
+                }
             }
         })
         .collect();
@@ -1545,23 +1933,27 @@ pub fn scope_view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: S
 /// Like [`scope_view`], with selectable height and optionally a percent scale on the left (0 … 100 %).
 /// Returns: double clicked (next size of the display).
 pub fn scope_view_h(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: Scope, height: f32, scale: bool) -> bool {
+    scope_view_h_inner(ui, tex, scope, height, scale)
+}
+
+fn scope_view_h_inner(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope: Scope, height: f32, scale: bool) -> bool {
     let (outer, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click());
     let rect = if scale { egui::Rect::from_min_max(outer.min + egui::vec2(34.0, 6.0), outer.max - egui::vec2(0.0, 6.0)) } else { outer };
     if scale {
         let p = ui.painter();
-        p.rect_filled(outer, 0.0, PANEL_DARK);
+        p.rect_filled(outer, 0.0, SCOPE_BG());
         for q in [0.0f32, 0.25, 0.5, 0.75, 1.0] {
             let y = rect.bottom() - rect.height() * q;
-            p.text(egui::pos2(outer.left() + 30.0, y), egui::Align2::RIGHT_CENTER, format!("{:.0}%", q * 100.0), egui::FontId::proportional(10.0), Color32::from_gray(0x70));
+            p.text(egui::pos2(outer.left() + 30.0, y), egui::Align2::RIGHT_CENTER, format!("{:.0}%", q * 100.0), egui::FontId::proportional(10.0), scope_gray(0x70));
         }
     }
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, PANEL_DARK);
+    painter.rect_filled(rect, 0.0, SCOPE_BG());
     if let Some(t) = tex {
         painter.image(t.id(), rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
     }
     // Guide lines at 25/50/75 %, for the parade also separators between the channels
-    let grid = Stroke::new(1.0, Color32::from_white_alpha(14));
+    let grid = Stroke::new(1.0, overlay(14));
     let qs: &[f32] = if scale { &[0.0, 0.25, 0.5, 0.75, 1.0] } else { &[0.25, 0.5, 0.75] };
     for &q in qs {
         let y = rect.bottom() - rect.height() * q;
@@ -1569,7 +1961,7 @@ pub fn scope_view_h(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, scope:
     }
     if scope == Scope::Parade {
         for q in [1.0 / 3.0, 2.0 / 3.0] {
-            painter.vline(rect.left() + rect.width() * q, rect.y_range(), Stroke::new(1.0, Color32::from_white_alpha(28)));
+            painter.vline(rect.left() + rect.width() * q, rect.y_range(), Stroke::new(1.0, overlay(28)));
         }
     }
     let (title, card) = match scope {
@@ -1597,7 +1989,7 @@ pub fn color_wheel(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], size: f
             Color32::from(col)
         };
         let mut mesh = egui::Mesh::default();
-        mesh.colored_vertex(c, Color32::from_gray(0x9e));
+        mesh.colored_vertex(c, gray(0x9e));
         let n = 72;
         for i in 0..=n {
             let a = i as f32 / n as f32 * std::f32::consts::TAU;
@@ -1608,7 +2000,7 @@ pub fn color_wheel(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], size: f
             mesh.add_triangle(0, i, i + 1);
         }
         ui.painter().add(egui::Shape::mesh(mesh));
-        ui.painter().circle_stroke(c, r, Stroke::new(1.0, Color32::from_gray(0x50)));
+        ui.painter().circle_stroke(c, r, Stroke::new(1.0, gray(0x50)));
         let shift = ui.input(|i| i.modifiers.shift);
         if resp.double_clicked() {
             crate::history::reset_gesture();
@@ -1623,7 +2015,7 @@ pub fn color_wheel(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], size: f
         }
         let a = value[0].to_radians();
         let dot = c + egui::vec2(a.cos(), -a.sin()) * r * value[1];
-        ui.painter().circle(dot, 4.0, hsv(value[0], value[1].max(0.3)), Stroke::new(1.5, Color32::WHITE));
+        ui.painter().circle(dot, 4.0, hsv(value[0], value[1].max(0.3)), Stroke::new(1.5, TEXT_STRONG()));
         if resp.hovered() || resp.dragged() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
         }
@@ -1643,15 +2035,15 @@ pub fn subsection<R>(ui: &mut egui::Ui, title: &str, count: usize, open: bool, a
     }
     let painter = ui.painter();
     if resp.hovered() {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+        painter.rect_filled(rect, 0.0, gray(0x22));
     }
     let openness = state.openness(ui.ctx());
     let c = egui::pos2(rect.left() + 9.0, rect.center().y);
     let a = openness * std::f32::consts::FRAC_PI_2;
     let rot = |p: egui::Vec2| c + egui::vec2(p.x * a.cos() - p.y * a.sin(), p.x * a.sin() + p.y * a.cos());
     let arrow = vec![rot(egui::vec2(-2.0, -3.2)), rot(egui::vec2(2.8, 0.0)), rot(egui::vec2(-2.0, 3.2))];
-    painter.add(egui::Shape::convex_polygon(arrow, if resp.hovered() { Color32::from_gray(0xe0) } else { Color32::from_gray(0x8a) }, Stroke::NONE));
-    let color = if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xd0) };
+    painter.add(egui::Shape::convex_polygon(arrow, if resp.hovered() { gray(0xe0) } else { gray(0x8a) }, Stroke::NONE));
+    let color = if resp.hovered() { TEXT_STRONG() } else { gray(0xd0) };
     painter.text(egui::pos2(rect.left() + 20.0, rect.center().y), egui::Align2::LEFT_CENTER, crate::tr(title), semibold(12.5), color);
     painter.text(egui::pos2(rect.right() - 6.0, rect.center().y), egui::Align2::RIGHT_CENTER, count.to_string(), egui::TextStyle::Small.resolve(ui.style()), TEXT_DIM());
     state.show_body_unindented(ui, |ui| {
@@ -1664,12 +2056,15 @@ pub fn subsection<R>(ui: &mut egui::Ui, title: &str, count: usize, open: bool, a
 }
 
 /// Curve color per channel (RGB, red, green, blue).
-const CURVE_COLORS: [Color32; 4] = [
-    Color32::from_gray(0xdc),
+#[allow(non_snake_case)]
+fn CURVE_COLORS() -> [Color32; 4] {
+    [
+    gray(0xdc),
     Color32::from_rgb(0xe0, 0x62, 0x58),
     Color32::from_rgb(0x6c, 0xc4, 0x64),
     Color32::from_rgb(0x6c, 0x9a, 0xea),
-];
+]
+}
 
 /// Tone curve (point curve) for channel `channel` (0 = RGB, 1 … 3 =
 /// red, green, blue): square field with grid and a subtle histogram behind it.
@@ -1687,17 +2082,17 @@ pub fn tone_curve(ui: &mut egui::Ui, curve: &mut develop::ToneCurve, channel: us
     let painter = ui.painter_at(rect.expand(6.0));
     let to_screen = |p: [f32; 2]| egui::pos2(rect.left() + p[0] * rect.width(), rect.bottom() - p[1] * rect.height());
     let from_screen = |q: egui::Pos2| [((q.x - rect.left()) / rect.width()).clamp(0.0, 1.0), ((rect.bottom() - q.y) / rect.height()).clamp(0.0, 1.0)];
-    let color = CURVE_COLORS[channel.min(3)];
+    let color = CURVE_COLORS()[channel.min(3)];
 
     // Background, histogram, grid
-    painter.rect_filled(rect, 0.0, PANEL_DARK);
+    painter.rect_filled(rect, 0.0, PANEL_DARK());
     if let Some(h) = hist {
         let n = h[0].len();
         let bins: Vec<f32> = (0..n)
             .map(|i| if channel == 0 { (h[0][i] + h[1][i] + h[2][i]) as f32 / 3.0 } else { h[channel - 1][i] as f32 })
             .collect();
         let max = bins[1..n - 1].iter().copied().fold(1.0f32, f32::max);
-        let fill = if channel == 0 { Color32::from_white_alpha(18) } else { color.gamma_multiply(0.16) };
+        let fill = if channel == 0 { overlay(18) } else { color.gamma_multiply(0.16) };
         for (i, &v) in bins.iter().enumerate() {
             let hgt = (v / max).min(1.0).sqrt() * rect.height() * 0.85;
             if hgt < 0.5 {
@@ -1708,14 +2103,14 @@ pub fn tone_curve(ui: &mut egui::Ui, curve: &mut develop::ToneCurve, channel: us
             painter.rect_filled(egui::Rect::from_min_max(egui::pos2(x0, rect.bottom() - hgt), egui::pos2(x1 + 0.3, rect.bottom())), 0.0, fill);
         }
     }
-    let grid = Stroke::new(1.0, Color32::from_gray(0x38));
+    let grid = Stroke::new(1.0, gray(0x38));
     for k in 1..4 {
         let t = k as f32 / 4.0;
         painter.vline(rect.left() + t * rect.width(), rect.y_range(), grid);
         painter.hline(rect.x_range(), rect.top() + t * rect.height(), grid);
     }
-    painter.line_segment([rect.left_bottom(), rect.right_top()], Stroke::new(1.0, Color32::from_gray(0x44)));
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(0x4a)), egui::StrokeKind::Inside);
+    painter.line_segment([rect.left_bottom(), rect.right_top()], Stroke::new(1.0, gray(0x44)));
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, gray(0x4a)), egui::StrokeKind::Inside);
 
     // Interaction: pressing selects the nearest point or sets a new one on the curve
     let mut work: Vec<[f32; 2]> = {
@@ -1816,14 +2211,14 @@ pub fn tone_curve(ui: &mut egui::Ui, curve: &mut develop::ToneCurve, channel: us
     };
     for k in 0..4 {
         if k != channel && !is_identity(curve.channel(k)) {
-            painter.add(egui::Shape::line(samples(curve.channel(k)), Stroke::new(1.0, CURVE_COLORS[k].gamma_multiply(0.35))));
+            painter.add(egui::Shape::line(samples(curve.channel(k)), Stroke::new(1.0, CURVE_COLORS()[k].gamma_multiply(0.35))));
         }
     }
     painter.add(egui::Shape::line(samples(&work), Stroke::new(1.6, color)));
     let hover_pt = if drag.is_none() { pointer.filter(|_| resp.hovered()).and_then(|q| nearest(&work, q)) } else { None };
     for (i, p) in work.iter().enumerate() {
         let active = drag == Some(i) || hover_pt == Some(i);
-        let fill = if active { color } else { PANEL_DARK };
+        let fill = if active { color } else { PANEL_DARK() };
         painter.circle(to_screen(*p), if active { 4.5 } else { 3.5 }, fill, Stroke::new(1.4, color));
     }
     if drag.is_some() {
@@ -2062,7 +2457,7 @@ pub fn paint_flag(painter: &egui::Painter, center: egui::Pos2, size: f32, flag: 
         (1 | -1, true) => {
             painter.circle_filled(center, size * 0.42, color);
             let mark = if flag == 1 { Icon::Check } else { Icon::X };
-            paint_icon(painter, egui::Rect::from_center_size(center, egui::vec2(size * 0.62, size * 0.62)), mark, Color32::from_gray(0x16));
+            paint_icon(painter, egui::Rect::from_center_size(center, egui::vec2(size * 0.62, size * 0.62)), mark, gray(0x16));
         }
         (1, false) => paint_icon(painter, r, Icon::CheckCircle, color),
         (-1, false) => paint_icon(painter, r, Icon::XCircle, color),
@@ -2106,15 +2501,15 @@ pub fn icon_grid(ui: &mut egui::Ui, id: &str, items: &[(Icon, &str, &str)], sele
         let on = selected == Some(i);
         let painter = ui.painter();
         let (fill, stroke) = if on {
-            (Color32::from_gray(0x2c), Color32::from_gray(0x8a))
+            (gray(0x2c), gray(0x8a))
         } else if resp.hovered() {
-            (Color32::from_gray(0x22), Color32::from_gray(0x44))
+            (gray(0x22), gray(0x44))
         } else {
-            (Color32::TRANSPARENT, Color32::from_gray(0x2c))
+            (Color32::TRANSPARENT, gray(0x2c))
         };
         painter.rect_filled(cell, 0.0, fill);
         painter.rect_stroke(cell, 0.0, Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
-        let color = if on { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { Color32::from_gray(0x9a) };
+        let color = if on { TEXT_STRONG() } else if resp.hovered() { gray(0xe0) } else { gray(0x9a) };
         paint_icon(painter, egui::Rect::from_center_size(cell.center_top() + egui::vec2(0.0, 14.0), egui::vec2(17.0, 17.0)), *icon, color);
         let g = caps_spaced(painter, label, egui::FontId::proportional(10.0), color, 0.6);
         painter.galley(egui::pos2(cell.center().x - g.size().x / 2.0, cell.bottom() - 4.0 - g.size().y), g, color);
@@ -2140,9 +2535,9 @@ pub fn color_chips(ui: &mut egui::Ui, id: &str, items: &[(Color32, &str)], selec
         let resp = ui.interact(egui::Rect::from_center_size(c, egui::vec2(d + 6.0, d + 6.0)), ui.scope_id().with((id, i)), egui::Sense::click());
         let painter = ui.painter();
         if selected == Some(i) {
-            painter.circle_stroke(c, d / 2.0 + 3.0, Stroke::new(1.5, Color32::from_gray(0xe8)));
+            painter.circle_stroke(c, d / 2.0 + 3.0, Stroke::new(1.5, gray(0xe8)));
         } else if resp.hovered() {
-            painter.circle_stroke(c, d / 2.0 + 3.0, Stroke::new(1.0, Color32::from_gray(0x60)));
+            painter.circle_stroke(c, d / 2.0 + 3.0, Stroke::new(1.0, gray(0x60)));
         }
         painter.circle_filled(c, d / 2.0, *color);
         painter.circle_stroke(c, d / 2.0, Stroke::new(1.0, Color32::from_black_alpha(90)));
@@ -2158,11 +2553,11 @@ pub fn color_chips(ui: &mut egui::Ui, id: &str, items: &[(Color32, &str)], selec
 pub fn edit_badge_film(painter: &egui::Painter, corner: egui::Pos2, film: bool) {
     let r = egui::Rect::from_min_max(corner - egui::vec2(17.0, 17.0), corner - egui::vec2(3.0, 3.0));
     painter.rect_filled(r, 0.0, Color32::from_black_alpha(170));
-    paint_icon(painter, r.shrink(1.5), Icon::Pencil, Color32::from_gray(0xe8));
+    paint_icon(painter, r.shrink(1.5), Icon::Pencil, gray(0xe8));
     if film {
         let f = r.translate(egui::vec2(-16.0, 0.0));
         painter.rect_filled(f, 0.0, Color32::from_black_alpha(170));
-        paint_icon(painter, f.shrink(1.5), Icon::Film, Color32::from_gray(0xe8));
+        paint_icon(painter, f.shrink(1.5), Icon::Film, gray(0xe8));
     }
 }
 
@@ -2178,9 +2573,9 @@ pub fn quick_badge(painter: &egui::Painter, image: egui::Rect, inside: bool, hov
     let c = r.center();
     image_plaque(painter, c, 4.5);
     if inside {
-        painter.circle_filled(c, 4.0, if hovered { Color32::WHITE } else { Color32::from_gray(0xe8) });
+        painter.circle_filled(c, 4.0, if hovered { TEXT_STRONG() } else { gray(0xe8) });
     } else {
-        painter.circle_stroke(c, 4.0, egui::Stroke::new(1.2, if hovered { Color32::WHITE } else { Color32::from_gray(0xb0) }));
+        painter.circle_stroke(c, 4.0, egui::Stroke::new(1.2, if hovered { TEXT_STRONG() } else { gray(0xb0) }));
     }
 }
 
@@ -2203,12 +2598,12 @@ pub fn aspect_grid(ui: &mut egui::Ui, items: &[(Option<f32>, &str)], selected: O
         let on = selected == Some(i);
         let painter = ui.painter();
         if on {
-            painter.rect_filled(cell, 0.0, Color32::from_gray(0x2c));
-            painter.rect_stroke(cell, 0.0, Stroke::new(1.0, Color32::from_gray(0x8a)), egui::StrokeKind::Inside);
+            painter.rect_filled(cell, 0.0, gray(0x2c));
+            painter.rect_stroke(cell, 0.0, Stroke::new(1.0, gray(0x8a)), egui::StrokeKind::Inside);
         } else if resp.hovered() {
-            painter.rect_filled(cell, 0.0, Color32::from_gray(0x22));
+            painter.rect_filled(cell, 0.0, gray(0x22));
         }
-        let color = if on { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { Color32::from_gray(0x9a) };
+        let color = if on { TEXT_STRONG() } else if resp.hovered() { gray(0xe0) } else { gray(0x9a) };
         // Icon: rectangle in the ratio, at most 18 × 12 pt; "Free" dashed
         let center = cell.center_top() + egui::vec2(0.0, 14.0);
         let q = ratio.map(|q| if landscape { q } else { 1.0 / q });
@@ -2244,19 +2639,19 @@ pub fn orientation_toggle(ui: &mut egui::Ui, landscape: &mut bool) -> bool {
     let (h, w) = (20.0, 24.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(2.0 * w, h), egui::Sense::hover());
     let painter = ui.painter().clone();
-    painter.rect_filled(rect, 0.0, PANEL_DARK);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(0x4a)), egui::StrokeKind::Inside);
+    painter.rect_filled(rect, 0.0, PANEL_DARK());
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, gray(0x4a)), egui::StrokeKind::Inside);
     let mut changed = false;
     for (i, (value, tip)) in [(true, "Querformat (X)"), (false, "Hochformat (X)")].into_iter().enumerate() {
         let seg = egui::Rect::from_min_size(rect.min + egui::vec2(i as f32 * w, 0.0), egui::vec2(w, h));
         let resp = ui.interact(seg, ui.scope_id().with(("lr-orientation", i)), egui::Sense::click());
         let active = *landscape == value;
         if active {
-            painter.rect_filled(seg.shrink(2.0), 0.0, Color32::from_gray(0x62));
+            painter.rect_filled(seg.shrink(2.0), 0.0, gray(0x62));
         } else if resp.hovered() {
-            painter.rect_filled(seg.shrink(2.0), 0.0, Color32::from_gray(0x3c));
+            painter.rect_filled(seg.shrink(2.0), 0.0, gray(0x3c));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
+        let color = if active { TEXT_STRONG() } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let size = if value { egui::vec2(13.0, 9.0) } else { egui::vec2(9.0, 13.0) };
         painter.rect_stroke(egui::Rect::from_center_size(seg.center(), size), 0.0, Stroke::new(1.2, color), egui::StrokeKind::Middle);
         if resp.clicked() && !active {
@@ -2281,6 +2676,8 @@ pub struct ThumbGridResponse {
     pub hide: Option<usize>,
     /// image area of each visible tile (for marks drawn on top, e.g. the number in the look comparison)
     pub rects: Vec<(usize, egui::Rect)>,
+    /// whole tile (image and name) of each visible tile: anchor for tooltips, so they sit below the name
+    pub cells: Vec<(usize, egui::Rect)>,
 }
 
 /// Like [`thumb_grid`], with a star at the top right of each preview: filled for favourites, otherwise
@@ -2341,7 +2738,7 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         job.wrap.max_rows = 2;
         job
     };
-    let row_h = |size: f32| ui.painter().layout_no_wrap("Ag".into(), egui::FontId::proportional(size), Color32::WHITE).size().y;
+    let row_h = |size: f32| ui.painter().layout_no_wrap("Ag".into(), egui::FontId::proportional(size), TEXT_STRONG()).size().y;
     let name_rows = tiles.iter().map(|t| ui.painter().layout_job(name_job(t.name, TEXT())).rows.len()).max().unwrap_or(1).clamp(1, 2);
     let with_sub = tiles.iter().any(|t| !t.sub.is_empty());
     let sub_h = row_h(SUB_SIZE);
@@ -2362,6 +2759,7 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         out.visible.push(i);
         let img = egui::Rect::from_min_size(cell.min, egui::vec2(cell_w, img_h));
         out.rects.push((i, img));
+        out.cells.push((i, cell));
         let star_rect = egui::Rect::from_center_size(img.right_top() + egui::vec2(-11.0, 11.0), egui::vec2(18.0, 18.0));
         let star = t.star.map(|_| ui.interact(star_rect, ui.scope_id().with((id, i, "stern")), egui::Sense::click()));
         let resp = ui.interact(cell, ui.scope_id().with((id, i)), egui::Sense::click());
@@ -2373,7 +2771,7 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         let on = selected == Some(i);
         let star_hovered = star.as_ref().is_some_and(|s| s.hovered());
         let painter = ui.painter();
-        painter.rect_filled(img, 0.0, PANEL_DARK);
+        painter.rect_filled(img, 0.0, PANEL_DARK());
         if let Some(tex) = &t.tex {
             let s = tex.size_vec2();
             let k = (img.width() / s.x).min(img.height() / s.y);
@@ -2383,22 +2781,22 @@ pub fn tile_grid(ui: &mut egui::Ui, id: &str, tiles: &[Tile], selected: Option<u
         }
         let hot = resp.hovered() || star_hovered;
         if on {
-            painter.rect_stroke(img, 0.0, Stroke::new(2.0, Color32::from_gray(0xf0)), egui::StrokeKind::Inside);
+            painter.rect_stroke(img, 0.0, Stroke::new(2.0, gray(0xf0)), egui::StrokeKind::Inside);
         } else if hot {
-            painter.rect_stroke(img, 0.0, Stroke::new(1.0, Color32::from_gray(0x80)), egui::StrokeKind::Inside);
+            painter.rect_stroke(img, 0.0, Stroke::new(1.0, gray(0x80)), egui::StrokeKind::Inside);
         }
         if let Some(fav) = t.star.filter(|&f| f || hot) {
             painter.circle_filled(star_rect.center(), 9.0, Color32::from_black_alpha(150));
-            let col = if fav { Color32::from_rgb(0xf0, 0xc8, 0x50) } else if star_hovered { Color32::WHITE } else { Color32::from_gray(0xb0) };
+            let col = if fav { Color32::from_rgb(0xf0, 0xc8, 0x50) } else if star_hovered { TEXT_STRONG() } else { gray(0xb0) };
             painter.text(star_rect.center(), egui::Align2::CENTER_CENTER, if fav { "★" } else { "☆" }, egui::FontId::proportional(12.0), col);
         }
-        let color = if !available { Color32::from_gray(0x7a) } else if on { Color32::WHITE } else if hot { Color32::from_gray(0xe8) } else { Color32::from_gray(0xb4) };
+        let color = if !available { gray(0x7a) } else if on { TEXT_STRONG() } else if hot { gray(0xe8) } else { gray(0xb4) };
         let g = painter.layout_job(name_job(t.name, color));
         let name_h = g.size().y;
         painter.galley(egui::pos2(cell.left(), img.bottom() + NAME_TOP), g, color);
         if !t.sub.is_empty() {
             // directly below the name (a one-row name leaves the free row at the bottom of the tile)
-            let sub_color = if available { Color32::from_gray(0x80) } else { Color32::from_gray(0x5a) };
+            let sub_color = if available { gray(0x80) } else { gray(0x5a) };
             let mut job = egui::text::LayoutJob::simple(t.sub.to_string(), egui::FontId::proportional(SUB_SIZE), sub_color, cell_w);
             job.wrap.max_rows = 1;
             let g = painter.layout_job(job);
@@ -2423,16 +2821,16 @@ pub fn icon_toggle(ui: &mut egui::Ui, icon: Icon, label: &str, on: bool, width: 
     let painter = ui.painter();
     let enabled = ui.is_enabled();
     let (fill, fg) = if on {
-        (Color32::from_gray(0x38), Color32::WHITE)
+        (gray(0x38), TEXT_STRONG())
     } else if resp.hovered() && enabled {
-        (Color32::from_gray(0x2a), Color32::from_gray(0xe0))
+        (gray(0x2a), gray(0xe0))
     } else {
-        (Color32::from_gray(0x1e), if enabled { TEXT() } else { Color32::from_gray(0x5c) })
+        (gray(0x1e), if enabled { TEXT() } else { gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     // the brighter fill already shows "on" clearly; only focus gets a frame
     if resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, ACCENT), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, ACCENT()), egui::StrokeKind::Inside);
     }
     let ir = egui::Rect::from_center_size(egui::pos2(rect.left() + 13.0, rect.center().y), egui::vec2(15.0, 15.0));
     paint_icon(painter, ir, icon, fg);
@@ -2489,15 +2887,15 @@ pub fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str, siz
     let enabled = ui.is_enabled();
     let painter = ui.painter();
     let (fill, fg) = if on {
-        (Color32::from_gray(0x38), Color32::WHITE)
+        (gray(0x38), TEXT_STRONG())
     } else if resp.hovered() && enabled {
-        (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
+        (gray(0x2a), gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT() } else { Color32::from_gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(if resp.has_focus() { 1.5 } else { 1.0 }, ACCENT), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(if resp.has_focus() { 1.5 } else { 1.0 }, ACCENT()), egui::StrokeKind::Inside);
     }
     paint_icon(painter, egui::Rect::from_center_size(rect.center(), egui::vec2(icon_px, icon_px)), icon, fg);
     if !tip.is_empty() && enabled {
@@ -2532,14 +2930,14 @@ pub fn cell_group_w(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)],
     let h = BAR_H;
     let total: f32 = widths.iter().sum();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(total, h), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, GROUP_FILL);
+    ui.painter().rect_filled(rect, 0.0, GROUP_FILL());
     let mut click = None;
     let mut x = 0.0;
     for (i, (cell, active, tip)) in cells.iter().enumerate() {
         let r = egui::Rect::from_min_size(rect.min + egui::vec2(x, 0.0), egui::vec2(widths[i], h));
         x += widths[i];
         let resp = ui.interact(r, ui.id().with((salt, i)), egui::Sense::click());
-        let fill = if *active { ACTIVE_FILL } else if resp.hovered() { Color32::from_gray(0x2e) } else { GROUP_FILL };
+        let fill = if *active { ACTIVE_FILL() } else if resp.hovered() { gray(0x2e) } else { GROUP_FILL() };
         let inner = r.shrink(2.0);
         ui.painter().rect_filled(inner, 0.0, fill);
         match cell {
@@ -2568,13 +2966,17 @@ pub fn cell_group_sized(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &st
 }
 
 /// Colour of a cell that cannot act in the current state.
-pub const CELL_DISABLED: Color32 = Color32::from_gray(0x55);
+#[allow(non_snake_case)]
+#[inline]
+pub fn CELL_DISABLED() -> Color32 {
+    gray(0x55)
+}
 
 /// Like [`cell_group_sized`]; `enabled[i] == false` greys cell `i` (no hover, no click; its tooltip, which should say
 /// why, still shows). Cells beyond `enabled` are enabled.
 pub fn cell_group_enabled(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &str)], enabled: &[bool], cell_w: f32, h: f32) -> (Option<usize>, egui::Rect) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(cell_w * cells.len() as f32, h), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, GROUP_FILL);
+    ui.painter().rect_filled(rect, 0.0, GROUP_FILL());
     let mut click = None;
     for (i, (cell, active, tip)) in cells.iter().enumerate() {
         let on = enabled.get(i).copied().unwrap_or(true);
@@ -2584,28 +2986,28 @@ pub fn cell_group_enabled(ui: &mut egui::Ui, salt: &str, cells: &[(Cell, bool, &
         let is_color_cell = matches!(cell, Cell::Color(_));
         let active = &(*active && on);
         let fill = if *active && !is_color_cell {
-            ACTIVE_FILL
+            ACTIVE_FILL()
         } else if on && resp.hovered() {
-            Color32::from_gray(0x2e)
+            gray(0x2e)
         } else {
             Color32::TRANSPARENT
         };
         let painter = ui.painter();
         painter.rect_filled(inner, 0.0, fill);
         if *active && !is_color_cell {
-            painter.rect_filled(egui::Rect::from_min_max(egui::pos2(inner.left(), inner.bottom() - 2.0), inner.max), 0.0, ACTIVE_MARK);
+            painter.rect_filled(egui::Rect::from_min_max(egui::pos2(inner.left(), inner.bottom() - 2.0), inner.max), 0.0, ACTIVE_MARK());
         }
         match cell {
-            Cell::Symbol(icon, c) => paint_icon(painter, egui::Rect::from_center_size(r.center(), egui::vec2(16.0, 16.0)), *icon, if !on { CELL_DISABLED } else if *active { Color32::WHITE } else { *c }),
-            Cell::Flag(f) => paint_flag(painter, r.center(), 17.0, *f, *active, if *active { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0xe0) } else { TEXT() }),
+            Cell::Symbol(icon, c) => paint_icon(painter, egui::Rect::from_center_size(r.center(), egui::vec2(16.0, 16.0)), *icon, if !on { CELL_DISABLED() } else if *active { TEXT_STRONG() } else { *c }),
+            Cell::Flag(f) => paint_flag(painter, r.center(), 17.0, *f, *active, if *active { TEXT_STRONG() } else if resp.hovered() { gray(0xe0) } else { TEXT() }),
             Cell::Text(t, size_pt, c) => {
-                painter.text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size_pt), if on { *c } else { CELL_DISABLED });
+                painter.text(r.center(), egui::Align2::CENTER_CENTER, *t, egui::FontId::proportional(*size_pt), if on { *c } else { CELL_DISABLED() });
             }
             Cell::Color(c) => {
                 let swatch = egui::Rect::from_center_size(r.center(), egui::vec2(13.0, 13.0));
                 painter.rect_filled(swatch, 0.0, *c);
                 if *active {
-                    painter.rect_stroke(swatch.expand(3.0), 0.0, egui::Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Outside);
+                    painter.rect_stroke(swatch.expand(3.0), 0.0, egui::Stroke::new(1.5, TEXT_STRONG()), egui::StrokeKind::Outside);
                 }
             }
         }
@@ -2628,8 +3030,8 @@ pub fn field_style(ui: &mut egui::Ui) {
         w.corner_radius = egui::CornerRadius::ZERO;
         w.bg_stroke = egui::Stroke::NONE;
     }
-    v.inactive.weak_bg_fill = GROUP_FILL;
-    v.inactive.bg_fill = GROUP_FILL;
+    v.inactive.weak_bg_fill = GROUP_FILL();
+    v.inactive.bg_fill = GROUP_FILL();
 }
 
 /// Segment of icon buttons (exactly one active). Returns: newly selected index.
@@ -2643,7 +3045,7 @@ pub fn icon_segment(ui: &mut egui::Ui, icons: &[Icon], selected: usize) -> Optio
         }
     }
     let r = egui::Rect::from_min_size(start, egui::vec2(26.0 * icons.len() as f32, 24.0));
-    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x3a)), egui::StrokeKind::Inside);
+    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, gray(0x3a)), egui::StrokeKind::Inside);
     ui.spacing_mut().item_spacing.x = 6.0;
     picked
 }
@@ -2750,7 +3152,7 @@ pub struct BarEntry<'a> {
 /// others dimmed. Returns: index of the clicked entry. Placed right-aligned when it sits in
 /// a right-to-left layout.
 pub fn bar(ui: &mut egui::Ui, entries: &[BarEntry]) -> Option<usize> {
-    bar_with(ui, entries, GOLD)
+    bar_with(ui, entries, GOLD())
 }
 
 /// Like [`bar`] with a selectable underline color (darkroom: safelight).
@@ -2762,7 +3164,7 @@ pub fn bar_with(ui: &mut egui::Ui, entries: &[BarEntry], accent: Color32) -> Opt
 pub fn bar_pad(ui: &mut egui::Ui, entries: &[BarEntry], accent: Color32, pad: f32) -> Option<usize> {
     let PAD: f32 = pad;
     let font = egui::TextStyle::Button.resolve(ui.style());
-    let galleys: Vec<_> = entries.iter().map(|e| ui.painter().layout_no_wrap(crate::tr(e.text).to_string(), font.clone(), Color32::WHITE)).collect();
+    let galleys: Vec<_> = entries.iter().map(|e| ui.painter().layout_no_wrap(crate::tr(e.text).to_string(), font.clone(), TEXT_STRONG())).collect();
     let total: f32 = galleys.iter().map(|g| g.size().x + 2.0 * PAD).sum::<f32>() + 2.0 * (entries.len().saturating_sub(1)) as f32;
     let mut clicked = None;
     ui.allocate_ui_with_layout(egui::vec2(total, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -2773,12 +3175,12 @@ pub fn bar_pad(ui: &mut egui::Ui, entries: &[BarEntry], accent: Color32, pad: f3
             let hover = resp.hovered() && e.enabled;
             let p = ui.painter();
             if e.active {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x2e));
+                p.rect_filled(r, 0.0, gray(0x2e));
                 p.rect_filled(egui::Rect::from_min_max(egui::pos2(r.left() + 4.0, r.bottom() - 2.0), egui::pos2(r.right() - 4.0, r.bottom())), 0.0, accent);
             } else if hover {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x22));
+                p.rect_filled(r, 0.0, gray(0x22));
             }
-            let color = if e.active { Color32::WHITE } else if !e.enabled { Color32::from_gray(0x78) } else if hover { TEXT() } else { TEXT_DIM() };
+            let color = if e.active { TEXT_STRONG() } else if !e.enabled { gray(0x78) } else if hover { TEXT() } else { TEXT_DIM() };
             let g2 = p.layout_no_wrap(crate::tr(e.text).to_string(), font.clone(), color);
             p.galley(egui::pos2(r.center().x - g2.size().x / 2.0, r.center().y - g2.size().y / 2.0 - 1.0), g2, color);
             if !e.hover_tip.is_empty() {
@@ -2851,27 +3253,27 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
 
     // Name and chosen step, coloured as with the sliders
     let name_color = if !enabled {
-        Color32::from_gray(0x5c)
+        gray(0x5c)
     } else if hot {
-        Color32::WHITE
+        TEXT_STRONG()
     } else if changed {
-        Color32::from_gray(0xe0)
+        gray(0xe0)
     } else {
-        Color32::from_gray(0xa4)
+        gray(0xa4)
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     if let Some(i) = sel {
-        let c = if !enabled { Color32::from_gray(0x5c) } else if changed { Color32::WHITE } else { TEXT_DIM() };
+        let c = if !enabled { gray(0x5c) } else if changed { TEXT_STRONG() } else { TEXT_DIM() };
         painter.text(value_rect.right_center() - egui::vec2(13.0, 0.0), egui::Align2::RIGHT_CENTER, crate::tr(options[i].1), egui::FontId::proportional(UI_SIZE), c);
     }
 
     // Line; the stretch from the default to the chosen step slightly brighter (like the slider fill)
     let dim = if enabled { 1.0 } else { 0.55 };
-    let rail = if hot { Color32::from_gray(0x5a) } else { Color32::from_gray(0x46) };
+    let rail = if hot { gray(0x5a) } else { gray(0x46) };
     painter.line_segment([egui::pos2(x_of(0), line_y), egui::pos2(x_of(n - 1), line_y)], Stroke::new(1.0, rail.gamma_multiply(dim)));
     if let (Some(a), Some(b)) = (def, sel) {
         if a != b {
-            let fill = if enabled { if hot { Color32::from_gray(0xe0) } else { Color32::from_gray(0xb0) } } else { Color32::from_gray(0x5c) };
+            let fill = if enabled { if hot { gray(0xe0) } else { gray(0xb0) } } else { gray(0x5c) };
             painter.line_segment([egui::pos2(x_of(a.min(b)), line_y), egui::pos2(x_of(a.max(b)), line_y)], Stroke::new(2.0, fill));
         }
     }
@@ -2880,16 +3282,16 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
         let c = egui::pos2(x_of(i), line_y);
         let on = sel == Some(i);
         if on {
-            let knob = if !enabled { Color32::from_gray(0x66) } else if hot { Color32::WHITE } else { Color32::from_gray(0xd8) };
+            let knob = if !enabled { gray(0x66) } else if hot { TEXT_STRONG() } else { gray(0xd8) };
             painter.circle_filled(c, 5.5, Color32::from_black_alpha(140));
             painter.circle_filled(c, 4.5, knob);
         } else {
-            let ring = if pointer_step == Some(i) { Color32::from_gray(0xd0) } else { Color32::from_gray(0x80) }.gamma_multiply(dim);
-            painter.circle_filled(c, 3.5, PANEL);
+            let ring = if pointer_step == Some(i) { gray(0xd0) } else { gray(0x80) }.gamma_multiply(dim);
+            painter.circle_filled(c, 3.5, PANEL());
             painter.circle_stroke(c, 3.5, Stroke::new(1.0, ring));
         }
         // Step names: small and dimmed; the outer ones aligned to the edges so they stay inside the panel
-        let tc = if on && enabled { Color32::from_gray(0xc4) } else { Color32::from_gray(0x86).gamma_multiply(dim) };
+        let tc = if on && enabled { gray(0xc4) } else { gray(0x86).gamma_multiply(dim) };
         let (align, x) = if n > 1 && i == 0 {
             (egui::Align2::LEFT_TOP, row.left() + 2.0)
         } else if n > 1 && i == n - 1 {
@@ -2906,7 +3308,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
 /// Name above a control, as with the sliders (capitals, left). Returns: row, text rect, id for the help "?".
 fn label_above(ui: &mut egui::Ui, label: &str) -> (egui::Rect, egui::Rect, egui::Id) {
     let (row, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 17.0), egui::Sense::hover());
-    let color = if ui.is_enabled() { Color32::from_gray(0xa4) } else { Color32::from_gray(0x5c) };
+    let color = if ui.is_enabled() { gray(0xa4) } else { gray(0x5c) };
     let text = label_caps(ui.painter(), row.left_center(), label, color);
     (row, text, ui.scope_id().with(("lr-choice", label)))
 }
@@ -2977,8 +3379,8 @@ fn segmented_full_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, o
     };
     let (rect, _) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::hover());
     let painter = ui.painter().clone();
-    painter.rect_filled(rect, 0.0, PANEL_DARK);
-    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(0x4a)), egui::StrokeKind::Inside);
+    painter.rect_filled(rect, 0.0, PANEL_DARK());
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.0, gray(0x4a)), egui::StrokeKind::Inside);
     let base = ui.scope_id().with(("lr-segmented-full", options.first().map(|o| o.1).unwrap_or_default()));
     let mut x = rect.left();
     let mut changed = false;
@@ -2995,14 +3397,14 @@ fn segmented_full_tips<T: PartialEq + Clone>(ui: &mut egui::Ui, value: &mut T, o
         }
         let active = *value == *v;
         if active {
-            painter.rect_filled(seg.shrink(2.0), 0.0, Color32::from_gray(0x62));
+            painter.rect_filled(seg.shrink(2.0), 0.0, gray(0x62));
         } else if resp.hovered() {
-            painter.rect_filled(seg.shrink(2.0), 0.0, Color32::from_gray(0x3c));
+            painter.rect_filled(seg.shrink(2.0), 0.0, gray(0x3c));
         }
         if i > 0 && !active {
-            painter.vline(seg.left(), seg.y_range().shrink(4.0), Stroke::new(1.0, Color32::from_gray(0x40)));
+            painter.vline(seg.left(), seg.y_range().shrink(4.0), Stroke::new(1.0, gray(0x40)));
         }
-        let color = if active { Color32::WHITE } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
+        let color = if active { TEXT_STRONG() } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.with_clip_rect(seg.shrink(1.0)).galley(seg.center() - galley.size() / 2.0, galley, color);
     }
@@ -3461,15 +3863,15 @@ pub fn drawn_icon_button_at(ui: &mut egui::Ui, rect: egui::Rect, salt: &str, ico
     let enabled = ui.is_enabled();
     let painter = ui.painter();
     let (fill, fg) = if on {
-        (Color32::from_gray(0x38), Color32::WHITE)
+        (gray(0x38), TEXT_STRONG())
     } else if resp.hovered() && enabled {
-        (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
+        (gray(0x2a), gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT() } else { Color32::from_gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { gray(0x5c) })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(if resp.has_focus() { 1.5 } else { 1.0 }, ACCENT), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(if resp.has_focus() { 1.5 } else { 1.0 }, ACCENT()), egui::StrokeKind::Inside);
     }
     paint_drawn_icon(painter, egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0)), icon, fg);
     if !tip.is_empty() && enabled {
@@ -3512,15 +3914,15 @@ pub fn menu_item_why(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: boo
     clicked
 }
 
-/// Input field (text or number) like the search field: dark surface [`FIELD_FILL`] with a 1 px frame
+/// Input field (text or number) like the search field: dark surface [`FIELD_FILL()`] with a 1 px frame
 /// [`FIELD_STROKE()`], lighter while it has the focus. Buttons stay frameless (surface only).
 pub fn text_field(ui: &mut egui::Ui, widget: impl egui::Widget) -> egui::Response {
     let r = ui
         .scope(|ui| {
             // number fields (DragValue) are drawn like buttons: give them the field surface too
             let w = &mut ui.visuals_mut().widgets.inactive;
-            w.bg_fill = FIELD_FILL;
-            w.weak_bg_fill = FIELD_FILL;
+            w.bg_fill = FIELD_FILL();
+            w.weak_bg_fill = FIELD_FILL();
             ui.add(widget)
         })
         .inner;
@@ -3536,7 +3938,7 @@ pub fn edit_field(ui: &mut egui::Ui, widget: egui::TextEdit<'_>) -> egui::Respon
 /// The 1 px frame of an input field around `r` (focus lighter).
 pub fn field_outline(ui: &egui::Ui, r: &egui::Response) {
     if ui.is_rect_visible(r.rect) {
-        let colour = if r.has_focus() { Color32::from_gray(0x9a) } else { FIELD_STROKE() };
+        let colour = if r.has_focus() { gray(0x9a) } else { FIELD_STROKE() };
         ui.painter().rect_stroke(r.rect, 0.0, egui::Stroke::new(1.0, colour), egui::StrokeKind::Inside);
     }
 }
@@ -3547,7 +3949,7 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, salt: &str, hint: &str
     let id = ui.scope_id().with(("lr-search", salt));
     let (frame, _) = ui.allocate_exact_size(egui::vec2(width, BAR_H), egui::Sense::hover());
     let focus = ui.memory(|m| m.has_focus(id));
-    ui.painter().rect(frame, 0.0, FIELD_FILL, egui::Stroke::new(1.0, if focus { Color32::from_gray(0x9a) } else { FIELD_STROKE() }), egui::StrokeKind::Inside);
+    ui.painter().rect(frame, 0.0, FIELD_FILL(), egui::Stroke::new(1.0, if focus { gray(0x9a) } else { FIELD_STROKE() }), egui::StrokeKind::Inside);
     let loupe = egui::pos2(frame.left() + 14.0, frame.center().y - 1.0);
     let lf = egui::Stroke::new(1.4, if focus { TEXT() } else { TEXT_DIM() });
     ui.painter().circle_stroke(loupe, 4.5, lf);
@@ -3567,7 +3969,7 @@ pub fn search_field(ui: &mut egui::Ui, text: &mut String, salt: &str, hint: &str
     if !empty {
         let cross = egui::Rect::from_center_size(egui::pos2(frame.right() - 14.0, frame.center().y), egui::vec2(18.0, 18.0));
         let resp = ui.interact(cross, id.with("clear"), egui::Sense::click());
-        let kf = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { TEXT_DIM() });
+        let kf = egui::Stroke::new(1.4, if resp.hovered() { TEXT_STRONG() } else { TEXT_DIM() });
         let c = cross.center();
         ui.painter().line_segment([c + egui::vec2(-3.5, -3.5), c + egui::vec2(3.5, 3.5)], kf);
         ui.painter().line_segment([c + egui::vec2(-3.5, 3.5), c + egui::vec2(3.5, -3.5)], kf);
@@ -3609,11 +4011,11 @@ pub fn arrow_button(ui: &mut egui::Ui, text: &str, width: f32, primary: bool) ->
 /// per window: a view with its own main button turns the import button plain).
 pub fn arrow_button_gold(ui: &mut egui::Ui, text: &str, width: f32, primary: bool, gold: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, 24.0), egui::Sense::click());
-    let dark = Color32::from_rgb(0x16, 0x14, 0x10);
+    let dark = ON_GOLD();
     let (fill, fg) = if gold {
-        (if resp.is_pointer_button_down_on() { Color32::from_rgb(0xa8, 0x8e, 0x50) } else if resp.hovered() { Color32::from_rgb(0xdc, 0xbf, 0x76) } else { GOLD }, dark)
+        (if resp.is_pointer_button_down_on() { GOLD_PRESSED() } else if resp.hovered() { GOLD_HOVER() } else { GOLD() }, dark)
     } else {
-        (if resp.hovered() { Color32::from_gray(0x36) } else { BUTTON_FILL }, TEXT())
+        (if resp.hovered() { gray(0x36) } else { BUTTON_FILL() }, TEXT())
     };
     let p = ui.painter();
     p.rect_filled(rect, 0.0, fill);
@@ -3636,4 +4038,131 @@ pub fn arrow_button_gold(ui: &mut egui::Ui, text: &str, width: f32, primary: boo
     p.line_segment([egui::pos2(c.x + 3.0, tip + d), egui::pos2(c.x, tip)], s);
     p.galley(egui::pos2(x0 + 20.0, rect.center().y - g.size().y / 2.0), g, fg);
     resp
+}
+
+#[cfg(test)]
+pub(crate) mod theme_tests {
+    use super::*;
+
+    /// The theme is global state: tests that switch it run one after another.
+    pub static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn dark_theme_is_identity_and_helpers_terminate() {
+        let _lock = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // all palette helpers must return (a recursive helper once hung the app)
+        assert_eq!(theme(), Theme::Dark);
+        for v in [0u8, 0x17, 0x80, 0xd0, 0xff] {
+            assert_eq!(gray(v), Color32::from_gray(v));
+        }
+        assert_eq!(overlay(40), Color32::from_white_alpha(40));
+        assert_eq!(TEXT_STRONG(), Color32::WHITE);
+        assert_eq!(ui_rgb(0x17, 0x18, 0x1a), Color32::from_rgb(0x17, 0x18, 0x1a));
+        assert_eq!(gray_alpha(0x20, 10), Color32::from_rgba_unmultiplied(0x20, 0x20, 0x20, 10));
+        let _ = (PANEL(), TEXT(), GOLD(), BLUE_TEXT(), ui_accent(BLUE()));
+        // one test only: the theme is global state
+        THEME.store(2, std::sync::atomic::Ordering::Relaxed);
+        assert!(TEXT().r() < 0x40 && PANEL().r() > 0xc0);
+        assert_eq!(overlay(40), Color32::from_black_alpha(40));
+        assert_eq!(image_zone(|| gray(0x17)), Color32::from_gray(0x17));
+        assert!(gray(0x17).r() > 0xc0);
+        THEME.store(1, std::sync::atomic::Ordering::Relaxed);
+        assert!(PANEL().r() > 0x30 && TEXT().r() > 0xc0);
+        THEME.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[cfg(test)]
+mod contrast_tests {
+    use super::*;
+
+    fn lum(c: Color32) -> f64 {
+        let ch = |v: u8| {
+            let c = v as f64 / 255.0;
+            if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * ch(c.r()) + 0.7152 * ch(c.g()) + 0.0722 * ch(c.b())
+    }
+
+    /// WCAG 2.2 contrast ratio.
+    pub fn ratio(a: Color32, b: Color32) -> f64 {
+        let (x, y) = (lum(a), lum(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    /// Every text/symbol color of the palette against every ground it is drawn on, per theme and
+    /// contrast mode: text ≥ 4.5:1, dimmed text and non-text (frames, marks, tracks) ≥ 3:1.
+        #[test]
+    fn wcag_contrast_of_the_palette() {
+        let _lock = super::theme_tests::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let known_dark: [&str; 0] = [];
+        let mut failures = Vec::new();
+        let mut table = String::from("| Thema | Kontrast | Paar | Verhältnis | Grenze |\n|---|---|---|---|---|\n");
+        for (t, tn) in [(0u8, "Dunkel"), (1, "Mittel"), (2, "Hell")] {
+            for hc in [false, true] {
+                THEME.store(t, std::sync::atomic::Ordering::Relaxed);
+                HIGH_CONTRAST.store(hc, std::sync::atomic::Ordering::Relaxed);
+                let grounds = [("PANEL", PANEL()), ("PANEL_DARK", PANEL_DARK()), ("GROUP_FILL", GROUP_FILL()), ("BUTTON_FILL", BUTTON_FILL()), ("WINDOW", ui_rgb(0x1e, 0x1f, 0x22)), ("IMAGE_BG", IMAGE_BG())];
+                let mut checks: Vec<(String, f64, f64)> = Vec::new();
+                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0)] {
+                    let (gn, w) = grounds.iter().map(|(gn, g)| (*gn, ratio(c, *g))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
+                    checks.push((format!("{n} / {gn}"), w, min));
+                }
+                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0)] {
+                    checks.push((format!("{n} / ACTIVE_FILL"), ratio(c, ACTIVE_FILL()), min));
+                }
+                for (n, c) in [("FIELD_STROKE", FIELD_STROKE()), ("ACCENT", ACCENT()), ("ACTIVE_MARK", ACTIVE_MARK()), ("GOLD", GOLD()), ("BLUE", BLUE())] {
+                    let w = ratio(c, PANEL()).min(ratio(c, PANEL_DARK()));
+                    checks.push((format!("{n} / PANEL"), w, 3.0));
+                }
+                checks.push(("BLUE_TEXT / PANEL".into(), ratio(BLUE_TEXT(), PANEL()), 4.5));
+                checks.push(("ON_GOLD / GOLD".into(), ratio(ON_GOLD(), GOLD()), 4.5));
+                checks.push(("ON_BLUE / BLUE".into(), ratio(ON_BLUE(), BLUE()), 4.5));
+                if t != 0 {
+                    // image info box on the photo: text against the box composited over a black and a white photo
+                    let fill = info_box_fill();
+                    let a = fill.a() as f64 / 255.0;
+                    let over = |photo: f64| {
+                        let m = |c: u8| (c as f64 * a + photo * (1.0 - a)).round() as u8;
+                        Color32::from_rgb(m(fill.r()), m(fill.g()), m(fill.b()))
+                    };
+                    let (main, name, notice) = info_box_text();
+                    for (n, c) in [("INFO_TEXT", main), ("INFO_NAME", name), ("INFO_NOTICE", notice)] {
+                        checks.push((format!("{n} / INFO_BOX+photo"), ratio(c, over(0.0)).min(ratio(c, over(255.0))), 4.5));
+                    }
+                }
+                // measuring displays: curves, clipping marks and labels against their ground
+                for (k, c) in HIST_CHANNELS().into_iter().enumerate() {
+                    checks.push((format!("HIST_{} / SCOPE_BG", ["R", "G", "B"][k]), ratio(c, SCOPE_BG()), 3.0));
+                }
+                checks.push(("CLIP_LIT / SCOPE_BG".into(), ratio(clip_triangle(true), SCOPE_BG()), 3.0));
+                checks.push(("SCOPE_LABEL / SCOPE_BG".into(), ratio(scope_gray(0xc4), SCOPE_BG()), 4.5));
+                checks.push(("SCOPE_RIM / SCOPE_BG".into(), ratio(scope_gray(0x70), SCOPE_BG()), 3.0));
+                if t == 2 {
+                    // light theme: the vectorscope/parade ink at full density
+                    for (k, l) in [[1.0f32, 0.32, 0.30], [0.35, 1.0, 0.40], [0.38, 0.55, 1.0]].into_iter().enumerate() {
+                        let p = scope_pixel(Theme::Light, l);
+                        let a = p.a() as f64 / 255.0;
+                        let g = SCOPE_BG();
+                        let m = |pc: u8, gc: u8| (pc as f64 + gc as f64 * (1.0 - a)).round().min(255.0) as u8;
+                        let c = Color32::from_rgb(m(p.r(), g.r()), m(p.g(), g.g()), m(p.b(), g.b()));
+                        checks.push((format!("SCOPE_INK_{} / SCOPE_BG", ["R", "G", "B"][k]), ratio(c, g), 3.0));
+                    }
+                }
+                let mode = if hc { "Hoch" } else { "Standard" };
+                for (pair, w, min) in checks {
+                    let ok = w >= min;
+                    table += &format!("| {tn} | {mode} | {pair} | {w:.2} | {min} {} |\n", if ok { "" } else { "✗" });
+                    let key = format!("{tn}/{mode} {}", pair.split(' ').next().unwrap());
+                    if !ok && !known_dark.contains(&key.as_str()) {
+                        failures.push(format!("{key}: {w:.2} < {min}"));
+                    }
+                }
+            }
+        }
+        THEME.store(0, std::sync::atomic::Ordering::Relaxed);
+        HIGH_CONTRAST.store(false, std::sync::atomic::Ordering::Relaxed);
+        println!("{table}");
+        assert!(failures.is_empty(), "contrast below WCAG: {failures:#?}");
+    }
 }

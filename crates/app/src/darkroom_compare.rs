@@ -208,10 +208,10 @@ impl Compare {
         } else if let (true, Some((_, t))) = (ready, self.tex.as_ref()) {
             crate::paint_src_quad(&painter.with_clip_rect(clip), t.id(), src, frame, image, tint);
         }
-        let line = Stroke::new(1.5, Color32::from_white_alpha(230));
+        let line = Stroke::new(1.5, crate::lr::overlay(230));
         painter.line_segment([Pos2::new(x, b.top()), Pos2::new(x, b.bottom())], line);
         let handle = Rect::from_center_size(Pos2::new(x, b.center().y), Vec2::new(34.0, 20.0));
-        painter.rect_filled(handle, 0.0, Color32::from_white_alpha(235));
+        painter.rect_filled(handle, 0.0, crate::lr::overlay(235));
         // Arrows as triangles (the font lacks the arrow glyphs)
         let m = handle.center();
         for r in [-1.0f32, 1.0] {
@@ -230,9 +230,9 @@ impl Compare {
             painter.galley(a.anchor_size(p, g.size()).min, g, color);
         };
         names(Pos2::new(b.left() + 12.0, b.top() + 12.0), egui::Align2::LEFT_TOP, &left_label, Color32::from_rgb(0x7a, 0xb8, 0xe8));
-        names(Pos2::new(b.right() - 12.0, b.top() + 12.0), egui::Align2::RIGHT_TOP, &right_label, lr::ACCENT);
+        names(Pos2::new(b.right() - 12.0, b.top() + 12.0), egui::Align2::RIGHT_TOP, &right_label, lr::ACCENT());
         if !ready {
-            names(Pos2::new(b.left() + 12.0, b.bottom() - 28.0), egui::Align2::LEFT_TOP, crate::tr("wird berechnet …"), Color32::from_gray(0xaa));
+            names(Pos2::new(b.left() + 12.0, b.bottom() - 28.0), egui::Align2::LEFT_TOP, crate::tr("wird berechnet …"), crate::lr::gray(0xaa));
         }
     }
 }
@@ -265,8 +265,8 @@ impl App {
     pub(crate) fn darkroom_compare_actions(&mut self, ui: &mut egui::Ui) {
         let Some(index) = self.current.as_ref().map(|c| c.index) else { return };
         let toggle = |ui: &mut egui::Ui, on: bool, text: &str| {
-            let color = if on { Color32::WHITE } else { lr::TEXT_DIM() };
-            ui.add(egui::Button::new(egui::RichText::new(text).color(color)).frame(on).fill(if on { Color32::from_gray(0x33) } else { Color32::TRANSPARENT })).clicked()
+            let color = if on { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() };
+            ui.add(egui::Button::new(egui::RichText::new(text).color(color)).frame(on).fill(if on { crate::lr::gray(0x33) } else { Color32::TRANSPARENT })).clicked()
         };
         match self.darkroom.compare.mode {
             Mode::Off => {}

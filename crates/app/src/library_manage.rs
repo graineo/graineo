@@ -981,22 +981,22 @@ impl LibraryView {
         };
         let r = egui::Rect::from_min_size(at, size);
         if p.images.len() > 1 {
-            painter.rect_filled(r.translate(egui::vec2(4.0, 4.0)), 0.0, Color32::from_gray(0x50));
+            painter.rect_filled(r.translate(egui::vec2(4.0, 4.0)), 0.0, crate::lr::gray(0x50));
         }
         match &tex {
             Some(t) => {
                 painter.image(t.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::from_white_alpha(230));
             }
             None => {
-                painter.rect_filled(r, 0.0, Color32::from_gray(0x30));
+                painter.rect_filled(r, 0.0, crate::lr::gray(0x30));
             }
         }
-        painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xc0)), egui::StrokeKind::Outside);
+        painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xc0)), egui::StrokeKind::Outside);
         let n = p.images.len().to_string();
-        let g = painter.layout_no_wrap(n, egui::FontId::proportional(10.5), Color32::WHITE);
+        let g = painter.layout_no_wrap(n, egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG());
         let badge = egui::Rect::from_min_size(r.right_top() + egui::vec2(-g.size().x - 6.0, -8.0), g.size() + egui::vec2(8.0, 4.0));
         painter.rect_filled(badge, 0.0, Color32::from_black_alpha(200));
-        painter.galley(badge.min + egui::vec2(4.0, 2.0), g, Color32::WHITE);
+        painter.galley(badge.min + egui::vec2(4.0, 2.0), g, crate::lr::TEXT_STRONG());
         ctx.set_cursor_icon(egui::CursorIcon::Grabbing);
     }
 
@@ -1006,7 +1006,7 @@ impl LibraryView {
         let hovering = resp.dnd_hover_payload::<PhotoDrag>().is_some();
         if hovering {
             if allowed {
-                ui.painter().rect_stroke(resp.rect, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xe0)), egui::StrokeKind::Inside);
+                ui.painter().rect_stroke(resp.rect, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xe0)), egui::StrokeKind::Inside);
             } else {
                 ui.painter().rect_filled(resp.rect, 0.0, Color32::from_black_alpha(110));
                 ui.ctx().set_cursor_icon(egui::CursorIcon::NoDrop);

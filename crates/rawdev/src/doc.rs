@@ -594,9 +594,9 @@ impl RawDoc {
         let t = std::time::Instant::now();
         let f = match raw::RawFile::open(path) {
             Ok(f) => f,
-            // a file graineo cannot decode (Nikon High Efficiency, implausible decoder result): the system engine, if it
-            // knows the file
-            Err(raw::Error::Unsupported(why)) if (why == raw::NIKON_HE || why == raw::DECODE_IMPLAUSIBLE) && apple::available() => {
+            // a file graineo cannot decode (Nikon High Efficiency, implausible decoder result, a camera the decoder does
+            // not know yet): the system engine, if it knows the file
+            Err(raw::Error::Unsupported(why)) if (why == raw::NIKON_HE || why == raw::DECODE_IMPLAUSIBLE || raw::unknown_camera(&why).is_some()) && apple::available() => {
                 return match apple::open(path, s, None, apple::Reason::Fallback, Some(why.clone())) {
                     Ok(d) => Ok(Some(d)),
                     Err(e) => {
@@ -1550,6 +1550,35 @@ impl RawDoc {
         let toneq = self.toneq_for(s, st.w, st.h, [0, 0, st.w, st.h]);
         let base = crate::render::brake_active(s).then(|| st.brake_base().to_vec());
         crate::render::render_finished_haze(self, &st.px, st.w, st.h, mask, s, geo, haze.as_ref(), toneq.as_ref(), base)
+    }
+
+    /// Histogram of the tone equalizer's zone brightness over the preview (bins of `develop::tone_eq::hist_bin`), for
+    /// the graph in Edit. Computed separately from the render (which may run on the GPU) with the same steps that
+    /// lead to the equalizer in [`Self::render_stage`]: dehaze and noise brake, then the mask of the preview stage and
+    /// the same exposure offset. `None` for another view than the developed image or while the mask is shown.
+    pub fn zone_histogram(&self, s: &Settings) -> Option<Vec<u32>> {
+        if s.view != develop::View::Developed || s.tone_eq_mask {
+            return None;
+        }
+        let st = self.preview_stage(s);
+        let eff = self.effective_settings(s);
+        let s = &*eff;
+        let scale = self.full_size[0] as f32 / st.w as f32;
+        // the steps before the equalizer, with the equalizer itself left out (same settings otherwise)
+        let mut before = develop::Settings { tone_eq: develop::tone_eq::ToneEq { amount: 0.0, zones: [0.0; develop::tone_eq::ZONES], ..s.tone_eq.clone() }, ..s.clone() };
+        if scale > 1.5 && crate::render::brake_active(&before) {
+            before.noise_brake = develop::NoiseBrake::Off;
+        }
+        let mask = st.mask(self.lum());
+        let haze = self.haze_for(&before, st.w, st.h, [0, 0, st.w, st.h]);
+        let base = crate::render::brake_active(&before).then(|| st.brake_base().to_vec());
+        let prepared = crate::render::prepare(self, &st.px, st.w, st.h, mask, &before, haze.as_ref(), None, base);
+        let px: &[[f32; 3]] = prepared.as_deref().unwrap_or(&st.px);
+        let m = develop::tone_eq::Mask::resample(st.toneq(s), st.w, st.h, [0, 0, st.w, st.h]);
+        let t = develop::tone_eq::Apply::new(&s.tone_eq, &m, self.base_ev_for(s) + s.exposure as f32, false);
+        let sink = develop::tone_eq::HistSink::new();
+        sink.add_image(&t, st.w, st.h, |x, y| px[y * st.w + x]);
+        sink.take()
     }
 
     /// Downscaled detail stage (thumbnails in the profile browser).

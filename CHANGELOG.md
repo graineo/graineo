@@ -491,3 +491,26 @@ A small update after the first reports from users.
 ## Trademarks
 
 SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film names, camera names, Lightroom, Camera Raw, Apple Photos, and macOS are trademarks of their respective owners. graineo is not affiliated with any of these companies.
+
+## 1.5.2 · Polish
+
+- Tooltips of profile tiles in Film & Look sit below the whole tile and no longer cover its name.
+- Help cards have an even margin on both sides, so no line runs up to the right edge.
+- The Noise limiter row in Develop always keeps its place (dimmed while the photo is not brightened), so Auto and undo no longer change the length of the panel.
+- New Skin Tones section below the color mixer: Skin hue (rosier ↔ more golden) and Skin saturation act only on a fixed range of skin tones, the same for every skin tone; colors away from skin stay exactly as they are. The effect is smoothed along the skin and stops at edges, so skin in JPEGs stays even instead of blotchy.
+- Camera defaults: in Edit, “Reset ▾” → “Set as default for <camera> …” stores chosen groups of the current settings as start values for that camera; they apply when an unedited photo from it is opened for the first time. Overview, change and remove under Preferences → Camera defaults; a small mark in the Edit panel shows when a camera has its own defaults. Reset stays neutral, with a separate “Reset to camera default”.
+- Preferences → Develop: “Lens correction on by default” and a default for “Neutral highlights” for new photos.
+- Preferences show their sections as a list on the left.
+- Tone Equalizer redesigned: below the Balance slider a graph of the nine zones from −8 EV to 0 EV shows what acts (Balance plus zones, Balance alone dashed) over the histogram of the photo in the same brightness the equalizer works with. Click a point and drag it, step it with ↑/↓ (⇧ coarse), switch zones with ←/→, use the mouse wheel, double-click for 0, or double-click the value to type it. The nine zone sliders are gone; existing edits look exactly the same.
+- New appearance setting (Settings → Interface → Appearance): Same as system, Dark, Medium, Light. Same as system follows macOS/Windows live. Medium is a dark grey, Light has light panels, menus and dialogs; the area around the photo follows with a neutral grey. Text and controls meet WCAG contrast in every theme, also together with high contrast.
+
+## 1.5.2 · Appearance, Skin Tones, Tone Equalizer, Camera Defaults
+
+- **Appearance.** Settings → Interface → Appearance: Dark, Medium, Light, or Match System (follows the system setting live). Surfaces and text are built in even steps with fixed contrast targets; the area around the photo stays neutral grey. Histogram, parade, vectorscope and the shooting info follow the theme.
+- **Skin tones.** New section below the colour mixer with two sliders: Skin Hue (rosier ↔ more golden) and Skin Saturation. They act only on a fixed range of skin colours, the same for very light to very dark skin; everything outside it stays exactly as it was.
+- **Tone Equalizer with a graph.** The section shows a curve over the zones with the photo's histogram behind it; drag the points directly. The detailed zone sliders are gone; values use the decimal separator of your language.
+- **Camera defaults.** Save the current settings as the default for a camera (Edit → menu next to Reset all) and manage them in Settings → Camera Defaults, with the actual values shown. New global start values: lens correction on by default, and a start value for Highlight Neutral.
+- **Settings** now list their sections vertically with icons.
+- **Unknown cameras.** A raw file from a camera that is not supported yet now says so, names the model and suggests converting the file to DNG, instead of “cannot open”. On the Mac, graineo first tries the macOS raw engine. Damaged files are reported as damaged.
+- Small fixes: tooltips of tiles no longer cover their names, help cards have even margins, the noise brake row keeps a fixed place, the history shows temperature in Kelvin.
+

@@ -110,8 +110,8 @@ impl Zones {
             let bar = (v[z] / max * 22.0).max(if v[z] > 0.0 { 1.0 } else { 0.0 });
             let g = zones_gray(z);
             let patch = Rect::from_min_max(Pos2::new(cell.left() + 1.0, cell.top() + 24.0), Pos2::new(cell.right() - 1.0, cell.bottom()));
-            painter.rect_filled(patch, 0.0, Color32::from_gray(g));
-            painter.rect_filled(Rect::from_min_max(Pos2::new(cell.left() + 6.0, cell.top() + 22.0 - bar), Pos2::new(cell.right() - 6.0, cell.top() + 22.0)), 0.0, Color32::from_gray(0xaa));
+            painter.rect_filled(patch, 0.0, crate::lr::gray(g));
+            painter.rect_filled(Rect::from_min_max(Pos2::new(cell.left() + 6.0, cell.top() + 22.0 - bar), Pos2::new(cell.right() - 6.0, cell.top() + 22.0)), 0.0, crate::lr::gray(0xaa));
             let text_color = if g > 120 { Color32::BLACK } else { Color32::WHITE };
             painter.text(patch.center(), egui::Align2::CENTER_CENTER, ROMAN[z], egui::FontId::monospace(10.5), text_color);
         }
@@ -119,8 +119,8 @@ impl Zones {
             // Mark in the bar and label at the pointer
             let x = strip.left() + (zone + 0.5) * 44.0;
             let x = x.clamp(strip.left(), strip.right());
-            painter.line_segment([Pos2::new(x, strip.top() + 22.0), Pos2::new(x, strip.bottom())], Stroke::new(2.0, lr::ACCENT));
-            painter.circle_stroke(p, 6.0, Stroke::new(1.5, lr::ACCENT));
+            painter.line_segment([Pos2::new(x, strip.top() + 22.0), Pos2::new(x, strip.bottom())], Stroke::new(2.0, lr::ACCENT()));
+            painter.circle_stroke(p, 6.0, Stroke::new(1.5, lr::ACCENT()));
             let text = crate::trf!("ZONE {a} · {b} %", a = ROMAN[zone.round().clamp(0.0, 10.0) as usize], b = format!("{:.0}", gray));
             let g = painter.layout_no_wrap(text, egui::FontId::monospace(11.0), Color32::WHITE);
             let o = p + Vec2::new(12.0, -22.0);

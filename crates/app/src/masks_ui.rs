@@ -308,9 +308,9 @@ fn color_samples(ui: &mut Ui, samples: &mut Vec<[f32; 3]>) {
         let resp = ui.interact(r, ui.scope_id().with(("color_sample", i)), egui::Sense::click());
         let srgb = |v: f32| (if v <= 0.0031308 { v * 12.92 } else { 1.055 * v.max(0.0).powf(1.0 / 2.4) - 0.055 }.clamp(0.0, 1.0) * 255.0).round() as u8;
         ui.painter().rect_filled(r, 0.0, Color32::from_rgb(srgb(c[0]), srgb(c[1]), srgb(c[2])));
-        ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0x50) }), egui::StrokeKind::Outside);
+        ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, if resp.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x50) }), egui::StrokeKind::Outside);
         if resp.hovered() {
-            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(14.0), Color32::WHITE);
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(14.0), crate::lr::TEXT_STRONG());
         }
         lr::hover_tip(ui, &resp, crate::tr("Probe entfernen"));
         if resp.clicked() {
@@ -514,9 +514,9 @@ fn parts_section(ui: &mut Ui, s: &mut State, layer: &mut Layer, name: &str, path
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 24.0), egui::Sense::click());
         let p = ui.painter();
         if i == s.part {
-            p.rect_filled(rect, 0.0, Color32::from_gray(0x30));
+            p.rect_filled(rect, 0.0, crate::lr::gray(0x30));
         } else if resp.hovered() {
-            p.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+            p.rect_filled(rect, 0.0, crate::lr::gray(0x22));
         }
         let sym = match op {
             None => "●",
@@ -524,7 +524,7 @@ fn parts_section(ui: &mut Ui, s: &mut State, layer: &mut Layer, name: &str, path
             Some(Operation::Subtract) => "−",
             Some(Operation::Intersect) => "∩",
         };
-        let c = if i == s.part { Color32::WHITE } else { lr::TEXT() };
+        let c = if i == s.part { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
         // the symbol (its ink, whichever font draws it) starts at the text edge of the tray
         let g = p.layout_no_wrap(sym.to_string(), egui::FontId::proportional(13.0), c);
         let ink = g.rows.first().and_then(|r| r.row.glyphs.first().map(|q| r.pos.x + q.pos.x + q.uv_rect.offset.x)).unwrap_or(0.0);
@@ -547,7 +547,7 @@ fn parts_section(ui: &mut Ui, s: &mut State, layer: &mut Layer, name: &str, path
         let more = egui::Rect::from_center_size(egui::pos2(rect.right() - 14.0, rect.center().y), egui::vec2(24.0, 22.0));
         let m = ui.interact(more, ui.scope_id().with(("part_menu", i)), egui::Sense::click());
         if m.hovered() {
-            ui.painter().rect_filled(more, 0.0, Color32::from_gray(0x44));
+            ui.painter().rect_filled(more, 0.0, crate::lr::gray(0x44));
         }
         ui.painter().text(more.center(), egui::Align2::CENTER_CENTER, "⋯", egui::FontId::proportional(13.0), lr::TEXT_DIM());
         lr::hover_tip(ui, &m, crate::tr("Teil: invertieren, Verknüpfung ändern, löschen"));
@@ -930,7 +930,7 @@ fn tool_line(ui: &mut Ui, s: &State, layer: Option<&Layer>) {
     if !text.is_empty() {
         let font = egui::FontId::proportional(10.5);
         let shown = lr::middle_ellipsis_font(ui.painter(), text, &font, r.width() - lr::TEXT_INSET - 2.0);
-        ui.painter().text(r.left_center() + egui::vec2(lr::TEXT_INSET, 0.0), egui::Align2::LEFT_CENTER, shown, font, lr::BLUE_TEXT);
+        ui.painter().text(r.left_center() + egui::vec2(lr::TEXT_INSET, 0.0), egui::Align2::LEFT_CENTER, shown, font, lr::BLUE_TEXT());
     }
 }
 
@@ -1716,7 +1716,7 @@ pub fn overlay(
             if open && !s.draw && tool == PartTool::Shape {
                 let mut part = part.clone();
                 for (_, p) in handles(mask_parts::last_leaf(&mut part), full) {
-                    painter.circle_filled(to_screen(p), 4.5, Color32::from_gray(0x20));
+                    painter.circle_filled(to_screen(p), 4.5, crate::lr::gray(0x20));
                     painter.circle_stroke(to_screen(p), 4.5, egui::Stroke::new(1.5, Color32::from_rgb(230, 180, 70)));
                 }
             }
@@ -1744,7 +1744,7 @@ pub fn overlay(
 fn brush_ring(painter: &egui::Painter, pos: egui::Pos2, radius: f32, hardness: f32, erase: bool) {
     let ring = |r: f32, alpha: u8| {
         painter.circle_stroke(pos, r, egui::Stroke::new(2.5, Color32::from_black_alpha(alpha / 2)));
-        painter.circle_stroke(pos, r, egui::Stroke::new(1.0, Color32::from_white_alpha(alpha)));
+        painter.circle_stroke(pos, r, egui::Stroke::new(1.0, crate::lr::overlay(alpha)));
     };
     let radius = radius.max(1.5);
     ring(radius, 230);
@@ -1753,7 +1753,7 @@ fn brush_ring(painter: &egui::Painter, pos: egui::Pos2, radius: f32, hardness: f
         ring(inner, 150);
     }
     if erase {
-        for (w, c) in [(4.0, Color32::from_black_alpha(150)), (1.5, Color32::WHITE)] {
+        for (w, c) in [(4.0, Color32::from_black_alpha(150)), (1.5, crate::lr::TEXT_STRONG())] {
             painter.line_segment([pos - egui::vec2(5.0, 0.0), pos + egui::vec2(5.0, 0.0)], egui::Stroke::new(w, c));
         }
     }
@@ -2150,8 +2150,8 @@ mod brush_view_tests {
             match s {
                 egui::Shape::Vec(v) => v.iter().for_each(|s| walk(s, d)),
                 egui::Shape::LineSegment { stroke, .. } if stroke.color == Color32::from_rgb(230, 180, 70) => d.gold_lines += 1,
-                egui::Shape::Circle(c) if c.stroke.color == Color32::from_white_alpha(230) => d.rings.push(c.radius),
-                egui::Shape::Circle(c) if c.stroke.color == Color32::from_white_alpha(150) => d.rings.push(-c.radius),
+                egui::Shape::Circle(c) if c.stroke.color == crate::lr::overlay(230) => d.rings.push(c.radius),
+                egui::Shape::Circle(c) if c.stroke.color == crate::lr::overlay(150) => d.rings.push(-c.radius),
                 egui::Shape::Mesh(_) => d.meshes += 1,
                 _ => {}
             }
@@ -2302,7 +2302,7 @@ mod brush_view_tests {
         paint(&ctx, &mut local, egui::pos2(20.0, 60.0), egui::pos2(200.0, 60.0));
         let alt = egui::Modifiers { alt: true, ..Default::default() };
         let out = frame_with(&ctx, &mut local, vec![egui::Event::PointerMoved(egui::pos2(100.0, 60.0))], alt);
-        let minus = out.shapes.iter().any(|c| matches!(&c.shape, egui::Shape::LineSegment { points, stroke } if stroke.color == Color32::WHITE && (points[1].x - points[0].x - 10.0).abs() < 0.01));
+        let minus = out.shapes.iter().any(|c| matches!(&c.shape, egui::Shape::LineSegment { points, stroke } if stroke.color == crate::lr::TEXT_STRONG() && (points[1].x - points[0].x - 10.0).abs() < 0.01));
         assert!(minus, "the ring shows a minus while ⌥ is held");
         for (a, b) in [(egui::pos2(100.0, 20.0), egui::pos2(100.0, 100.0)), (egui::pos2(140.0, 20.0), egui::pos2(140.0, 100.0))] {
             frame_with(&ctx, &mut local, vec![egui::Event::PointerMoved(a), egui::Event::PointerButton { pos: a, button: egui::PointerButton::Primary, pressed: true, modifiers: alt }], alt);
@@ -2668,7 +2668,7 @@ impl Overlay {
         let w = w.clamp(0.0, 1.0);
         match self {
             Overlay::Red => Color32::from_rgba_unmultiplied(230, 40, 40, (w * 140.0) as u8),
-            Overlay::Mask => Color32::from_gray((w * 255.0).round() as u8),
+            Overlay::Mask => crate::lr::gray((w * 255.0).round() as u8),
             Overlay::ImageOnGrey => Color32::from_rgba_unmultiplied(128, 128, 128, ((1.0 - w) * 235.0) as u8),
             Overlay::Rubylith => Color32::from_rgba_unmultiplied(220, 30, 30, ((1.0 - w) * 150.0) as u8),
         }
@@ -2928,7 +2928,7 @@ mod overlay_tests {
         assert_eq!((Overlay::Red.pixel(0.0).a(), Overlay::Rubylith.pixel(1.0).a()), (0, 0));
         assert!(Overlay::Red.pixel(1.0).a() > 100 && Overlay::Rubylith.pixel(0.0).a() > 100);
         // the mask in black and white, opaque
-        assert_eq!((Overlay::Mask.pixel(0.0), Overlay::Mask.pixel(1.0)), (Color32::BLACK, Color32::WHITE));
+        assert_eq!((Overlay::Mask.pixel(0.0), Overlay::Mask.pixel(1.0)), (Color32::BLACK, crate::lr::TEXT_STRONG()));
         // image on grey: the photo shows through where the mask acts
         assert_eq!(Overlay::ImageOnGrey.pixel(1.0).a(), 0);
         assert!(Overlay::ImageOnGrey.pixel(0.0).a() > 200);

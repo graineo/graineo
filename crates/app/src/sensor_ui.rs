@@ -334,14 +334,14 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
     if let Some(tip) = tip { lr::hover_tip(ui, &resp, tip); }
     let painter = ui.painter();
     if on {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x4a));
+        painter.rect_filled(rect, 0.0, crate::lr::gray(0x4a));
     } else if resp.hovered() && enabled {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x38));
+        painter.rect_filled(rect, 0.0, crate::lr::gray(0x38));
     }
     let fg = if !enabled {
-        Color32::from_gray(0x5c)
+        crate::lr::gray(0x5c)
     } else if on || resp.hovered() {
-        Color32::WHITE
+        crate::lr::TEXT_STRONG()
     } else {
         lr::TEXT()
     };
@@ -351,9 +351,9 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
         x += 22.0;
     }
     let right = if busy { "…".to_string() } else { key.to_string() };
-    let rg = painter.layout_no_wrap(right, egui::FontId::proportional(10.5), if on { Color32::from_gray(0xc8) } else { lr::TEXT_DIM() });
+    let rg = painter.layout_no_wrap(right, egui::FontId::proportional(10.5), if on { crate::lr::gray(0xc8) } else { lr::TEXT_DIM() });
     let rx = rect.right() - 8.0 - rg.size().x;
-    painter.galley(egui::pos2(rx, rect.center().y - rg.size().y / 2.0), rg, Color32::WHITE);
+    painter.galley(egui::pos2(rx, rect.center().y - rg.size().y / 2.0), rg, crate::lr::TEXT_STRONG());
     painter.with_clip_rect(egui::Rect::from_min_max(rect.min, egui::pos2(rx - 6.0, rect.bottom()))).text(
         egui::pos2(x, rect.center().y),
         egui::Align2::LEFT_CENTER,
@@ -366,8 +366,14 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
 
 /// Width of the label column of the value grids (same in all sections, so the values line up).
 const GRID_LABEL_W: f32 = 120.0;
-const CHART_BG: Color32 = Color32::from_gray(20);
-const CHART_GRID: Color32 = Color32::from_gray(0x30);
+#[allow(non_snake_case)]
+fn CHART_BG() -> Color32 {
+    crate::lr::gray(20)
+}
+#[allow(non_snake_case)]
+fn CHART_GRID() -> Color32 {
+    crate::lr::gray(0x30)
+}
 const CHART_COLORS: [Color32; 3] = [Color32::from_rgb(255, 90, 90), Color32::from_rgb(90, 230, 90), Color32::from_rgb(100, 150, 255)];
 
 /// Axis labels (EV) below a chart and vertical grid lines.
@@ -376,7 +382,7 @@ fn ev_axis(painter: &egui::Painter, plot: egui::Rect, ev0: f32, ev1: f32, step: 
     let mut e = (ev0 / step as f32).ceil() as i32 * step;
     while e as f32 <= ev1 + 1e-3 {
         let x = plot.left() + plot.width() * (e as f32 - ev0) / (ev1 - ev0);
-        painter.line_segment([egui::pos2(x, plot.top()), egui::pos2(x, plot.bottom())], egui::Stroke::new(1.0, CHART_GRID));
+        painter.line_segment([egui::pos2(x, plot.top()), egui::pos2(x, plot.bottom())], egui::Stroke::new(1.0, CHART_GRID()));
         painter.text(egui::pos2(x, plot.bottom() + 2.0), egui::Align2::CENTER_TOP, if e == 0 { "0".to_string() } else { format!("{e}") }, font.clone(), lr::TEXT_DIM());
         e += step;
     }
@@ -387,7 +393,7 @@ fn histogram_ev(ui: &mut egui::Ui, h: Option<(f32, &[Vec<f64>; 3])>) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 110.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
     let plot = egui::Rect::from_min_max(egui::pos2(rect.left() + 8.0, rect.top()), egui::pos2(rect.right() - 8.0, rect.bottom() - 14.0));
-    painter.rect_filled(plot, 0.0, CHART_BG);
+    painter.rect_filled(plot, 0.0, CHART_BG());
     let (ev0, ev1) = (-12.0f32, 0.25f32);
     ev_axis(&painter, plot, ev0, ev1 - 0.25, 2);
     // saturation
@@ -418,14 +424,14 @@ fn snr_chart(ui: &mut egui::Ui, d: Option<&(Vec<f64>, Vec<Vec<f64>>, Vec<Vec<(f6
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 130.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
     let plot = egui::Rect::from_min_max(egui::pos2(rect.left() + 22.0, rect.top()), egui::pos2(rect.right() - 8.0, rect.bottom() - 14.0));
-    painter.rect_filled(plot, 0.0, CHART_BG);
+    painter.rect_filled(plot, 0.0, CHART_BG());
     let (ev0, ev1) = (-14.0f32, 0.0f32);
     let db_max = 50.0f32;
     ev_axis(&painter, plot, ev0, ev1, 2);
     let font = egui::FontId::proportional(9.5);
     for db in [0, 10, 20, 30, 40, 50] {
         let y = plot.bottom() - plot.height() * db as f32 / db_max;
-        painter.line_segment([egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)], egui::Stroke::new(1.0, CHART_GRID));
+        painter.line_segment([egui::pos2(plot.left(), y), egui::pos2(plot.right(), y)], egui::Stroke::new(1.0, CHART_GRID()));
         if db % 20 == 0 {
             painter.text(egui::pos2(plot.left() - 4.0, y), egui::Align2::RIGHT_CENTER, format!("{db}"), font.clone(), lr::TEXT_DIM());
         }

@@ -74,12 +74,12 @@ impl Motion {
 pub fn busy_strip(painter: &eframe::egui::Painter, frame: eframe::egui::Rect, t: f64) {
     use eframe::egui;
     let track = egui::Rect::from_min_max(egui::pos2(frame.left() + 1.0, frame.bottom() - 3.0), egui::pos2(frame.right() - 1.0, frame.bottom() - 1.0));
-    painter.rect_filled(track, 0.0, egui::Color32::from_gray(0x2c));
+    painter.rect_filled(track, 0.0, crate::lr::gray(0x2c));
     let w = track.width() * 0.28;
     // to and fro, softly turning at the ends
     let phase = ((t / 1.1).fract() * std::f64::consts::TAU).sin() as f32 * 0.5 + 0.5;
     let x = track.left() + (track.width() - w) * phase;
-    painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, track.top()), egui::vec2(w, track.height())), 0.0, egui::Color32::from_gray(0x9a));
+    painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, track.top()), egui::vec2(w, track.height())), 0.0, crate::lr::gray(0x9a));
 }
 
 /// Soft start and end.

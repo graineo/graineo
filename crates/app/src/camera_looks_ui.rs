@@ -816,7 +816,7 @@ fn body(ui: &mut egui::Ui, w: &mut Window) {
     let middle = Rect::from_min_max(Pos2::new(list.max.x + gap, area.min.y), Pos2::new(side.min.x - gap, area.max.y));
     let p = ui.painter();
     for x in [list.max.x + gap / 2.0, side.min.x - gap / 2.0] {
-        p.line_segment([Pos2::new(x, area.min.y), Pos2::new(x, area.max.y)], egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
+        p.line_segment([Pos2::new(x, area.min.y), Pos2::new(x, area.max.y)], egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
     }
     let mut child = |r: Rect, salt: &str| ui.new_child(egui::UiBuilder::new().id_salt(salt).max_rect(r).layout(egui::Layout::top_down(egui::Align::Min)));
     list_ui(&mut child(list, "list"), w);
@@ -902,7 +902,7 @@ fn list_ui(ui: &mut egui::Ui, w: &mut Window) {
                 lr::hover_tip(ui, &r, crate::tr("Die Zahlen dieser Kamera sind vorläufig, bis ihre Auswahl ganz gelesen ist; Lernen geht danach"));
             }
             if let Some(more) = newest {
-                let r = ui.label(egui::RichText::new(crate::trf!("{n} neue Fotos seit dem Lernen", n = more)).small().color(lr::BLUE_TEXT));
+                let r = ui.label(egui::RichText::new(crate::trf!("{n} neue Fotos seit dem Lernen", n = more)).small().color(lr::BLUE_TEXT()));
                 lr::hover_tip(ui, &r, crate::tr("Mit den neuen Fotos lässt sich der Look neu lernen; er wird nur ersetzt, wenn er an denselben Kontrollfotos besser ist"));
             }
             if cam.styles.is_empty() {
@@ -933,9 +933,9 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
     let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 38.0), egui::Sense::click());
     let p = ui.painter();
     if selected {
-        p.rect_filled(rect, 0.0, lr::ACTIVE_FILL);
+        p.rect_filled(rect, 0.0, lr::ACTIVE_FILL());
     } else if resp.hovered() {
-        p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+        p.rect_filled(rect, 0.0, crate::lr::gray(0x26));
     }
     p.circle_filled(Pos2::new(rect.min.x + 8.0, rect.min.y + 11.0), 3.5, learnable_colour(learnable));
     let name = style_label(&s.style);
@@ -964,13 +964,13 @@ fn style_line(ui: &mut egui::Ui, s: &StyleRow, selected: bool, include_adaptive:
         tags.push((t, GREEN));
     }
     if st.bundled.is_some() {
-        tags.push((if st.own { crate::tr("EIGENER LOOK") } else { crate::tr("MITGELIEFERT") }.into(), lr::BLUE_TEXT));
+        tags.push((if st.own { crate::tr("EIGENER LOOK") } else { crate::tr("MITGELIEFERT") }.into(), lr::BLUE_TEXT()));
     }
     if st.hue_table {
         tags.push((crate::tr("FARBTONTABELLE").into(), lr::TEXT_DIM()));
     }
     if tags.is_empty() {
-        tags.push((crate::tr("KEINER").into(), Color32::from_gray(0x80)));
+        tags.push((crate::tr("KEINER").into(), crate::lr::gray(0x80)));
     }
     let mut x = rect.min.x + 18.0;
     for (t, c) in tags {
@@ -1047,7 +1047,7 @@ fn side_ui(ui: &mut egui::Ui, w: &mut Window) {
     let st = status(&row);
     let (learnable, why) = assess(&row, w.include_adaptive, cov.as_ref());
     // head
-    ui.label(egui::RichText::new(format!("{} · {}", cam_name, style_label(&row.style))).font(lr::semibold(13.0)).color(Color32::from_gray(0xee)));
+    ui.label(egui::RichText::new(format!("{} · {}", cam_name, style_label(&row.style))).font(lr::semibold(13.0)).color(crate::lr::gray(0xee)));
     ui.horizontal_wrapped(|ui| {
         let (r, _) = ui.allocate_exact_size(Vec2::new(10.0, 14.0), egui::Sense::hover());
         ui.painter().circle_filled(r.center(), 4.0, learnable_colour(learnable));
@@ -1186,13 +1186,13 @@ fn live_ui(ui: &mut egui::Ui, w: &mut Window) {
         for (i, name) in names.iter().enumerate() {
             let idx = i as u8;
             let c = match now {
-                Some(n) if n == idx => Color32::WHITE,
+                Some(n) if n == idx => crate::lr::TEXT_STRONG(),
                 Some(n) if n > idx && (n >= 3 || idx >= 3) => GREEN.gamma_multiply(0.8),
-                _ => Color32::from_gray(0x70),
+                _ => crate::lr::gray(0x70),
             };
             ui.label(egui::RichText::new(*name).small().color(c));
             if i + 1 < names.len() {
-                ui.label(egui::RichText::new("›").small().color(Color32::from_gray(0x60)));
+                ui.label(egui::RichText::new("›").small().color(crate::lr::gray(0x60)));
             }
         }
     });
@@ -1319,7 +1319,7 @@ fn looks_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, row: &StyleRow, st: &S
         }
         line(ui, crate::tr("Gelernt"), &format!("{label}: {t}"));
         if let Some(more) = new_since(meta.as_ref(), cam_photos) {
-            ui.label(egui::RichText::new(crate::trf!("{n} neue Fotos seit dem Lernen", n = more)).small().color(lr::BLUE_TEXT));
+            ui.label(egui::RichText::new(crate::trf!("{n} neue Fotos seit dem Lernen", n = more)).small().color(lr::BLUE_TEXT()));
         }
         if let Some(wb) = meta.as_ref().and_then(|m| m["wb_spread"].as_array().cloned()) {
             if let [a, b] = &wb[..] {
@@ -1374,7 +1374,7 @@ fn stats_ui(ui: &mut egui::Ui, w: &Window, row: &StyleRow, cam_photos: usize, co
         Some(c) => {
             let src = if from_blocks { crate::tr("aus den Lernblöcken (Kamera-JPEG)") } else { crate::tr("aus den Vorschauen der Bibliothek") };
             ui.label(egui::RichText::new(crate::trf!("Abdeckung, {a}", a = src)).small().color(lr::TEXT_DIM()));
-            bars(ui, crate::tr("Helligkeit"), &c.brightness, &|_| Color32::from_gray(0xb0), crate::tr("Anteil dunkler bis heller Bildteile (fünf Stufen)"));
+            bars(ui, crate::tr("Helligkeit"), &c.brightness, &|_| crate::lr::gray(0xb0), crate::tr("Anteil dunkler bis heller Bildteile (fünf Stufen)"));
             bars(ui, crate::tr("Farben"), &c.hues, &|i| hue_colour(i), crate::tr("Anteil farbiger Bildteile je Farbton (Rot, Gelb, Grün, Cyan, Blau, Magenta)"));
             ui.horizontal(|ui| {
                 let s = ui.label(egui::RichText::new(crate::trf!("Hauttöne {a} %", a = (c.skin * 100.0).round())).small().color(if c.skin < 0.01 { YELLOW } else { lr::TEXT() }));
@@ -1423,7 +1423,7 @@ fn bars(ui: &mut egui::Ui, label: &str, v: &[f32], colour: &dyn Fn(usize) -> Col
         let (rect, resp) = ui.allocate_exact_size(Vec2::new(width, 24.0), egui::Sense::hover());
         lr::hover_tip(ui, &resp, tip);
         let p = ui.painter();
-        p.rect_filled(rect, 0.0, Color32::from_gray(0x16));
+        p.rect_filled(rect, 0.0, crate::lr::gray(0x16));
         let max = v.iter().copied().fold(0.0f32, f32::max).max(1e-6);
         let bw = rect.width() / v.len() as f32;
         for (i, x) in v.iter().enumerate() {
@@ -1632,7 +1632,7 @@ fn compare_ui(ui: &mut egui::Ui, w: &mut Window) {
     // two fixed rows: what is compared (left | right), then how
     ui.horizontal(|ui| {
         lr::segmented_tips(ui, &mut w.compare.left, &modes, &tips, 6.0);
-        ui.label(egui::RichText::new("|").color(Color32::from_gray(0x60)));
+        ui.label(egui::RichText::new("|").color(crate::lr::gray(0x60)));
         lr::segmented_tips(ui, &mut w.compare.right, &modes, &tips, 6.0);
     });
     ui.horizontal(|ui| {
@@ -1678,7 +1678,7 @@ fn file_name(p: &std::path::Path) -> String {
 
 fn images_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, area: Rect) {
     let resp = ui.interact(area, egui::Id::unique("camera-looks-image"), egui::Sense::click_and_drag());
-    ui.painter().rect_filled(area, 0.0, lr::IMAGE_BG);
+    ui.painter().rect_filled(area, 0.0, lr::IMAGE_BG());
     // the texture of the new look (made on demand from the neutral image)
     // (the look itself only when its texture has to be made, not in every frame)
     let new_id = w.new_look_id(key);
@@ -1802,7 +1802,7 @@ fn images_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, area: Rect) {
         for (k, m) in [(0, c.left), (1, c.right)] {
             let pr = panes[k];
             let clip = painter.with_clip_rect(pr);
-            clip.rect_filled(pr, 0.0, lr::IMAGE_BG);
+            clip.rect_filled(pr, 0.0, lr::IMAGE_BG());
             paint(&clip, pr, m);
             crate::compare_view::tag(&clip, pr.min + Vec2::new(8.0, 8.0), mode_label(m), false, false, label_w(pr));
         }
@@ -1811,17 +1811,17 @@ fn images_ui(ui: &mut egui::Ui, w: &mut Window, key: &str, area: Rect) {
         let right = Rect::from_min_max(Pos2::new(split_x, pane.min.y), pane.max);
         paint(&painter.with_clip_rect(left), pane, c.left);
         paint(&painter.with_clip_rect(right), pane, c.right);
-        painter.line_segment([Pos2::new(split_x, pane.min.y), Pos2::new(split_x, pane.max.y)], egui::Stroke::new(1.0, Color32::from_white_alpha(200)));
+        painter.line_segment([Pos2::new(split_x, pane.min.y), Pos2::new(split_x, pane.max.y)], egui::Stroke::new(1.0, crate::lr::overlay(200)));
         let handle = Rect::from_center_size(Pos2::new(split_x, pane.center().y), Vec2::new(8.0, 36.0));
-        painter.rect_filled(handle, 2.0, Color32::from_white_alpha(if c.dragging_divider || near_divider { 230 } else { 160 }));
+        painter.rect_filled(handle, 2.0, crate::lr::overlay(if c.dragging_divider || near_divider { 230 } else { 160 }));
         crate::compare_view::tag(&painter.with_clip_rect(left), pane.min + Vec2::new(8.0, 8.0), mode_label(c.left), false, false, label_w(left).max(60.0));
         let rt = mode_label(c.right).to_uppercase();
-        let tw = painter.layout_no_wrap(rt, egui::FontId::monospace(11.0), Color32::WHITE).size().x + 14.0;
+        let tw = painter.layout_no_wrap(rt, egui::FontId::monospace(11.0), crate::lr::TEXT_STRONG()).size().x + 14.0;
         crate::compare_view::tag(&painter.with_clip_rect(right), Pos2::new(pane.max.x - 8.0 - tw, pane.min.y + 8.0), mode_label(c.right), false, false, label_w(right).max(60.0));
     }
     if c.zoom > 1.01 {
         let z = format!("{:.0} %", c.zoom / one * 100.0);
-        painter.text(area.right_bottom() - Vec2::new(8.0, 8.0), egui::Align2::RIGHT_BOTTOM, z, egui::FontId::monospace(10.5), Color32::from_white_alpha(200));
+        painter.text(area.right_bottom() - Vec2::new(8.0, 8.0), egui::Align2::RIGHT_BOTTOM, z, egui::FontId::monospace(10.5), crate::lr::overlay(200));
     }
 }
 
@@ -1849,19 +1849,19 @@ fn strip_ui(ui: &mut egui::Ui, w: &mut Window, strip: &[(PathBuf, Option<PathBuf
                 let wdt = tex.map_or(h * 1.5, |t| h * t.size_vec2().x / t.size_vec2().y.max(1.0)).clamp(h * 0.6, h * 1.6);
                 let (r, resp) = ui.allocate_exact_size(Vec2::new(wdt, h), egui::Sense::click());
                 let painter = ui.painter();
-                painter.rect_filled(r, 0.0, Color32::from_gray(0x22));
+                painter.rect_filled(r, 0.0, crate::lr::gray(0x22));
                 if let Some(t) = tex {
                     painter.image(t.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
                 }
                 let selected = w.compare.photo.as_ref() == Some(p);
                 if selected {
-                    painter.rect_stroke(r, 0.0, egui::Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Inside);
+                    painter.rect_stroke(r, 0.0, egui::Stroke::new(2.0, crate::lr::TEXT_STRONG()), egui::StrokeKind::Inside);
                 } else if resp.hovered() {
-                    painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x90)), egui::StrokeKind::Inside);
+                    painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x90)), egui::StrokeKind::Inside);
                 }
                 let (letter, colour, tip) = match mark {
                     Mark::Check => (crate::tr("K"), GREEN, crate::tr("Kontrollfoto: nicht zum Lernen benutzt, daran wird gemessen")),
-                    Mark::Training => (crate::tr("T"), lr::BLUE_TEXT, crate::tr("Trainingsfoto: daraus wird gelernt")),
+                    Mark::Training => (crate::tr("T"), lr::BLUE_TEXT(), crate::tr("Trainingsfoto: daraus wird gelernt")),
                     Mark::Unknown => ("", lr::TEXT_DIM(), crate::tr("Foto, das zum Lernen dienen würde (Training oder Kontrolle entscheidet sich beim Lernen)")),
                 };
                 if !letter.is_empty() {

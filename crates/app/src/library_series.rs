@@ -572,7 +572,7 @@ impl LibraryView {
         if m.collapsed {
             // two thin edges behind the photo (a pile of prints)
             for (d, g) in [(3.0, 0x70), (6.0, 0x4c)] {
-                let c = Color32::from_gray(g);
+                let c = crate::lr::gray(g);
                 let pts = vec![egui::pos2(r.left() + d, r.top() - d), egui::pos2(r.right() + d, r.top() - d), egui::pos2(r.right() + d, r.bottom() - d)];
                 p.add(egui::Shape::line(pts, egui::Stroke::new(1.0, c)));
             }
@@ -589,28 +589,28 @@ impl LibraryView {
             (true, false, false) => format!("{} ◂", tile_number(&m)),
             _ => tile_number(&m),
         };
-        let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), if hot { Color32::WHITE } else { look.text });
+        let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), if hot { crate::lr::TEXT_STRONG() } else { look.text });
         let symbol_w = if m.collapsed || m.first { 12.0 } else { 0.0 };
         let dot_w = if s.is_series() && s.reviewed.is_none() && (m.collapsed || m.first) { 8.0 } else { 0.0 };
         let size = egui::vec2(g.size().x + 10.0 + symbol_w + dot_w, if hot { 18.0 } else { 16.0 });
         let field = egui::Rect::from_min_size(r.right_bottom() - size - egui::vec2(3.0, 3.0), size);
         let resp = ui.interact(field, egui::Id::unique(("stapel-zahl", z.image)), egui::Sense::click());
-        let bg = if resp.hovered() { Color32::from_gray(0x50) } else if hot { Color32::from_black_alpha(230) } else { look.ground };
+        let bg = if resp.hovered() { crate::lr::gray(0x50) } else if hot { Color32::from_black_alpha(230) } else { look.ground };
         p.rect_filled(field, 0.0, bg);
         if hot {
-            p.rect_stroke(field, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x9a)), egui::StrokeKind::Inside);
+            p.rect_stroke(field, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x9a)), egui::StrokeKind::Inside);
         }
         let mut x = field.left() + 5.0;
         let cy = field.center().y;
         if dot_w > 0.0 {
-            p.circle_filled(egui::pos2(x + 2.0, cy), 2.0, Color32::from_gray(0xd8));
+            p.circle_filled(egui::pos2(x + 2.0, cy), 2.0, crate::lr::gray(0xd8));
             x += dot_w;
         }
         if symbol_w > 0.0 {
             paint_kind(p, egui::pos2(x + 4.5, cy), s);
             x += symbol_w;
         }
-        p.galley(egui::pos2(x, cy - g.size().y / 2.0), g, Color32::WHITE);
+        p.galley(egui::pos2(x, cy - g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
         let tip = self.mark_tip(&m, series_view, false);
         lr::hover_tip(ui, &resp, &tip);
         if resp.clicked() {
@@ -1361,18 +1361,18 @@ pub struct StripMark {
 /// Rectangle of the stack number on a filmstrip cell, its bottom right corner at `corner`; `button`: at least 18 pt
 /// high (a click area).
 pub fn strip_number_rect(p: &egui::Painter, corner: egui::Pos2, text: &str, button: bool) -> egui::Rect {
-    let g = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(9.5), Color32::from_gray(0xe8));
+    let g = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(9.5), crate::lr::gray(0xe8));
     let h = if button { 18.0 } else { g.size().y + 2.0 };
     egui::Rect::from_min_max(corner - egui::vec2(g.size().x + 8.0, h), corner)
 }
 
 /// Stack number on a filmstrip cell in `r` (small, on a dark ground); `hot`: under the pointer (a button), `dim`: greyed.
 pub fn paint_strip_number(p: &egui::Painter, r: egui::Rect, text: &str, hot: bool, dim: bool) {
-    let col = if dim { Color32::from_gray(0x80) } else { Color32::from_gray(0xe8) };
+    let col = if dim { crate::lr::gray(0x80) } else { crate::lr::gray(0xe8) };
     let g = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(9.5), col);
-    p.rect_filled(r, 0.0, if hot { Color32::from_gray(0x50) } else { Color32::from_black_alpha(215) });
+    p.rect_filled(r, 0.0, if hot { crate::lr::gray(0x50) } else { Color32::from_black_alpha(215) });
     if hot {
-        p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x9a)), egui::StrokeKind::Inside);
+        p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x9a)), egui::StrokeKind::Inside);
     }
     p.galley(egui::pos2(r.left() + 4.0, r.center().y - g.size().y / 2.0), g, col);
 }
@@ -1419,8 +1419,8 @@ pub fn series_all_button(ui: &mut egui::Ui, state: SeriesAll, w: f32, h: f32) ->
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click());
     let hot = usable && resp.hovered();
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, if hot { Color32::from_gray(0x2e) } else { lr::GROUP_FILL });
-    let color = if !usable { Color32::from_gray(0x5a) } else if hot { Color32::WHITE } else { lr::TEXT() };
+    p.rect_filled(rect, 0.0, if hot { crate::lr::gray(0x2e) } else { lr::GROUP_FILL() });
+    let color = if !usable { crate::lr::gray(0x5a) } else if hot { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
     lr::paint_icon(p, egui::Rect::from_center_size(rect.center(), egui::vec2(16.0, 16.0)), icon, color);
     lr::hover_tip(ui, &resp, &tip);
     usable && resp.clicked()
@@ -1448,17 +1448,17 @@ struct MarkLook {
 /// no ground behind the tile), the numbers of other stacks dimmed while such a stack is open; else as before.
 fn mark_look(m: &Mark, open: Option<usize>) -> MarkLook {
     let normal = MarkLook {
-        bracket: Color32::from_gray(0x6a),
+        bracket: crate::lr::gray(0x6a),
         width: 1.0,
         tick: 4.0,
-        text: Color32::from_gray(if m.collapsed { 0xf0 } else { 0xc0 }),
+        text: crate::lr::gray(if m.collapsed { 0xf0 } else { 0xc0 }),
         // dark enough to read on a nearly white photo (QA run 3: "6/6" on an overexposed frame)
         ground: Color32::from_black_alpha(215),
     };
     match open {
-        Some(k) if k == m.stack => MarkLook { bracket: Color32::from_gray(0xd0), width: 1.5, tick: 7.0, text: Color32::from_gray(0xf8), ground: Color32::from_black_alpha(235), ..normal },
+        Some(k) if k == m.stack => MarkLook { bracket: crate::lr::gray(0xd0), width: 1.5, tick: 7.0, text: crate::lr::gray(0xf8), ground: Color32::from_black_alpha(235), ..normal },
         // other stacks while one is open: dimmed text, the ground stays dark (readable on bright photos)
-        Some(_) => MarkLook { text: Color32::from_gray(0xa0), ground: Color32::from_black_alpha(200), ..normal },
+        Some(_) => MarkLook { text: crate::lr::gray(0xa0), ground: Color32::from_black_alpha(200), ..normal },
         None => normal,
     }
 }
@@ -1505,7 +1505,7 @@ fn tile_number(m: &Mark) -> String {
 
 /// Small symbol of the kind: two rectangles (series), a step (exposure bracket), three sheets (own stack).
 fn paint_kind(p: &egui::Painter, c: egui::Pos2, s: &Stack) {
-    let w = egui::Stroke::new(1.0, Color32::from_gray(0xd0));
+    let w = egui::Stroke::new(1.0, crate::lr::gray(0xd0));
     match s.kind {
         StackKind::Series => {
             p.rect_stroke(egui::Rect::from_center_size(c + egui::vec2(-1.0, 1.0), egui::vec2(6.0, 5.0)), 0.0, w, egui::StrokeKind::Inside);

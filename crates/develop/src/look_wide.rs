@@ -89,6 +89,7 @@ pub fn apply(data: &mut [f32], width:usize, height:usize, s: &Settings, geo: Geo
     // steep curve should not push the raised black point back down.
     let curve = crate::curve::CurveLut::new(&s.tone_curve);
     let hsl_on = !s.monochrome && s.hsl.iter().flatten().any(|&v| v != 0.0);
+    let skin_on = crate::skin::active(s);
     let grading = s.grade_shadows[1] > 0.0 || s.grade_midtones[1] > 0.0 || s.grade_highlights[1] > 0.0;
     let pivot = (0.5 - 0.3 * s.grade_balance).clamp(0.15, 0.85);
     let fade = s.fade.clamp(0.0, 0.4);
@@ -100,6 +101,23 @@ pub fn apply(data: &mut [f32], width:usize, height:usize, s: &Settings, geo: Geo
     // In the preview fine grains average out; dampen the strength accordingly
     let grain_amp = s.grain_amount.clamp(0.0, 1.0) * 0.16 * (cell / geo.scale.max(1.0)).min(1.0).sqrt();
     let rough = s.grain_rough.clamp(0.0, 1.0);
+    // skin-tone weights after tone curve and colour mixer, smoothed edge-preserving (empty when the stage is off)
+    let skin_w: Vec<f32> = if skin_on {
+        let pre = |i: usize| {
+            let mut c = [data[i * 3], data[i * 3 + 1], data[i * 3 + 2]];
+            if let Some(lut) = &curve {
+                c = lut.apply(c);
+            }
+            if hsl_on {
+                c = apply_hsl(c, &s.hsl);
+            }
+            c
+        };
+        let height = data.len() / 3 / width.max(1);
+        crate::skin::weight_map(width, height, crate::skin::smooth_radius(geo.full_w, geo.full_h, geo.scale), pre)
+    } else {
+        Vec::new()
+    };
     data.par_chunks_mut(width * 3).enumerate().for_each(|(y, line)| {
         let fy = geo.off_y as f32 + (y as f32 + 0.5) * geo.scale;
         for x in 0..width {
@@ -111,6 +129,9 @@ pub fn apply(data: &mut [f32], width:usize, height:usize, s: &Settings, geo: Geo
             }
             if hsl_on {
                 c = apply_hsl(c, &s.hsl);
+            }
+            if skin_on {
+                c = crate::skin::apply_weighted(c, s.skin_hue, s.skin_sat, skin_w[y * width + x]);
             }
             let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
             if grading {

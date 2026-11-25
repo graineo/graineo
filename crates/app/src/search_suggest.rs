@@ -446,11 +446,11 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
     let painter = ui.painter().clone();
     if active {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x4a));
+        painter.rect_filled(rect, 0.0, crate::lr::gray(0x4a));
     } else if resp.hovered() {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x38));
+        painter.rect_filled(rect, 0.0, crate::lr::gray(0x38));
     }
-    let color = if active || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
+    let color = if active || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
     let font = egui::TextStyle::Body.resolve(ui.style());
     let mut left = rect.left() + 8.0;
     if s.detail.is_some() {
@@ -498,7 +498,7 @@ pub(super) fn row(ui: &mut egui::Ui, s: &Suggestion, active: bool) -> egui::Resp
 /// Table of all fields for the "?" card of the search field: base form, short form, second names, explanation.
 pub fn field_table(ui: &mut egui::Ui) {
     ui.add_space(6.0);
-    ui.label(egui::RichText::new(crate::tr("Felder")).font(lr::semibold(11.0)).color(Color32::from_gray(0xe0)));
+    ui.label(egui::RichText::new(crate::tr("Felder")).font(lr::semibold(11.0)).color(crate::lr::gray(0xe0)));
     ui.label(egui::RichText::new(crate::tr("Grundform (Kurzform) · Zweitnamen – Erklärung. Alle Namen werden verstanden; eingefügt und gespeichert wird die Grundform.")).size(10.5).color(lr::TEXT_DIM()));
     ui.add_space(2.0);
     egui::ScrollArea::vertical().id_salt("suche-felder").max_height(300.0).auto_shrink([false, true]).show(ui, |ui| {

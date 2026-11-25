@@ -41,6 +41,8 @@ use tiff::encoder::{colortype, TiffEncoder};
 use x3f::{CamfEntry, MatrixData, X3fFile};
 
 mod classic_output;
+mod skin_chart;
+mod skin_image;
 mod hlclip_cmd;
 mod auto_look_cmd;
 mod scene_cmd;
@@ -214,6 +216,10 @@ fn main() -> Result<()> {
         return analog::run(&args[1..]);
     }
     // yardstick for color film profiles (test chart, ΔE00 of two profiles), see color_chart.rs
+    // skin-tone sliders on the test chart (ΔE00 per patch), see skin_chart.rs
+    if matches!(cmd, "skin-chart") {
+        return skin_chart::run(&args[1..]);
+    }
     if matches!(cmd, "color-chart") {
         return color_chart::run(&args[1..]);
     }
@@ -349,6 +355,10 @@ fn main() -> Result<()> {
     // automatic look ("Auto"): solved settings as JSON, optionally the measured sensitivities, see auto_look_cmd.rs
     if cmd == "auto-look" {
         return auto_look_cmd::run(file, &args[2..]);
+    }
+    // skin-tone sliders on one picture: per-pixel against smoothed weights, times, see skin_image.rs
+    if cmd == "skin-image" {
+        return skin_image::run(file, &args[2..]);
     }
     if cmd == "rawapp" {
         return rawapp::run(file, &args[2..]);

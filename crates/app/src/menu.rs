@@ -260,7 +260,7 @@ impl AppMenu {
 
     /// The menu bar in the window: a fixed strip at the very top (same height always, no layout jumps).
     pub fn bar(&self, ui: &mut egui::Ui) {
-        let frame = egui::Frame::new().fill(crate::lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(6, 0));
+        let frame = egui::Frame::new().fill(crate::lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(6, 0));
         egui::Panel::top("menu-bar").show_separator_line(false).resizable(false).exact_size(BAR_H).frame(frame).show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 for (key, entries) in LINUX_MENU {

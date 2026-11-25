@@ -63,6 +63,7 @@ impl Start {
         let hwnd = crate::native_window_handle(cc);
         crate::lr::apply_theme(&cc.egui_ctx);
         crate::prefs::apply_scale(&cc.egui_ctx);
+        crate::theme::load(&cc.egui_ctx);
         cc.egui_ctx.on_end_pass("frame-watch", std::sync::Arc::new(|_| crate::frame_watch::end()));
         Box::new(Self { stage: Stage::Converting(run), ctx: cc.egui_ctx.clone(), hwnd, brand: Brand::new(), shown: 0.0, last: None })
     }
@@ -96,7 +97,7 @@ impl Start {
         // the steps report only now and then: the bar creeps ahead a little between two reports
         self.shown = self.shown.max(real);
         self.shown += ((real + 0.08).min(0.97) - self.shown).max(0.0) * dt * 0.3;
-        ui.painter().rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(0x0b, 0x0c, 0x0d));
+        ui.painter().rect_filled(ui.max_rect(), 0.0, crate::lr::ui_rgb(0x0b, 0x0c, 0x0d));
         self.brand.show_hold(
             ctx,
             Hold {
@@ -112,7 +113,7 @@ impl Start {
     fn failed(ui: &mut egui::Ui, error: &str, backup: &std::path::Path) {
         {
             let ctx = ui.ctx().clone();
-            ui.painter().rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(0x0b, 0x0c, 0x0d));
+            ui.painter().rect_filled(ui.max_rect(), 0.0, crate::lr::ui_rgb(0x0b, 0x0c, 0x0d));
             ui.vertical_centered(|ui| {
                 ui.add_space((ui.available_height() * 0.28).max(20.0));
                 ui.set_max_width(640.0);

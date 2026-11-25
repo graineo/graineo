@@ -184,12 +184,12 @@ pub(crate) fn subgroup(ui: &mut egui::Ui, title: &str, gap: bool, extra: impl Fn
     ui.horizontal(|ui| {
         let g = crate::lr::caps(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), crate::lr::CATEGORY_LABEL());
         let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 18.0), egui::Sense::hover());
-        ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, egui::Color32::WHITE);
+        ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
         extra(ui);
         let rest = ui.available_rect_before_wrap();
         let y = r.center().y;
         if rest.width() > 12.0 {
-            ui.painter().line_segment([egui::pos2(rest.left() + 6.0, y), egui::pos2(rest.right(), y)], egui::Stroke::new(1.0, egui::Color32::from_gray(0x3a)));
+            ui.painter().line_segment([egui::pos2(rest.left() + 6.0, y), egui::pos2(rest.right(), y)], egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
         }
     });
     ui.add_space(6.0);

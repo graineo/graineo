@@ -145,7 +145,7 @@ pub fn show(ui: &mut egui::Ui, v: &View, paint_image: impl FnOnce(&egui::Painter
     let a = |value: u8| (value as f32 * alpha) as u8;
     let painter = ui.painter_at(v.view);
     painter.rect_filled(plate, 0.0, Color32::from_black_alpha(a(170)));
-    paint_image(&painter.with_clip_rect(mini.intersect(v.view)), mini, Color32::WHITE.gamma_multiply(alpha));
+    paint_image(&painter.with_clip_rect(mini.intersect(v.view)), mini, egui::Color32::WHITE.gamma_multiply(alpha));
     let seen = viewport(v.image, v.view, mini);
     // outside the part on screen: slightly darker
     let shade = Color32::from_black_alpha(a(110));
@@ -160,8 +160,8 @@ pub fn show(ui: &mut egui::Ui, v: &View, paint_image: impl FnOnce(&egui::Painter
         }
     }
     painter.rect_stroke(seen.expand(1.0), 0.0, egui::Stroke::new(1.0, Color32::from_black_alpha(a(120))), egui::StrokeKind::Outside);
-    painter.rect_stroke(seen, 0.0, egui::Stroke::new(1.0, Color32::from_white_alpha(a(255))), egui::StrokeKind::Inside);
-    painter.rect_stroke(plate, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x5a).gamma_multiply(alpha)), egui::StrokeKind::Inside);
+    painter.rect_stroke(seen, 0.0, egui::Stroke::new(1.0, crate::lr::overlay(a(255))), egui::StrokeKind::Inside);
+    painter.rect_stroke(plate, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x5a).gamma_multiply(alpha)), egui::StrokeKind::Inside);
 
     if !want || !v.interactive {
         return None;

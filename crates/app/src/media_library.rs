@@ -141,7 +141,7 @@ impl App {
                 hover_tip: if unreachable { crate::tr("Dunkelkammer: Original nicht erreichbar") } else { t_dark.as_str() },
             },
         ];
-        let accent = lr::GOLD;
+        let accent = lr::GOLD();
         match lr::bar_with(ui, &bar_entries, accent) {
             Some(0) if !media_library => self.to_grid(),
             Some(1) if media_library => self.to_single_image(),

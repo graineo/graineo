@@ -209,6 +209,27 @@ impl App {
         }
     }
 
+    /// "Reset to camera default": neutral values, then the global start-value preferences and the camera default
+    /// (camera_defaults.rs), as one undoable command.
+    pub(crate) fn reset_to_camera_default(&mut self) {
+        let Some(c) = self.current.as_ref() else { return };
+        let i = c.index;
+        let Some(camera) = crate::camera_defaults::camera_of(&c.loaded) else { return };
+        let foreign_raw = c.loaded.previews.foreign.as_ref().is_some_and(|d| !d.finished);
+        let no_neutral = c.loaded.kind == crate::image_kind::ImageKind::Foveon && !c.loaded.cal.modes.iter().any(|m| m.name == crate::sidecar::NEUTRAL_MODE);
+        let path = self.entries[i].path.clone();
+        let f = move |s: &Settings| {
+            let mut r = crate::sidecar::reset(s.view, &path);
+            if no_neutral {
+                r.color_mode = None;
+            }
+            crate::camera_defaults::start_values(&r, Some(&camera), foreign_raw)
+        };
+        if self.settings_command(&[i], crate::history::Command::new(crate::history::Hint::reset()), f) > 0 {
+            self.status = crate::tr("Auf Kamera-Standard zurückgesetzt (⌘Z nimmt es zurück)").to_string();
+        }
+    }
+
     /// New settings for the given photos as one undoable command. Returns the number of photos that changed.
     /// Many photos (more than [`crate::multi_edit::RIGHT_AWAY_MAX`]) go through the background: loaded, changed and saved
     /// there block by block; the undo entry follows when it is done.

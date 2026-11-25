@@ -91,13 +91,13 @@ impl LibraryView {
     pub(super) fn paint_source_chip(&self, ui: &mut egui::Ui, region: egui::Rect, x: f32, id: egui::Id) -> Option<(f32, bool)> {
         let text = self.source_chip()?;
         let clip = ui.painter().with_clip_rect(region);
-        let g = clip.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), Color32::WHITE);
+        let g = clip.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), crate::lr::TEXT_STRONG());
         let r = egui::Rect::from_min_size(egui::pos2(x, region.top() + 1.0), egui::vec2(g.size().x + 28.0, 20.0));
-        clip.rect_filled(r, 0.0, Color32::from_rgb(0x3c, 0x4a, 0x3a));
-        clip.galley(r.left_center() + egui::vec2(9.0, -g.size().y / 2.0), g, Color32::WHITE);
+        clip.rect_filled(r, 0.0, crate::lr::ui_rgb(0x3c, 0x4a, 0x3a));
+        clip.galley(r.left_center() + egui::vec2(9.0, -g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
         let cross = egui::Rect::from_center_size(egui::pos2(r.right() - 10.0, r.center().y), egui::vec2(14.0, 14.0));
         let resp = ui.interact(cross.intersect(region), id.with("quelle-chip"), egui::Sense::click());
-        clip.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0xc4) });
+        clip.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0xc4) });
         lr::tip_key(ui, &resp, "Ansicht verlassen", "grid_esc");
         Some((r.right() + 5.0, resp.clicked()))
     }
@@ -110,9 +110,9 @@ impl LibraryView {
         let resp = ui.interact(plus, egui::Id::unique(id), egui::Sense::click());
         let c = plus.center();
         if resp.hovered() {
-            ui.painter().rect_filled(plus, 0.0, Color32::from_gray(0x36));
+            ui.painter().rect_filled(plus, 0.0, crate::lr::gray(0x36));
         }
-        let stroke = egui::Stroke::new(1.4, if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+        let stroke = egui::Stroke::new(1.4, if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
         ui.painter().line_segment([c - egui::vec2(5.0, 0.0), c + egui::vec2(5.0, 0.0)], stroke);
         ui.painter().line_segment([c - egui::vec2(0.0, 5.0), c + egui::vec2(0.0, 5.0)], stroke);
         lr::hover_tip(ui, &resp, tip);

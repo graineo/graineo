@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use eframe::egui::{self, Color32, Stroke};
 
-use crate::lr::{self, PANEL_DARK, TEXT, TEXT_DIM};
+use crate::lr::{self, TEXT, TEXT_DIM};
 
 /// Key in `settings.json`: zoom on the saturation (1, 2 or 4).
 pub const ZOOM_KEY: &str = "vectorscopeZoom";
@@ -216,6 +216,8 @@ pub fn image(rgb: &[u8], zoom: u8) -> egui::ColorImage {
         }
     }
     let top = density_reference(&counts);
+    // computed on a worker: the chosen theme of the interface decides the look of the image
+    let t = lr::ui_theme();
     let pixels = counts
         .iter()
         .zip(&col)
@@ -227,7 +229,11 @@ pub fn image(rgb: &[u8], zoom: u8) -> egui::ColorImage {
             // colour of the pixels, brought to full brightness so the hue is recognisable
             let m = (c[0].max(c[1]).max(c[2]) / n as f32).max(1e-3);
             let k = |x: f32| ((x / n as f32 / m) * 0.7 + 0.3).min(1.0) * v * 255.0;
-            Color32::from_rgb(k(c[0]) as u8, k(c[1]) as u8, k(c[2]) as u8)
+            if t == lr::Theme::Dark {
+                Color32::from_rgb(k(c[0]) as u8, k(c[1]) as u8, k(c[2]) as u8)
+            } else {
+                lr::scope_pixel(t, [k(c[0]) / 255.0, k(c[1]) / 255.0, k(c[2]) / 255.0])
+            }
         })
         .collect();
     egui::ColorImage { size: [N, N], source_size: egui::vec2(N as f32, N as f32), pixels }
@@ -266,10 +272,10 @@ pub struct ViewResponse {
 fn overlay_button(ui: &egui::Ui, rect: egui::Rect, id: egui::Id, label: &str, on: bool, tip: &str) -> bool {
     let r = ui.interact(rect, id, egui::Sense::click());
     let p = ui.painter();
-    let fill = if r.hovered() { Color32::from_gray(0x2c) } else { Color32::from_black_alpha(150) };
+    let fill = if r.hovered() { crate::lr::gray(0x2c) } else { lr::info_box_fill() };
     p.rect_filled(rect, 0.0, fill);
-    p.rect_stroke(rect, 0.0, Stroke::new(1.0, Color32::from_gray(if on { 0x6a } else { 0x38 })), egui::StrokeKind::Inside);
-    let color = if on || r.hovered() { TEXT() } else { Color32::from_gray(0x80) };
+    p.rect_stroke(rect, 0.0, Stroke::new(1.0, crate::lr::gray(if on { 0x6a } else { 0x38 })), egui::StrokeKind::Inside);
+    let color = if on || r.hovered() { TEXT() } else { crate::lr::gray(0x80) };
     p.text(rect.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), color);
     lr::hover_tip(ui, &r, tip);
     r.clicked()
@@ -278,31 +284,35 @@ fn overlay_button(ui: &egui::Ui, rect: egui::Rect, id: egui::Id, label: &str, on
 /// Draws the vectorscope in a field `height` points high and as wide as the tray. `tex` is the image of [`image`]
 /// for the current zoom. `small`: the smallest size step (short labels, no ring labels).
 pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, small: bool) -> ViewResponse {
+    view_inner(ui, tex, height, small)
+}
+
+fn view_inner(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, small: bool) -> ViewResponse {
     let mut out = ViewResponse::default();
     let (outer, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click());
     let z = zoom();
     let p = ui.painter_at(outer);
-    p.rect_filled(outer, 0.0, PANEL_DARK);
+    p.rect_filled(outer, 0.0, lr::SCOPE_BG());
     let d = (height.min(outer.width()) - 8.0).max(20.0);
     let sq = egui::Rect::from_center_size(outer.center(), egui::vec2(d, d));
     let c = sq.center();
     let r = d / 2.0;
     let at = |cb: f32, cr: f32| egui::pos2(sq.left() + (cb * z as f32 + 0.5) * d, sq.top() + (0.5 - cr * z as f32) * d);
     // rim, saturation rings and crosshair
-    p.circle_stroke(c, r, Stroke::new(1.0, Color32::from_gray(0x44)));
+    p.circle_stroke(c, r, Stroke::new(1.0, lr::scope_gray(0x44)));
     let label_font = egui::FontId::proportional(if small { 9.0 } else { 9.5 });
     for &pct in ring_levels(z) {
         let rr = r * ring_radius(pct, z);
-        p.circle_stroke(c, rr, Stroke::new(1.0, Color32::from_gray(0x24)));
+        p.circle_stroke(c, rr, Stroke::new(1.0, lr::scope_gray(0x24)));
         if !small {
             // label in the lower left between yellow and green: photos rarely have colours there (sky and skin lie
             // on the other diagonal)
             let a = (-152f32).to_radians();
-            p.text(c + egui::vec2(a.cos(), -a.sin()) * rr + egui::vec2(-2.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{pct:.0}"), label_font.clone(), Color32::from_gray(0x58));
+            p.text(c + egui::vec2(a.cos(), -a.sin()) * rr + egui::vec2(-2.0, 0.0), egui::Align2::RIGHT_CENTER, format!("{pct:.0}"), label_font.clone(), lr::scope_gray(0x58));
         }
     }
-    p.line_segment([c - egui::vec2(r, 0.0), c + egui::vec2(r, 0.0)], Stroke::new(1.0, Color32::from_gray(0x1e)));
-    p.line_segment([c - egui::vec2(0.0, r), c + egui::vec2(0.0, r)], Stroke::new(1.0, Color32::from_gray(0x1e)));
+    p.line_segment([c - egui::vec2(r, 0.0), c + egui::vec2(r, 0.0)], Stroke::new(1.0, lr::scope_gray(0x1e)));
+    p.line_segment([c - egui::vec2(0.0, r), c + egui::vec2(0.0, r)], Stroke::new(1.0, lr::scope_gray(0x1e)));
     let skin = skin_line();
     let skin_color = Color32::from_rgb(0xe0, 0xa0, 0x80);
     if skin {
@@ -314,7 +324,7 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
         p.image(t.id(), sq, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
     }
     // centre mark on top of the cloud: neutral grey lies here
-    let cm = Color32::from_gray(0x70);
+    let cm = lr::scope_gray(0x70);
     p.line_segment([c - egui::vec2(4.0, 0.0), c + egui::vec2(4.0, 0.0)], Stroke::new(1.0, cm));
     p.line_segment([c - egui::vec2(0.0, 4.0), c + egui::vec2(0.0, 4.0)], Stroke::new(1.0, cm));
     if skin && !small {
@@ -331,7 +341,7 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
         let dir = (pos - c).normalized();
         let label = target_label(i, small);
         let label_at = if z == 1 {
-            p.rect_stroke(egui::Rect::from_center_size(pos, egui::vec2(7.0, 7.0)), 0.0, Stroke::new(1.0, Color32::from_gray(0x70)), egui::StrokeKind::Middle);
+            p.rect_stroke(egui::Rect::from_center_size(pos, egui::vec2(7.0, 7.0)), 0.0, Stroke::new(1.0, lr::scope_gray(0x70)), egui::StrokeKind::Middle);
             pos + egui::vec2(if dir.x < 0.0 { -7.0 } else { 7.0 }, 0.0)
         } else {
             p.line_segment([c + dir * (r - 5.0), c + dir * (r + 2.0)], Stroke::new(2.0, dot));
@@ -342,12 +352,12 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
             (true, true) | (false, false) => egui::Align2::RIGHT_CENTER,
             _ => egui::Align2::LEFT_CENTER,
         };
-        let g = p.layout_no_wrap(label, font.clone(), Color32::from_gray(0xc4));
+        let g = p.layout_no_wrap(label, font.clone(), lr::scope_gray(0xc4));
         let text_rect = align.anchor_size(label_at, g.size() + egui::vec2(8.0, 0.0));
         // colour dot in front of the text, the text after it
         let dot_at = egui::pos2(text_rect.left() + 3.0, text_rect.center().y);
         p.circle_filled(dot_at, 2.6, dot);
-        p.galley(egui::pos2(text_rect.left() + 8.0, text_rect.top()), g, Color32::from_gray(0xc4));
+        p.galley(egui::pos2(text_rect.left() + 8.0, text_rect.top()), g, lr::scope_gray(0xc4));
     }
     // options in the lower corners
     let bh = 16.0;
@@ -368,7 +378,7 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
     if let Some((cb, cr)) = probe {
         if resp.hover_pos().is_none() {
             // test position: show where it is
-            p.circle_stroke(at(cb, cr), 4.0, Stroke::new(1.0, Color32::WHITE));
+            p.circle_stroke(at(cb, cr), 4.0, Stroke::new(1.0, crate::lr::TEXT_STRONG()));
         }
         let sat = saturation_pct(cb, cr);
         let line1 = if sat < 3.0 { crate::tr("Neutral (Grau)").to_string() } else { format!("{} · {:.0}°", hue_name(hue_deg(cb, cr)), hue_deg(cb, cr)) };
@@ -378,7 +388,7 @@ pub fn view(ui: &mut egui::Ui, tex: Option<&egui::TextureHandle>, height: f32, s
         let g2 = p.layout_no_wrap(line2, f, TEXT_DIM());
         let w = g1.size().x.max(g2.size().x) + 10.0;
         let box_rect = egui::Rect::from_min_size(outer.left_top() + egui::vec2(4.0, 4.0), egui::vec2(w, g1.size().y + g2.size().y + 6.0));
-        p.rect_filled(box_rect, 0.0, Color32::from_black_alpha(190));
+        p.rect_filled(box_rect, 0.0, if lr::theme() == lr::Theme::Dark { Color32::from_black_alpha(190) } else { lr::info_box_fill() });
         let h1 = g1.size().y;
         p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0), g1, TEXT());
         p.galley(box_rect.left_top() + egui::vec2(5.0, 3.0 + h1), g2, TEXT_DIM());

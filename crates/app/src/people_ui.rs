@@ -1162,19 +1162,19 @@ fn columns_row(ui: &mut egui::Ui, z: &mut State) -> bool {
         ];
         for (i, (title, rows, sel, note)) in columns.into_iter().enumerate() {
             let (frame, _) = ui.allocate_exact_size(egui::vec2(widths[i], COLUMN_H), egui::Sense::hover());
-            ui.painter().rect_filled(frame, 0.0, Color32::from_gray(0x16));
+            ui.painter().rect_filled(frame, 0.0, crate::lr::gray(0x16));
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(frame.shrink2(egui::vec2(4.0, 3.0))).layout(egui::Layout::top_down(egui::Align::Min)));
             let c = &mut child;
             c.horizontal(|ui| {
                 ui.set_height(18.0);
                 ui.label(egui::RichText::new(crate::tr(title)).font(lr::semibold(10.5)).color(lr::TEXT_DIM()));
                 if !note.is_empty() {
-                    ui.label(egui::RichText::new(crate::tr(note)).size(9.5).color(Color32::from_gray(0x80)));
+                    ui.label(egui::RichText::new(crate::tr(note)).size(9.5).color(crate::lr::gray(0x80)));
                 }
                 if !sel.is_empty() {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let (r, resp) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::click());
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
                         lr::hover_tip(ui, &resp, crate::tr("Auswahl dieser Spalte aufheben"));
                         if resp.clicked() {
                             clicks[i] = Some(BTreeSet::new());
@@ -1714,7 +1714,7 @@ fn grid(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<Command
                         _ => crate::library_ui::thousands(n),
                     };
                     p.text(egui::pos2(base.x + gw + 10.0, base.y + 1.0), egui::Align2::LEFT_TOP, sub, egui::FontId::proportional(10.5), lr::TEXT_DIM());
-                    p.hline(origin.x..=origin.x + width, y + h - 3.0, egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
+                    p.hline(origin.x..=origin.x + width, y + h - 3.0, egui::Stroke::new(1.0, crate::lr::gray(0x2a)));
                 }
                 Some(start) => {
                     let end = z_ref.built.sections[si].range.end.min(start + lay.columns);
@@ -1863,7 +1863,7 @@ fn big_view(ui: &mut egui::Ui, z: &State) -> Option<Command> {
     let area = ui.available_rect_before_wrap();
     let (area, resp) = ui.allocate_exact_size(area.size(), egui::Sense::click());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, Color32::from_gray(0x16));
+    painter.rect_filled(area, 0.0, crate::lr::gray(0x16));
     let mut command = None;
     let open = || z.selection.iter().next().map(|&i| Command::OpenPhoto(i));
     if resp.double_clicked() {
@@ -1914,21 +1914,21 @@ fn big_view(ui: &mut egui::Ui, z: &State) -> Option<Command> {
         }
         let fade = |c: Color32| c.gamma_multiply(a);
         let (name, confirmed) = box_label(z, f);
-        let color = if is_chosen { Color32::WHITE } else if confirmed { Color32::from_white_alpha(200) } else if name.is_empty() { Color32::from_white_alpha(90) } else { Color32::from_white_alpha(150) };
+        let color = if is_chosen { crate::lr::TEXT_STRONG() } else if confirmed { crate::lr::overlay(200) } else if name.is_empty() { crate::lr::overlay(90) } else { crate::lr::overlay(150) };
         painter.rect_stroke(b.expand(1.0), 0.0, egui::Stroke::new(3.0, fade(Color32::from_black_alpha(110))), egui::StrokeKind::Outside);
         painter.rect_stroke(b, 0.0, egui::Stroke::new(if is_chosen { 2.5 } else { 1.2 }, fade(color)), egui::StrokeKind::Outside);
         if name.is_empty() && !is_chosen && !over {
             continue;
         }
         let text = if name.is_empty() { crate::tr("Ohne Namen").to_string() } else { name };
-        let g = painter.layout_no_wrap(text, egui::FontId::proportional(12.0), fade(Color32::from_gray(235)));
+        let g = painter.layout_no_wrap(text, egui::FontId::proportional(12.0), fade(crate::lr::gray(235)));
         let pos = egui::pos2(b.center().x - g.size().x / 2.0, b.bottom() + 4.0);
         let bg = egui::Rect::from_min_size(pos - egui::vec2(5.0, 2.0), g.size() + egui::vec2(10.0, 4.0));
         painter.rect_filled(bg, 0.0, fade(Color32::from_black_alpha(if is_chosen { 235 } else { 190 })));
         if is_chosen {
-            painter.rect_stroke(bg, 0.0, egui::Stroke::new(1.0, fade(Color32::from_gray(0xd8))), egui::StrokeKind::Inside);
+            painter.rect_stroke(bg, 0.0, egui::Stroke::new(1.0, fade(crate::lr::gray(0xd8))), egui::StrokeKind::Inside);
         }
-        painter.galley(pos, g, fade(Color32::WHITE));
+        painter.galley(pos, g, fade(crate::lr::TEXT_STRONG()));
     }
     command
 }
@@ -1940,7 +1940,7 @@ pub fn navigator(ui: &mut egui::Ui) {
     let w = ui.available_width();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(w, H), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, lr::PANEL_DARK);
+    painter.rect_filled(rect, 0.0, lr::PANEL_DARK());
     Z.with(|zz| {
         let g = zz.borrow();
         let Some(z) = g.as_ref().filter(|z| z.is_open) else { return };
@@ -1970,7 +1970,7 @@ pub fn navigator(ui: &mut egui::Ui) {
             // at least a few points large, so that a small face stays visible in the small photo
             let b = egui::Rect::from_center_size(b.center(), b.size().max(egui::vec2(8.0, 8.0)));
             painter.rect_stroke(b.expand(1.0), 0.0, egui::Stroke::new(3.0, Color32::from_black_alpha(140)), egui::StrokeKind::Outside);
-            painter.rect_stroke(b, 0.0, egui::Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Outside);
+            painter.rect_stroke(b, 0.0, egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()), egui::StrokeKind::Outside);
         }
     });
 }
@@ -1979,16 +1979,16 @@ fn draw_tile(ui: &egui::Ui, z: &State, ix: &FaceIndex, t: &Tile, rect: egui::Rec
     let inner = rect.shrink(4.0);
     let p = ui.painter();
     let stack = !matches!(t.kind, Kind::Face(_));
-    let fill = if chosen { Color32::from_gray(0x3a) } else if hovered { Color32::from_gray(0x2a) } else { Color32::from_gray(0x22) };
+    let fill = if chosen { crate::lr::gray(0x3a) } else if hovered { crate::lr::gray(0x2a) } else { crate::lr::gray(0x22) };
     let card = if stack { egui::Rect::from_min_max(inner.min + egui::vec2(0.0, 6.0), inner.max - egui::vec2(6.0, 0.0)) } else { inner };
     if stack {
         // a stack: two cards behind it, offset to the upper right
-        p.rect_filled(card.translate(egui::vec2(6.0, -6.0)), 0.0, Color32::from_gray(0x1b));
-        p.rect_filled(card.translate(egui::vec2(3.0, -3.0)), 0.0, Color32::from_gray(0x1f));
+        p.rect_filled(card.translate(egui::vec2(6.0, -6.0)), 0.0, crate::lr::gray(0x1b));
+        p.rect_filled(card.translate(egui::vec2(3.0, -3.0)), 0.0, crate::lr::gray(0x1f));
     }
     p.rect_filled(card, 0.0, fill);
     if chosen {
-        p.rect_stroke(card, 0.0, egui::Stroke::new(2.0, Color32::from_gray(0xd8)), egui::StrokeKind::Inside);
+        p.rect_stroke(card, 0.0, egui::Stroke::new(2.0, crate::lr::gray(0xd8)), egui::StrokeKind::Inside);
     }
     let side = (card.width() - 12.0).min(card.height() - TEXT_HEIGHT - 6.0);
     let image_rect = egui::Rect::from_min_size(card.min + egui::vec2(6.0, 6.0), egui::vec2(side, side));
@@ -1998,14 +1998,14 @@ fn draw_tile(ui: &egui::Ui, z: &State, ix: &FaceIndex, t: &Tile, rect: egui::Rec
             p.image(tex.id(), image_rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), if hidden { Color32::from_gray(0x80) } else { Color32::WHITE });
         }
         None => {
-            p.rect_filled(image_rect, 0.0, Color32::from_gray(0x2c));
+            p.rect_filled(image_rect, 0.0, crate::lr::gray(0x2c));
         }
     }
     if stack {
-        let g = p.layout_no_wrap(crate::library_ui::thousands(t.count), egui::FontId::proportional(10.5), Color32::WHITE);
+        let g = p.layout_no_wrap(crate::library_ui::thousands(t.count), egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG());
         let r = egui::Rect::from_min_size(egui::pos2(image_rect.right() - g.size().x - 10.0, image_rect.top() + 4.0), g.size() + egui::vec2(6.0, 2.0));
         p.rect_filled(r, 2.0, Color32::from_black_alpha(170));
-        p.galley(r.min + egui::vec2(3.0, 1.0), g, Color32::WHITE);
+        p.galley(r.min + egui::vec2(3.0, 1.0), g, crate::lr::TEXT_STRONG());
     }
     let (title, sub, question) = tile_text(ix, t);
     let w = card.width() - 12.0;

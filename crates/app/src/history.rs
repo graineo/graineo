@@ -998,8 +998,10 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("highlight_colour", "Lichter-Farbe", false),
     ("highlight_structure", "Lichter-Detail", false),
     ("hsl", "Farbmischer", false),
+    ("skin_hue", "Hautton", true),
+    ("skin_sat", "Hautsättigung", true),
     ("tone_curve", "Gradationskurve", false),
-    ("toneEqualizer", "Tonwert-Entzerrer", false),
+    ("toneEqualizer", "Tonwert-Equalizer", false),
     ("grade_shadows", "Color Grading", false),
     ("grade_midtones", "Color Grading", false),
     ("grade_highlights", "Color Grading", false),
@@ -1180,6 +1182,58 @@ pub fn describe(before: &Settings, after: &Settings) -> (&'static str, Value) {
     (k, label)
 }
 
+/// Readable values that differ between `base` and `s` ("Belichtung +0,30", "Objektivkorrekturen an"), one per slider
+/// name, in the order of the panel; fields without a name of their own appear as their copy group.
+pub(crate) fn chips(base: &Settings, s: &Settings) -> Vec<String> {
+    let (a, b) = (value(base), value(s));
+    let mut out: Vec<String> = Vec::new();
+    let mut names: Vec<&str> = Vec::new();
+    let mut unnamed = false;
+    for f in changed_fields(&a, &b) {
+        let Some((n, signed)) = field(&f) else {
+            unnamed = true;
+            continue;
+        };
+        if names.contains(&n) {
+            continue;
+        }
+        names.push(n);
+        let v = f.split('.').try_fold(&b, |v, p| v.get(p));
+        let label = crate::tr(n);
+        out.push(match v {
+            Some(Value::Number(x)) => format!("{label} {}", field_number(&f, x.as_f64().unwrap_or(0.0), signed)),
+            Some(Value::Bool(on)) => format!("{label} {}", if *on { crate::tr("an") } else { crate::tr("aus") }),
+            Some(Value::String(t)) if f == "raw.wb_mode" => match t.as_str() {
+                "as_shot" => format!("{label} {}", crate::tr("Wie Aufnahme")),
+                "auto" => format!("{label} {}", crate::tr("Automatisch")),
+                "custom" => format!("{label} {}", crate::tr("Eigener")),
+                _ => label.to_string(),
+            },
+            Some(Value::String(t)) if !t.is_empty() && t.chars().count() <= 28 => format!("{label} {t}"),
+            _ => label.to_string(),
+        });
+    }
+    if unnamed {
+        for (g, _) in crate::paste::GROUPS.iter() {
+            if crate::paste::merge(base, s, &crate::paste::Groups::from_names([*g])) != *base && !names.contains(g) {
+                out.push(crate::tr(g).to_string());
+            }
+        }
+    }
+    out
+}
+
+/// Fields holding an absolute value with a unit (shown without sign, with the unit).
+const ABSOLUTE_UNITS: [(&str, &str); 1] = [("raw.temperature", "K")];
+
+/// Value of field `f` for display: absolute values with their unit ("5600 K"), others as [`number`].
+fn field_number(f: &str, v: f64, signed: bool) -> String {
+    match ABSOLUTE_UNITS.iter().find(|(k, _)| *k == f) {
+        Some((_, unit)) => format!("{} {unit}", number(v.round(), false)),
+        None => number(v, signed),
+    }
+}
+
 fn number(v: f64, signed: bool) -> String {
     let lang = crate::menu::i18n::language();
     let places = if v.fract() == 0.0 && v.abs() >= 1.0 { 0 } else { 2 };
@@ -1295,7 +1349,7 @@ fn fields_name(l: &Value) -> String {
         1 => {
             let v = l.get("v").and_then(|v| v.get(0)).and_then(Value::as_f64);
             match (v, fields.as_slice()) {
-                (Some(v), [f]) => format!("{} {}", names[0], number(v, field(f).is_some_and(|(_, s)| s))),
+                (Some(v), [f]) => format!("{} {}", names[0], field_number(f, v, field(f).is_some_and(|(_, s)| s))),
                 _ => names[0].clone(),
             }
         }
@@ -1307,6 +1361,23 @@ fn fields_name(l: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Kelvin is absolute: no sign, with unit, in chips and step names; relative values keep their sign.
+    #[test]
+    fn kelvin_without_sign() {
+        let mut s = Settings::default();
+        s.raw.wb_mode = "custom".into();
+        s.raw.temperature = 5600.0;
+        s.raw.tint = 12.0;
+        let c = chips(&Settings::default(), &s);
+        assert!(c.iter().any(|x| x == "Temperatur 5600 K" || x == "Temperature 5600 K"), "{c:?}");
+        assert!(c.iter().any(|x| x.ends_with("+12")), "{c:?}");
+        assert!(!c.iter().any(|x| x.contains("custom")), "internal mode name never shown: {c:?}");
+        let t = Settings { raw: develop::settings::RawAdjust { temperature: 4800.0, ..Settings::default().raw }, ..Settings::default() };
+        assert!(named(&Settings::default(), &t).ends_with(" 4800 K"), "{}", named(&Settings::default(), &t));
+        let w = Settings { wb_temp: 0.25, ..Settings::default() };
+        assert!(chips(&Settings::default(), &w).iter().any(|x| x.ends_with("+0,25") || x.ends_with("+0.25")));
+    }
 
     /// A history in memory only (tests never read a library).
     fn memory(name: &str) -> (History, Key) {

@@ -67,12 +67,12 @@ pub fn show(ctx: &egui::Context, id: &str, title: &str, width: f32, content: imp
 /// [`Answer::Cancel`]).
 pub fn show_extra(ctx: &egui::Context, id: &str, title: &str, width: f32, content: impl FnOnce(&mut egui::Ui), buttons: Buttons, extra: Option<&str>) -> (Answer, bool) {
     let mut extra_clicked = false;
-    let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
+    let frame = egui::Frame::new().fill(crate::lr::gray(0x1e)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
     let mut answer = Answer::Open;
     let r = egui::Modal::new(egui::Id::unique(("dialog", id))).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
         ui.set_width(width);
         ui.spacing_mut().item_spacing.y = 6.0;
-        ui.add(egui::Label::new(egui::RichText::new(crate::tr(title)).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))).wrap());
+        ui.add(egui::Label::new(egui::RichText::new(crate::tr(title)).font(lr::semibold(15.0)).color(crate::lr::gray(0xee))).wrap());
         ui.add_space(6.0);
         lr::bounded(ui, content);
         ui.add_space(10.0);
@@ -124,14 +124,14 @@ const SCREEN_GAP: f32 = 24.0;
 pub fn show_scrolling(ctx: &egui::Context, id: &str, title: &str, width: f32, footer_h: f32, mut content: impl FnMut(&mut egui::Ui, Part), buttons: Buttons) -> Answer {
     let typing = ctx.egui_wants_keyboard_input();
     let max_h = (ctx.content_rect().height() - 2.0 * SCREEN_GAP - 2.0 * MARGIN).max(160.0);
-    let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
+    let frame = egui::Frame::new().fill(crate::lr::gray(0x1e)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x3a))).corner_radius(0.0).inner_margin(MARGIN);
     let mut answer = Answer::Open;
     let r = egui::Modal::new(egui::Id::unique(("dialog", id))).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
         ui.set_width(width);
         ui.spacing_mut().item_spacing.y = 6.0;
         let top = ui.cursor().top();
         ui.horizontal(|ui| {
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr(title)).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))).truncate());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr(title)).font(lr::semibold(15.0)).color(crate::lr::gray(0xee))).truncate());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| content(ui, Part::Header));
         });
         ui.add_space(4.0);
@@ -177,7 +177,7 @@ fn button_row(ui: &mut egui::Ui, k: &Buttons) -> Answer {
             let clicked = match style {
                 Style::Normal => lr::main_button_min(ui, text, active, 110.0).clicked(),
                 Style::Destructive => {
-                    let b = egui::Button::new(egui::RichText::new(crate::tr(text)).strong().color(Color32::WHITE)).min_size(egui::vec2(110.0, BUTTON_H)).corner_radius(0.0).fill(Color32::from_rgb(0x5a, 0x22, 0x20)).stroke(egui::Stroke::new(1.0, RED));
+                    let b = egui::Button::new(egui::RichText::new(crate::tr(text)).strong().color(crate::lr::TEXT_STRONG())).min_size(egui::vec2(110.0, BUTTON_H)).corner_radius(0.0).fill(Color32::from_rgb(0x5a, 0x22, 0x20)).stroke(egui::Stroke::new(1.0, RED));
                     ui.add_enabled(active, b).clicked()
                 }
             };
@@ -219,15 +219,15 @@ pub fn pending(ui: &mut egui::Ui, t: &str) {
 
 /// Yellow warning line (small), e.g. not enough space.
 pub fn warning(ui: &mut egui::Ui, t: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(Color32::from_rgb(0xe0, 0xb0, 0x40))).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(t)).small().color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xb0, 0x40)))).wrap());
 }
 
 /// Grey chip with key figures, e.g. "184 photos · 2.3 GB".
 pub fn chip(ui: &mut egui::Ui, t: &str) {
     // air above (not below the text before it): a chip as the last element must not add space before the divider
     ui.add_space(8.0);
-    egui::Frame::new().fill(Color32::from_gray(0x2a)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(9, 3)).show(ui, |ui| {
-        ui.label(egui::RichText::new(crate::tr(t)).small().color(Color32::from_gray(0xc8)));
+    egui::Frame::new().fill(crate::lr::gray(0x2a)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(9, 3)).show(ui, |ui| {
+        ui.label(egui::RichText::new(crate::tr(t)).small().color(crate::lr::gray(0xc8)));
     });
 }
 
@@ -235,8 +235,8 @@ pub fn chip(ui: &mut egui::Ui, t: &str) {
 pub fn options<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.add_space(10.0);
     egui::Frame::new()
-        .fill(Color32::from_gray(0x19))
-        .stroke(egui::Stroke::new(1.0, Color32::from_gray(0x30)))
+        .fill(crate::lr::gray(0x19))
+        .stroke(egui::Stroke::new(1.0, crate::lr::gray(0x30)))
         .corner_radius(0.0)
         .inner_margin(10.0)
         .show(ui, |ui| {
@@ -289,7 +289,7 @@ pub fn input(ui: &mut egui::Ui, label: &str, value: &mut String) -> egui::Respon
 pub fn progress(ui: &mut egui::Ui, fraction: Option<f32>, current: &str) {
     let w = ui.available_width();
     let (r, _) = ui.allocate_exact_size(egui::vec2(w, 6.0), egui::Sense::hover());
-    ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x33));
+    ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x33));
     match fraction {
         Some(a) => {
             let f = egui::Rect::from_min_size(r.min, egui::vec2(w * a.clamp(0.0, 1.0), r.height()));

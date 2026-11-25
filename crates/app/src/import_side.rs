@@ -330,7 +330,7 @@ fn apply_on_import(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, Str
         ui.spacing_mut().item_spacing.x = 2.0;
         for s in 1..=5u8 {
             let on = imp.stars >= s;
-            let r = ui.add(egui::Button::new(egui::RichText::new("★").color(if on { Color32::from_gray(0xe8) } else { Color32::from_gray(0x55) })).frame(false));
+            let r = ui.add(egui::Button::new(egui::RichText::new("★").color(if on { crate::lr::gray(0xe8) } else { crate::lr::gray(0x55) })).frame(false));
             lr::hover_tip(ui, &r, &crate::trf!("{n} Sterne", n = s));
             if r.clicked() {
                 imp.stars = if imp.stars == s { 0 } else { s };
@@ -401,7 +401,7 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
         }
     }
     let rel_name = |p: &Path| p.strip_prefix(&source).ok().map(|r| r.display().to_string()).filter(|r| !r.is_empty()).unwrap_or_else(|| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 6)).show(ui, |ui| {
+    egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(4, 6)).show(ui, |ui| {
         ui.set_min_size(egui::vec2(width - 8.0, list_h - 12.0));
         ui.set_max_width(width - 8.0);
         egui::ScrollArea::vertical().id_salt("import-ordner").auto_shrink([false, false]).max_height(list_h - 12.0).show(ui, |ui| {
@@ -417,14 +417,14 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
                 let check_r = ui.interact(check.expand(3.0), ui.scope_id().with(("imp-ordner-haken", &p)), egui::Sense::click());
                 let painter = ui.painter();
                 if focused {
-                    painter.rect_filled(rect, 0.0, Color32::from_gray(0x3a));
+                    painter.rect_filled(rect, 0.0, crate::lr::gray(0x3a));
                 } else if row.hovered() {
-                    painter.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+                    painter.rect_filled(rect, 0.0, crate::lr::gray(0x26));
                 }
                 // check (light, not gold: gold is the main button only)
-                painter.rect_stroke(check, 0.0, egui::Stroke::new(1.0, Color32::from_gray(if check_r.hovered() { 0xe0 } else { 0xb0 })), egui::StrokeKind::Inside);
+                painter.rect_stroke(check, 0.0, egui::Stroke::new(1.0, crate::lr::gray(if check_r.hovered() { 0xe0 } else { 0xb0 })), egui::StrokeKind::Inside);
                 if on {
-                    painter.rect_filled(check.shrink(3.5), 0.0, Color32::from_gray(0xe8));
+                    painter.rect_filled(check.shrink(3.5), 0.0, crate::lr::gray(0xe8));
                 }
                 let font = egui::TextStyle::Body.resolve(ui.style());
                 let count = painter.layout_no_wrap(dialog::count(n, crate::tr("Foto"), crate::tr("Fotos")), font.clone(), lr::TEXT_DIM());
@@ -435,7 +435,7 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
                     right -= g.size().x + 10.0;
                     painter.galley(egui::pos2(right, rect.center().y - g.size().y / 2.0), g, Color32::from_rgb(0x8f, 0xc0, 0x8a));
                 }
-                let color = if focused || row.hovered() { Color32::WHITE } else { lr::TEXT() };
+                let color = if focused || row.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
                 let name = painter.layout_no_wrap(rel_name(&p), font, color);
                 let clip = egui::Rect::from_min_max(egui::pos2(check.right() + 8.0, rect.top()), egui::pos2(right - 10.0, rect.bottom()));
                 painter.with_clip_rect(clip).galley(egui::pos2(clip.left(), rect.center().y - name.size().y / 2.0), name, color);
@@ -475,7 +475,7 @@ fn peek(ui: &mut egui::Ui, imp: &mut Import, width: f32, height: f32, rel_name: 
         ui.add(egui::Label::new(egui::RichText::new(t).small().color(lr::TEXT_DIM())).truncate());
     });
     let mut wanted: Vec<(PathBuf, String)> = Vec::new();
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
+    egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
         let (w, h) = (width - 8.0, height - 8.0);
         ui.set_min_size(egui::vec2(w, h));
         ui.set_max_width(w);
@@ -521,7 +521,7 @@ fn peek_cell(ui: &egui::Ui, imp: &Import, ci: usize, rect: egui::Rect, folder_on
     let there = imp.cell_duplicate(c);
     let p = ui.painter();
     let inner = rect.shrink(3.0);
-    p.rect_filled(inner, 0.0, Color32::from_gray(0x1a));
+    p.rect_filled(inner, 0.0, crate::lr::gray(0x1a));
     let image = egui::Rect::from_min_size(inner.min + egui::vec2(4.0, 4.0), egui::vec2(inner.width() - 8.0, inner.height() - 22.0));
     match imp.thumbs.tex.get(&path) {
         Some(t) => {
@@ -531,7 +531,7 @@ fn peek_cell(ui: &egui::Ui, imp: &Import, ci: usize, rect: egui::Rect, folder_on
             p.image(t.id(), egui::Rect::from_center_size(image.center(), sz * f), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
         }
         None => {
-            p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.0), Color32::from_gray(0x82));
+            p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.0), crate::lr::gray(0x82));
         }
     }
     let color = if there { lr::TEXT_DIM() } else { lr::TEXT() };

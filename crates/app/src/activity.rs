@@ -220,7 +220,7 @@ impl App {
                 _ => crate::trf!("{a} Fehler", a = faults),
             };
             dot(&mut child, RED);
-            child.add(egui::Label::new(egui::RichText::new(label).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT() })).truncate().selectable(false));
+            child.add(egui::Label::new(egui::RichText::new(label).small().color(if hover { crate::lr::TEXT_STRONG() } else { lr::TEXT() })).truncate().selectable(false));
             if let Some(t) = summary(&tasks) {
                 child.add(egui::Label::new(egui::RichText::new("·").small().color(lr::TEXT_DIM())).selectable(false));
                 calm_spinner(&mut child, 9.0, lr::TEXT_DIM().gamma_multiply(0.8));
@@ -240,7 +240,7 @@ impl App {
                 child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { lr::TEXT_DIM() } else { lr::TEXT_DIM().gamma_multiply(0.75) })).truncate().selectable(false));
             } else {
                 calm_spinner(&mut child, 9.0, lr::TEXT_DIM().gamma_multiply(0.8));
-                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { egui::Color32::WHITE } else { lr::TEXT() })).truncate().selectable(false));
+                child.add(egui::Label::new(egui::RichText::new(text).small().color(if hover { crate::lr::TEXT_STRONG() } else { lr::TEXT() })).truncate().selectable(false));
                 // the spinner explains itself: the step the computing job is at
                 if let Some(step) = crate::work_step::describe() {
                     lr::hover_tip(ui, &resp, &step);
@@ -280,7 +280,7 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 6.0;
                         dot(ui, RED);
-                        ui.label(egui::RichText::new(&f.title).font(lr::semibold(12.5)).color(egui::Color32::from_gray(0xf0)));
+                        ui.label(egui::RichText::new(&f.title).font(lr::semibold(12.5)).color(crate::lr::gray(0xf0)));
                     });
                     if !f.cause.is_empty() {
                         ui.add(egui::Label::new(egui::RichText::new(&f.cause).font(lr::sans(12.0)).color(lr::TEXT())).wrap());

@@ -72,10 +72,10 @@ pub(crate) fn created_done(file: i64, now: f64) {
 
 /// The mark "HDR" on a picture of a merged photo (grid and filmstrip), at the bottom left of `r`.
 pub(crate) fn paint_mark(p: &egui::Painter, r: egui::Rect) {
-    let g = p.layout_no_wrap("HDR".into(), egui::FontId::proportional(9.5), egui::Color32::from_gray(0x16));
+    let g = p.layout_no_wrap("HDR".into(), egui::FontId::proportional(9.5), crate::lr::gray(0x16));
     let box_ = egui::Rect::from_min_size(r.left_bottom() + egui::vec2(4.0, -g.size().y - 6.0), g.size() + egui::vec2(8.0, 2.0));
-    p.rect_filled(box_, 1.0, egui::Color32::from_gray(0xd8));
-    p.galley(box_.min + egui::vec2(4.0, 1.0), g, egui::Color32::from_gray(0x16));
+    p.rect_filled(box_, 1.0, crate::lr::gray(0xd8));
+    p.galley(box_.min + egui::vec2(4.0, 1.0), g, crate::lr::gray(0x16));
 }
 
 /// Test: a new session (nothing waiting to be swapped in, no hint, no message).
@@ -246,14 +246,14 @@ impl crate::App {
         let mut sources = false;
         let mut close = false;
         egui::Area::new(egui::Id::new("hdr-created-hint")).order(egui::Order::Foreground).anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -self.message_bottom())).show(ctx, |ui| {
-            egui::Frame::new().fill(egui::Color32::from_rgb(0x26, 0x26, 0x26)).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x44))).inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| {
+            egui::Frame::new().fill(crate::lr::ui_rgb(0x26, 0x26, 0x26)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x44))).inner_margin(egui::Margin::symmetric(14, 10)).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 12.0;
-                    ui.label(egui::RichText::new(crate::tr("HDR erstellt")).font(crate::lr::semibold(12.5)).color(egui::Color32::from_gray(0xee)));
+                    ui.label(egui::RichText::new(crate::tr("HDR erstellt")).font(crate::lr::semibold(12.5)).color(crate::lr::gray(0xee)));
                     undo = ui.add(egui::Button::new(crate::tr("Rückgängig")).corner_radius(0.0)).clicked();
                     sources = ui.add(egui::Button::new(crate::tr("Quellen zeigen")).corner_radius(0.0)).clicked();
                     let (xr, x) = ui.allocate_exact_size(egui::vec2(18.0, 18.0), egui::Sense::click());
-                    crate::lr::paint_icon(ui.painter(), xr.shrink(3.0), crate::lr::Icon::X, if x.hovered() { egui::Color32::WHITE } else { crate::lr::TEXT_DIM() });
+                    crate::lr::paint_icon(ui.painter(), xr.shrink(3.0), crate::lr::Icon::X, if x.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::TEXT_DIM() });
                     crate::lr::hover_tip(ui, &x, crate::tr("Hinweis schließen"));
                     close = x.clicked();
                 });

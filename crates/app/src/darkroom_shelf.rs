@@ -54,9 +54,9 @@ pub fn format_of(s: &StockInfo) -> Format {
 /// Colour of the sign by genre: black & white grey, colour negative terracotta, slide petrol, cine violet; papers
 /// neutral grey.
 pub fn color_of(s: &StockInfo) -> Color32 {
-    let grey = Color32::from_rgb(0xb9, 0xb6, 0xae);
+    let grey = crate::lr::ui_rgb(0xb9, 0xb6, 0xae);
     match s.category {
-        Category::Paper => Color32::from_gray(0xa4),
+        Category::Paper => crate::lr::gray(0xa4),
         Category::PrintFilm if s.monochrome => grey,
         Category::PrintFilm | Category::Cine => Color32::from_rgb(0xa2, 0x7f, 0xd1),
         Category::BlackWhite => grey,
@@ -239,11 +239,11 @@ pub fn paint_tile(p: &egui::Painter, field: Rect, t: &TextureHandle, ppp: f32) {
 /// Placeholder while a tile is being computed: a neutral mid grey (clearly not a dark photo) with three small dots
 /// lighting up one after the other at the bottom right.
 pub fn paint_waiting(p: &egui::Painter, field: Rect, time: f64) {
-    p.rect_filled(field, 0.0, Color32::from_gray(0x2e));
+    p.rect_filled(field, 0.0, crate::lr::gray(0x2e));
     let step = ((time * 3.0) as usize) % 3;
     for k in 0..3 {
         let c = Pos2::new(field.right() - 16.0 + 5.0 * k as f32, field.bottom() - 6.0);
-        p.circle_filled(c, 1.3, Color32::from_gray(if k == step { 0x9a } else { 0x55 }));
+        p.circle_filled(c, 1.3, crate::lr::gray(if k == step { 0x9a } else { 0x55 }));
     }
 }
 

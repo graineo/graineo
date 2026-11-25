@@ -3055,8 +3055,8 @@ impl LibraryView {
                 egui::pos2(view.left() + r.max.x, view.top() + r.max.y - offset),
             );
             let p = ui.painter_at(view);
-            p.rect_filled(screen, 0.0, Color32::from_white_alpha(0x1c));
-            p.rect_stroke(screen, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xb4)), egui::StrokeKind::Inside);
+            p.rect_filled(screen, 0.0, crate::lr::overlay(0x1c));
+            p.rect_stroke(screen, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xb4)), egui::StrokeKind::Inside);
             // near or beyond the top/bottom edge the view follows, calmly
             let speed = sel::autoscroll_speed(b.pointer.y, view.top(), view.bottom());
             if speed != 0.0 {
@@ -3583,16 +3583,16 @@ impl LibraryView {
         let over_triangle = open.is_some() && resp.hover_pos().is_some_and(|p| triangle.contains(p));
         let painter = ui.painter();
         if active {
-            painter.rect_filled(rect, 0.0, Color32::from_gray(0x4a));
+            painter.rect_filled(rect, 0.0, crate::lr::gray(0x4a));
         } else if resp.hovered() {
-            painter.rect_filled(rect, 0.0, Color32::from_gray(0x2c));
+            painter.rect_filled(rect, 0.0, crate::lr::gray(0x2c));
         }
         if let Some(o) = open {
             let c = triangle.center();
             let pts = if o { vec![c + egui::vec2(-3.5, -2.0), c + egui::vec2(3.5, -2.0), c + egui::vec2(0.0, 2.5)] } else { vec![c + egui::vec2(-2.0, -3.5), c + egui::vec2(2.5, 0.0), c + egui::vec2(-2.0, 3.5)] };
-            painter.add(egui::Shape::convex_polygon(pts, if over_triangle { Color32::WHITE } else { Color32::from_gray(0x8a) }, egui::Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(pts, if over_triangle { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x8a) }, egui::Stroke::NONE));
         }
-        let color = if dimmed { Color32::from_gray(0x8c) } else if active || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
+        let color = if dimmed { crate::lr::gray(0x8c) } else if active || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
         let font = egui::TextStyle::Body.resolve(ui.style());
         let right_free = 52.0;
         // symbol (special rows only) in the marker column of the rows – where the other sections show the triangle of
@@ -3775,7 +3775,9 @@ impl LibraryView {
                 let view = ui.clip_rect();
                 if top < view.bottom() {
                     let rect = egui::Rect::from_min_max(egui::pos2(view.left(), top.max(view.top())), view.right_bottom());
-                    ui.painter().rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(0x16, 0x16, 0x18, 135));
+                    // fade toward the panel color so the veil matches every theme
+                    let bg = lr::PANEL();
+                    ui.painter().rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 160));
                 }
             }
         }));
@@ -3804,7 +3806,7 @@ impl LibraryView {
         // root folder on an unreachable location: small "not connected" mark (crossed-out circle) before the count
         if offline && depth == 0 && ui.is_rect_visible(resp.rect) {
             let c = egui::pos2(resp.rect.right() - 48.0, resp.rect.center().y);
-            let stroke = egui::Stroke::new(1.2, Color32::from_gray(0x8c));
+            let stroke = egui::Stroke::new(1.2, crate::lr::gray(0x8c));
             ui.painter().circle_stroke(c, 4.5, stroke);
             ui.painter().line_segment([c + egui::vec2(-3.2, 3.2), c + egui::vec2(3.2, -3.2)], stroke);
         }
@@ -3940,7 +3942,7 @@ impl LibraryView {
                     ui.add(egui::Image::new((t.id(), egui::vec2(w, w * t.size()[1] as f32 / t.size()[0] as f32))));
                 }
                 None => {
-                    ui.label(egui::RichText::new("graineo").font(lr::brand(30.0)).color(Color32::from_rgb(0xf2, 0xef, 0xe6)));
+                    ui.label(egui::RichText::new("graineo").font(lr::brand(30.0)).color(crate::lr::ui_rgb(0xf2, 0xef, 0xe6)));
                 }
             }
             ui.add_space(6.0);
@@ -3967,10 +3969,10 @@ impl LibraryView {
                 let hot = r.hovered() || forced;
                 // titles stay in the light text colour; the symbol in the app's blue marks the tile as clickable, on
                 // hover a blue frame and a slightly lighter ground (the Apple Photos line stays the only blue text)
-                p.rect_filled(rect, 0.0, if hot { Color32::from_gray(0x2a) } else { lr::GROUP_FILL });
-                p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, if hot { lr::BLUE } else { lr::FIELD_STROKE() }), egui::StrokeKind::Inside);
+                p.rect_filled(rect, 0.0, if hot { crate::lr::gray(0x2a) } else { lr::GROUP_FILL() });
+                p.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, if hot { lr::BLUE() } else { lr::FIELD_STROKE() }), egui::StrokeKind::Inside);
                 let inner = rect.shrink2(egui::vec2(14.0, 14.0));
-                lr::paint_icon(p, egui::Rect::from_min_size(inner.min, egui::vec2(22.0, 22.0)), *icon, lr::BLUE_TEXT);
+                lr::paint_icon(p, egui::Rect::from_min_size(inner.min, egui::vec2(22.0, 22.0)), *icon, lr::BLUE_TEXT());
                 let mut y = inner.min.y + 32.0;
                 for (text, font, color) in [(*title, lr::semibold(13.0), lr::TEXT()), (*line, egui::FontId::proportional(lr::UI_SIZE), lr::TEXT_DIM()), (*hint, egui::FontId::proportional(lr::UI_SIZE - 1.0), lr::TEXT_DIM())] {
                     let g = p.layout(text.to_string(), font, color, inner.width());
@@ -4000,7 +4002,7 @@ impl LibraryView {
             {
                 ui.add_space(4.0);
                 // the app's blue (switch, progress), as a clickable line with an arrow – not a button, not gold
-                let r = lr::link_text(ui, egui::RichText::new(format!("{}  →", crate::tr("Du nutzt Apple Fotos? Bibliothek verbinden …"))), lr::BLUE_TEXT);
+                let r = lr::link_text(ui, egui::RichText::new(format!("{}  →", crate::tr("Du nutzt Apple Fotos? Bibliothek verbinden …"))), lr::BLUE_TEXT());
                 lr::hover_tip(ui, &r, "Öffnet Einstellungen › Bibliothek › Apple Fotos");
                 if r.clicked() {
                     crate::prefs::open_section("Bibliothek");
@@ -4603,11 +4605,11 @@ impl LibraryView {
                     // separator row
                     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), crate::grid_jump::SEP_H), egui::Sense::hover());
                     let y = r.top() + 28.0;
-                    ui.painter().line_segment([egui::pos2(r.left() + 4.0, y), egui::pos2(r.right() - 4.0, y)], egui::Stroke::new(1.0, Color32::from_gray(0x44)));
-                    let g = lr::caps(ui.painter(), crate::tr("Ähnlich in der Bedeutung"), lr::semibold(11.0), Color32::from_gray(0xc8));
+                    ui.painter().line_segment([egui::pos2(r.left() + 4.0, y), egui::pos2(r.right() - 4.0, y)], egui::Stroke::new(1.0, crate::lr::gray(0x44)));
+                    let g = lr::caps(ui.painter(), crate::tr("Ähnlich in der Bedeutung"), lr::semibold(11.0), crate::lr::gray(0xc8));
                     let gr = egui::Rect::from_min_size(egui::pos2(r.left() + 16.0, y - g.size().y / 2.0), g.size()).expand(6.0);
-                    ui.painter().rect_filled(gr, 0.0, lr::IMAGE_BG);
-                    ui.painter().galley(gr.min + egui::vec2(6.0, 6.0), g, Color32::from_gray(0xc8));
+                    ui.painter().rect_filled(gr, 0.0, lr::IMAGE_BG());
+                    ui.painter().galley(gr.min + egui::vec2(6.0, 6.0), g, crate::lr::gray(0xc8));
                     if self.visible.len() > n1 {
                         ui.painter().text(egui::pos2(r.left() + 16.0, y + 22.0), egui::Align2::LEFT_TOP, crate::trf!("{a} Fotos nach Bild- und Beschreibungsinhalt, ohne passendes Wort", a = self.visible.len() - n1), egui::FontId::proportional(10.5), lr::TEXT_DIM());
                     } else {
@@ -4913,10 +4915,10 @@ impl LibraryView {
         // hovered make it lighter in the same tone, outside a group the greys as before
         let fill = match self.group_tone(z.image) {
             Some(t) => library_series::lighter(t, if active { 0.75 } else if selected { 0.45 } else if resp.hovered() { 0.2 } else { 0.0 }),
-            None if active => Color32::from_gray(0x4a),
-            None if selected => Color32::from_gray(0x36),
-            None if resp.hovered() => Color32::from_gray(0x26),
-            None => Color32::from_gray(0x1a),
+            None if active => crate::lr::gray(0x4a),
+            None if selected => crate::lr::gray(0x36),
+            None if resp.hovered() => crate::lr::gray(0x26),
+            None => crate::lr::gray(0x1a),
         };
         let mut fill = fill;
         // color label tints the cell
@@ -4928,9 +4930,9 @@ impl LibraryView {
         }
         p.rect_filled(inner, 0.0, fill);
         if active {
-            p.rect_stroke(inner, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x9a)), egui::StrokeKind::Inside);
+            p.rect_stroke(inner, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x9a)), egui::StrokeKind::Inside);
         } else if self.sel_ext.as_ref().is_some_and(|e| self.active == Some(e.anchor) && e.head == z.image && selected) {
-            p.line_segment([inner.left_bottom() + egui::vec2(3.0, -2.0), inner.right_bottom() + egui::vec2(-3.0, -2.0)], egui::Stroke::new(2.0, Color32::from_gray(0xb0)));
+            p.line_segment([inner.left_bottom() + egui::vec2(3.0, -2.0), inner.right_bottom() + egui::vec2(-3.0, -2.0)], egui::Stroke::new(2.0, crate::lr::gray(0xb0)));
         }
         // Fixed header row outside the photo area (`cell_label.rs`): state and number on the left, the
         // name with its marks in the middle, quick collection on the right in its own zone; nothing overlaps.
@@ -4954,14 +4956,14 @@ impl LibraryView {
             let h = cl::header(zone_right - number_x, number_w + score_w, &name, copy_w, pair_w, &measure);
             let mut x = number_x;
             if h.number {
-                p.text(egui::pos2(number_x, header.center().y), egui::Align2::LEFT_CENTER, number_text, egui::FontId::proportional(cl::SIZE), Color32::from_gray(0x8c));
+                p.text(egui::pos2(number_x, header.center().y), egui::Align2::LEFT_CENTER, number_text, egui::FontId::proportional(cl::SIZE), crate::lr::gray(0x8c));
                 if let Some(pc) = score.filter(|_| score_w > 0.0) {
                     crate::semantic_ui::cell_value(ui, header, number_x + number_w, pc);
                 }
                 x += number_w + score_w + cl::GAP;
             }
             if let Some(n) = &h.name {
-                let color = if active { Color32::from_gray(0xd0) } else { Color32::from_gray(0xa0) };
+                let color = if active { crate::lr::gray(0xd0) } else { crate::lr::gray(0xa0) };
                 let g = p.text(egui::pos2(x, header.center().y), egui::Align2::LEFT_CENTER, n, egui::FontId::proportional(cl::SIZE), color);
                 if h.shortened {
                     let tip = ui.interact(g, egui::Id::unique(("zellname", z.image)), egui::Sense::hover());
@@ -4970,13 +4972,13 @@ impl LibraryView {
                 x = g.right() + cl::GAP;
             }
             if h.copy {
-                let r = cl::paint_copy(p, egui::pos2(x, header.center().y), copy_no.flatten(), Color32::from_gray(0xb8));
+                let r = cl::paint_copy(p, egui::pos2(x, header.center().y), copy_no.flatten(), crate::lr::gray(0xb8));
                 let tip = ui.interact(r.expand(2.0), egui::Id::unique(("zellkopie", z.image)), egui::Sense::hover());
                 lr::hover_tip(ui, &tip, &cl::copy_tip(z.copy.as_deref().unwrap_or_default()));
                 x = r.right() + cl::GAP;
             }
             if h.pair {
-                let g = p.text(egui::pos2(x, header.center().y), egui::Align2::LEFT_CENTER, "+JPG", egui::FontId::proportional(cl::SIZE), Color32::from_gray(0x8a));
+                let g = p.text(egui::pos2(x, header.center().y), egui::Align2::LEFT_CENTER, "+JPG", egui::FontId::proportional(cl::SIZE), crate::lr::gray(0x8a));
                 let tip = ui.interact(g, egui::Id::unique(("zellpaar", z.image)), egui::Sense::hover());
                 lr::hover_tip(ui, &tip, "RAW+JPEG zusammen (ein Foto)");
             }
@@ -4991,7 +4993,7 @@ impl LibraryView {
                 let s = crate::library_turn::turned_size(t.size_vec2(), quarters);
                 let k = (image.width() / s.x).min(image.height() / s.y);
                 let r = egui::Rect::from_center_size(image.center(), s * k);
-                p.rect_filled(r.expand(1.0), 0.0, Color32::from_gray(0x10));
+                p.rect_filled(r.expand(1.0), 0.0, crate::lr::gray(0x10));
                 // rejected photos dimmed (translucent), as in the filmstrip
                 let tint = if z.flag == -1 {
                     Color32::WHITE.gamma_multiply(0.3)
@@ -5004,10 +5006,10 @@ impl LibraryView {
                 // video: duration at the bottom left of the image ("▶ 0:42")
                 if z.format == "VIDEO" {
                     let text = library::video::duration(&self.path_of(z)).map_or("▶".to_string(), |d| format!("▶ {}", library::video::duration_text(d)));
-                    let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), Color32::WHITE);
+                    let g = p.layout_no_wrap(text, egui::FontId::proportional(10.5), crate::lr::TEXT_STRONG());
                     let field = egui::Rect::from_min_size(r.left_bottom() + egui::vec2(4.0, -g.size().y - 8.0), g.size() + egui::vec2(8.0, 4.0));
                     p.rect_filled(field, 0.0, Color32::from_black_alpha(170));
-                    p.galley(field.min + egui::vec2(4.0, 2.0), g, Color32::WHITE);
+                    p.galley(field.min + egui::vec2(4.0, 2.0), g, crate::lr::TEXT_STRONG());
                 }
                 // merged photo (HDR): a small mark at the bottom left of the image
                 if z.status as i64 == library::merge::STATUS_VIRTUAL {
@@ -5019,14 +5021,14 @@ impl LibraryView {
                 // virtual copy: folded corner at the bottom left
                 if z.copy.is_some() {
                     let c = r.left_bottom();
-                    p.add(egui::Shape::convex_polygon(vec![c, c + egui::vec2(0.0, -12.0), c + egui::vec2(12.0, 0.0)], Color32::from_gray(0xd8), egui::Stroke::NONE));
+                    p.add(egui::Shape::convex_polygon(vec![c, c + egui::vec2(0.0, -12.0), c + egui::vec2(12.0, 0.0)], crate::lr::gray(0xd8), egui::Stroke::NONE));
                 }
             }
             None => {
                 let placeholder = egui::Rect::from_center_size(image.center(), egui::vec2(image.width() * 0.8, image.width() * 0.55).min(image.size()));
-                p.rect_filled(placeholder, 0.0, Color32::from_gray(0x22));
+                p.rect_filled(placeholder, 0.0, crate::lr::gray(0x22));
                 let t = if z.status != 0 { "" } else { "…" };
-                p.text(placeholder.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(11.0), Color32::from_gray(0x82));
+                p.text(placeholder.center(), egui::Align2::CENTER_CENTER, t, egui::FontId::proportional(11.0), crate::lr::gray(0x82));
             }
         }
         // state: missing / volume missing
@@ -5044,13 +5046,13 @@ impl LibraryView {
         let bottom = inner.left_bottom() + egui::vec2(8.0, -6.0);
         let stars_w = inner.right() - 8.0 - crate::cell_label::FLAG_W - crate::cell_label::GAP - bottom.x;
         if let Some(stars) = crate::cell_label::stars(z.stars, stars_w, &crate::cell_label::measurer(p, crate::cell_label::SIZE)) {
-            p.text(bottom, egui::Align2::LEFT_BOTTOM, stars, egui::FontId::proportional(crate::cell_label::SIZE), if z.stars > 0 { Color32::from_gray(0xdd) } else { Color32::from_gray(0x70) });
+            p.text(bottom, egui::Align2::LEFT_BOTTOM, stars, egui::FontId::proportional(crate::cell_label::SIZE), if z.stars > 0 { crate::lr::gray(0xdd) } else { crate::lr::gray(0x70) });
         }
         // flag: tick for a pick, cross for a rejected one (its image is dimmed), the dashed circle of
         // "none" only under the pointer; at the bottom right, away from the quick-collection dot in the header
         let flag_at = inner.right_bottom() + egui::vec2(-14.0, -12.0);
         if z.flag != 0 || resp.hovered() {
-            lr::paint_flag(&p, flag_at, 15.0, z.flag as i8, z.flag != 0, if z.flag != 0 { Color32::from_gray(0xe8) } else { Color32::from_gray(0x80) });
+            lr::paint_flag(&p, flag_at, 15.0, z.flag as i8, z.flag != 0, if z.flag != 0 { crate::lr::gray(0xe8) } else { crate::lr::gray(0x80) });
         }
         // quick collection: circle on the right of the fixed header row (filled = in, empty = not in)
         let inside = self.quick.contains(&z.image);
@@ -5069,12 +5071,12 @@ impl LibraryView {
             let p = ui.painter();
             if !possible {
                 // a viewed folder: a faint dashed-looking ring, never white on hover
-                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
+                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
             } else if inside {
-                p.circle_filled(middle, 6.0, if hovered { Color32::WHITE } else { Color32::from_gray(0xe4) });
-                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, Color32::from_gray(0x20)));
+                p.circle_filled(middle, 6.0, if hovered { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0xe4) });
+                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.0, crate::lr::gray(0x20)));
             } else {
-                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.3, if hovered { Color32::WHITE } else if resp.hovered() { Color32::from_gray(0x90) } else { Color32::from_gray(0x58) }));
+                p.circle_stroke(middle, 6.0, egui::Stroke::new(1.3, if hovered { crate::lr::TEXT_STRONG() } else if resp.hovered() { crate::lr::gray(0x90) } else { crate::lr::gray(0x58) }));
             }
         }
         click
@@ -5091,14 +5093,14 @@ impl LibraryView {
         let p = ui.painter();
         for (k, f) in info.iter().enumerate() {
             let Some(t) = crate::cell_info::text(*f, z, &name, lang) else { continue };
-            let mut job = egui::text::LayoutJob::simple_singleline(t.clone(), egui::FontId::proportional(crate::cell_info::SIZE), Color32::from_gray(0x8c));
+            let mut job = egui::text::LayoutJob::simple_singleline(t.clone(), egui::FontId::proportional(crate::cell_info::SIZE), crate::lr::gray(0x8c));
             job.wrap = egui::text::TextWrapping { max_width: area.width().max(10.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
             let g = p.layout_job(job);
             let line = egui::Rect::from_min_size(egui::pos2(area.left(), area.top() + k as f32 * crate::cell_info::LINE_H), egui::vec2(area.width(), crate::cell_info::LINE_H));
             let at = egui::pos2(line.left(), line.center().y - g.size().y / 2.0);
             let shown = egui::Rect::from_min_size(at, g.size());
             let elided = g.elided;
-            p.galley(at, g, Color32::from_gray(0x8c));
+            p.galley(at, g, crate::lr::gray(0x8c));
             if elided {
                 let tip = ui.interact(shown, egui::Id::unique(("zellinfo", z.image, k)), egui::Sense::hover());
                 lr::hover_tip(ui, &tip, &t);
@@ -5130,7 +5132,7 @@ impl LibraryView {
                     lr::field_label(ui, crate::tr("Sterne"));
                     for n in 1..=5u8 {
                         let on = z.stars >= n;
-                        let r = ui.add(egui::Label::new(egui::RichText::new(if on { "★" } else { "☆" }).size(15.0).color(if on { Color32::from_gray(0xe8) } else { Color32::from_gray(0x90) })).selectable(false).sense(egui::Sense::click()));
+                        let r = ui.add(egui::Label::new(egui::RichText::new(if on { "★" } else { "☆" }).size(15.0).color(if on { crate::lr::gray(0xe8) } else { crate::lr::gray(0x90) })).selectable(false).sense(egui::Sense::click()));
                         lr::hover_tip(ui, &r, &format!("{} ({n})", if n == 1 { crate::tr("1 Stern").to_string() } else { crate::trf!("{n} Sterne", n = n) }));
                         if r.clicked() {
                             self.rate(Some(if z.stars == n { 0 } else { n }), None, None, actions);
@@ -5249,7 +5251,7 @@ impl LibraryView {
                         if k.nonsense {
                             ui.label(egui::RichText::new(crate::tr("KI-Beschreibung als unsicher markiert")).small().color(lr::TEXT_DIM()));
                         }
-                        ui.label(egui::RichText::new(k.model.clone().unwrap_or_default()).small().color(Color32::from_gray(0x9a)));
+                        ui.label(egui::RichText::new(k.model.clone().unwrap_or_default()).small().color(crate::lr::gray(0x9a)));
                     }
                 }
                 ui.add_space(2.0);
@@ -5307,7 +5309,7 @@ impl LibraryView {
                             }
                             "suggested" => {
                                 ui.horizontal_wrapped(|ui| {
-                                    ui.label(egui::RichText::new(crate::trf!("Vorschlag: {a}", a = g.name)).color(Color32::from_rgb(0xe0, 0xc2, 0x4a)));
+                                    ui.label(egui::RichText::new(crate::trf!("Vorschlag: {a}", a = g.name)).color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xc2, 0x4a))));
                                     ui.label(egui::RichText::new(format!("{:.2}", g.confidence)).small().color(lr::TEXT_DIM()));
                                     if ui.small_button(crate::tr("Ja")).clicked() {
                                         suggestion_answer = Some((g.id, true));
@@ -6187,7 +6189,7 @@ fn lr_progress(ui: &mut egui::Ui, fraction: Option<f32>, message: &str, cancella
                 HANDOVER_CANCEL.store(true, std::sync::atomic::Ordering::SeqCst);
             }
             let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 6.0), egui::Sense::hover());
-            ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x33));
+            ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x33));
             let blue = Color32::from_rgb(0x3b, 0x7d, 0xd8);
             match fraction {
                 Some(f) => {
@@ -6209,7 +6211,7 @@ fn lr_progress(ui: &mut egui::Ui, fraction: Option<f32>, message: &str, cancella
 
 fn lr_separator(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 9.0), egui::Sense::hover());
-    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, Color32::from_gray(0x2c)));
+    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, crate::lr::gray(0x2c)));
 }
 
 /// Cancels a running handover of the Lightroom edits (after the current photo; a new run continues).
@@ -6431,7 +6433,7 @@ fn chip_text(t: &str) -> (String, Color32) {
     } else if field.is_some() {
         Color32::from_rgb(0x2e, 0x4c, 0x74)
     } else {
-        Color32::from_gray(0x44)
+        crate::lr::gray(0x44)
     };
     (text, color)
 }
@@ -6461,8 +6463,8 @@ fn chips_row(ui: &mut egui::Ui, words: &[String]) -> Option<String> {
         for w in words {
             let g = ui.painter().layout_no_wrap(w.clone(), egui::FontId::proportional(10.5), lr::TEXT());
             let (r, resp) = ui.allocate_exact_size(g.size() + egui::vec2(14.0, 6.0), egui::Sense::click());
-            ui.painter().rect_filled(r, 0.0, if resp.hovered() { Color32::from_gray(0x50) } else { Color32::from_gray(0x33) });
-            ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, if resp.hovered() { Color32::WHITE } else { lr::TEXT() });
+            ui.painter().rect_filled(r, 0.0, if resp.hovered() { crate::lr::gray(0x50) } else { crate::lr::gray(0x33) });
+            ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() });
             if resp.clicked() {
                 clicked = Some(w.clone());
             }
@@ -6495,9 +6497,9 @@ fn labels_text(bits: u8) -> String {
 
 fn header(ui: &mut egui::Ui, text: &str) {
     ui.add_space(4.0);
-    let g = lr::caps(ui.painter(), text, egui::FontId::proportional(10.0), Color32::from_gray(0x8a));
+    let g = lr::caps(ui.painter(), text, egui::FontId::proportional(10.0), crate::lr::gray(0x8a));
     let (rect, _) = ui.allocate_exact_size(g.size(), egui::Sense::hover());
-    ui.painter().galley(rect.min, g, Color32::from_gray(0x8a));
+    ui.painter().galley(rect.min, g, crate::lr::gray(0x8a));
 }
 
 /// 44275 → "44 275"
@@ -6681,9 +6683,9 @@ fn chip_remove(ui: &mut egui::Ui, text: &str, dim: bool) -> bool {
     let (r, _) = ui.allocate_exact_size(g.size() + egui::vec2(24.0, 6.0), egui::Sense::hover());
     let cross = egui::Rect::from_center_size(egui::pos2(r.right() - 9.0, r.center().y), egui::vec2(14.0, 14.0));
     let resp = ui.interact(cross, ui.scope_id().with(("sw-chip", text)), egui::Sense::click());
-    ui.painter().rect_filled(r, 0.0, if dim { Color32::from_gray(0x26) } else { Color32::from_gray(0x33) });
+    ui.painter().rect_filled(r, 0.0, if dim { crate::lr::gray(0x26) } else { crate::lr::gray(0x33) });
     ui.painter().galley(r.min + egui::vec2(7.0, 3.0), g, colour);
-    ui.painter().text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+    ui.painter().text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
     resp.clicked()
 }
 
@@ -7428,6 +7430,11 @@ impl LibraryView {
                 self.ask_new_collection(library::manage::COLLECTION, None);
             }
             "imports" => self.ask_imports(),
+            // the question of "Metadaten neu einlesen" for the grid photos (help card screenshots)
+            "metadata-reread" => {
+                let (files, photos) = self.reread_files();
+                self.dialog = Some(Dialog::Reread { files, photos, sidecars: 0, take: false });
+            }
             // "rename:<new name>": the rename dialog of the first photo, filled in (⌘Z tests)
             n if n.starts_with("rename:") => {
                 if let Some(z) = self.visible.first().map(|&i| self.rows[i].clone()) {
@@ -8558,7 +8565,7 @@ mod media_library_tests {
         // A real texture makes it testable that the icons lie fully above the photo.
         let texture = ctx.load_texture(
             "synthetic-grid-photo",
-            egui::ColorImage::filled([24, 16], Color32::from_gray(150)),
+            egui::ColorImage::filled([24, 16], crate::lr::gray(150)),
             Default::default(),
         );
         let ti = b.visible[0];

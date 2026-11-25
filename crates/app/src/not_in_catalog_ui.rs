@@ -288,7 +288,7 @@ impl LibraryView {
             }
             self.scroll_to_folder = Some((e.root, e.rel.clone()));
         }
-        egui::Frame::new().fill(Color32::from_gray(0x24)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
+        egui::Frame::new().fill(crate::lr::gray(0x24)).corner_radius(0.0).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(crate::trf!("Dieser Ordner ist noch nicht in der Bibliothek · {a}", a = crate::dialog::count(e.count, crate::tr("Foto"), crate::tr("Fotos")))).color(lr::TEXT()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -508,7 +508,7 @@ impl LibraryView {
                         if wide {
                             label("Größe", size_right);
                         }
-                        p.hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, Color32::from_gray(0x33)));
+                        p.hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, crate::lr::gray(0x33)));
                     }
                     Item::Row(e) => {
                         let e: &Entry = e;
@@ -516,18 +516,18 @@ impl LibraryView {
                         let checked = self.not_in_catalog.selection.contains(&key);
                         let resp = ui.interact(rect, ui.scope_id().with(("nik-row", &key)), egui::Sense::click());
                         if checked {
-                            p.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+                            p.rect_filled(rect, 0.0, crate::lr::gray(0x22));
                         } else if resp.hovered() {
-                            p.rect_filled(rect, 0.0, Color32::from_gray(0x1c));
+                            p.rect_filled(rect, 0.0, crate::lr::gray(0x1c));
                         }
-                        p.hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, Color32::from_gray(0x26)));
+                        p.hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, crate::lr::gray(0x26)));
                         let mid = rect.center().y;
                         let (line1, line2) = (mid - 8.0, mid + 9.0);
                         // checkbox, vertically centred
                         let check_box = egui::Rect::from_center_size(egui::pos2(rect.left() + pad_x + 7.0, mid), egui::vec2(14.0, 14.0));
-                        p.rect_stroke(check_box, 2.0, egui::Stroke::new(1.0, Color32::from_gray(if checked { 0xc8 } else { 0x7a })), egui::StrokeKind::Inside);
+                        p.rect_stroke(check_box, 2.0, egui::Stroke::new(1.0, crate::lr::gray(if checked { 0xc8 } else { 0x7a })), egui::StrokeKind::Inside);
                         if checked {
-                            p.rect_filled(check_box.shrink(3.0), 1.0, Color32::from_gray(0xe0));
+                            p.rect_filled(check_box.shrink(3.0), 1.0, crate::lr::gray(0xe0));
                         }
                         // folder name (bright) over the parent path (dimmed), both shortened in the middle
                         let parts: Vec<&str> = e.rel.trim_end_matches('/').split('/').filter(|t| !t.is_empty()).collect();

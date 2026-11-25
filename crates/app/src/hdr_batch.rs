@@ -174,7 +174,7 @@ fn close() {
 
 fn options_box(ui: &mut egui::Ui, d: &mut BatchDialog) {
     ui.spacing_mut().item_spacing = egui::vec2(8.0, 4.0);
-    egui::Frame::new().fill(egui::Color32::from_gray(0x19)).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x30))).inner_margin(10.0).show(ui, |ui| {
+    egui::Frame::new().fill(crate::lr::gray(0x19)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x30))).inner_margin(10.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
         use hdr::ghost::Level;
         let levels = [(Level::Off, "Aus"), (Level::Standard, "Standard"), (Level::Fine, "Fein")];

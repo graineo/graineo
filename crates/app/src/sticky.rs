@@ -145,7 +145,7 @@ fn paint_stuck(ui: &mut egui::Ui, mut entries: Vec<Entry>) {
     paint(&painter, bar, resp.hovered());
     // thin divider line and small shadow: content passes underneath
     let shadow = ui.painter().with_clip_rect(Rect::from_min_max(clip.left_bottom(), Pos2::new(clip.right(), clip.bottom() + 5.0)).intersect(view));
-    painter.line_segment([Pos2::new(bar.left(), bar.bottom() - 0.5), Pos2::new(bar.right(), bar.bottom() - 0.5)], egui::Stroke::new(1.0, Color32::from_gray(0x2c)));
+    painter.line_segment([Pos2::new(bar.left(), bar.bottom() - 0.5), Pos2::new(bar.right(), bar.bottom() - 0.5)], egui::Stroke::new(1.0, crate::lr::gray(0x2c)));
     for (i, alpha) in [46u8, 26, 12, 4].into_iter().enumerate() {
         let y = bar.bottom() + i as f32;
         shadow.line_segment([Pos2::new(bar.left(), y + 0.5), Pos2::new(bar.right(), y + 0.5)], egui::Stroke::new(1.0, Color32::from_black_alpha(alpha)));

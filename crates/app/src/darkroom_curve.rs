@@ -35,11 +35,11 @@ impl App {
         let (r, _) =
             ui.allocate_exact_size(egui::vec2(ui.available_width(), 130.), egui::Sense::hover());
         let p = ui.painter();
-        p.rect_filled(r, 0., egui::Color32::from_gray(18));
+        p.rect_filled(r, 0., crate::lr::gray(18));
         let colors = [
             egui::Color32::from_rgb(180, 162, 115),
-            egui::Color32::from_gray(130),
-            egui::Color32::WHITE,
+            crate::lr::gray(130),
+            crate::lr::TEXT_STRONG(),
         ];
         for (j, c) in k.data.iter().enumerate() {
             let points = c

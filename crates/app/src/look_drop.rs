@@ -110,7 +110,7 @@ pub(super) fn add(storage: &Storage, found: &FoundLooks) -> Added {
 }
 
 fn ask_body(ui: &mut egui::Ui, found: &FoundLooks) {
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+    egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         egui::ScrollArea::vertical().id_salt("look-drop-list").max_height(LIST_H).auto_shrink([false, true]).show(ui, |ui| {
             for l in &found.looks {
@@ -201,7 +201,7 @@ fn hint(ctx: &egui::Context, title: &str, detail: &str) {
         .pivot(egui::Align2::CENTER_BOTTOM)
         .fixed_pos(egui::pos2(screen.center().x, screen.bottom() - 60.0))
         .show(ctx, |ui| {
-            egui::Frame::new().fill(egui::Color32::from_gray(0x24)).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(0x44))).inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| {
+            egui::Frame::new().fill(crate::lr::gray(0x24)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x44))).inner_margin(egui::Margin::symmetric(16, 10)).show(ui, |ui| {
                 ui.set_max_width(460.0);
                 ui.label(egui::RichText::new(title).strong().color(lr::TEXT()));
                 if !detail.is_empty() {

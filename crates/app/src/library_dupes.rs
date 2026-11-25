@@ -298,7 +298,7 @@ impl LibraryView {
         if self.source != Source::Duplicates || !self.dupes.grid {
             return;
         }
-        egui::Frame::new().fill(Color32::from_gray(0x24)).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
+        egui::Frame::new().fill(crate::lr::gray(0x24)).inner_margin(egui::Margin::symmetric(10, 6)).show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(crate::tr("Duplikate als Raster: die Fotos einer Gruppe stehen nebeneinander.")).color(lr::TEXT()));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -336,7 +336,7 @@ impl LibraryView {
         let mut leave = false;
         ui.horizontal(|ui| {
             let text = self.source_chip().unwrap_or_default();
-            let w = ui.painter().layout_no_wrap(text, egui::FontId::proportional(11.0), Color32::WHITE).size().x + 30.0;
+            let w = ui.painter().layout_no_wrap(text, egui::FontId::proportional(11.0), crate::lr::TEXT_STRONG()).size().x + 30.0;
             let (rect, _) = ui.allocate_exact_size(egui::vec2(w, 22.0), egui::Sense::hover());
             if let Some((_, true)) = self.paint_source_chip(ui, rect, rect.left(), ui.scope_id().with("duplikate-chip")) {
                 leave = true;
@@ -538,7 +538,7 @@ impl LibraryView {
             let card = egui::Rect::from_min_size(egui::pos2(rect.left() + 4.0 + col as f32 * (CARD_W + GAP), rect.top() + HEAD_H + line as f32 * (CARD_H + GAP)), egui::vec2(CARD_W, CARD_H));
             let resp = ui.interact(card, ui.scope_id().with(("dupe", gi, m.image)), egui::Sense::click());
             let marked = self.dupes.marked.contains(&m.image);
-            let fill = if resp.hovered() { Color32::from_gray(0x2a) } else { Color32::from_gray(0x20) };
+            let fill = if resp.hovered() { crate::lr::gray(0x2a) } else { crate::lr::gray(0x20) };
             painter.rect_filled(card, 0.0, fill);
             // state (coloured) and its reason (dimmed, own line: the card is narrow)
             let (state, reason, state_color) = if marked {
@@ -558,7 +558,7 @@ impl LibraryView {
                 painter.rect_stroke(card, 0.0, egui::Stroke::new(1.5, Color32::from_rgb(0xb0, 0x50, 0x44)), egui::StrokeKind::Inside);
             }
             let thumb = egui::Rect::from_min_size(card.min + egui::vec2(6.0, 6.0), egui::vec2(CARD_W - 12.0, THUMB_H - 6.0));
-            painter.rect_filled(thumb, 0.0, Color32::from_gray(0x16));
+            painter.rect_filled(thumb, 0.0, crate::lr::gray(0x16));
             if let Some(t) = self.thumbnail(m.file) {
                 let s = t.size_vec2();
                 if s.x > 0.0 && s.y > 0.0 {

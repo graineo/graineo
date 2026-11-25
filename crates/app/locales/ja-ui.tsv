@@ -4901,7 +4901,7 @@ Personen: Gesichtsrahmen im großen Foto ein/aus	人物:大きな写真の顔枠
 Foto des gewählten Gesichts groß zeigen	選んだ顔の写真を大きく表示
 Gesichter als Raster zeigen	顔をグリッドで表示
 Dieses Foto in Entwickeln öffnen	この写真を現像で開く
-Tonwert-Entzerrer	トーンイコライザー
+Tonwert-Equalizer	トーンイコライザー
 Belichtung je Helligkeitszone, Maske	明るさゾーンごとの露光量、マスク
 Maske	マスク
 −8 EV	−8 EV
@@ -4930,9 +4930,9 @@ Maske zeigen	マスクを表示
 Zonen als Graustufen: Schwarz = −8 EV, Weiß = 0 EV	ゾーンをグレースケールで表示：黒 = −8 EV、白 = 0 EV
 Hebt (+) oder senkt (−) die Belichtung dieser Helligkeitszone, in Blendenstufen.	この明るさゾーンの露光量を段単位で上げる（+）または下げる（−）。
 Stellt die Maske ein, die jede Bildstelle einer Zone zuordnet.	画像の各点をゾーンに割り当てるマスクを設定します。
-• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kantenschärfe** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **スムージング** – マスク領域の大きさ（長辺に対する割合）。大きいほど落ち着き、ディテールのコントラストが保たれる。小さいほどカーブに近い効果。\n• **エッジのシャープさ** – マスクがエッジにどれだけ沿うか。高いほどエッジのハローが減るが、細かな構造が分かれやすくなる。\n\nマスクは設定ごとに画像全体で一度だけ計算されます。
+• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **スムージング** – マスク領域の大きさ（長辺に対する割合）。大きいほど落ち着き、ディテールのコントラストが保たれる。小さいほどカーブに近い効果。\n• **エッジ** – マスクがエッジにどれだけ沿うか。高いほどエッジのハローが減るが、細かな構造が分かれやすくなる。\n\nマスクは設定ごとに画像全体で一度だけ計算されます。
 Ein Regler für Schatten und Lichter, mit Schutz der jeweils anderen Seite.	シャドウとハイライトを一つのスライダーで、反対側を保護しながら調整。
-• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Feineinstellung\nNeun Zonenregler von −8 EV (fast Schwarz) bis 0 EV (Weiß) kommen zum Ausgleich hinzu; dazu Glättung, Kantenschärfe und „Maske zeigen“. Gesetzte Zonen können den Schutz aufheben.	• **右へ** – シャドウと中間調を明るくします。白から1段下より明るいハイライトは確実にそのまま、新たな白飛びは起きません。\n• **左へ** – ハイライトと中間調を暗くします。深いシャドウは確実にそのままです。\n\n面をなめらかにしエッジで止まるマスクにより、逆光の顔などの面全体がまとまって明るくなり、エッジにハローが出ません。\n### 詳細設定\n−8 EV（ほぼ黒）から 0 EV（白）までの9つのゾーンスライダーがバランスに加算されます。スムージング、エッジのシャープさ、「マスクを表示」も使えます。ゾーンを設定すると保護が外れることがあります。
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nKlick wählt einen Punkt · Ziehen: Zone heller/dunkler · ↑/↓ ±0,05, mit ⇧ ±0,25 · ←/→ nächste Zone · Mausrad über der Grafik: Zone unter dem Zeiger · Doppelklick auf einen Punkt: 0 · Doppelklick auf den Wert darunter: eintippen\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **バランスを右へ** – シャドウと中間調を明るくします。白から1段下より明るいハイライトは必ずそのまま残り、新たな白飛びは生じません。\n• **バランスを左へ** – ハイライトと中間調を暗くします。深いシャドウは必ずそのまま残ります。\n\n面を滑らかにしエッジで止まるマスクにより、面全体（逆光の顔など）がまとまって明るくなり、エッジにハロは出ません。\n### グラフ\n−8 EV（ほぼ黒、左）から 0 EV（白、右）までの9つのゾーン。背景には同じゾーン明るさでの写真のヒストグラム。金色の線は実際に効く合計（破線のバランスの基本形＋ゾーン）を示します。グラフで変わるのはゾーンだけで、隣のゾーンは動かず、間の線は計算どおりに滑らかにつながります。設定したゾーンはバランスの保護を上書きすることがあります。\n### 操作\nクリックで点を選択 · ドラッグ：ゾーンを明るく/暗く · ↑/↓ ±0.05、⇧ で ±0.25 · ←/→ 隣のゾーン · グラフ上でマウスホイール：ポインタ下のゾーン · 点をダブルクリック：0 · 下の値をダブルクリック：数値入力\n### マスク\n**スムージング** と **エッジ** でマスクを調整し、**マスク** で写真にグレースケールで表示します。
 Die Zone zählt ab Weiß nach der Belichtung: 0 EV sind die hellsten Lichter, −4 EV die Mitteltöne, −8 EV fast Schwarz. Nachbarzonen werden weich mitgenommen; benachbarte Regler daher ähnlich stellen, sonst kann der Tonverlauf kippen. Die Zonen kommen zum Ausgleich hinzu.	ゾーンは露出後の白から数えます：0 EV が最も明るいハイライト、−4 EV が中間調、−8 EV がほぼ黒。隣のゾーンもなめらかに連動するため、隣り合うスライダーは近い値にしてください。そうしないと階調が破綻することがあります。ゾーンはバランスに加算されます。
 Ausgleich	バランス
 Feineinstellung	詳細設定
@@ -7107,3 +7107,61 @@ graineo beendet sich, sobald die Berechnung fertig ist.	計算が終わると gr
 Beim Beenden geht die laufende Berechnung verloren.	今終了すると、実行中の計算は失われます。
 Warten	待つ
 Abbrechen und beenden	中止して終了
+Hauttöne	肌の色
+Hautton	肌の色相
+Hautsättigung	肌の彩度
+Hautton, Hautsättigung	肌の色相、肌の彩度
+Links rosiger, rechts goldener – nur Hauttöne	左でより赤み、右でより黄金色に – 肌の色のみ
+Hauttöne blasser oder kräftiger	肌の色をより淡く、またはより鮮やかに
+Farbton und Sättigung nur im Bereich der Hauttöne.	肌の色の範囲だけで色相と彩度を調整します。
+• **Hautton** – links rosiger, rechts gelblicher und goldener\n• **Hautsättigung** – Hauttöne blasser oder kräftiger\n\nDer Bereich ist fest: ein breites Band warmer, mäßig bunter Töne von sehr heller bis sehr dunkler Haut. Er wird nicht aus dem Foto gemessen, und alle Hauttöne werden gleich behandelt. Alle anderen Farben, Grau, Schwarz und Weiß bleiben genau, wie sie sind.\n\n### Gut zu wissen\nDie Regler kennen keine Personen: Holz, Sand, Leder oder warmes Licht im selben Farbbereich ändern sich mit, ebenso Orange.	• **肌の色相** – 左でより赤み、右でより黄色く黄金色に\n• **肌の彩度** – 肌の色をより淡く、またはより鮮やかに\n\n範囲は固定です。とても明るい肌からとても暗い肌までを含む、暖かく中程度に色づいた広い帯域です。写真から測定されることはなく、すべての肌の色が同じように扱われます。その他の色、グレー、黒、白はまったく変わりません。\n\n### 知っておくと便利\nスライダーは人物を認識しません。同じ色域にある木、砂、革、暖かい光も一緒に変わり、オレンジも同様に変わります。
+{g}: Standard	{g}：標準
+Standard für {c}	{c} の標準
+Diese Gruppen gelten beim ersten Öffnen neuer, noch unbearbeiteter Fotos dieser Kamera. Bereits bearbeitete Fotos bleiben, wie sie sind.	これらのグループは、このカメラの未編集の新しい写真を初めて開いたときに適用されます。編集済みの写真はそのままです。
+Übernommen werden die aktuellen Werte des geöffneten Fotos.	開いている写真の現在の値を使用します。
+Festlegen	設定
+Eigene Standardwerte · {n} Kameras	独自の標準値 · {n}台のカメラ
+Noch keine Kamera eingetragen. In Bearbeiten über „Zurücksetzen ▾“ → „Als Standard für … festlegen …“ die Werte des geöffneten Fotos als Standard seiner Kamera übernehmen.	カメラはまだ登録されていません。編集で「リセット ▾」→「…の標準として設定…」を選ぶと、開いている写真の値がそのカメラの標準になります。
+Gilt für neu geöffnete Fotos dieser Kamera und übersteuert für die enthaltenen Werte die Voreinstellungen unter „Entwickeln“. Bereits bearbeitete Fotos, Lightroom-Übernahmen und zusammengefügte Fotos bleiben, wie sie sind; JPEG, HEIC und TIFF hat die Kamera schon entwickelt.	このカメラで新しく開く写真に適用され、含まれる値については「現像」の設定より優先されます。編集済みの写真、Lightroom からの引き継ぎ、合成した写真はそのままです。JPEG・HEIC・TIFF はカメラで現像済みです。
+Kamera-Standard für {c}:	{c} のカメラ標準：
+Weitere Möglichkeiten zum Zurücksetzen	その他のリセット方法
+Auf Kamera-Standard zurücksetzen	カメラ標準にリセット
+Als Standard für {c} festlegen …	{c} の標準として設定…
+Als Kamera-Standard festlegen …	カメラ標準として設定…
+Kamera-Standards verwalten …	カメラ標準を管理…
+Startwerte neuer Fotos	新しい写真の初期値
+Objektivkorrektur standardmäßig an	レンズ補正を標準でオン
+Für RAWs von Bayer- und X-Trans-Kameras, wenn ein Objektivprofil gefunden wird. Gilt beim ersten Öffnen eines unbearbeiteten Fotos; Sigma-Fotos bleiben wie bisher.	ベイヤーおよび X-Trans カメラの RAW で、レンズプロファイルが見つかった場合。未編集の写真を初めて開いたときに適用されます。Sigma の写真は従来どおりです。
+Startwert des Reglers für neue Fotos (0 = wie bisher). „Zurücksetzen“ stellt weiter neutral.	新しい写真でのスライダーの初期値（0 = 従来どおり）。「リセット」は引き続きニュートラルにします。
+Auf Kamera-Standard zurückgesetzt (⌘Z nimmt es zurück)	カメラ標準にリセットしました（⌘Z で元に戻せます）
+Ändern	変更
+an	オン
+Kamera-Standards	カメラ標準
+Zone {z} · Punkt	ゾーン {z} · ポイント
+Zone {z} · {t} (Ausgleich {b}, Punkt {v})	ゾーン {z} · {t}（バランス {b}、ポイント {v}）
+Maske zeigen: Zonen als Graustufen, Schwarz = −8 EV, Weiß = 0 EV	マスク表示：ゾーンをグレースケールで、黒 = −8 EV、白 = 0 EV
+verändert	変更あり
+nicht im Standard	標準に含まれない
+Gruppe aus dem Standard nehmen	このグループを標準から外す
+meist fotoabhängig	通常は写真ごとに異なる
+Übernimmt die angehakten Einstellungen dieses Fotos als Startwerte für neue, unbearbeitete Fotos der {c}.	この写真のチェックした設定を、{c} の未編集の新しい写真の初期値として使います。
+Für die {c} gibt es schon einen Standard. Angehakte Gruppen werden ersetzt, nicht angehakte bleiben wie bisher.	{c} にはすでに標準があります。チェックしたグループは置き換えられ、チェックしていないグループはそのまま残ります。
+Die angehakten Gruppen gelten als Startwerte für neue Fotos der {c}.	チェックしたグループが {c} の新しい写真の初期値になります。
+Werte ändern: ein Foto der Kamera öffnen, Regler stellen, erneut festlegen.	値を変更するには：このカメラの写真を開き、スライダーを調整して、もう一度設定します。
+Unverändert	変更なし
+Startwert	初期値
+Kamera noch nicht unterstützt	カメラはまだ未対応です
+Diese Kamera ({a}) wird noch nicht unterstützt.	このカメラ（{a}）はまだサポートされていません。
+Bis zum nächsten Update: mit dem kostenlosen Adobe DNG Converter in DNG umwandeln – DNG öffnet graineo sofort.	次のアップデートまでは、無料の Adobe DNG Converter で DNG に変換してください。DNG なら graineo ですぐに開けます。
+Datei beschädigt oder unvollständig	ファイルが破損しているか不完全です
+beschädigt oder unvollständig	破損または不完全
+Die Datei lässt sich nicht lesen: Sie ist unvollständig (z. B. abgebrochene Kopie) oder beschädigt. Die Vorschau aus der Kamera bleibt sichtbar, wenn die Datei eine enthält. Am besten das Original noch einmal von der Karte oder aus der Sicherung kopieren.	このファイルは読み込めません。不完全（コピーの中断など）か破損しています。ファイルにカメラのプレビューが含まれていれば、それは表示されたままです。カードまたはバックアップから元のファイルをもう一度コピーしてください。
+Apple RAW {a} · neue Kamera	Apple RAW {a} · 新しいカメラ
+entwickelt mit Apple RAW {a} (Kamera in graineo noch nicht unterstützt)	Apple RAW {a} で現像（このカメラは graineo でまだ未対応）
+graineo unterstützt diese Kamera ({b}) noch nicht. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen.	graineo はこのカメラ（{b}）にまだ対応していません。この写真は macOS がデコードし（Apple RAW {a}）、色・トーン・ルック・フィルム・マスクは graineo が計算します。色とシャープネスは graineo 独自の現像と異なる場合があります。
+nicht möglich: graineo unterstützt diese Kamera noch nicht	不可：graineo はこのカメラにまだ対応していません
+Erscheinungsbild	外観
+Wie das System	システムに合わせる
+Dunkel (Erscheinungsbild)	ダーク
+Mittel (Erscheinungsbild)	ミディアム
+Hell (Erscheinungsbild)	ライト

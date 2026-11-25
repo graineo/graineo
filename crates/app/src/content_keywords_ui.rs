@@ -75,7 +75,7 @@ impl LibraryView {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(4.0, 4.0);
             let blocked = !matches!(state, State::Ready(_));
-            let head = ui.label(egui::RichText::new(crate::tr("Vorschläge")).small().color(if blocked { Color32::from_gray(0x70) } else { lr::TEXT_DIM() }));
+            let head = ui.label(egui::RichText::new(crate::tr("Vorschläge")).small().color(if blocked { crate::lr::gray(0x70) } else { lr::TEXT_DIM() }));
             let why = match &state {
                 State::NoModel => crate::tr("Vorschläge aus dem Bildinhalt brauchen das Suchmodell „Beste Treffer“ (SigLIP 2 Base). Installieren unter Einstellungen → Suche; es wird nichts von selbst geladen."),
                 State::Preparing => crate::tr("Die Begriffe werden einmal für das Suchmodell vorbereitet (wenige Sekunden)."),
@@ -106,7 +106,7 @@ impl LibraryView {
                     lr::hover_tip(ui, &r, &crate::menu::i18n::tr_msg(e));
                 }
                 State::NoModel | State::NoVector => {
-                    let r = ui.label(egui::RichText::new("–").small().color(Color32::from_gray(0x70)));
+                    let r = ui.label(egui::RichText::new("–").small().color(crate::lr::gray(0x70)));
                     lr::hover_tip(ui, &r, why);
                 }
             }
@@ -171,11 +171,11 @@ fn suggestion_chip(ui: &mut egui::Ui, text: &str) -> Option<bool> {
     let no = ui.interact(cross, ui.scope_id().with(("content-idea-no", text)), egui::Sense::click());
     let p = ui.painter();
     if take.hovered() {
-        p.rect_filled(r, 0.0, Color32::from_gray(0x33));
+        p.rect_filled(r, 0.0, crate::lr::gray(0x33));
     }
-    p.rect_stroke(r.shrink(0.5), 0.0, egui::Stroke::new(1.0, Color32::from_gray(if take.hovered() || no.hovered() { 0x80 } else { 0x55 })), egui::StrokeKind::Inside);
-    p.galley(r.min + egui::vec2(7.0, 3.0), g, if take.hovered() { Color32::WHITE } else { lr::TEXT() });
-    p.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if no.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+    p.rect_stroke(r.shrink(0.5), 0.0, egui::Stroke::new(1.0, crate::lr::gray(if take.hovered() || no.hovered() { 0x80 } else { 0x55 })), egui::StrokeKind::Inside);
+    p.galley(r.min + egui::vec2(7.0, 3.0), g, if take.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() });
+    p.text(cross.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(11.0), if no.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
     lr::hover_tip(ui, &take, crate::tr("Als Stichwort für dieses Foto übernehmen"));
     lr::hover_tip(ui, &no, crate::tr("Vorschlag für dieses Foto ablehnen"));
     if take.clicked() {

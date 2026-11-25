@@ -198,7 +198,7 @@ impl App {
         let resp_id = ui.id().with("dk-griff");
         let hovered_before = ui.ctx().read_response(resp_id).is_some_and(|r| r.hovered());
         let open = self.darkroom.recipes.drawer;
-        let text_color = if hovered_before || open { Color32::from_gray(0xee) } else { lr::TEXT() };
+        let text_color = if hovered_before || open { crate::lr::gray(0xee) } else { lr::TEXT() };
 
         // Text in the centre; both sides keep room for bookmark and help, so the text stays centred
         let side = 12.0 + CHEVRON_W + SAVE_W + 12.0;
@@ -219,7 +219,7 @@ impl App {
         // Chevron beside the text; open it points upward
         let c = Pos2::new(text_left + text_w + 10.0, y);
         let d = if open { -2.0 } else { 2.0 };
-        let stroke = egui::Stroke::new(1.0, if hovered_before || open { Color32::from_gray(0xcc) } else { lr::TEXT_DIM() });
+        let stroke = egui::Stroke::new(1.0, if hovered_before || open { crate::lr::gray(0xcc) } else { lr::TEXT_DIM() });
         ui.painter().line_segment([c + Vec2::new(-3.5, -d), c + Vec2::new(0.0, d)], stroke);
         ui.painter().line_segment([c + Vec2::new(0.0, d), c + Vec2::new(3.5, -d)], stroke);
 
@@ -230,10 +230,10 @@ impl App {
         let (rest_l, rest_r) = (text_left, text_left + text_w);
         let (full_l, full_r) = (row.left(), row.right());
         let line_y = row.bottom() - 1.5;
-        let rest = if hovered_before { Color32::from_gray(0x88) } else { Color32::from_gray(0x4a) };
+        let rest = if hovered_before { crate::lr::gray(0x88) } else { crate::lr::gray(0x4a) };
         ui.painter().line_segment(
             [Pos2::new(egui::lerp(rest_l..=full_l, eased), line_y), Pos2::new(egui::lerp(rest_r..=full_r, eased), line_y)],
-            egui::Stroke::new(1.0, lerp_color(rest, lr::GOLD, eased)),
+            egui::Stroke::new(1.0, lerp_color(rest, lr::GOLD(), eased)),
         );
         if t > 0.0 && t < 1.0 {
             ui.ctx().request_repaint();
@@ -250,7 +250,7 @@ impl App {
         let save = Rect::from_center_size(Pos2::new(area.right() + 8.0 + SAVE_W / 2.0, y), Vec2::new(SAVE_W, 22.0));
         if matches!(state, LookState::Combination | LookState::Changed(_)) {
             let save_resp = ui.interact(save, ui.id().with("dk-speichern"), egui::Sense::click());
-            let color = if save_resp.hovered() { Color32::from_gray(0xee) } else { lr::TEXT_DIM() };
+            let color = if save_resp.hovered() { crate::lr::gray(0xee) } else { lr::TEXT_DIM() };
             ui.painter().text(save.left_center(), egui::Align2::LEFT_CENTER, crate::tr("Speichern"), egui::FontId::proportional(12.0), color);
             lr::hover_tip(ui, &save_resp, crate::tr("Als neuen Filmlook speichern"));
             if save_resp.clicked() {

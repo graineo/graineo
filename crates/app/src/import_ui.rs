@@ -826,7 +826,7 @@ impl LibraryView {
                         // a disabled import button says why, in plain words, next to it
                         if let Some(r) = reason.filter(|_| !running && !done) {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(egui::RichText::new(crate::tr(r)).color(Color32::from_rgb(0xe0, 0xb0, 0x40)));
+                                ui.label(egui::RichText::new(crate::tr(r)).color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xb0, 0x40))));
                             });
                         }
                     });
@@ -1280,7 +1280,7 @@ fn divider(ui: &mut egui::Ui, h: f32) {
 /// Column heading in capitals (like the panels of the library).
 pub(super) fn heading(ui: &mut egui::Ui, text: &str) {
     ui.add_space(2.0);
-    ui.label(egui::RichText::new(crate::tr(text).to_uppercase()).font(lr::semibold(11.0)).color(Color32::from_gray(0x9a)));
+    ui.label(egui::RichText::new(crate::tr(text).to_uppercase()).font(lr::semibold(11.0)).color(crate::lr::gray(0x9a)));
 }
 
 /// Files per type, RAW first: "20 X3F + 2 JPG".

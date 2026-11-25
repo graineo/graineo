@@ -373,7 +373,7 @@ impl LibraryView {
 
     fn pairs_thumb(&mut self, ui: &mut egui::Ui, item: &pairs::Item) {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(66.0, 46.0), egui::Sense::hover());
-        ui.painter().rect_filled(rect, 0.0, Color32::from_gray(0x1c));
+        ui.painter().rect_filled(rect, 0.0, crate::lr::gray(0x1c));
         if let Some(t) = self.thumbnail(item.file) {
             let s = t.size_vec2();
             if s.x > 0.0 && s.y > 0.0 {
@@ -487,9 +487,9 @@ impl LibraryView {
             for p in shown[range].iter().map(|&i| &pairs_all[i]) {
                 let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW), egui::Sense::hover());
                 if resp.hovered() {
-                    ui.painter().rect_filled(rect, 0.0, Color32::from_gray(0x22));
+                    ui.painter().rect_filled(rect, 0.0, crate::lr::gray(0x22));
                 }
-                ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
+                ui.painter().hline(rect.x_range(), rect.bottom() - 0.5, egui::Stroke::new(1.0, crate::lr::gray(0x2a)));
                 let mut on = self.pairs.checked.contains(&p.jpeg.image);
                 let can = removable(p);
                 let box_rect = egui::Rect::from_center_size(egui::pos2(rect.left() + 16.0, rect.center().y), egui::vec2(20.0, 20.0));
@@ -585,7 +585,7 @@ impl LibraryView {
         let h = (area.height() - caption_h).max(0.0);
         for (k, item) in [&p.raw, &p.jpeg].into_iter().enumerate() {
             let frame = egui::Rect::from_min_size(egui::pos2(area.left() + k as f32 * (w + gap), area.top()), egui::vec2(w, h));
-            ui.painter().rect_filled(frame, 0.0, Color32::from_gray(0x1c));
+            ui.painter().rect_filled(frame, 0.0, crate::lr::gray(0x1c));
             if let Some(t) = self.thumbnail(item.file) {
                 let s = t.size_vec2();
                 if s.x > 0.0 && s.y > 0.0 {

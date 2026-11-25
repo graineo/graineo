@@ -698,7 +698,7 @@ impl Facets {
         let slot = self.slots[i];
         let mut changed = false;
         let (frame, _) = ui.allocate_exact_size(egui::vec2(w, HEIGHT), egui::Sense::hover());
-        ui.painter().rect_filled(frame, 0.0, Color32::from_gray(0x16));
+        ui.painter().rect_filled(frame, 0.0, crate::lr::gray(0x16));
         let mut kind = ui.new_child(egui::UiBuilder::new().max_rect(frame.shrink2(egui::vec2(4.0, 3.0))).layout(egui::Layout::top_down(egui::Align::Min)));
         let ui = &mut kind;
         let active = self.slot_active(slot);
@@ -715,7 +715,7 @@ impl Facets {
                 });
             if active {
                 let (r, resp) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::click());
-                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() });
+                ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "×", egui::FontId::proportional(12.0), if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() });
                 if resp.clicked() {
                     self.clear_slot(slot);
                     changed = true;
@@ -764,7 +764,7 @@ impl Facets {
         // same height as the search field of the other columns: nothing jumps when switching the content
         let (header, _) = ui.allocate_exact_size(egui::vec2(w - 8.0, 18.0), egui::Sense::hover());
         let font = egui::FontId::proportional(10.5);
-        let color = if sel.is_empty() { lr::TEXT_DIM() } else { Color32::WHITE };
+        let color = if sel.is_empty() { lr::TEXT_DIM() } else { crate::lr::TEXT_STRONG() };
         let g = ui.painter().layout_no_wrap(text, font, color);
         ui.painter().with_clip_rect(header).galley(egui::pos2(header.left() + 4.0, header.center().y - g.size().y / 2.0), g, color);
         let numbers = self.band_numbers[r].clone();
@@ -845,11 +845,11 @@ fn list_rows_with(ui: &mut egui::Ui, salt: (&str, usize), len: usize, row_at: &d
             let (r, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
             let p = ui.painter();
             if is_on {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x4a));
+                p.rect_filled(r, 0.0, crate::lr::gray(0x4a));
             } else if resp.hovered() {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x2a));
+                p.rect_filled(r, 0.0, crate::lr::gray(0x2a));
             }
-            let color = if row.dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
+            let color = if row.dim && !is_on { crate::lr::gray(0x7a) } else if is_on || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
             let font = egui::FontId::proportional(10.5);
             let right = r.right() - 2.0;
             let count_galley = p.layout_no_wrap(row.count.clone(), font.clone(), lr::TEXT_DIM());

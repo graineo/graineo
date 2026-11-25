@@ -30,6 +30,7 @@ pub mod defects;
 pub mod defringe;
 pub mod spp_defringe;
 pub mod dehaze;
+pub mod skin;
 pub mod ai_denoise;
 pub mod denoise;
 pub mod diskcache;
@@ -375,9 +376,12 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
     let brake = s.noise_brake.exponents().filter(|_| s.fill_light > 0.0 && fill.is_some()).map(|(l, c)| lift::Brake::new(&lin.data, lin.width, lin.height, l, c));
     // Tone equalizer: exposure per brightness zone, mask of the whole image (attached, else computed for this image);
     // the data are normalised to sensor saturation (white = 1)
-    let teq_mask = tone_eq::needed(s).then(|| tone_eq::mask_for(lin.toneq.as_ref(), &lin.data, lin.width, lin.height, 1.0, &s.tone_eq));
+    // (also for the zone histogram of the tone equalizer graph when one is collected on this thread: gain stays 1)
+    let hist = tone_eq::collector().filter(|_| s.view == View::Developed && !s.tone_eq_mask);
+    let teq_mask = tone_eq::wanted(s).then(|| tone_eq::mask_for(lin.toneq.as_ref(), &lin.data, lin.width, lin.height, 1.0, &s.tone_eq));
     let teq = teq_mask.as_ref().map(|m| tone_eq::Apply::new(&s.tone_eq, m, (s.exposure + quattro_exposure_offset(cal, s)) as f32, s.tone_eq_mask));
     out_rows(&mut data, &mut scene_data, lin.width * 3, mode_out, cal).zip(lin.data.par_chunks(lin.width * 3)).enumerate().for_each(|(y, (mut out, src))| {
+        let mut zone_hist = hist.as_ref().map(|_| [0u32; tone_eq::HIST_BINS]);
         for x in 0..lin.width {
             let px = y * lin.width + x;
             let mut p = [src[x * 3], src[x * 3 + 1], src[x * 3 + 2]];
@@ -385,6 +389,9 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
             if let Some(dz) = &dz {
                 p = dz.pixel(px, p);
                 bp = bp.map(|b| dz.pixel(px, b));
+            }
+            if let (Some(h), Some(t)) = (zone_hist.as_mut(), &teq) {
+                h[tone_eq::hist_bin(t.zone_ev(x, y, p))] += 1;
             }
             let te = match &teq {
                 Some(t) if t.show => {
@@ -438,6 +445,9 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
                 }
             }
             out.rgb(x, rgb, &tone, gamma, out_m.as_ref(), max_count);
+        }
+        if let (Some(h), Some(k)) = (&zone_hist, &hist) {
+            k.add(h);
         }
         if let Some(a) = axes {
             out.encoded_row(lin.width, |p| a.apply_u16(p));
@@ -613,9 +623,11 @@ fn render_counts_impl(
     // Noise brake for Fill Light: base/detail split of the input (see lift::Brake)
     let brake = s.noise_brake.exponents().filter(|_| s.fill_light > 0.0 && fill.is_some()).map(|(l, c)| lift::Brake::new(src_data, counts.width, counts.height, l, c));
     // Tone equalizer on the counts (white = highest count): mask handed in, attached, or computed for this image
-    let teq_mask = tone_eq::needed(s).then(|| tone_eq::mask_for(toneq.or(counts.toneq.as_ref()), src_data, counts.width, counts.height, cal.max_count(), &s.tone_eq));
+    let hist = tone_eq::collector().filter(|_| s.view == View::Developed && !s.tone_eq_mask);
+    let teq_mask = tone_eq::wanted(s).then(|| tone_eq::mask_for(toneq.or(counts.toneq.as_ref()), src_data, counts.width, counts.height, cal.max_count(), &s.tone_eq));
     let teq = teq_mask.as_ref().map(|m| tone_eq::Apply::new(&s.tone_eq, m, (s.exposure + quattro_exposure_offset(cal, s)) as f32, s.tone_eq_mask));
     out_rows(&mut data, &mut scene_data, counts.width * 3, mode_out, cal).zip(src_data.par_chunks(counts.width * 3)).enumerate().for_each(|(y, (mut out, src))| {
+        let mut zone_hist = hist.as_ref().map(|_| [0u32; tone_eq::HIST_BINS]);
         for x in 0..counts.width {
             let mut p = [src[x * 3], src[x * 3 + 1], src[x * 3 + 2]];
             if let Some(g) = &grey {
@@ -633,6 +645,9 @@ fn render_counts_impl(
             if let Some(dz) = &dz {
                 p = dz.pixel(px, p);
                 bp = bp.map(|b| dz.pixel(px, b));
+            }
+            if let (Some(h), Some(t)) = (zone_hist.as_mut(), &teq) {
+                h[tone_eq::hist_bin(t.zone_ev(x, y, p))] += 1;
             }
             let te = match &teq {
                 Some(t) if t.show => {
@@ -728,6 +743,9 @@ fn render_counts_impl(
                 rgb = highlight_gamut(rgb, w);
             }
             out.rgb(x, rgb, &tone, gamma, out_m.as_ref(), max_count);
+        }
+        if let (Some(h), Some(k)) = (&zone_hist, &hist) {
+            k.add(h);
         }
     });
     RenderOut::new(counts.width, counts.height, data, scene_data, mode_out.float_buffer())

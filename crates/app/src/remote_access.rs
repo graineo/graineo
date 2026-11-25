@@ -360,7 +360,7 @@ pub fn settings_page(ui: &mut egui::Ui) {
             },
         );
         if let Some(e) = &error {
-            ui.label(egui::RichText::new(crate::trf!("Konnte nicht starten: {e}", e = e)).small().color(Color32::from_rgb(0xe0, 0x78, 0x6f)));
+            ui.label(egui::RichText::new(crate::trf!("Konnte nicht starten: {e}", e = e)).small().color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0x78, 0x6f))));
         }
         if let Some(s) = server() {
             separator(ui);

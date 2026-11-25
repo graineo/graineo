@@ -141,10 +141,10 @@ pub fn tiles(ui: &mut Ui, salt: &str, path: &Path) -> Option<NewKind> {
             let ok = possible.is_ok();
             let resp = ui.interact(cell, ui.scope_id().with((salt, i, g)), if ok { egui::Sense::click() } else { egui::Sense::hover() });
             let p = ui.painter();
-            let (fill, stroke) = if resp.hovered() && ok { (Color32::from_gray(0x26), Color32::from_gray(0x50)) } else { (Color32::from_gray(0x1c), Color32::from_gray(0x30)) };
+            let (fill, stroke) = if resp.hovered() && ok { (crate::lr::gray(0x26), crate::lr::gray(0x50)) } else { (crate::lr::gray(0x1c), crate::lr::gray(0x30)) };
             p.rect_filled(cell, 0.0, fill);
             p.rect_stroke(cell, 0.0, egui::Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
-            let color = if !ok { Color32::from_gray(0x5c) } else if resp.hovered() { Color32::WHITE } else { lr::TEXT() };
+            let color = if !ok { crate::lr::gray(0x5c) } else if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
             lr::paint_icon(p, egui::Rect::from_center_size(cell.center_top() + egui::vec2(0.0, 14.0), egui::vec2(17.0, 17.0)), kind.icon(), color);
             let g = p.layout_no_wrap(crate::tr(kind.label()).to_string(), egui::FontId::proportional(10.5), color);
             p.galley(egui::pos2(cell.center().x - g.size().x.min(cell_w - 4.0) / 2.0, cell.bottom() - 4.0 - g.size().y), g, color);
@@ -290,8 +290,8 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
     let w = lr::visible_width(ui);
     let frame_h = ROW_H * ROWS as f32 + 2.0;
     let (outer, _) = ui.allocate_exact_size(egui::vec2(w, frame_h), egui::Sense::hover());
-    ui.painter().rect_filled(outer, 0.0, lr::PANEL_DARK);
-    ui.painter().rect_stroke(outer, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x2c)), egui::StrokeKind::Inside);
+    ui.painter().rect_filled(outer, 0.0, lr::PANEL_DARK());
+    ui.painter().rect_stroke(outer, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x2c)), egui::StrokeKind::Inside);
     let mut child = ui.new_child(egui::UiBuilder::new().id_salt("mask_list").max_rect(outer.shrink(1.0)).layout(egui::Layout::top_down(egui::Align::Min)));
     egui::ScrollArea::vertical().id_salt("mask_list_scroll").auto_shrink([false; 2]).max_height(frame_h - 2.0).show(&mut child, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
@@ -299,9 +299,9 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
             let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
             let p = ui.painter().clone();
             if i == selected {
-                p.rect_filled(rect, 0.0, Color32::from_gray(0x34));
+                p.rect_filled(rect, 0.0, crate::lr::gray(0x34));
             } else if resp.hovered() {
-                p.rect_filled(rect, 0.0, Color32::from_gray(0x22));
+                p.rect_filled(rect, 0.0, crate::lr::gray(0x22));
             }
             if resp.hovered() {
                 hovered = Some(i);
@@ -309,7 +309,7 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
             // eye
             let eye = egui::Rect::from_min_size(rect.min, egui::vec2(24.0, ROW_H));
             let er = ui.interact(eye, ui.scope_id().with(("eye", i)), if fields { egui::Sense::click() } else { egui::Sense::hover() });
-            let ec = if !fields { Color32::from_gray(0x50) } else if er.hovered() { Color32::WHITE } else { lr::TEXT_DIM() };
+            let ec = if !fields { crate::lr::gray(0x50) } else if er.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() };
             lr::paint_icon(&p, egui::Rect::from_center_size(eye.center(), egui::vec2(14.0, 14.0)), if l.enabled { lr::Icon::Eye } else { lr::Icon::EyeSlash }, ec);
             lr::hover_tip(ui, &er, if fields { crate::tr(if l.enabled { "Maske ausschalten (bleibt erhalten)" } else { "Maske einschalten" }) } else { crate::tr("Erst „Filter auf Version 2 umstellen“ (⋯)") });
             if er.clicked() && fields {
@@ -318,16 +318,16 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
             // thumbnail
             let th = egui::Rect::from_min_size(egui::pos2(eye.right() + 2.0, rect.center().y - 8.0), egui::vec2(24.0, 16.0));
             let tex = thumbnail(ui.ctx(), i, &l.mask, aspect, index);
-            p.rect_filled(th, 0.0, Color32::from_gray(0x0c));
+            p.rect_filled(th, 0.0, crate::lr::gray(0x0c));
             if let Some(t) = tex {
                 p.image(t.id(), th, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
             }
-            p.rect_stroke(th, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x3a)), egui::StrokeKind::Outside);
+            p.rect_stroke(th, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x3a)), egui::StrokeKind::Outside);
             // strength on the right
-            let text_c = if !l.enabled { Color32::from_gray(0x6a) } else if i == selected { Color32::WHITE } else { lr::TEXT() };
+            let text_c = if !l.enabled { crate::lr::gray(0x6a) } else if i == selected { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
             let pct = format!("{} %", (l.amount * 100.0).round() as i32);
             let font = egui::TextStyle::Body.resolve(ui.style());
-            let gp = p.layout_no_wrap(pct, font.clone(), if l.enabled { lr::TEXT_DIM() } else { Color32::from_gray(0x5a) });
+            let gp = p.layout_no_wrap(pct, font.clone(), if l.enabled { lr::TEXT_DIM() } else { crate::lr::gray(0x5a) });
             let pr = egui::pos2(rect.right() - 8.0 - gp.size().x, rect.center().y - gp.size().y / 2.0);
             p.galley(pr, gp, lr::TEXT_DIM());
             let name_x = th.right() + 8.0;
@@ -358,8 +358,8 @@ pub fn list(ui: &mut Ui, doc: &Document, selected: usize, rename: &mut Option<(u
                 if !hint.is_empty() && rest > 24.0 {
                     let small = egui::FontId::proportional(10.0);
                     let hint = lr::middle_ellipsis_font(&p, &hint, &small, rest);
-                    let g = p.layout_no_wrap(hint, small, Color32::from_gray(0x80));
-                    p.galley(egui::pos2(name_x + gw + 8.0, rect.center().y - g.size().y / 2.0 + 1.0), g, Color32::from_gray(0x80));
+                    let g = p.layout_no_wrap(hint, small, crate::lr::gray(0x80));
+                    p.galley(egui::pos2(name_x + gw + 8.0, rect.center().y - g.size().y / 2.0 + 1.0), g, crate::lr::gray(0x80));
                 }
             }
             if resp.clicked() && !er.hovered() {
@@ -395,7 +395,7 @@ pub fn thumbnail(ctx: &egui::Context, slot: usize, mask: &Mask, aspect: f32, ind
     let base = content.as_ref().map_or_else(|| vec![0.18f32; w * h * 3], |c| crate::mask_sample::resized(c, w, h));
     let img = masks::Image::new(w, h, &base).ok()?;
     let weights = masks::rasterize(img, mask).ok()?;
-    let pixels: Vec<Color32> = weights.iter().map(|v| Color32::from_gray((v.clamp(0.0, 1.0) * 220.0) as u8 + 16)).collect();
+    let pixels: Vec<Color32> = weights.iter().map(|v| crate::lr::gray((v.clamp(0.0, 1.0) * 220.0) as u8 + 16)).collect();
     let t = ctx.load_texture("mask_thumbnail", egui::ColorImage::new([w, h], pixels), egui::TextureOptions::LINEAR);
     ctx.data_mut(|d| d.insert_temp(id, (stamp, t.clone())));
     Some(t)

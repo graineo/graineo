@@ -33,7 +33,10 @@ const FILL_GAP: f32 = 4.0;
 /// Height of the foot of a field card (stars, hints, ✓ ✗ in one row).
 const FOOT_H: f32 = 26.0;
 /// Ground of a field card (the foot and the frame around the photo).
-const CARD: Color32 = Color32::from_gray(0x1c);
+#[allow(non_snake_case)]
+fn CARD() -> Color32 {
+    crate::lr::gray(0x1c)
+}
 
 /// The app's part of the comparison: crops at full resolution and the state of the view.
 #[derive(Default)]
@@ -676,7 +679,7 @@ impl App {
                 if let Some(s) = side {
                     let at = r.left_top() + Vec2::new(4.0, 4.0);
                     let tr = Rect::from_min_size(at, Vec2::new(14.0, 14.0));
-                    painter.rect_filled(tr, 0.0, Color32::from_gray(0xf0));
+                    painter.rect_filled(tr, 0.0, crate::lr::gray(0xf0));
                     painter.text(tr.center(), egui::Align2::CENTER_CENTER, s, lr::semibold(10.0), Color32::BLACK);
                 }
             }
@@ -684,10 +687,10 @@ impl App {
             // a photo with a field: a white bar along the top (the selection frame marks every compared photo). No digit:
             // a lone "1" on a cell said nothing (found in 1.5.0-test.5), and the cell's number is its place in the
             // series (library_series.rs)
-            painter.rect_filled(Rect::from_min_max(r.left_top(), egui::pos2(r.right(), r.top() + 3.0)), 0.0, Color32::WHITE);
+            painter.rect_filled(Rect::from_min_max(r.left_top(), egui::pos2(r.right(), r.top() + 3.0)), 0.0, crate::lr::TEXT_STRONG());
         }
         if c.reference == Some(image) {
-            painter.rect_filled(Rect::from_min_max(egui::pos2(r.left(), r.bottom() - 2.0), r.max), 0.0, lr::GOLD);
+            painter.rect_filled(Rect::from_min_max(egui::pos2(r.left(), r.bottom() - 2.0), r.max), 0.0, lr::GOLD());
         }
     }
 
@@ -882,9 +885,9 @@ impl App {
                 let arrow = |ui: &mut egui::Ui, text: &str, tip: &str, on: bool| {
                     let (r, resp) = ui.allocate_exact_size(Vec2::new(22.0, 22.0), if on { egui::Sense::click() } else { egui::Sense::hover() });
                     if on && resp.hovered() {
-                        ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x2a));
+                        ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x2a));
                     }
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), if on { lr::TEXT() } else { Color32::from_gray(0x50) });
+                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(13.0), if on { lr::TEXT() } else { crate::lr::gray(0x50) });
                     if on {
                         lr::hover_tip(ui, &resp, crate::tr(tip));
                     }
@@ -903,7 +906,7 @@ impl App {
                 ui.add_space(8.0);
             }
             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                let h = ui.add(egui::Label::new(egui::RichText::new(head).font(lr::semibold(12.0)).color(Color32::from_gray(0xe0))).truncate().sense(egui::Sense::hover()));
+                let h = ui.add(egui::Label::new(egui::RichText::new(head).font(lr::semibold(12.0)).color(crate::lr::gray(0xe0))).truncate().sense(egui::Sense::hover()));
                 if let Some(t) = tip {
                     lr::hover_tip(ui, &h, &t);
                 }
@@ -1090,7 +1093,7 @@ impl App {
             RefView::Difference => lr::Icon::CircleHalf,
         };
         let cells = [
-            (lr::Cell::Symbol(lr::Icon::PushPin, if held { lr::GOLD } else { lr::TEXT() }), held, t_hold.as_str()),
+            (lr::Cell::Symbol(lr::Icon::PushPin, if held { lr::GOLD() } else { lr::TEXT() }), held, t_hold.as_str()),
             (lr::Cell::Symbol(view_icon, lr::TEXT()), held && c.ref_view != RefView::SideBySide, t_view.as_str()),
         ];
         let enabled = [!tour && (c.focus.is_some() || held), held && !tour];
@@ -1177,7 +1180,7 @@ impl App {
 
     /// "MEHR": the groups that did not fit, one function per row.
     fn tool_more(&mut self, ui: &mut egui::Ui, c: &mut Compare, hidden: &[Tool], tour: bool) {
-        let resp = ui.add(egui::Button::new(crate::tr("MEHR")).min_size(egui::vec2(crate::toolbar_plan::MORE_W, lr::BAR_H)).fill(lr::GROUP_FILL));
+        let resp = ui.add(egui::Button::new(crate::tr("MEHR")).min_size(egui::vec2(crate::toolbar_plan::MORE_W, lr::BAR_H)).fill(lr::GROUP_FILL()));
         egui::Popup::menu(&resp).align(egui::RectAlign::TOP_START).show(|ui| {
             ui.set_min_width(260.0);
             let key = |k: &str| crate::shortcuts::display(k);
@@ -1700,10 +1703,10 @@ impl App {
                 let text = crate::tr("Rechteck ziehen: Schärfe je Feld");
                 // above the fields (they are painted after this)
                 let p = ui.painter().clone().with_layer_id(egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("cmp-measure-hint")));
-                let g = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(13.0), Color32::WHITE);
+                let g = p.layout_no_wrap(text.to_string(), egui::FontId::proportional(13.0), crate::lr::TEXT_STRONG());
                 let r = Rect::from_center_size(area.center(), g.size() + Vec2::new(24.0, 14.0));
                 p.rect_filled(r, 0.0, Color32::from_black_alpha(200));
-                p.galley(r.min + Vec2::new(12.0, 7.0), g, Color32::WHITE);
+                p.galley(r.min + Vec2::new(12.0, 7.0), g, crate::lr::TEXT_STRONG());
             }
         }
         if resp.drag_stopped() {
@@ -1774,7 +1777,7 @@ impl App {
             };
             let clip = painter.with_clip_rect(clip_rect);
             if k == 0 || !single_ref {
-                clip.rect_filled(f.rect, 0.0, lr::IMAGE_BG);
+                clip.rect_filled(f.rect, 0.0, lr::IMAGE_BG());
             }
             // a rejected photo: the whole card is dimmed (compare_field_marks)
             let tint = Color32::WHITE;
@@ -1814,7 +1817,7 @@ impl App {
                 if let Some(h) = self.lib.compare_hint(f.image) {
                     if let Some([x, y, w, hh]) = h.focus_area.or(h.focus.map(|[x, y]| [x - 0.02, y - 0.02, 0.04, 0.04])) {
                         let fr = Rect::from_min_size(r.min + Vec2::new(x * r.width(), y * r.height()), Vec2::new(w * r.width(), hh * r.height()));
-                        clip.rect_stroke(fr, 0.0, egui::Stroke::new(1.5, Color32::WHITE), egui::StrokeKind::Outside);
+                        clip.rect_stroke(fr, 0.0, egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()), egui::StrokeKind::Outside);
                     }
                 }
             }
@@ -1827,10 +1830,10 @@ impl App {
         if single_ref && c.ref_view == RefView::Wipe {
             let f = &fields[0];
             let x = f.rect.left() + f.rect.width() * c.wipe;
-            painter.line_segment([egui::pos2(x, f.rect.top()), egui::pos2(x, f.rect.bottom())], egui::Stroke::new(1.5, Color32::WHITE));
+            painter.line_segment([egui::pos2(x, f.rect.top()), egui::pos2(x, f.rect.bottom())], egui::Stroke::new(1.5, crate::lr::TEXT_STRONG()));
             let handle = Rect::from_center_size(egui::pos2(x, f.rect.center().y), Vec2::new(14.0, 40.0));
             let h = ui.interact(handle, egui::Id::unique("cmp-wischer"), egui::Sense::drag());
-            painter.rect_filled(handle, 0.0, Color32::from_gray(0xe8));
+            painter.rect_filled(handle, 0.0, crate::lr::gray(0xe8));
             if h.dragged() {
                 c.wipe = ((x + h.drag_delta().x - f.rect.left()) / f.rect.width()).clamp(0.02, 0.98);
             }
@@ -1897,26 +1900,26 @@ impl App {
         let mut icons: Vec<(lr::Icon, Color32)> = Vec::new();
         if !single_ref {
             if c.reference == Some(f.image) {
-                icons.push((lr::Icon::PushPin, lr::GOLD));
+                icons.push((lr::Icon::PushPin, lr::GOLD()));
                 words.push(crate::tr("Referenz"));
             }
             if c.suggested() == Some(f.image) {
-                icons.push((lr::Icon::Sparkle, Color32::WHITE));
+                icons.push((lr::Icon::Sparkle, crate::lr::TEXT_STRONG()));
                 words.push(crate::tr("Vorschlag"));
             }
             if editing {
-                icons.push((lr::Icon::Sliders, Color32::WHITE));
+                icons.push((lr::Icon::Sliders, crate::lr::TEXT_STRONG()));
                 words.push(crate::tr("wird bearbeitet"));
             }
         }
         let tag_rect = if single_ref {
             crate::compare_view::tag(&p, f.rect.min + Vec2::new(6.0, 6.0), &tag, false, false, f.rect.width() - 20.0)
         } else {
-            let g = p.layout_no_wrap(format!("{tag} ▾"), egui::FontId::monospace(11.0), Color32::WHITE);
+            let g = p.layout_no_wrap(format!("{tag} ▾"), egui::FontId::monospace(11.0), crate::lr::TEXT_STRONG());
             let w = g.size().x + icons.len() as f32 * 17.0 + 14.0;
             let r = Rect::from_min_size(f.rect.min + Vec2::new(6.0, 6.0), Vec2::new(w, g.size().y + 8.0));
             p.rect_filled(r, 0.0, Color32::from_black_alpha(180));
-            p.galley(r.min + Vec2::new(7.0, 4.0), g.clone(), Color32::WHITE);
+            p.galley(r.min + Vec2::new(7.0, 4.0), g.clone(), crate::lr::TEXT_STRONG());
             for (n, (ic, col)) in icons.iter().enumerate() {
                 let at = egui::pos2(r.min.x + 7.0 + g.size().x + 4.0 + n as f32 * 17.0, r.center().y);
                 lr::paint_icon(&p, Rect::from_min_size(egui::pos2(at.x, at.y - 6.5), Vec2::splat(13.0)), *ic, *col);
@@ -1928,7 +1931,7 @@ impl App {
             let g = p.layout_no_wrap(format!("{n}."), lr::semibold(20.0), Color32::BLACK);
             let size = g.size() + Vec2::new(18.0, 6.0);
             let r = Rect::from_min_size(egui::pos2(f.rect.center().x - size.x / 2.0, f.rect.top() + 6.0), size);
-            p.rect_filled(r, 0.0, Color32::from_gray(0xf0));
+            p.rect_filled(r, 0.0, crate::lr::gray(0xf0));
             p.galley(r.min + Vec2::new(9.0, 3.0), g, Color32::BLACK);
             // "Übernehmen" sets place 1 only; places 2 and 3 keep their rating (no stars)
             let tip = crate::trf!("Platz {n} im Turnier – „Übernehmen“ setzt: {w}", n = n, w = if n == 1 { crate::tr("Auswahl · Titelfoto") } else { crate::tr("abgelehnt") });
@@ -1976,7 +1979,7 @@ impl App {
                 FieldState::Fast => (crate::tr("schnelle Vorschau"), crate::tr("Die genaue Rechnung dieses Fotos ist gescheitert: das Feld zeigt die schnelle Vorschau mit mehr Rauschen")),
                 _ => (crate::tr("wird berechnet"), crate::tr("Das Feld wird mit seinen Einstellungen in voller Qualität entwickelt; bis dahin die Vorschau der Bibliothek")),
             };
-            let g = p.layout_no_wrap(text.to_string(), egui::FontId::monospace(10.5), Color32::WHITE);
+            let g = p.layout_no_wrap(text.to_string(), egui::FontId::monospace(10.5), crate::lr::TEXT_STRONG());
             let spin = state == FieldState::Computing;
             let w = g.size().x + 12.0 + if spin { 16.0 } else { 0.0 };
             let r = Rect::from_min_size(egui::pos2(f.rect.right() - w - 8.0, f.rect.top() + 6.0), Vec2::new(w, g.size().y + 8.0));
@@ -1985,7 +1988,7 @@ impl App {
                 crate::spinner(&p, egui::pos2(r.left() + 11.0, r.center().y), 4.5, ui.input(|i| i.time), 1.0);
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(60));
             }
-            p.galley(egui::pos2(r.right() - g.size().x - 6.0, r.top() + 4.0), g, if state == FieldState::Offline { Color32::from_rgb(0xe6, 0xa2, 0x3c) } else { Color32::WHITE });
+            p.galley(egui::pos2(r.right() - g.size().x - 6.0, r.top() + 4.0), g, if state == FieldState::Offline { Color32::from_rgb(0xe6, 0xa2, 0x3c) } else { crate::lr::TEXT_STRONG() });
             let h = ui.interact(r, egui::Id::unique(("cmp-zustand", f.image)), egui::Sense::hover());
             lr::hover_tip(ui, &h, tip);
         }
@@ -2008,17 +2011,17 @@ impl App {
             };
             let single = if c.offsets.contains_key(&f.image) { format!("{} · ", crate::tr("einzeln")) } else { String::new() };
             let text = format!("{single}{pct:.0} % · {state}");
-            let g = p.layout_no_wrap(text, egui::FontId::monospace(10.5), Color32::WHITE);
+            let g = p.layout_no_wrap(text, egui::FontId::monospace(10.5), crate::lr::TEXT_STRONG());
             let r = Rect::from_min_size(egui::pos2(f.rect.right() - g.size().x - 20.0, f.rect.top() + 6.0), g.size() + Vec2::new(12.0, 8.0));
             p.rect_filled(r, 0.0, Color32::from_black_alpha(170));
             if c.offsets.contains_key(&f.image) {
                 // a dashed frame: this field is moved on its own
-                let s = egui::Stroke::new(1.0, Color32::from_gray(0xd0));
+                let s = egui::Stroke::new(1.0, crate::lr::gray(0xd0));
                 for seg in egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], s, 3.0, 3.0) {
                     p.add(seg);
                 }
             }
-            p.galley(r.min + Vec2::new(6.0, 4.0), g, Color32::WHITE);
+            p.galley(r.min + Vec2::new(6.0, 4.0), g, crate::lr::TEXT_STRONG());
         }
         if c.checks.exif {
             self.compare_exif_line(ui, &c.fields, f.image, f.rect);
@@ -2040,10 +2043,10 @@ impl App {
             pp.rect_filled(Rect::from_min_max(card.min, egui::pos2(card.max.x, card.min.y + 2.0)), 0.0, Color32::from_rgb(0x5c, 0xb8, 0x6a));
         }
         if c.reference == Some(f.image) {
-            pp.rect_filled(Rect::from_min_max(egui::pos2(card.left(), card.bottom() - 2.0), card.max), 0.0, lr::GOLD);
+            pp.rect_filled(Rect::from_min_max(egui::pos2(card.left(), card.bottom() - 2.0), card.max), 0.0, lr::GOLD());
         }
         if c.focus == Some(f.image) {
-            pp.rect_stroke(card.expand(2.0), 0.0, egui::Stroke::new(2.0, Color32::from_gray(0xe8)), egui::StrokeKind::Inside);
+            pp.rect_stroke(card.expand(2.0), 0.0, egui::Stroke::new(2.0, crate::lr::gray(0xe8)), egui::StrokeKind::Inside);
         }
         let _ = k;
     }
@@ -2052,7 +2055,7 @@ impl App {
     /// (explanations in the tooltips), ✓ and ✗ on the right.
     fn compare_foot(&mut self, ui: &mut egui::Ui, c: &mut Compare, image: i64, foot: Rect, row: Option<&library::db::Row>, decide: bool) {
         let p = ui.painter().with_clip_rect(foot);
-        p.rect_filled(foot, 0.0, CARD);
+        p.rect_filled(foot, 0.0, CARD());
         let (stars, flag) = row.map_or((0, 0), |z| (z.stars, z.flag));
         let cy = foot.center().y;
         let mut x = foot.left() + 8.0;
@@ -2063,7 +2066,7 @@ impl App {
                 let r = Rect::from_center_size(egui::pos2(right - 10.0, cy), Vec2::splat(20.0));
                 let resp = ui.interact(r, egui::Id::unique(("cmp-fuss-flagge", image, f)), egui::Sense::click());
                 let on = flag == f;
-                let col = if on { if f == 1 { Color32::from_rgb(0x6c, 0xd0, 0x7a) } else { Color32::from_rgb(0xe0, 0x70, 0x60) } } else if resp.hovered() { Color32::WHITE } else { Color32::from_gray(0x80) };
+                let col = if on { if f == 1 { Color32::from_rgb(0x6c, 0xd0, 0x7a) } else { Color32::from_rgb(0xe0, 0x70, 0x60) } } else if resp.hovered() { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x80) };
                 lr::paint_icon(&p, Rect::from_center_size(r.center(), Vec2::splat(15.0)), icon, col);
                 lr::tip_key(ui, &resp, tip, key);
                 if resp.clicked() {
@@ -2076,7 +2079,7 @@ impl App {
                 let r = Rect::from_min_size(egui::pos2(x, cy - 9.0), Vec2::new(13.0, 18.0));
                 let resp = ui.interact(r, egui::Id::unique(("cmp-fuss-stern", image, n)), egui::Sense::click());
                 let on = n <= stars;
-                let col = if on { Color32::from_rgb(0xe8, 0xc5, 0x5a) } else if resp.hovered() { Color32::from_gray(0xc0) } else { Color32::from_gray(0x6a) };
+                let col = if on { Color32::from_rgb(0xe8, 0xc5, 0x5a) } else if resp.hovered() { crate::lr::gray(0xc0) } else { crate::lr::gray(0x6a) };
                 p.text(r.center(), egui::Align2::CENTER_CENTER, if on { "★" } else { "☆" }, egui::FontId::proportional(11.5), col);
                 let tip = if n == 1 { crate::tr("1 Stern").to_string() } else { crate::trf!("{n} Sterne", n = n) };
                 lr::hover_tip(ui, &resp, &format!("{tip} ({n})"));
@@ -2117,7 +2120,7 @@ impl App {
                 continue;
             }
             let differs = k > 0 && rows.len() > 1 && *t != majority(k);
-            let r = p.text(egui::pos2(x, bar.center().y), egui::Align2::LEFT_CENTER, t, egui::FontId::monospace(10.5), if differs { amber } else { Color32::from_gray(0xe0) });
+            let r = p.text(egui::pos2(x, bar.center().y), egui::Align2::LEFT_CENTER, t, egui::FontId::monospace(10.5), if differs { amber } else { crate::lr::gray(0xe0) });
             if differs {
                 let s = egui::Stroke::new(1.0, amber);
                 for seg in egui::Shape::dotted_line(&[egui::pos2(r.left(), r.bottom()), egui::pos2(r.right(), r.bottom())], amber, 3.0, 0.7) {
@@ -2142,10 +2145,10 @@ impl App {
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(head).layout(egui::Layout::left_to_right(egui::Align::Center)));
         let ui = &mut child;
         ui.spacing_mut().item_spacing.x = 10.0;
-        ui.label(egui::RichText::new(crate::trf!("Duell {a} von etwa {b} · Ziel Platz 1–3", a = duels, b = estimate)).font(lr::semibold(12.0)).color(Color32::from_gray(0xe0)));
+        ui.label(egui::RichText::new(crate::trf!("Duell {a} von etwa {b} · Ziel Platz 1–3", a = duels, b = estimate)).font(lr::semibold(12.0)).color(crate::lr::gray(0xe0)));
         let (bar, _) = ui.allocate_exact_size(Vec2::new(160.0, 4.0), egui::Sense::hover());
-        ui.painter().rect_filled(bar, 0.0, Color32::from_gray(0x30));
-        ui.painter().rect_filled(Rect::from_min_size(bar.min, Vec2::new(bar.width() * (duels as f32 / estimate as f32).min(1.0), bar.height())), 0.0, Color32::from_gray(0xd0));
+        ui.painter().rect_filled(bar, 0.0, crate::lr::gray(0x30));
+        ui.painter().rect_filled(Rect::from_min_size(bar.min, Vec2::new(bar.width() * (duels as f32 / estimate as f32).min(1.0), bar.height())), 0.0, crate::lr::gray(0xd0));
         ui.label(egui::RichText::new(crate::trf!("{a} Fotos · {b} raus", a = entrants, b = out)).color(lr::TEXT_DIM()));
     }
 
@@ -2153,8 +2156,8 @@ impl App {
     fn compare_faces_bar(&mut self, ui: &mut egui::Ui, c: &Compare, area: Rect) {
         let persons = self.lib.compare_persons(&c.images);
         let p = ui.painter_at(area);
-        let g = lr::caps(&p, crate::tr("Gesichter"), lr::semibold(10.5), Color32::from_gray(0xb0));
-        p.galley(area.min + Vec2::new(8.0, 3.0), g, Color32::from_gray(0xb0));
+        let g = lr::caps(&p, crate::tr("Gesichter"), lr::semibold(10.5), crate::lr::gray(0xb0));
+        p.galley(area.min + Vec2::new(8.0, 3.0), g, crate::lr::gray(0xb0));
         let size = 58.0;
         for (row, &(cx, cy)) in persons.iter().take(3).enumerate() {
             let y = area.top() + 20.0 + row as f32 * (size + 6.0);
@@ -2164,7 +2167,7 @@ impl App {
                     break;
                 }
                 let cell = Rect::from_min_size(egui::pos2(x, y), Vec2::new(size, size));
-                p.rect_filled(cell, 0.0, Color32::from_gray(0x18));
+                p.rect_filled(cell, 0.0, crate::lr::gray(0x18));
                 let dist = |q: &library::series_quality::Face| (q.x + q.w / 2.0 - cx).powi(2) + (q.y + q.h / 2.0 - cy).powi(2);
                 let face = self.lib.compare_hint(b).and_then(|h| h.faces).and_then(|f| f.iter().min_by(|a, b| dist(a).total_cmp(&dist(b))).copied()).filter(|f| dist(f) < 0.15 * 0.15);
                 let Some(face) = face else { continue };
@@ -2512,7 +2515,7 @@ pub(crate) fn difference_image(reference: &image::RgbImage, candidate: &image::R
         for x in 0..w as i64 {
             let (cx, cy) = (x + dx, y + dy);
             let v = if cx >= 0 && cy >= 0 && cx < w as i64 && cy < h as i64 { (luma(reference.get_pixel(x as u32, y as u32)) - luma(cand.get_pixel(cx as u32, cy as u32))).abs() * 4.0 } else { 0.0 };
-            px.push(Color32::from_gray(v.min(255.0) as u8));
+            px.push(crate::lr::gray(v.min(255.0) as u8));
         }
     }
     egui::ColorImage::new([w as usize, h as usize], px)
@@ -2816,7 +2819,7 @@ fn compare_hint_symbols(ui: &egui::Ui, p: &egui::Painter, at: Pos2, limit: f32, 
     let cy = at.y;
     let mut x = at.x;
     let amber = Color32::from_rgb(220, 180, 110);
-    let dim = Color32::from_gray(0xa8);
+    let dim = crate::lr::gray(0xa8);
     let font = egui::FontId::proportional(10.5);
     let item = |x: &mut f32, icon: Option<lr::Icon>, text: String, col: Color32, tip: &str, n: usize| {
         let w_text = if text.is_empty() { 0.0 } else { p.layout_no_wrap(text.clone(), font.clone(), col).size().x + 3.0 };
@@ -2841,7 +2844,7 @@ fn compare_hint_symbols(ui: &egui::Ui, p: &egui::Painter, at: Pos2, limit: f32, 
     };
     if let Some(v) = measured {
         let tip = if best { format!("{} {v:.0} · {}", crate::tr("Schärfe"), crate::tr("schärfstes")) } else { format!("{} {v:.0}", crate::tr("Schärfe")) };
-        item(&mut x, Some(lr::Icon::Ruler), format!("{v:.0}"), if best { lr::GOLD } else { dim }, &tip, 1);
+        item(&mut x, Some(lr::Icon::Ruler), format!("{v:.0}"), if best { lr::GOLD() } else { dim }, &tip, 1);
     }
     // sharpness: four small bars
     let filled = sharp.map_or(0, |s| ((s * 4.0).round() as usize).clamp(1, 4));
@@ -2850,9 +2853,9 @@ fn compare_hint_symbols(ui: &egui::Ui, p: &egui::Painter, at: Pos2, limit: f32, 
         for b in 0..4 {
             let r = Rect::from_min_size(egui::pos2(x + b as f32 * 6.0, cy - 5.0), Vec2::new(4.0, 10.0));
             if b < filled {
-                p.rect_filled(r, 0.0, Color32::from_gray(0xd8));
+                p.rect_filled(r, 0.0, crate::lr::gray(0xd8));
             } else {
-                p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0x60)), egui::StrokeKind::Inside);
+                p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x60)), egui::StrokeKind::Inside);
             }
         }
         let h = ui.interact(bars, egui::Id::unique(("cmp-schaerfe", image)), egui::Sense::hover());

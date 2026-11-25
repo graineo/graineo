@@ -158,6 +158,19 @@ pub fn damaged(d: &develop::damaged::Damage) -> Notice {
 
 /// Damaged Sigma file whose RAW data cannot be read: the camera's preview is shown.
 pub fn unreadable(detail: &str) -> Notice {
+    if detail.contains(raw::DAMAGED) {
+        // a RAW of a supported format cut short or damaged (not an unknown camera): say so plainly
+        return Notice {
+            spec: Spec::Unreadable(detail.to_string()),
+            ..Notice::new(
+                Kind::Damaged,
+                crate::tr("Datei beschädigt oder unvollständig"),
+                crate::tr("beschädigt oder unvollständig"),
+                crate::tr("Datei beschädigt oder unvollständig"),
+                crate::tr("Die Datei lässt sich nicht lesen: Sie ist unvollständig (z. B. abgebrochene Kopie) oder beschädigt. Die Vorschau aus der Kamera bleibt sichtbar, wenn die Datei eine enthält. Am besten das Original noch einmal von der Karte oder aus der Sicherung kopieren."),
+            )
+        };
+    }
     Notice { spec: Spec::Unreadable(detail.to_string()), ..Notice::new(Kind::Damaged, crate::tr("Beschädigt · Vorschau aus der Kamera"), crate::tr("beschädigt – nur Vorschau der Kamera"), crate::tr("Datei beschädigt"), crate::menu::i18n::tr_msg(detail)) }
 }
 
@@ -175,15 +188,38 @@ pub fn open_failed(error: &str) -> Notice {
             )
         };
     }
+    if let Some(camera) = raw::unknown_camera(error) {
+        // a camera newer than the decoder: not a broken file, and there is a way out today
+        return Notice {
+            spec: Spec::OpenFailed(error.to_string()),
+            ..Notice::new(
+                Kind::OpenFailed,
+                crate::tr("Kamera noch nicht unterstützt"),
+                crate::tr("Kamera noch nicht unterstützt"),
+                crate::tr("Kamera noch nicht unterstützt"),
+                format!("{}\n{}", crate::trf!("Diese Kamera ({a}) wird noch nicht unterstützt.", a = camera), unknown_camera_advice()),
+            )
+        };
+    }
     Notice { spec: Spec::OpenFailed(error.to_string()), ..Notice::new(Kind::OpenFailed, crate::tr("Lässt sich nicht öffnen"), crate::tr("lässt sich nicht öffnen"), crate::tr("Foto lässt sich nicht öffnen"), crate::menu::i18n::tr_msg(error)) }
 }
 
+/// What to do until graineo knows a new camera.
+pub fn unknown_camera_advice() -> String {
+    crate::tr("Bis zum nächsten Update: mit dem kostenlosen Adobe DNG Converter in DNG umwandeln – DNG öffnet graineo sofort.").to_string()
+}
+
 /// Short reason instead of "<format> – lässt sich hier nicht entwickeln" when the photo uses a known unsupported
-/// variant of its format (Nikon High Efficiency NEF); `None` otherwise.
+/// variant of its format (Nikon High Efficiency NEF) or a camera the decoder does not know yet; `None` otherwise.
 pub fn unsupported_text(path: &Path) -> Option<String> {
     let g = STORE.lock().unwrap();
     let v = g.as_ref()?.get(path)?;
-    v.iter().any(|n| matches!(&n.spec, Spec::OpenFailed(t) if t.contains(raw::NIKON_HE))).then(|| crate::tr("NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt").to_string())
+    v.iter().find_map(|n| match &n.spec {
+        Spec::OpenFailed(t) if t.contains(raw::NIKON_HE) => Some(crate::tr("NEF-Kompression „Hohe Effizienz“ – noch nicht unterstützt").to_string()),
+        Spec::Unreadable(t) if t.contains(raw::DAMAGED) => Some(crate::tr("Datei beschädigt oder unvollständig").to_string()),
+        Spec::OpenFailed(t) => raw::unknown_camera(t).map(|c| format!("{}\n{}", crate::trf!("Diese Kamera ({a}) wird noch nicht unterstützt.", a = c), unknown_camera_advice())),
+        _ => None,
+    })
 }
 
 /// The stored development comes from a newer version of graineo: this version cannot read it, shows the initial values
@@ -204,6 +240,15 @@ pub fn newer_develop() -> Notice {
 /// Developed by the system RAW engine of macOS because graineo cannot decode the file: Nikon High Efficiency, or
 /// `blocked` = [`raw::DECODE_IMPLAUSIBLE`] (the decoder's result is unusable, e.g. Galaxy S23 Ultra DNG).
 pub fn engine_fallback(version: &str, blocked: &str) -> Notice {
+    if let Some(camera) = raw::unknown_camera(blocked) {
+        return Notice::new(
+            Kind::Engine,
+            crate::trf!("Apple RAW {a} · neue Kamera", a = version),
+            crate::trf!("entwickelt mit Apple RAW {a} (Kamera in graineo noch nicht unterstützt)", a = version),
+            crate::trf!("Entwickelt mit Apple RAW {a}", a = version),
+            crate::trf!("graineo unterstützt diese Kamera ({b}) noch nicht. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen.", a = version, b = camera),
+        );
+    }
     if blocked == raw::DECODE_IMPLAUSIBLE {
         return Notice::new(
             Kind::Engine,

@@ -227,7 +227,7 @@ impl Brand {
         if let Some(t) = self.logo(ui.ctx()) {
             ui.add(egui::Image::new((t.id(), egui::vec2(18.0, 18.0))));
         }
-        ui.label(egui::RichText::new("graineo").font(lr::brand(14.5)).color(Color32::from_rgb(0xf2, 0xef, 0xe6)));
+        ui.label(egui::RichText::new("graineo").font(lr::brand(14.5)).color(crate::lr::ui_rgb(0xf2, 0xef, 0xe6)));
         ui.add_space(6.0);
     }
 
@@ -278,8 +278,8 @@ impl Brand {
         let shadow = egui::epaint::Shadow { offset: [0, 10], blur: 48, spread: 0, color: a(Color32::from_black_alpha(140)) };
         p.add(shadow.as_shape(rect, 14));
         // dark ground of the app symbol (#111214)
-        p.rect_filled(rect, 14.0, a(Color32::from_rgb(0x11, 0x12, 0x14)));
-        p.rect_stroke(rect, 14.0, egui::Stroke::new(1.0, a(Color32::from_white_alpha(28))), egui::StrokeKind::Inside);
+        p.rect_filled(rect, 14.0, a(crate::lr::ui_rgb(0x11, 0x12, 0x14)));
+        p.rect_stroke(rect, 14.0, egui::Stroke::new(1.0, a(crate::lr::overlay(28))), egui::StrokeKind::Inside);
         // black-and-white film grain on the card, below word mark and text (texture once per card size)
         let ppp = ctx.pixels_per_point();
         let px = [(size.x * ppp).round().max(1.0) as usize, (size.y * ppp).round().max(1.0) as usize];
@@ -330,30 +330,30 @@ impl Brand {
             p.image(t.id(), r, uv, a(Color32::WHITE));
             baseline = r.bottom();
         }
-        let line1 = lr::caps_spaced(&p, crate::tr("RAW & Film"), egui::FontId::proportional(12.5 * k), a(Color32::from_gray(0xb4)), 2.6 * k);
-        let line2 = lr::caps_spaced(&p, "with Foveon support", egui::FontId::proportional(10.5 * k), a(Color32::from_gray(0xc4)), 1.8 * k);
+        let line1 = lr::caps_spaced(&p, crate::tr("RAW & Film"), egui::FontId::proportional(12.5 * k), a(crate::lr::gray(0xb4)), 2.6 * k);
+        let line2 = lr::caps_spaced(&p, "with Foveon support", egui::FontId::proportional(10.5 * k), a(crate::lr::gray(0xc4)), 1.8 * k);
         let y1 = baseline + 14.0 * k;
         let y2 = y1 + line1.size().y + 5.0 * k;
-        p.galley(egui::pos2(cx - line1.size().x / 2.0, y1), line1, a(Color32::from_gray(0xb4)));
-        p.galley(egui::pos2(cx - line2.size().x / 2.0, y2), line2, a(Color32::from_gray(0xc4)));
+        p.galley(egui::pos2(cx - line1.size().x / 2.0, y1), line1, a(crate::lr::gray(0xb4)));
+        p.galley(egui::pos2(cx - line2.size().x / 2.0, y2), line2, a(crate::lr::gray(0xc4)));
         // splash and About window: only the version; About adds a quiet text button to the licence card
         let _ = status;
         let version = crate::trf!("Version {a}", a = env!("CARGO_PKG_VERSION"));
-        let mut job = egui::text::LayoutJob::simple(version, egui::FontId::proportional(12.0 * k), a(Color32::from_gray(0x78)), (size.x - 96.0 * k).max(1.0));
+        let mut job = egui::text::LayoutJob::simple(version, egui::FontId::proportional(12.0 * k), a(crate::lr::gray(0x78)), (size.x - 96.0 * k).max(1.0));
         job.halign = egui::Align::Center;
         let body = p.layout_job(job);
         let version_top = rect.bottom() - 30.0 * k - body.size().y - if self.about { 30.0 * k } else { 0.0 };
-        p.galley(egui::pos2(cx, version_top), body.clone(), a(Color32::from_gray(0x78)));
+        p.galley(egui::pos2(cx, version_top), body.clone(), a(crate::lr::gray(0x78)));
         let mut over_button = false;
         if let Some(h) = &self.hold {
             let w = (size.x - 150.0 * k).max(1.0);
             let mut y = rect.top() + size.y * 0.672;
             let line = |text: &str, px: f32, gray: u8, y: &mut f32| {
-                let mut job = egui::text::LayoutJob::simple(text.to_string(), egui::FontId::proportional(px * k), a(Color32::from_gray(gray)), w);
+                let mut job = egui::text::LayoutJob::simple(text.to_string(), egui::FontId::proportional(px * k), a(crate::lr::gray(gray)), w);
                 job.halign = egui::Align::Center;
                 let g = p.layout_job(job);
                 let h = g.size().y;
-                p.galley(egui::pos2(cx, *y), g, a(Color32::from_gray(gray)));
+                p.galley(egui::pos2(cx, *y), g, a(crate::lr::gray(gray)));
                 *y += h;
             };
             line(&h.title, 13.0, 0xd0, &mut y);
@@ -361,9 +361,9 @@ impl Brand {
             line(&h.step, 11.5, 0xa0, &mut y);
             y += 8.0 * k;
             let bar = egui::Rect::from_min_size(egui::pos2(cx - 150.0 * k, y), egui::vec2(300.0 * k, 3.0 * k));
-            p.rect_filled(bar, 1.5 * k, a(Color32::from_white_alpha(28)));
+            p.rect_filled(bar, 1.5 * k, a(crate::lr::overlay(28)));
             let fill = egui::Rect::from_min_size(bar.min, egui::vec2(bar.width() * h.fraction.clamp(0.0, 1.0), bar.height()));
-            p.rect_filled(fill, 1.5 * k, a(Color32::from_gray(0xc0)));
+            p.rect_filled(fill, 1.5 * k, a(crate::lr::gray(0xc0)));
             y += 12.0 * k;
             line(&h.note, 10.5, 0x88, &mut y);
         }
@@ -376,7 +376,7 @@ impl Brand {
                 .pivot(egui::Align2::CENTER_TOP)
                 .show(ctx, |ui| {
                     ui.horizontal(|ui| {
-                        let r = lr::link_text(ui, egui::RichText::new(label).size(11.0), Color32::from_gray(0xa0));
+                        let r = lr::link_text(ui, egui::RichText::new(label).size(11.0), crate::lr::gray(0xa0));
                         over_button = r.hovered() || r.contains_pointer();
                         if r.clicked() {
                             self.licenses = true;
@@ -384,7 +384,7 @@ impl Brand {
                         // quiet support link next to it, only once an address is set (support.rs); opens the browser
                         if crate::support::enabled() {
                             ui.add_space(14.0);
-                            let r = lr::link_text(ui, egui::RichText::new(crate::tr("graineo unterstützen …")).size(11.0), Color32::from_gray(0xa0));
+                            let r = lr::link_text(ui, egui::RichText::new(crate::tr("graineo unterstützen …")).size(11.0), crate::lr::gray(0xa0));
                             over_button |= r.hovered() || r.contains_pointer();
                             if r.clicked() {
                                 crate::support::open();
@@ -412,11 +412,11 @@ impl Brand {
     fn licenses_card(&mut self, ctx: &egui::Context, rect: egui::Rect) {
         let head = |ui: &mut egui::Ui, text: &str| {
             ui.add_space(8.0);
-            ui.label(egui::RichText::new(text.to_uppercase()).size(10.0).color(Color32::from_gray(0x90)));
+            ui.label(egui::RichText::new(text.to_uppercase()).size(10.0).color(crate::lr::gray(0x90)));
             ui.add_space(2.0);
         };
         let line = |ui: &mut egui::Ui, text: &str| {
-            ui.label(egui::RichText::new(text).size(10.5).color(Color32::from_gray(0xb0)));
+            ui.label(egui::RichText::new(text).size(10.5).color(crate::lr::gray(0xb0)));
         };
         egui::Area::new(egui::Id::new("brand-licenses-card"))
             .order(egui::Order::Tooltip)
@@ -424,13 +424,13 @@ impl Brand {
             .pivot(egui::Align2::CENTER_CENTER)
             .show(ctx, |ui| {
                 egui::Frame::new()
-                    .fill(Color32::from_rgb(0x15, 0x16, 0x19))
-                    .stroke(egui::Stroke::new(1.0, Color32::from_white_alpha(28)))
+                    .fill(crate::lr::ui_rgb(0x15, 0x16, 0x19))
+                    .stroke(egui::Stroke::new(1.0, crate::lr::overlay(28)))
                     .corner_radius(10.0)
                     .inner_margin(egui::Margin::same(20))
                     .show(ui, |ui| {
                         ui.set_width((rect.width() - 120.0).clamp(260.0, 620.0));
-                        ui.label(egui::RichText::new(crate::tr("Lizenzen und Marken")).size(13.0).color(Color32::from_rgb(0xf2, 0xef, 0xe6)));
+                        ui.label(egui::RichText::new(crate::tr("Lizenzen und Marken")).size(13.0).color(crate::lr::ui_rgb(0xf2, 0xef, 0xe6)));
                         egui::ScrollArea::vertical().max_height((rect.height() - 96.0).max(120.0)).show(ui, |ui| {
                             head(ui, &crate::tr("Lizenz"));
                             line(ui, &crate::tr("graineo steht unter der GPL-3.0."));
@@ -460,7 +460,7 @@ impl Brand {
                             line(ui, &crate::tr("Filmnamen wie Portra, Ektar, Tri-X, Velvia, Provia oder Acros sind Marken ihrer jeweiligen Inhaber. graineo bildet diese Filme anhand veröffentlichter Daten nach und steht in keiner Verbindung zu Kodak, Fujifilm, Ilford, Agfa oder anderen Herstellern."));
                         });
                         ui.add_space(10.0);
-                        if lr::link_text(ui, egui::RichText::new(crate::tr("Schließen")).size(11.0), Color32::from_gray(0xa0)).clicked() {
+                        if lr::link_text(ui, egui::RichText::new(crate::tr("Schließen")).size(11.0), crate::lr::gray(0xa0)).clicked() {
                             self.licenses = false;
                         }
                     });

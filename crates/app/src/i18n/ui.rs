@@ -644,6 +644,13 @@ pub fn tr_msg(de: &str) -> std::borrow::Cow<'_, str> {
     if de.contains(raw::NIKON_HE) {
         return std::borrow::Cow::Owned(tr_msg(&de.replace(raw::NIKON_HE, NIKON_HE_KEY)).into_owned());
     }
+    if let Some(camera) = raw::unknown_camera(de) {
+        // the dictionary template "Diese Kamera ({a}) …" matches the German sentence
+        return std::borrow::Cow::Owned(tr_msg_depth(&format!("Diese Kamera ({camera}) wird noch nicht unterstützt."), 0).into_owned());
+    }
+    if de.contains(raw::DAMAGED) {
+        return std::borrow::Cow::Owned(tr_msg_depth("Datei beschädigt oder unvollständig", 0).into_owned());
+    }
     match friendly(de) {
         std::borrow::Cow::Borrowed(_) => tr_msg_depth(de, 0),
         std::borrow::Cow::Owned(s) => std::borrow::Cow::Owned(tr_msg_depth(&s, 0).into_owned()),

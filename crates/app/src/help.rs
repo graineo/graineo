@@ -120,7 +120,7 @@ fn vectorscope_sketch(ui: &mut egui::Ui) {
     let c = egui::pos2(rect.left() + size / 2.0 + 4.0, rect.center().y);
     let r = size / 2.0 - 6.0;
     let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(c, Color32::from_gray(0x80));
+    mesh.colored_vertex(c, crate::lr::gray(0x80));
     let n = 72;
     for i in 0..=n {
         let a = i as f32 / n as f32 * std::f32::consts::TAU;
@@ -132,11 +132,11 @@ fn vectorscope_sketch(ui: &mut egui::Ui) {
     }
     let p = ui.painter();
     p.add(egui::Shape::mesh(mesh));
-    p.circle_stroke(c, r, egui::Stroke::new(1.0, Color32::from_gray(0x50)));
+    p.circle_stroke(c, r, egui::Stroke::new(1.0, crate::lr::gray(0x50)));
     // saturation: an arrow from the centre outwards; hue: an arc along the rim
     let a = (-30f32).to_radians();
     let dir = egui::vec2(a.cos(), -a.sin());
-    let white = egui::Stroke::new(1.5, Color32::WHITE);
+    let white = egui::Stroke::new(1.5, crate::lr::TEXT_STRONG());
     p.arrow(c, dir * (r - 4.0), white);
     let arc: Vec<egui::Pos2> = (0..=20).map(|k| {
         let t = (60.0 + k as f32 * 4.0).to_radians();
@@ -481,17 +481,12 @@ static DEHAZE: Card = card(
 );
 static TONE_EQ: Card = card(
     "Ein Regler für Schatten und Lichter, mit Schutz der jeweils anderen Seite.",
-    "• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Feineinstellung\nNeun Zonenregler von −8 EV (fast Schwarz) bis 0 EV (Weiß) kommen zum Ausgleich hinzu; dazu Glättung, Kantenschärfe und „Maske zeigen“. Gesetzte Zonen können den Schutz aufheben.",
-    None,
-);
-static TONE_EQ_ZONE: Card = card(
-    "Hebt (+) oder senkt (−) die Belichtung dieser Helligkeitszone, in Blendenstufen.",
-    "Die Zone zählt ab Weiß nach der Belichtung: 0 EV sind die hellsten Lichter, −4 EV die Mitteltöne, −8 EV fast Schwarz. Nachbarzonen werden weich mitgenommen; benachbarte Regler daher ähnlich stellen, sonst kann der Tonverlauf kippen. Die Zonen kommen zum Ausgleich hinzu.",
+    "• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nKlick wählt einen Punkt · Ziehen: Zone heller/dunkler · ↑/↓ ±0,05, mit ⇧ ±0,25 · ←/→ nächste Zone · Mausrad über der Grafik: Zone unter dem Zeiger · Doppelklick auf einen Punkt: 0 · Doppelklick auf den Wert darunter: eintippen\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.",
     None,
 );
 static TONE_EQ_MASK: Card = card(
     "Stellt die Maske ein, die jede Bildstelle einer Zone zuordnet.",
-    "• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kantenschärfe** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.",
+    "• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.",
     None,
 );
 static COLOR_CASTS: Card = card(
@@ -508,6 +503,7 @@ static SATURATION: Card = card("", "Wirkt auf alle Farben gleich stark; −1 erg
 // ── Curve, color mixer, black & white, color grading ──
 static CURVE: Card = card("Punktkurve auf den fertigen Bildwerten nach der Tonkurve der Kamera.", "Eine sanfte S-Kurve gibt den Mitteltönen Kontrast; mit den Kanälen Rot, Grün und Blau lassen sich Farbstiche formen.\n\n### Tasten\nKlicken setzt einen Punkt · Ziehen verschiebt · Doppelklick entfernt", example_pair!("curve", "Vorher", "S-Kurve"));
 static COLOR_MIXER: Card = card("Farbton, Sättigung und Helligkeit einzelner Farbbereiche.", "Jeder der acht Bereiche erfasst die Töne um seine Mitte und blendet weich in die Nachbarn über; Grautöne bleiben unberührt. Beispiel: Blau-Luminanz senkt den Himmel ab, Wolken und Laub bleiben.", example_pair!("color_mixer", "Vorher", "Blau-Luminanz −0,80"));
+static SKIN_TONES: Card = card("Farbton und Sättigung nur im Bereich der Hauttöne.", "• **Hautton** – links rosiger, rechts gelblicher und goldener\n• **Hautsättigung** – Hauttöne blasser oder kräftiger\n\nDer Bereich ist fest: ein breites Band warmer, mäßig bunter Töne von sehr heller bis sehr dunkler Haut. Er wird nicht aus dem Foto gemessen, und alle Hauttöne werden gleich behandelt. Alle anderen Farben, Grau, Schwarz und Weiß bleiben genau, wie sie sind.\n\n### Gut zu wissen\nDie Regler kennen keine Personen: Holz, Sand, Leder oder warmes Licht im selben Farbbereich ändern sich mit, ebenso Orange.", None);
 static BW_MIX: Card = card("Wie ein Farbfilter vor Schwarzweißfilm.", "Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte", example_pair!("bw_mix", "Summe", "Rotfilter"));
 static LAYER_MIXER: Card = card("Verteilt die drei Foveon-Schichten frei auf Rot, Grün und Blau – statt der Farbmatrix der Kamera.", "Wie ein Kanalmixer, aber mit den Sensorschichten: Ausgabe Rot, Grün oder Blau wählen und festlegen, wie viel Prozent aus der unteren (≈ Rot/IR), mittleren (≈ Grün) und oberen Schicht (≈ Blau) kommen.\n• **Summe 100 %** – Grau bleibt neutral; mehr macht den Kanal heller\n• **Negative Anteile** – entmischen die überlappenden Schichten\n• **IR NRG** – Falschfarben-Infrarot (Vegetation rot)\n• **R↔B** – klassischer IR-Kanaltausch für blauen Himmel\n\n### Tipp\nFür Infrarot- und Vollspektrum-Umbauten; bei normalen Fotos auf „Sigma“ lassen.", None);
 static GRADING: Card = card("Tönt Schatten, Mitteltöne und Lichter getrennt.", "Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral", example_pair!("color_grading", "Vorher", "Split-Tone"));
@@ -584,9 +580,8 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Tiefen" => &SHADOWS,
         "Fill Light (Retinex)" | "Fill Light" => &FILL_LIGHT,
         "Dunst entfernen" => &DEHAZE,
-        _ if hint.starts_with(crate::tone_eq_ui::ZONE_HINT_START) => &TONE_EQ_ZONE,
         "Ausgleich" if hint == crate::tone_eq_ui::BALANCE_HINT => &TONE_EQ,
-        "Glättung" | "Kantenschärfe" if hint.contains("Maske") => &TONE_EQ_MASK,
+        "Glättung" | "Kanten" if hint.contains("Maske") => &TONE_EQ_MASK,
         "Lichter neutral" => &HIGHLIGHTS_NEUTRAL,
         "Binning" => &BINNING,
         "Rauschbremse" if !hint.is_empty() => &NOISE_BRAKE_RAW,
@@ -638,9 +633,10 @@ pub fn for_section(title: &str) -> Option<&'static Card> {
     Some(match title {
         "Gradationskurve" => &CURVE,
         "Farbstiche" => &COLOR_CASTS,
-        "Tonwert-Entzerrer" => &TONE_EQ,
+        "Tonwert-Equalizer" => &TONE_EQ,
         "Freistellen & Ausrichten" => &CROP_ALIGN,
         "Farbmischer" => &COLOR_MIXER,
+        "Hauttöne" => &SKIN_TONES,
         "Schichtmischer" => &LAYER_MIXER,
         "S/W-Mischung (Sensorschichten)" => &BW_MIX,
         "Color Grading" => &GRADING,
@@ -669,14 +665,17 @@ pub const WIDTH: f32 = 380.0;
 const BODY: f32 = lr::UI_SIZE;
 const LINE: f32 = 16.5;
 /// Text of the set-off part at the end of a card (keys, tips).
-const ASIDE: Color32 = Color32::from_gray(0x8a);
+#[allow(non_snake_case)]
+fn ASIDE() -> Color32 {
+    crate::lr::gray(0x8a)
+}
 
 /// One line of body text as a layout job: `**…**` is set in the medium weight and the brighter text color.
 fn body_job(text: &str, width: f32, color: Color32) -> egui::text::LayoutJob {
     let mut job = egui::text::LayoutJob::default();
     job.wrap.max_width = width;
     let plain = egui::TextFormat { font_id: egui::FontId::proportional(BODY), color, line_height: Some(LINE), ..Default::default() };
-    let strong = if color == ASIDE { Color32::from_gray(0xb0) } else { lr::TEXT() };
+    let strong = if color == ASIDE() { crate::lr::gray(0xb0) } else { lr::TEXT() };
     let bold = egui::TextFormat { font_id: lr::semibold(BODY), color: strong, line_height: Some(LINE), ..Default::default() };
     for (n, part) in text.split("**").enumerate() {
         if !part.is_empty() {
@@ -708,15 +707,15 @@ pub fn body(ui: &mut egui::Ui, text: &str, color: Color32) {
         first = false;
         for line in paragraph.split('\n') {
             if let Some(heading) = line.strip_prefix("### ") {
-                color = ASIDE;
+                color = ASIDE();
                 ui.add_space(2.0);
                 let (r, _) = ui.allocate_exact_size(egui::vec2(width, 7.0), egui::Sense::hover());
-                ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
-                ui.label(egui::RichText::new(heading.to_uppercase()).font(lr::semibold(10.0)).color(ASIDE));
+                ui.painter().hline(r.x_range(), r.top(), egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
+                ui.label(egui::RichText::new(heading.to_uppercase()).font(lr::semibold(10.0)).color(ASIDE()));
                 continue;
             }
             if let Some(heading) = line.strip_prefix("## ") {
-                ui.label(egui::RichText::new(heading.to_uppercase()).font(lr::semibold(10.0)).color(Color32::from_gray(0xb4)));
+                ui.label(egui::RichText::new(heading.to_uppercase()).font(lr::semibold(10.0)).color(crate::lr::gray(0xb4)));
                 continue;
             }
             let item = line.strip_prefix("• ").or_else(|| line.strip_prefix("- "));
@@ -724,7 +723,7 @@ pub fn body(ui: &mut egui::Ui, text: &str, color: Color32) {
             let galley = ui.painter().layout_job(body_job(item.unwrap_or(line), width - indent, color));
             let (rect, _) = ui.allocate_exact_size(egui::vec2(width, galley.size().y), egui::Sense::hover());
             if item.is_some() {
-                ui.painter().circle_filled(egui::pos2(rect.left() + 4.0, rect.top() + LINE * 0.5), 1.8, Color32::from_gray(0x8a));
+                ui.painter().circle_filled(egui::pos2(rect.left() + 4.0, rect.top() + LINE * 0.5), 1.8, crate::lr::gray(0x8a));
             }
             ui.painter().galley(rect.min + egui::vec2(indent, 0.0), galley, color);
         }
@@ -745,11 +744,17 @@ fn texture(ctx: &egui::Context, key: String, bytes: &[u8]) -> Option<egui::Textu
     Some(tex)
 }
 
+/// Frame of a card: the popup look with an even inner margin, so the longest wrapped line keeps the same distance
+/// to the right edge as the text to the left edge.
+fn card_frame(ui: &egui::Ui) -> egui::Frame {
+    egui::Frame::popup(ui.style()).inner_margin(egui::Margin::symmetric(14, 12))
+}
+
 /// Card content: name, short hint + addition, example, usage (small).
 pub fn show_card(ui: &mut egui::Ui, title: &str, hint: &str, card: &Card, controls: &str) {
     ui.set_width(WIDTH);
     ui.spacing_mut().item_spacing.y = 3.0;
-    ui.label(egui::RichText::new(crate::tr(title)).font(lr::semibold(13.0)).color(Color32::from_gray(0xf0)));
+    ui.label(egui::RichText::new(crate::tr(title)).font(lr::semibold(13.0)).color(crate::lr::gray(0xf0)));
     ui.add_space(2.0);
     let short = if hint.is_empty() { card.short } else { hint };
     if !short.is_empty() {
@@ -783,7 +788,7 @@ pub fn show_card(ui: &mut egui::Ui, title: &str, hint: &str, card: &Card, contro
     }
     if !controls.is_empty() {
         ui.add_space(5.0);
-        ui.label(egui::RichText::new(crate::tr(controls)).small().color(Color32::from_gray(0x9a)));
+        ui.label(egui::RichText::new(crate::tr(controls)).small().color(crate::lr::gray(0x9a)));
     }
 }
 
@@ -809,8 +814,8 @@ pub fn question_mark(ui: &egui::Ui, center: egui::Pos2, id: egui::Id, show: bool
     let r = ui.interact(rect, id, egui::Sense::click());
     let hovered = r.hovered() || open;
     let painter = ui.painter();
-    painter.circle_stroke(center, 6.0, egui::Stroke::new(1.0, Color32::from_gray(if hovered { 0xd0 } else { 0x6a })));
-    painter.text(center + egui::vec2(0.0, 0.5), egui::Align2::CENTER_CENTER, "?", egui::FontId::proportional(10.0), Color32::from_gray(if hovered { 0xf0 } else { 0x8c }));
+    painter.circle_stroke(center, 6.0, egui::Stroke::new(1.0, crate::lr::gray(if hovered { 0xd0 } else { 0x6a })));
+    painter.text(center + egui::vec2(0.0, 0.5), egui::Align2::CENTER_CENTER, "?", egui::FontId::proportional(10.0), crate::lr::gray(if hovered { 0xf0 } else { 0x8c }));
     if r.clicked() {
         ui.ctx().data_mut(|d| {
             if open {
@@ -830,7 +835,7 @@ pub fn question_mark(ui: &egui::Ui, center: egui::Pos2, id: egui::Id, show: bool
         .pivot(egui::Align2::RIGHT_TOP)
         .fixed_pos(rect.left_bottom() + egui::vec2(-4.0, 4.0))
         .show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| show_card(ui, title, hint, card, controls));
+            card_frame(ui).show(ui, |ui| show_card(ui, title, hint, card, controls));
         });
     let outside = ui.input(|i| i.pointer.any_click() && i.pointer.interact_pos().is_some_and(|p| !area.response.rect.contains(p) && !rect.contains(p)));
     if outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
@@ -844,7 +849,7 @@ pub fn test_card(ctx: &egui::Context) {
     let Some(name) = crate::env::help_card_test() else { return };
     let Some(card) = for_slider(&name, "").or_else(|| for_section(&name)) else { return };
     egui::Area::new(egui::Id::new("hilfe-testkarte")).order(egui::Order::Foreground).fixed_pos(egui::pos2(330.0, 90.0)).show(ctx, |ui| {
-        egui::Frame::popup(ui.style()).show(ui, |ui| show_card(ui, &name, "", card, ""));
+        card_frame(ui).show(ui, |ui| show_card(ui, &name, "", card, ""));
     });
 }
 
@@ -934,7 +939,7 @@ fn layer_bars(ui: &mut egui::Ui, read: [f64; 3], color: Color32) {
         let pct = (read[p] * 100.0).round() as i64;
         painter.text(rect.right_center(), egui::Align2::RIGHT_CENTER, crate::trf!("{a} % gelesen", a = pct), font, lr::TEXT_DIM());
         let bar = egui::Rect::from_min_size(egui::pos2(rect.left() + 118.0, rect.center().y - 2.5), egui::vec2(rect.width() - 118.0 - 92.0, 5.0));
-        painter.rect_filled(bar, 0.0, Color32::from_gray(0x3a));
+        painter.rect_filled(bar, 0.0, crate::lr::gray(0x3a));
         let mut done = bar;
         done.set_width(bar.width() * read[p].clamp(0.0, 1.0) as f32);
         painter.rect_filled(done, 0.0, color);
@@ -984,7 +989,7 @@ pub fn notice_mark(ui: &mut egui::Ui, salt: &str, heading: &str, items: &[Notice
             egui::Frame::popup(ui.style()).show(ui, |ui| {
                 ui.set_width(WIDTH);
                 ui.spacing_mut().item_spacing.y = 3.0;
-                ui.label(egui::RichText::new(heading).font(lr::semibold(13.0)).color(Color32::from_gray(0xf0)));
+                ui.label(egui::RichText::new(heading).font(lr::semibold(13.0)).color(crate::lr::gray(0xf0)));
                 for item in items {
                     ui.add_space(5.0);
                     ui.label(egui::RichText::new(&item.title).font(lr::semibold(BODY)).color(color));

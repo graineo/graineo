@@ -401,14 +401,14 @@ fn look_header(
     let (key, title, sub) = presentation;
     ui.add_space(4.);
     // fixed height: room for two name rows and the subline (plus the note), whatever the name length
-    let row = |font: egui::FontId| ui.painter().layout_no_wrap("Ag".into(), font, Color32::WHITE).size().y;
+    let row = |font: egui::FontId| ui.painter().layout_no_wrap("Ag".into(), font, crate::lr::TEXT_STRONG()).size().y;
     let small_row = row(egui::FontId::proportional(10.));
     let text_h = 2. * row(lr::semibold(lr::UI_SIZE)) + 2. + small_row + if note.is_some() { small_row + 1. } else { 0. };
     let height = text_h.max(THUMB.y);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::hover());
     let p = ui.painter();
     let img = egui::Rect::from_min_size(rect.min, THUMB);
-    p.rect_filled(img, 3., lr::PANEL_DARK);
+    p.rect_filled(img, 3., lr::PANEL_DARK());
     if let Some(t) = thumbs.get(key) {
         let sz = t.size_vec2();
         let k = (img.width() / sz.x).min(img.height() / sz.y);
@@ -416,7 +416,7 @@ fn look_header(
             t.id(),
             egui::Rect::from_center_size(img.center(), sz * k),
             egui::Rect::from_min_max(egui::pos2(0., 0.), egui::pos2(1., 1.)),
-            Color32::WHITE,
+            egui::Color32::WHITE,
         );
     } else {
         p.text(img.center(), egui::Align2::CENTER_CENTER, if key.is_empty() { "—" } else { "…" }, lr::semibold(lr::UI_SIZE), lr::TEXT_DIM());
@@ -428,10 +428,10 @@ fn look_header(
         job.wrap.max_rows = rows;
         ui.painter().layout_job(job)
     };
-    let name = line(title.clone(), lr::semibold(lr::UI_SIZE), Color32::WHITE, 2);
+    let name = line(title.clone(), lr::semibold(lr::UI_SIZE), crate::lr::TEXT_STRONG(), 2);
     let mut y = rect.top();
     let (name_h, name_rows) = (name.size().y, name.rows.len());
-    p.galley(egui::pos2(x, y), name, Color32::WHITE);
+    p.galley(egui::pos2(x, y), name, crate::lr::TEXT_STRONG());
     y += name_h + 2.;
     // name and subline share three rows: a short name leaves the subline room for a second row
     let sub_rows = 3usize.saturating_sub(name_rows).max(1);
@@ -469,7 +469,7 @@ fn package_header_paint(p: &egui::Painter, rect: egui::Rect, name: &str, count: 
     p.rect_filled(
         rect,
         3.,
-        Color32::from_gray(if hovered { 0x26 } else { 0x1c }),
+        crate::lr::gray(if hovered { 0x26 } else { 0x1c }),
     );
     if focus {
         p.rect_stroke(
@@ -482,7 +482,7 @@ fn package_header_paint(p: &egui::Painter, rect: egui::Rect, name: &str, count: 
     let color = if available {
         lr::TEXT()
     } else {
-        Color32::from_gray(0x68)
+        crate::lr::gray(0x68)
     };
     let clip = p.with_clip_rect(egui::Rect::from_min_max(
         rect.min,
@@ -591,8 +591,11 @@ fn group_ui(
         if let Some(n) = numbers(&items[*i].key) {
             crate::compare_view::pick_mark(ui.painter(), rect.min, n);
         }
+    }
+    // Tile tips hang on the whole tile (image and name), so they sit below the name instead of covering it.
+    for (i, cell) in &r.cells {
         if is_linear_key(&items[*i].key) {
-            let hover = ui.interact(*rect, ui.id().with(("linear-tip", &items[*i].key)), egui::Sense::hover());
+            let hover = ui.interact(*cell, ui.id().with(("linear-tip", &items[*i].key)), egui::Sense::hover());
             lr::hover_tip(ui, &hover, "Sensordaten ohne Kurve, Look, Schärfen, Entrauschen – flacher Ausgangspunkt");
         }
     }
@@ -620,10 +623,23 @@ impl App {
         let name = if s.film.is_active() { crate::trf!("Film · {a}", a = film_card(&s).1) } else { crate::trf!("Look · {a}", a = look_card(&s, foreign.as_deref(), &camera_mode).1) };
         let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::click());
         let p = ui.painter();
-        p.rect_filled(rect, 0.0, if resp.hovered() { Color32::from_gray(0x2a) } else { Color32::from_gray(0x1e) });
+        p.rect_filled(rect, 0.0, if resp.hovered() { crate::lr::gray(0x2a) } else { crate::lr::gray(0x1e) });
         let g = lr::caps(p, crate::tr("Film & Look"), egui::FontId::proportional(10.0), lr::TEXT_DIM());
         p.galley(egui::pos2(rect.left() + 10.0, rect.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
-        let clip = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(rect.left() + 100.0, rect.top()), egui::pos2(rect.right() - 26.0, rect.bottom())));
+        // mark "Kamera-Standard" when the photo's camera has own start values (camera_defaults.rs), tooltip with the values
+        let default_entry = crate::camera_defaults::camera_of(&c.loaded).and_then(|k| crate::camera_defaults::find(&k));
+        let mut name_right = rect.right() - 26.0;
+        if let Some(e) = &default_entry {
+            // compact mark: camera icon in a thin frame (the look name keeps its room)
+            let mark = egui::Rect::from_center_size(egui::pos2(rect.right() - 40.0, rect.center().y), egui::vec2(20.0, 18.0));
+            p.rect_stroke(mark, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x5a)), egui::StrokeKind::Inside);
+            lr::paint_icon(p, mark.shrink(3.0), lr::Icon::Camera, lr::TEXT_DIM());
+            name_right = mark.left() - 6.0;
+            let tip = ui.interact(mark, ui.scope_id().with("camera-default-mark"), egui::Sense::hover());
+            lr::hover_tip(ui, &tip, &crate::camera_defaults::tooltip(e));
+        }
+        let p = ui.painter();
+        let clip = p.with_clip_rect(egui::Rect::from_min_max(egui::pos2(rect.left() + 100.0, rect.top()), egui::pos2(name_right, rect.bottom())));
         clip.text(egui::pos2(rect.left() + 100.0, rect.center().y), egui::Align2::LEFT_CENTER, name, egui::TextStyle::Body.resolve(ui.style()), lr::TEXT());
         lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 14.0, rect.center().y), egui::vec2(12.0, 12.0)), lr::Icon::Chevron, lr::TEXT_DIM());
         if resp.clicked() {

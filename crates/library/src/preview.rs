@@ -1042,6 +1042,22 @@ fn nef_fast(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
     smallest_jpeg(path, &t, ifd0, jpegs, min)
 }
 
+/// Last resort of [`raw_preview`] for a TIFF-based RAW the RAW reader refuses: the smallest embedded JPEG that
+/// reaches `min`, else the largest one, with the whole file read (Sony ARW keeps IFD0 at the end of the file, out of
+/// reach of the header that [`nef_fast`] reads). Rare, so the full read does not matter.
+fn any_tiff_jpeg(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
+    let b = std::fs::read(path).ok()?;
+    let t = Tiff::new(&b)?;
+    let ifd0 = t.u32_(4)? as usize;
+    let jpegs = tiff_jpegs(&t, ifd0);
+    smallest_jpeg(path, &t, ifd0, jpegs.clone(), min).or_else(|| {
+        // none reaches `min`: the largest, as large as it is
+        let (o, l) = jpegs.into_iter().filter(|&(_, l)| l > 1000).max_by_key(|&(_, l)| l)?;
+        let img = jpeg_downscaled(b.get(o as usize..(o as usize).checked_add(l)?)?, min)?;
+        Some(tiff_finish(&t, ifd0, img))
+    })
+}
+
 /// JPEG previews (offset, length) of IFD0 and its SubIFDs: JPEGInterchangeFormat 0x0201/0x0202 with Compression 6 or
 /// without a Compression entry (Samsung SRW leaves it out).
 fn tiff_jpegs(t: &Tiff, ifd0: usize) -> Vec<(u64, usize)> {
@@ -1277,7 +1293,9 @@ fn raw_preview(path: &Path, min: u32) -> Result<(RgbImage, Meta), String> {
     match from_source(&src, min) {
         Ok((img, m)) if img.width().max(img.height()) * 2 >= min => Ok((img, m)),
         Ok((img, m)) => Ok(decoded_preview(&src, min).unwrap_or((img, m))),
-        Err(e) => decoded_preview(&src, min).map_err(|d| format!("{e}; {d}")),
+        // the RAW reader refuses the file (a camera newer than its list, a file cut short): any embedded JPEG of a
+        // TIFF-based RAW, even one smaller than asked, still beats an empty tile
+        Err(e) => decoded_preview(&src, min).or_else(|d| any_tiff_jpeg(path, min).ok_or(format!("{e}; {d}"))),
     }
 }
 
@@ -2381,6 +2399,31 @@ mod nef_tests {
             n += 1;
         }
         assert!(n > 0, "no NEF/NRW in {}", dir.display());
+    }
+
+    /// A RAW of a camera the RAW reader does not know and a RAW cut short (`GRAINEO_TEST_UNKNOWN_DIR`, files
+    /// `unknown-camera.*` and `truncated.*`; skipped without it): the unknown camera still gets the embedded camera JPEG
+    /// as tile, the cut file at least does not panic.
+    #[test]
+    fn unknown_camera_and_truncated_raw_keep_the_camera_preview() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_UNKNOWN_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_UNKNOWN_DIR not set, skipped");
+            return;
+        };
+        for p in std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())) {
+            if !p.file_stem().is_some_and(|s| s == "unknown-camera" || s == "truncated") {
+                continue;
+            }
+            match raw_preview(&p, 400) {
+                Ok((img, _)) => {
+                    eprintln!("{}: {}x{}", p.display(), img.width(), img.height());
+                    assert!(img.width().max(img.height()) >= 160, "{}", p.display());
+                }
+                // a file cut short may have lost its preview (Sony keeps IFD0 at the end of the file)
+                Err(e) if p.file_stem().is_some_and(|s| s == "truncated") => eprintln!("{}: no preview ({e})", p.display()),
+                Err(e) => panic!("{}: {e}", p.display()),
+            }
+        }
     }
 
     /// A folder of RAW sample files of every kind (`GRAINEO_TEST_FORMATS_DIR`, e.g. the CC0 files of raw.pixls.us used

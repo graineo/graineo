@@ -265,17 +265,17 @@ fn size_switch(ui: &mut egui::Ui) {
     let (w, h) = (15.0, 18.0);
     let (rect, _) = ui.allocate_exact_size(egui::vec2(3.0 * w, h), egui::Sense::hover());
     let painter = ui.painter().clone();
-    painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(0x3a)), egui::StrokeKind::Inside);
+    painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x3a)), egui::StrokeKind::Inside);
     for (i, label) in ["S", "M", "L"].into_iter().enumerate() {
         let seg = egui::Rect::from_min_size(rect.min + egui::vec2(i as f32 * w, 0.0), egui::vec2(w, h));
         let resp = ui.interact(seg, ui.scope_id().with(("display-size", i)), egui::Sense::click());
         let on = step == i;
         if on {
-            painter.rect_filled(seg.shrink(2.0), 0.0, egui::Color32::from_gray(0x4a));
+            painter.rect_filled(seg.shrink(2.0), 0.0, crate::lr::gray(0x4a));
         } else if resp.hovered() {
-            painter.rect_filled(seg.shrink(2.0), 0.0, egui::Color32::from_gray(0x2c));
+            painter.rect_filled(seg.shrink(2.0), 0.0, crate::lr::gray(0x2c));
         }
-        let color = if on { egui::Color32::WHITE } else if resp.hovered() { lr::TEXT() } else { lr::TEXT_DIM() };
+        let color = if on { crate::lr::TEXT_STRONG() } else if resp.hovered() { lr::TEXT() } else { lr::TEXT_DIM() };
         painter.text(seg.center(), egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), color);
         lr::hover_tip(ui, &resp, &crate::trf!("Größe der Anzeige: {s} (Doppelklick auf die Anzeige: nächste Größe)", s = label));
         if resp.clicked() && !on {
@@ -500,7 +500,7 @@ mod tests {
             // the newer result arrives first: the older one is dropped after it
             assert!(publish(&mut st, b, 7, img(2)));
             assert!(!publish(&mut st, a, 7, img(1)));
-            assert_eq!(st.ready.as_ref().map(|r| r.1.pixels[0]), Some(egui::Color32::from_gray(2)));
+            assert_eq!(st.ready.as_ref().map(|r| r.1.pixels[0]), Some(crate::lr::gray(2)));
             // while a slider is dragged an older result of the same display is shown until the newest arrives …
             let c = begin(&mut st, (7, 3, 1));
             let d = begin(&mut st, (7, 3, 1));

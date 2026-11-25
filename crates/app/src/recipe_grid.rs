@@ -363,7 +363,7 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
         let selected = selection == Some(e.source);
         p.rect_filled(
             rect, 0.0,
-            Color32::from_gray(if selected { 48 } else { 25 }),
+            crate::lr::gray(if selected { 48 } else { 25 }),
         );
         let image = Rect::from_min_max(
             rect.min + Vec2::splat(4.0),
@@ -377,7 +377,7 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
                 t.id(),
                 fit,
                 Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
-                Color32::WHITE,
+                egui::Color32::WHITE,
             );
         } else {
             p.text(
@@ -418,7 +418,7 @@ fn card(ui: &mut egui::Ui, v: &Previews, e: &Entry, selection: Option<Source>, w
             rect, 0.0,
             Stroke::new(
                 if selected { 2.0 } else { 1.0 },
-                Color32::from_gray(if selected {
+                crate::lr::gray(if selected {
                     210
                 } else if r.hovered() {
                     115
@@ -451,7 +451,7 @@ pub fn line(ui: &mut egui::Ui, v: &Previews, width: f32, filter: u8, current: &F
             let (rect, r) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::click());
             let p = ui.painter_at(rect);
             let selected = e.film == *current;
-            p.rect_filled(rect, 0.0, Color32::from_gray(if selected { 48 } else { 25 }));
+            p.rect_filled(rect, 0.0, crate::lr::gray(if selected { 48 } else { 25 }));
             let image = Rect::from_min_max(rect.min + Vec2::splat(3.0), Pos2::new(rect.right() - 3.0, rect.bottom() - 22.0));
             if let Some(t) = v.cache.get(&e.key) {
                 let size = t.size_vec2();
@@ -464,7 +464,7 @@ pub fn line(ui: &mut egui::Ui, v: &Previews, width: f32, filter: u8, current: &F
             job.wrap = egui::text::TextWrapping { max_width: width - 10.0, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
             let g = p.layout_job(job);
             p.galley(Pos2::new(rect.left() + 5.0, rect.bottom() - 18.0), g, lr::TEXT());
-            p.rect_stroke(rect, 0.0, Stroke::new(if selected { 1.5 } else { 1.0 }, Color32::from_gray(if selected { 210 } else if r.hovered() { 115 } else { 46 })), egui::StrokeKind::Inside);
+            p.rect_stroke(rect, 0.0, Stroke::new(if selected { 1.5 } else { 1.0 }, crate::lr::gray(if selected { 210 } else if r.hovered() { 115 } else { 46 })), egui::StrokeKind::Inside);
             if r.hovered() {
                 hovered = Some((e.source, e.film.clone()));
             }

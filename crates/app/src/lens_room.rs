@@ -139,7 +139,7 @@ fn profile_line(p: &OwnProfile) -> String {
 fn list_two_lines(ui: &mut egui::Ui, title: &str, detail: &str, active: bool) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 38.0), egui::Sense::click());
     if active || response.hovered() {
-        ui.painter().rect_filled(rect, 0.0, if active { lr::ACTIVE_FILL } else { Color32::from_gray(0x38) });
+        ui.painter().rect_filled(rect, 0.0, if active { lr::ACTIVE_FILL() } else { crate::lr::gray(0x38) });
     }
     let x = rect.left() + 8.0;
     let width = (rect.width() - 16.0).max(0.0);
@@ -243,12 +243,12 @@ pub fn ui(ctx: &egui::Context) {
         let mut close = false;
         let mut add = false;
         let mut import = false;
-        let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(16.0);
+        let frame = egui::Frame::new().fill(crate::lr::gray(0x1e)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x3a))).corner_radius(0.0).inner_margin(16.0);
         let modal = egui::Modal::new(egui::Id::unique(("dialog", "objektive"))).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
             ui.set_width(W);
             ui.spacing_mut().item_spacing.y = 6.0;
             ui.horizontal(|ui| {
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr("OBJEKTIVE")).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))));
+                ui.add(egui::Label::new(egui::RichText::new(crate::tr("OBJEKTIVE")).font(lr::semibold(15.0)).color(crate::lr::gray(0xee))));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.add(egui::Button::new(crate::tr("Schließen")).min_size(egui::vec2(90.0, 26.0)).corner_radius(0.0).fill(Color32::TRANSPARENT).stroke(egui::Stroke::new(1.0, lr::FIELD_STROKE()))).clicked() {
                         close = true;
@@ -266,7 +266,7 @@ pub fn ui(ctx: &egui::Context) {
                 ui.spacing_mut().item_spacing.x = 12.0;
                 ui.allocate_ui_with_layout(egui::vec2(LIST_W, H), egui::Layout::top_down(egui::Align::Min), |ui| list(ui, r));
                 let (line, _) = ui.allocate_exact_size(egui::vec2(1.0, H), egui::Sense::hover());
-                ui.painter().rect_filled(line, 0.0, Color32::from_gray(0x3a));
+                ui.painter().rect_filled(line, 0.0, crate::lr::gray(0x3a));
                 let w = ui.available_width();
                 ui.allocate_ui_with_layout(egui::vec2(w, H), egui::Layout::top_down(egui::Align::Min), |ui| detail(ui, r));
             });
@@ -400,7 +400,7 @@ fn detail(ui: &mut egui::Ui, r: &mut Room) {
 }
 
 fn lens_detail(ui: &mut egui::Ui, r: &mut Room, row: &LensRow) {
-    ui.add(egui::Label::new(egui::RichText::new(lens_title(row)).font(lr::semibold(14.0)).color(Color32::from_gray(0xee))).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(lens_title(row)).font(lr::semibold(14.0)).color(crate::lr::gray(0xee))).wrap());
     dim(ui, format!("{} · {}", row.camera, crate::trf!("{n} Fotos", n = row.photos)));
     let (state, _) = lens_state(row);
     ui.add_space(4.0);
@@ -448,7 +448,7 @@ fn profile_detail(ui: &mut egui::Ui, r: &mut Room, id: &str) {
         dim(ui, crate::tr("Dieses Profil gibt es nicht mehr."));
         return;
     };
-    ui.add(egui::Label::new(egui::RichText::new(&p.name).font(lr::semibold(14.0)).color(Color32::from_gray(0xee))).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(&p.name).font(lr::semibold(14.0)).color(crate::lr::gray(0xee))).wrap());
     let sensor = match p.sensor {
         lensprof::own::SensorKind::Bayer => "Bayer",
         lensprof::own::SensorKind::Xtrans => "X-Trans",

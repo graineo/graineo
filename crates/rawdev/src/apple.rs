@@ -275,9 +275,10 @@ fn render_stage(path: &Path, p: &Params, full: bool) -> Result<(Stage, f64), Str
     Ok((Stage::new(px, r.width, r.height, profile), ms))
 }
 
-/// Is the engine there at all (macOS with Core Image)?
+/// Is the engine there at all (macOS with Core Image)? Test switch `GRAINEO_NO_APPLE_RAW=1`: as if it were not (shows
+/// what Windows or an engine without the camera would show).
 pub fn available() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(target_os = "macos") && std::env::var_os("GRAINEO_NO_APPLE_RAW").is_none()
 }
 
 /// Open `path` with the engine. `requested`: pinned version (`None` = default version for `reason`). `blocked`: why

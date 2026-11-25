@@ -216,6 +216,9 @@ pub(super) fn area_label(index: usize) -> &'static str {
         Text::PrefsLooks,
         Text::PrefsBrowser,
     ];
+    if index == 11 {
+        return crate::tr("Kamera-Standards");
+    }
     keys.get(index).map(|&key| i18n::text(key)).unwrap_or("")
 }
 
@@ -388,10 +391,10 @@ mod window_geometry_tests {
                             t.galley.text()
                         );
                         // only the navigation band (10 pt); the same word can also be a heading of a page in a longer language
-                        let nav_size = t.galley.job.sections.first().is_some_and(|s| (s.format.font_id.size - 10.0).abs() < 0.01);
+                        let nav_size = t.galley.job.sections.first().is_some_and(|s| (s.format.font_id.size - NAV_FONT).abs() < 0.01);
                         if nav_size && (0..SECTIONS.len()).any(|i| area_label(i) == t.galley.text()) {
                             assert!(
-                                bounds.width() <= (780.0 - 20.0) / 11.0,
+                                bounds.width() <= NAV_WIDTH - 44.0,
                                 "navigation label exceeds slot: {} {:?} {}",
                                 t.galley.text(), bounds, t.galley.job.sections[0].format.font_id.size
                             );

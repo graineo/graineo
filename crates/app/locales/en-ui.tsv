@@ -4903,7 +4903,7 @@ Personen: Gesichtsrahmen im großen Foto ein/aus	People: face frames on the larg
 Foto des gewählten Gesichts groß zeigen	Show the selected face’s photo large
 Gesichter als Raster zeigen	Show faces as a grid
 Dieses Foto in Entwickeln öffnen	Open this photo in Develop
-Tonwert-Entzerrer	Tone Equalizer
+Tonwert-Equalizer	Tone Equalizer
 Belichtung je Helligkeitszone, Maske	Exposure per brightness zone, mask
 Maske	Mask
 −8 EV	−8 EV
@@ -4932,9 +4932,9 @@ Maske zeigen	Show mask
 Zonen als Graustufen: Schwarz = −8 EV, Weiß = 0 EV	Zones as shades of gray: black = −8 EV, white = 0 EV
 Hebt (+) oder senkt (−) die Belichtung dieser Helligkeitszone, in Blendenstufen.	Raises (+) or lowers (−) the exposure of this brightness zone, in stops.
 Stellt die Maske ein, die jede Bildstelle einer Zone zuordnet.	Sets up the mask that assigns each part of the image to a zone.
-• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kantenschärfe** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **Smoothing** – how large the mask areas are (percent of the long image edge). More: smoother, details keep their contrast; less: behaves more like a curve.\n• **Edge Sharpness** – how closely the mask follows edges. Higher: fewer halos at edges, but fine textures get separated more.\n\nThe mask is computed once per setting for the whole image.
+• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **Smoothing** – how large the mask areas are (percent of the long image edge). More: smoother, details keep their contrast; less: behaves more like a curve.\n• **Edges** – how closely the mask follows edges. Higher: fewer halos at edges, but fine textures get separated more.\n\nThe mask is computed once per setting for the whole image.
 Ein Regler für Schatten und Lichter, mit Schutz der jeweils anderen Seite.	One slider for shadows and highlights, protecting the other side.
-• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Feineinstellung\nNeun Zonenregler von −8 EV (fast Schwarz) bis 0 EV (Weiß) kommen zum Ausgleich hinzu; dazu Glättung, Kantenschärfe und „Maske zeigen“. Gesetzte Zonen können den Schutz aufheben.	• **Balance to the right** – brightens shadows and midtones. Highlights from one stop below white upward are guaranteed to stay unchanged; nothing new gets blown out.\n• **Balance to the left** – darkens highlights and midtones. The deep shadows are guaranteed to stay unchanged.\n\nA mask that smooths areas but stops at edges makes whole areas (a backlit face) brighten together – without halos at the edges.\n### Fine-tuning\nNine zone sliders from −8 EV (almost black) to 0 EV (white) add to the balance, plus Smoothing, Edge Sharpness and “Show mask”. Setting zones can override the protection.
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nKlick wählt einen Punkt · Ziehen: Zone heller/dunkler · ↑/↓ ±0,05, mit ⇧ ±0,25 · ←/→ nächste Zone · Mausrad über der Grafik: Zone unter dem Zeiger · Doppelklick auf einen Punkt: 0 · Doppelklick auf den Wert darunter: eintippen\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **Balance to the right** – brightens shadows and midtones. Highlights from one stop below white stay guaranteed unchanged, nothing new is blown out.\n• **Balance to the left** – darkens highlights and midtones. The deep shadows stay guaranteed unchanged.\n\nA mask that smooths surfaces and stops at edges makes whole surfaces (a face against the light) brighten together – without halos at the edges.\n### Graph\nNine zones from −8 EV (nearly black, left) to 0 EV (white, right), behind them the histogram of the photo in the same zone brightness. The gold line shows what acts in total: the base shape of Balance (dashed) plus the zones. The graph changes only the zones; neighbours stay put, and between them the line runs as smoothly as it is calculated. Zones you set can override the protection of Balance.\n### Controls\nClick selects a point · Drag: zone brighter/darker · ↑/↓ ±0.05, with ⇧ ±0.25 · ←/→ next zone · Mouse wheel over the graph: zone under the pointer · Double-click a point: 0 · Double-click the value below: type it\n### Mask\n**Smoothing** and **Edges** set the mask, **Mask** shows it in the photo in shades of grey.
 Die Zone zählt ab Weiß nach der Belichtung: 0 EV sind die hellsten Lichter, −4 EV die Mitteltöne, −8 EV fast Schwarz. Nachbarzonen werden weich mitgenommen; benachbarte Regler daher ähnlich stellen, sonst kann der Tonverlauf kippen. Die Zonen kommen zum Ausgleich hinzu.	Zones are counted down from white, after exposure: 0 EV is the brightest highlights, −4 EV the midtones, −8 EV almost black. Neighboring zones are pulled along smoothly, so set neighboring sliders to similar values or the tonal transitions may invert. The zones add to the balance.
 Ausgleich	Balance
 + hellt Schatten auf, Lichter bleiben · − dunkelt Lichter ab, Schatten bleiben	+ brightens shadows, highlights unchanged · − darkens highlights, shadows unchanged
@@ -7109,3 +7109,61 @@ graineo beendet sich, sobald die Berechnung fertig ist.	graineo quits as soon as
 Beim Beenden geht die laufende Berechnung verloren.	Quitting now loses the merge in progress.
 Warten	Wait
 Abbrechen und beenden	Cancel and quit
+Hauttöne	Skin Tones
+Hautton	Skin hue
+Hautsättigung	Skin saturation
+Hautton, Hautsättigung	Skin hue, skin saturation
+Links rosiger, rechts goldener – nur Hauttöne	Left rosier, right more golden – skin tones only
+Hauttöne blasser oder kräftiger	Skin tones paler or richer
+Farbton und Sättigung nur im Bereich der Hauttöne.	Hue and saturation only within the range of skin tones.
+• **Hautton** – links rosiger, rechts gelblicher und goldener\n• **Hautsättigung** – Hauttöne blasser oder kräftiger\n\nDer Bereich ist fest: ein breites Band warmer, mäßig bunter Töne von sehr heller bis sehr dunkler Haut. Er wird nicht aus dem Foto gemessen, und alle Hauttöne werden gleich behandelt. Alle anderen Farben, Grau, Schwarz und Weiß bleiben genau, wie sie sind.\n\n### Gut zu wissen\nDie Regler kennen keine Personen: Holz, Sand, Leder oder warmes Licht im selben Farbbereich ändern sich mit, ebenso Orange.	• **Skin hue** – left rosier, right more yellow and golden\n• **Skin saturation** – skin tones paler or richer\n\nThe range is fixed: a wide band of warm, moderately colorful tones from very light to very dark skin. It is not measured from the photo, and all skin tones are treated alike. All other colors, gray, black and white stay exactly as they are.\n\n### Good to know\nThe sliders don't know about people: wood, sand, leather or warm light in the same color range change too, and so does orange.
+{g}: Standard	{g}: default
+Standard für {c}	Default for {c}
+Diese Gruppen gelten beim ersten Öffnen neuer, noch unbearbeiteter Fotos dieser Kamera. Bereits bearbeitete Fotos bleiben, wie sie sind.	These groups apply when new, still unedited photos from this camera are opened for the first time. Photos already edited stay as they are.
+Übernommen werden die aktuellen Werte des geöffneten Fotos.	The current values of the open photo are used.
+Festlegen	Set
+Eigene Standardwerte · {n} Kameras	Own defaults · {n} cameras
+Noch keine Kamera eingetragen. In Bearbeiten über „Zurücksetzen ▾“ → „Als Standard für … festlegen …“ die Werte des geöffneten Fotos als Standard seiner Kamera übernehmen.	No camera yet. In Edit, use “Reset ▾” → “Set as default for … …” to make the open photo's values the default for its camera.
+Gilt für neu geöffnete Fotos dieser Kamera und übersteuert für die enthaltenen Werte die Voreinstellungen unter „Entwickeln“. Bereits bearbeitete Fotos, Lightroom-Übernahmen und zusammengefügte Fotos bleiben, wie sie sind; JPEG, HEIC und TIFF hat die Kamera schon entwickelt.	Applies to newly opened photos from this camera and, for the values it contains, overrides the preferences under “Develop”. Photos already edited, Lightroom handovers and merged photos stay as they are; JPEG, HEIC and TIFF were already developed by the camera.
+Kamera-Standard für {c}:	Camera default for {c}:
+Weitere Möglichkeiten zum Zurücksetzen	More ways to reset
+Auf Kamera-Standard zurücksetzen	Reset to camera default
+Als Standard für {c} festlegen …	Set as default for {c} …
+Als Kamera-Standard festlegen …	Set as camera default …
+Kamera-Standards verwalten …	Manage camera defaults …
+Startwerte neuer Fotos	Start values of new photos
+Objektivkorrektur standardmäßig an	Lens correction on by default
+Für RAWs von Bayer- und X-Trans-Kameras, wenn ein Objektivprofil gefunden wird. Gilt beim ersten Öffnen eines unbearbeiteten Fotos; Sigma-Fotos bleiben wie bisher.	For RAWs from Bayer and X-Trans cameras when a lens profile is found. Applies when an unedited photo is opened for the first time; Sigma photos stay as before.
+Startwert des Reglers für neue Fotos (0 = wie bisher). „Zurücksetzen“ stellt weiter neutral.	Start value of the slider for new photos (0 = as before). “Reset” still sets neutral values.
+Auf Kamera-Standard zurückgesetzt (⌘Z nimmt es zurück)	Reset to camera default (⌘Z undoes it)
+Ändern	Change
+an	on
+Kamera-Standards	Camera defaults
+Zone {z} · Punkt	Zone {z} · point
+Zone {z} · {t} (Ausgleich {b}, Punkt {v})	Zone {z} · {t} (balance {b}, point {v})
+Maske zeigen: Zonen als Graustufen, Schwarz = −8 EV, Weiß = 0 EV	Show mask: zones in shades of grey, black = −8 EV, white = 0 EV
+verändert	changed
+nicht im Standard	not in the default
+Gruppe aus dem Standard nehmen	Remove group from the default
+meist fotoabhängig	usually photo-specific
+Übernimmt die angehakten Einstellungen dieses Fotos als Startwerte für neue, unbearbeitete Fotos der {c}.	Uses the checked settings of this photo as start values for new, unedited photos from the {c}.
+Für die {c} gibt es schon einen Standard. Angehakte Gruppen werden ersetzt, nicht angehakte bleiben wie bisher.	There already is a default for the {c}. Checked groups are replaced, unchecked ones stay as before.
+Die angehakten Gruppen gelten als Startwerte für neue Fotos der {c}.	The checked groups are the start values for new photos from the {c}.
+Werte ändern: ein Foto der Kamera öffnen, Regler stellen, erneut festlegen.	To change values: open a photo from this camera, set the sliders, set the default again.
+Unverändert	Unchanged
+Startwert	Start value
+Kamera noch nicht unterstützt	Camera not supported yet
+Diese Kamera ({a}) wird noch nicht unterstützt.	This camera ({a}) is not supported yet.
+Bis zum nächsten Update: mit dem kostenlosen Adobe DNG Converter in DNG umwandeln – DNG öffnet graineo sofort.	Until the next update: convert to DNG with the free Adobe DNG Converter – graineo opens DNG right away.
+Datei beschädigt oder unvollständig	File damaged or incomplete
+beschädigt oder unvollständig	damaged or incomplete
+Die Datei lässt sich nicht lesen: Sie ist unvollständig (z. B. abgebrochene Kopie) oder beschädigt. Die Vorschau aus der Kamera bleibt sichtbar, wenn die Datei eine enthält. Am besten das Original noch einmal von der Karte oder aus der Sicherung kopieren.	The file cannot be read: it is incomplete (e.g. an interrupted copy) or damaged. The camera’s preview stays visible if the file contains one. Best copy the original again from the card or from the backup.
+Apple RAW {a} · neue Kamera	Apple RAW {a} · new camera
+entwickelt mit Apple RAW {a} (Kamera in graineo noch nicht unterstützt)	developed with Apple RAW {a} (camera not supported in graineo yet)
+graineo unterstützt diese Kamera ({b}) noch nicht. macOS dekodiert dieses Foto (Apple RAW {a}); Farbe, Ton, Looks, Film und Masken rechnet graineo. Farbe und Schärfe können von graineos eigener Entwicklung abweichen.	graineo does not support this camera ({b}) yet. macOS decodes this photo (Apple RAW {a}); graineo computes color, tone, looks, film and masks. Color and sharpness may differ from graineo’s own development.
+nicht möglich: graineo unterstützt diese Kamera noch nicht	not possible: graineo does not support this camera yet
+Erscheinungsbild	Appearance
+Wie das System	Same as system
+Dunkel (Erscheinungsbild)	Dark
+Mittel (Erscheinungsbild)	Medium
+Hell (Erscheinungsbild)	Light

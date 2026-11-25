@@ -67,18 +67,18 @@ fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Colo
 fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str) -> (bool, Rect) {
     let (rect, resp) = ui.allocate_exact_size(SIZE, egui::Sense::click());
     let (fill, fg) = if !enabled {
-        (Color32::TRANSPARENT, Color32::from_gray(0x5c))
+        (Color32::TRANSPARENT, crate::lr::gray(0x5c))
     } else if on {
-        (Color32::from_gray(0x38), Color32::WHITE)
+        (crate::lr::gray(0x38), crate::lr::TEXT_STRONG())
     } else if resp.hovered() {
-        (Color32::from_gray(0x2a), Color32::from_gray(0xe8))
+        (crate::lr::gray(0x2a), crate::lr::gray(0xe8))
     } else {
         (Color32::TRANSPARENT, lr::TEXT())
     };
     let painter = ui.painter();
     painter.rect_filled(rect, 0.0, fill);
     if resp.has_focus() {
-        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, lr::ACCENT), egui::StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, Stroke::new(1.5, lr::ACCENT()), egui::StrokeKind::Inside);
     }
     paint_symbol(painter, rect, symbol, fg);
     lr::hover_tip(ui, &resp, tip);
@@ -223,9 +223,9 @@ impl App {
                     .constrain(false)
                     .show(ctx, |ui| {
                         let (r, resp) = ui.allocate_exact_size(rect.size(), egui::Sense::click());
-                        let fill = if resp.hovered() { Color32::from_gray(0x44) } else { Color32::from_gray(0x38) };
+                        let fill = if resp.hovered() { crate::lr::gray(0x44) } else { crate::lr::gray(0x38) };
                         ui.painter().rect_filled(r, 0.0, fill);
-                        paint_symbol(ui.painter(), r, Symbol::Lights, Color32::WHITE);
+                        paint_symbol(ui.painter(), r, Symbol::Lights, crate::lr::TEXT_STRONG());
                         lr::hover_tip(ui, &resp, &tip);
                         resp.clicked()
                     });
@@ -251,9 +251,9 @@ impl App {
             .show(ctx, |ui| {
                 let (rect, resp) = ui.allocate_exact_size(SIZE, egui::Sense::click());
                 let painter = ui.painter();
-                let bg = if resp.hovered() { Color32::from_gray(0x38) } else { Color32::from_gray(0x20) };
+                let bg = if resp.hovered() { crate::lr::gray(0x38) } else { crate::lr::gray(0x20) };
                 painter.rect_filled(rect, 0.0, bg.gamma_multiply(strength));
-                paint_symbol(painter, rect, symbol, Color32::from_gray(0xe0).gamma_multiply(strength));
+                paint_symbol(painter, rect, symbol, crate::lr::gray(0xe0).gamma_multiply(strength));
                 lr::hover_tip(ui, &resp, &tip);
                 resp.clicked()
             });

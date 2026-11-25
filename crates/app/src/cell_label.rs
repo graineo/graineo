@@ -139,7 +139,7 @@ pub fn paint_copy(p: &egui::Painter, at: egui::Pos2, number: Option<u32>, color:
     let back = egui::Rect::from_min_size(at + egui::vec2(3.0, -6.0), egui::vec2(7.0, 8.0));
     let front = egui::Rect::from_min_size(at + egui::vec2(0.0, -3.0), egui::vec2(7.0, 8.0));
     p.rect_stroke(back, 0.0, egui::Stroke::new(1.0, color.gamma_multiply(0.7)), egui::StrokeKind::Inside);
-    p.rect_filled(front, 0.0, Color32::from_gray(0x1a));
+    p.rect_filled(front, 0.0, crate::lr::gray(0x1a));
     p.rect_stroke(front, 0.0, egui::Stroke::new(1.0, color), egui::StrokeKind::Inside);
     let mut r = back.union(front);
     if let Some(n) = number {

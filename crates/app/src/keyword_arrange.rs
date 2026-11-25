@@ -283,11 +283,11 @@ impl LibraryView {
         let mut request: Option<Request> = None;
         let mut done = false;
         let lr_catalog = self.db.as_ref().and_then(library::lightroom_catalog).is_some_and(|p| p.exists());
-        let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(egui::Margin::same(14));
+        let frame = egui::Frame::new().fill(crate::lr::gray(0x1e)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x3a))).corner_radius(0.0).inner_margin(egui::Margin::same(14));
         let modal = egui::Modal::new(egui::Id::unique("keyword-arrange")).frame(frame).backdrop_color(Color32::from_black_alpha(150)).show(ctx, |ui| {
             ui.set_width(WIDTH);
             ui.spacing_mut().item_spacing.y = 6.0;
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Stichwörter ordnen")).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))));
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Stichwörter ordnen")).font(lr::semibold(15.0)).color(crate::lr::gray(0xee))));
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 lr::edit_field(ui, egui::TextEdit::singleline(&mut a.search).hint_text(crate::tr("Suchen")).desired_width(300.0));
@@ -323,7 +323,7 @@ impl LibraryView {
             let (body, _) = ui.allocate_exact_size(egui::vec2(WIDTH, body_h), egui::Sense::hover());
             let left = egui::Rect::from_min_size(body.min, egui::vec2(list_w, body_h));
             let right = egui::Rect::from_min_max(egui::pos2(body.min.x + list_w + 16.0, body.min.y), body.max);
-            ui.painter().vline(body.min.x + list_w + 8.0, body.y_range(), egui::Stroke::new(1.0, Color32::from_gray(0x3a)));
+            ui.painter().vline(body.min.x + list_w + 8.0, body.y_range(), egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
             let mut lui = ui.new_child(egui::UiBuilder::new().max_rect(left).layout(egui::Layout::top_down(egui::Align::Min)));
             lui.set_clip_rect(left);
             self.arrange_list(&mut lui, a, &tree, &rows, &count, &mut request);
@@ -383,7 +383,7 @@ impl LibraryView {
         let top_ok = dragging.as_ref().is_some_and(|d| d.0.iter().any(|k| tree.by_id.get(k).is_some_and(|k| k.parent.is_some())));
         ui.painter().text(top.left_center() + egui::vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, crate::tr("Oberste Ebene"), egui::FontId::proportional(10.5), if top_ok { lr::TEXT() } else { lr::TEXT_DIM() });
         if top_resp.dnd_hover_payload::<KeywordDrag>().is_some() && top_ok {
-            ui.painter().rect_stroke(top, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xe0)), egui::StrokeKind::Inside);
+            ui.painter().rect_stroke(top, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xe0)), egui::StrokeKind::Inside);
             set_drag_status(ui, crate::trf!("{a} auf die oberste Ebene legen", a = dragged_names(tree, dragging.as_deref().map(|d| d.0.as_slice()).unwrap_or(&[]))));
         }
         if top_ok {
@@ -410,18 +410,18 @@ impl LibraryView {
                 let on = a.selected.contains(&row.id);
                 let p = ui.painter();
                 if on {
-                    p.rect_filled(r, 0.0, Color32::from_gray(0x4a));
+                    p.rect_filled(r, 0.0, crate::lr::gray(0x4a));
                 } else if resp.hovered() && !over_arrow {
-                    p.rect_filled(r, 0.0, Color32::from_gray(0x2a));
+                    p.rect_filled(r, 0.0, crate::lr::gray(0x2a));
                 }
                 if row.has_children {
                     let m = arrow.center();
                     let pts = if row.open { vec![m + egui::vec2(-3.5, -2.0), m + egui::vec2(3.5, -2.0), m + egui::vec2(0.0, 2.5)] } else { vec![m + egui::vec2(-2.0, -3.5), m + egui::vec2(2.5, 0.0), m + egui::vec2(-2.0, 3.5)] };
-                    p.add(egui::Shape::convex_polygon(pts, if over_arrow { Color32::WHITE } else { Color32::from_gray(0x8a) }, egui::Stroke::NONE));
+                    p.add(egui::Shape::convex_polygon(pts, if over_arrow { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x8a) }, egui::Stroke::NONE));
                 }
                 let n = count(row.id);
                 let dim = !row.hit || n == 0;
-                let color = if on || resp.hovered() { Color32::WHITE } else if dim { Color32::from_gray(0x7a) } else { lr::TEXT() };
+                let color = if on || resp.hovered() { crate::lr::TEXT_STRONG() } else if dim { crate::lr::gray(0x7a) } else { lr::TEXT() };
                 let font = egui::FontId::proportional(10.5);
                 let count_g = p.layout_no_wrap(crate::library_ui::thousands(n), font.clone(), lr::TEXT_DIM());
                 let space = egui::Rect::from_min_max(egui::pos2(arrow.right() + 2.0, r.top()), egui::pos2(r.right() - count_g.size().x - 24.0, r.bottom()));
@@ -443,7 +443,7 @@ impl LibraryView {
                     let target = if alt { Drop::Merge(row.id) } else { Drop::Below(Some(row.id)) };
                     match drop_problem(tree, &d.0, target) {
                         None => {
-                            let c = if alt { Color32::from_rgb(0x6a, 0xa8, 0xe8) } else { Color32::from_gray(0xe0) };
+                            let c = if alt { Color32::from_rgb(0x6a, 0xa8, 0xe8) } else { crate::lr::gray(0xe0) };
                             ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, c), egui::StrokeKind::Inside);
                             let names = dragged_names(tree, &d.0);
                             set_drag_status(ui, if alt { crate::trf!("{a} mit „{b}“ zusammenführen", a = names, b = k.name) } else { crate::trf!("{a} unter „{b}“ legen", a = names, b = k.name) });
@@ -795,7 +795,7 @@ fn arrange_keys(ctx: &egui::Context, a: &mut Arrange, tree: &Tree, rows: &[Row],
 fn arrange_properties(ui: &mut egui::Ui, a: &mut Arrange, tree: &Tree, count: &dyn Fn(i64) -> usize, request: &mut Option<Request>) {
     let sel: Vec<i64> = a.selected.iter().copied().collect();
     let heading = |ui: &mut egui::Ui, t: &str| {
-        ui.add(egui::Label::new(egui::RichText::new(t).font(lr::semibold(13.0)).color(Color32::from_gray(0xee))).truncate());
+        ui.add(egui::Label::new(egui::RichText::new(t).font(lr::semibold(13.0)).color(crate::lr::gray(0xee))).truncate());
     };
     match &sel[..] {
         [] => {
@@ -1027,11 +1027,11 @@ impl LibraryView {
         let Some(s) = &mut a.suggest else { return };
         let mut close = false;
         let mut apply: Option<Vec<(Change, String)>> = None;
-        let frame = egui::Frame::new().fill(Color32::from_gray(0x1e)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x3a))).corner_radius(0.0).inner_margin(egui::Margin::same(14));
+        let frame = egui::Frame::new().fill(crate::lr::gray(0x1e)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x3a))).corner_radius(0.0).inner_margin(egui::Margin::same(14));
         let modal = egui::Modal::new(egui::Id::unique("keyword-suggest")).frame(frame).backdrop_color(Color32::from_black_alpha(120)).show(ctx, |ui| {
             ui.set_width(720.0);
             ui.spacing_mut().item_spacing.y = 6.0;
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Vorschläge zum Ordnen")).font(lr::semibold(15.0)).color(Color32::from_gray(0xee))));
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Vorschläge zum Ordnen")).font(lr::semibold(15.0)).color(crate::lr::gray(0xee))));
             match &s.list {
                 None => {
                     ui.allocate_ui(egui::vec2(720.0, 420.0), |ui| crate::dialog::pending(ui, crate::tr("Vorschläge werden berechnet …")));

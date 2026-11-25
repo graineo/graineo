@@ -324,7 +324,7 @@ pub fn pane_rects(n: usize, area: Rect, cols: usize, rows: usize, gap: f32) -> V
 pub(crate) fn tag(painter: &egui::Painter, at: Pos2, text: &str, menu: bool, hot: bool, max_width: f32) -> Rect {
     let t = if menu { format!("{}  ▾", text.to_uppercase()) } else { text.to_uppercase() };
     // one line, shortened with "…" if the pane is narrower than the name
-    let mut job = egui::text::LayoutJob::simple(t, egui::FontId::monospace(11.0), Color32::WHITE, (max_width - 14.0).max(40.0));
+    let mut job = egui::text::LayoutJob::simple(t, egui::FontId::monospace(11.0), crate::lr::TEXT_STRONG(), (max_width - 14.0).max(40.0));
     job.wrap.max_rows = 1;
     job.wrap.break_anywhere = true;
     let g = painter.layout_job(job);
@@ -332,16 +332,16 @@ pub(crate) fn tag(painter: &egui::Painter, at: Pos2, text: &str, menu: bool, hot
     let r = Rect::from_min_size(at, g.size() + pad * 2.0);
     painter.rect_filled(r, 0.0, Color32::from_black_alpha(if hot { 220 } else { 170 }));
     if menu {
-        painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_white_alpha(if hot { 170 } else { 80 })), egui::StrokeKind::Inside);
+        painter.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::overlay(if hot { 170 } else { 80 })), egui::StrokeKind::Inside);
     }
-    painter.galley(r.min + pad, g, Color32::WHITE);
+    painter.galley(r.min + pad, g, crate::lr::TEXT_STRONG());
     r
 }
 
 /// Number mark of a look tile in the comparison (top left of the tile image).
 pub fn pick_mark(painter: &egui::Painter, corner: Pos2, n: usize) {
     let c = corner + Vec2::new(11.0, 11.0);
-    painter.circle_filled(c, 9.0, Color32::from_gray(0xf0));
+    painter.circle_filled(c, 9.0, crate::lr::gray(0xf0));
     painter.circle_stroke(c, 9.5, egui::Stroke::new(1.0, Color32::from_black_alpha(160)));
     painter.text(c, egui::Align2::CENTER_CENTER, n.to_string(), lr::semibold(11.0), Color32::BLACK);
 }
@@ -871,7 +871,7 @@ impl App {
                 },
             }
             if kind == Kind::Looks && hovered_pane == Some(k) {
-                painter.rect_stroke(r.intersect(rect), 0.0, egui::Stroke::new(2.0, Color32::from_white_alpha(200)), egui::StrokeKind::Inside);
+                painter.rect_stroke(r.intersect(rect), 0.0, egui::Stroke::new(2.0, crate::lr::overlay(200)), egui::StrokeKind::Inside);
             }
             let menu = matches!(kind, Kind::BeforeAfter | Kind::Before) && k == 0;
             let at = r.intersect(rect).left_top() + Vec2::new(10.0, 10.0);

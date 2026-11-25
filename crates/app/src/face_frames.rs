@@ -83,14 +83,14 @@ pub fn fetch_discarded() -> Option<i64> {
 fn draw_by_hand(ui: &mut egui::Ui, avail: Rect, rect: Rect, frame: &Frame, r: u8) {
     let painter = ui.painter().with_clip_rect(avail);
     let (drawing_on, start) = DRAW_BY_HAND.with(|h| *h.borrow());
-    let text = painter.layout_no_wrap(crate::tr("+ Gesicht").to_string(), egui::FontId::proportional(12.0), Color32::from_gray(235));
+    let text = painter.layout_no_wrap(crate::tr("+ Gesicht").to_string(), egui::FontId::proportional(12.0), crate::lr::gray(235));
     let toggle_rect = Rect::from_min_size(avail.left_top() + egui::vec2(12.0, 12.0), text.size() + egui::vec2(16.0, 8.0));
     let resp = ui.interact(toggle_rect, egui::Id::new("gesicht-von-hand"), egui::Sense::click());
     painter.rect_filled(toggle_rect, 0.0, Color32::from_black_alpha(if drawing_on || resp.hovered() { 235 } else { 190 }));
     if drawing_on {
-        painter.rect_stroke(toggle_rect, 0.0, Stroke::new(1.0, Color32::from_gray(220)), egui::StrokeKind::Inside);
+        painter.rect_stroke(toggle_rect, 0.0, Stroke::new(1.0, crate::lr::gray(220)), egui::StrokeKind::Inside);
     }
-    painter.galley(toggle_rect.min + egui::vec2(8.0, 4.0), text, Color32::WHITE);
+    painter.galley(toggle_rect.min + egui::vec2(8.0, 4.0), text, crate::lr::TEXT_STRONG());
     if resp.clicked() {
         DRAW_BY_HAND.with(|h| *h.borrow_mut() = (!drawing_on, None));
     }
@@ -113,7 +113,7 @@ fn draw_by_hand(ui: &mut egui::Ui, avail: Rect, rect: Rect, frame: &Frame, r: u8
     let dragged_rect = Rect::from_two_pos(a, b);
     if drag_area.dragged() {
         painter.rect_stroke(dragged_rect.expand(1.0), 0.0, Stroke::new(3.0, Color32::from_black_alpha(110)), egui::StrokeKind::Outside);
-        painter.rect_stroke(dragged_rect, 0.0, Stroke::new(1.2, Color32::WHITE), egui::StrokeKind::Outside);
+        painter.rect_stroke(dragged_rect, 0.0, Stroke::new(1.2, crate::lr::TEXT_STRONG()), egui::StrokeKind::Outside);
     }
     if drag_area.drag_stopped() {
         DRAW_BY_HAND.with(|h| *h.borrow_mut() = (false, None));
@@ -151,9 +151,9 @@ pub fn draw(ui: &mut egui::Ui, avail: Rect, rect: Rect, frame: &Frame, r: u8, fa
         }
         let named = !g.name.is_empty() && g.status != "rejected";
         let (color, name) = match g.status.as_str() {
-            "confirmed" if named => (Color32::from_white_alpha(230), g.name.clone()),
-            "suggested" if named => (Color32::from_white_alpha(150), format!("{}?", g.name)),
-            _ => (Color32::from_white_alpha(90), String::new()),
+            "confirmed" if named => (crate::lr::overlay(230), g.name.clone()),
+            "suggested" if named => (crate::lr::overlay(150), format!("{}?", g.name)),
+            _ => (crate::lr::overlay(90), String::new()),
         };
         painter.rect_stroke(box_.expand(1.0), 0.0, Stroke::new(3.0, Color32::from_black_alpha(110)), egui::StrokeKind::Outside);
         painter.rect_stroke(box_, 0.0, Stroke::new(1.2, color), egui::StrokeKind::Outside);
@@ -171,14 +171,14 @@ pub fn draw(ui: &mut egui::Ui, avail: Rect, rect: Rect, frame: &Frame, r: u8, fa
             continue;
         }
         let text = if name.is_empty() { crate::tr("+ Name").to_string() } else { name };
-        let galley = painter.layout_no_wrap(text, egui::FontId::proportional(12.0), Color32::from_gray(235));
+        let galley = painter.layout_no_wrap(text, egui::FontId::proportional(12.0), crate::lr::gray(235));
         let pos = Pos2::new(box_.center().x - galley.size().x / 2.0, box_.bottom() + 4.0);
         let tag_bg = Rect::from_min_size(pos - egui::vec2(5.0, 2.0), galley.size() + egui::vec2(10.0, 4.0));
         let resp = ui.interact(tag_bg.intersect(avail), egui::Id::new(("gesicht-name", g.id)), egui::Sense::click());
         above |= pointer.is_some_and(|p| tag_bg.expand(2.0).contains(p));
         let brighter = resp.hovered() || open;
         painter.rect_filled(tag_bg, 0.0, Color32::from_black_alpha(if brighter { 235 } else { 190 }));
-        painter.galley(pos, galley, Color32::WHITE);
+        painter.galley(pos, galley, crate::lr::TEXT_STRONG());
         if resp.clicked() {
             NAME_FIELD.with(|f| *f.borrow_mut() = Some(NameField { face: g.id, text: g.name.clone(), anchor: Pos2::new(tag_bg.left(), tag_bg.bottom() + 4.0), focused: false, has_name: named, is_new: false }));
         }

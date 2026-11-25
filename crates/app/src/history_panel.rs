@@ -35,9 +35,18 @@ struct Row {
     parts: Option<String>,
 }
 
-const CURRENT: Color32 = Color32::from_gray(0xee);
-const BEFORE: Color32 = Color32::from_gray(0xb4);
-const AFTER: Color32 = Color32::from_gray(0x66);
+#[allow(non_snake_case)]
+fn CURRENT() -> Color32 {
+    crate::lr::gray(0xee)
+}
+#[allow(non_snake_case)]
+fn BEFORE() -> Color32 {
+    crate::lr::gray(0xb4)
+}
+#[allow(non_snake_case)]
+fn AFTER() -> Color32 {
+    crate::lr::gray(0x66)
+}
 
 impl App {
     /// The section "Verlauf" (drawn after the presets: a hovered step reaches their hover preview in the next frame).
@@ -85,20 +94,20 @@ impl App {
                     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
                     let painter = ui.painter_at(rect);
                     if resp.hovered() {
-                        painter.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+                        painter.rect_filled(rect, 0.0, crate::lr::gray(0x26));
                         if row.index != cursor {
                             hovered = Some(row.index);
                         }
                     }
                     let color = match row.index {
-                        i if i == cursor => CURRENT,
-                        i if i > cursor => AFTER,
-                        _ => BEFORE,
+                        i if i == cursor => CURRENT(),
+                        i if i > cursor => AFTER(),
+                        _ => BEFORE(),
                     };
                     let font = egui::FontId::proportional(lr::UI_SIZE);
                     let small = egui::FontId::proportional(lr::UI_SIZE - 1.5);
                     if row.index == cursor {
-                        painter.text(egui::pos2(rect.left() + 2.0, rect.center().y), egui::Align2::LEFT_CENTER, "▶", small.clone(), CURRENT);
+                        painter.text(egui::pos2(rect.left() + 2.0, rect.center().y), egui::Align2::LEFT_CENTER, "▶", small.clone(), CURRENT());
                     }
                     // right: "(3×)" and the time, then the name in the space left
                     let time = painter.layout_no_wrap(row.time.clone(), small.clone(), lr::TEXT_DIM());
@@ -304,7 +313,7 @@ fn lightroom_rows(ui: &mut egui::Ui, steps: &[(String, i64)]) {
     let text = crate::trf!("In Lightroom: {n} Schritte", n = steps.len());
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::click());
     if resp.hovered() {
-        ui.painter().rect_filled(rect, 0.0, Color32::from_gray(0x26));
+        ui.painter().rect_filled(rect, 0.0, crate::lr::gray(0x26));
     }
     let painter = ui.painter_at(rect);
     let small = egui::FontId::proportional(lr::UI_SIZE - 1.5);
@@ -325,10 +334,10 @@ fn lightroom_rows(ui: &mut egui::Ui, steps: &[(String, i64)]) {
     for (name, t) in steps.iter().rev() {
         let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H - 2.0), egui::Sense::hover());
         let painter = ui.painter_at(rect);
-        let date = painter.layout_no_wrap(history::date_of(*t), small.clone(), AFTER);
+        let date = painter.layout_no_wrap(history::date_of(*t), small.clone(), AFTER());
         let right = rect.right() - 4.0 - date.size().x;
-        painter.galley(egui::pos2(right, rect.center().y - date.size().y / 2.0), date, AFTER);
+        painter.galley(egui::pos2(right, rect.center().y - date.size().y / 2.0), date, AFTER());
         let r = egui::Rect::from_min_max(egui::pos2(rect.left() + 16.0, rect.top()), egui::pos2(right - 6.0, rect.bottom()));
-        painter.with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, name, small.clone(), AFTER);
+        painter.with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, name, small.clone(), AFTER());
     }
 }

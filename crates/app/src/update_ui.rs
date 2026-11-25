@@ -350,8 +350,8 @@ pub fn frame(ctx: &egui::Context, bottom: f32) -> Option<String> {
         .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -bottom))
         .show(ctx, |ui| {
             egui::Frame::new()
-                .fill(Color32::from_rgb(0x26, 0x26, 0x26))
-                .stroke(egui::Stroke::new(1.0, Color32::from_gray(0x44)))
+                .fill(crate::lr::ui_rgb(0x26, 0x26, 0x26))
+                .stroke(egui::Stroke::new(1.0, crate::lr::gray(0x44)))
                 .corner_radius(0.0)
                 .inner_margin(egui::Margin::symmetric(14, 12))
                 .show(ui, |ui| {
@@ -369,7 +369,7 @@ pub fn frame(ctx: &egui::Context, bottom: f32) -> Option<String> {
 }
 
 fn title(ui: &mut egui::Ui, t: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(t).font(lr::semibold(13.0)).color(Color32::from_gray(0xee))).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(t).font(lr::semibold(13.0)).color(crate::lr::gray(0xee))).wrap());
 }
 
 fn small(ui: &mut egui::Ui, t: &str) {

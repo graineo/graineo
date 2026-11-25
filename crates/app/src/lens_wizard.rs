@@ -327,12 +327,12 @@ fn sketch(ui: &mut egui::Ui, grid: bool) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(54.0, 40.0), egui::Sense::hover());
     let p = ui.painter();
     if grid {
-        p.rect_filled(r, 0.0, egui::Color32::from_gray(0xd8));
+        p.rect_filled(r, 0.0, crate::lr::gray(0xd8));
         let q = r.width() / 9.0;
         for j in 0..((r.height() / q).floor() as usize) {
             for i in 0..9 {
                 if (i + j) % 2 == 0 {
-                    p.rect_filled(egui::Rect::from_min_size(r.min + egui::vec2(i as f32 * q, j as f32 * q), egui::vec2(q, q)), 0.0, egui::Color32::from_gray(0x20));
+                    p.rect_filled(egui::Rect::from_min_size(r.min + egui::vec2(i as f32 * q, j as f32 * q), egui::vec2(q, q)), 0.0, crate::lr::gray(0x20));
                 }
             }
         }
@@ -340,18 +340,18 @@ fn sketch(ui: &mut egui::Ui, grid: bool) {
         // light falling off to the corners: what the flat field measures
         for k in 0..6 {
             let f = 1.0 - k as f32 / 6.0;
-            p.rect_filled(r.shrink(k as f32 * 3.0), 0.0, egui::Color32::from_gray((0xa0 as f32 + 0x50 as f32 * (1.0 - f)) as u8));
+            p.rect_filled(r.shrink(k as f32 * 3.0), 0.0, crate::lr::gray((0xa0 as f32 + 0x50 as f32 * (1.0 - f)) as u8));
         }
     }
-    p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, egui::Color32::from_gray(0x50)), egui::StrokeKind::Inside);
+    p.rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0x50)), egui::StrokeKind::Inside);
 }
 
 /// One selectable card of step 2: sketch(es), title, short "how to photograph it". Fixed height.
 fn goal_card(ui: &mut egui::Ui, goal: &mut Goal, value: Goal, title: &str, how: &str) {
     let on = *goal == value;
     let frame = egui::Frame::new()
-        .fill(if on { egui::Color32::from_gray(0x26) } else { egui::Color32::from_gray(0x19) })
-        .stroke(egui::Stroke::new(1.0, if on { egui::Color32::from_gray(0x8a) } else { egui::Color32::from_gray(0x30) }))
+        .fill(if on { crate::lr::gray(0x26) } else { crate::lr::gray(0x19) })
+        .stroke(egui::Stroke::new(1.0, if on { crate::lr::gray(0x8a) } else { crate::lr::gray(0x30) }))
         .inner_margin(egui::Margin::symmetric(10, 8));
     let r = frame
         .show(ui, |ui| {
@@ -360,7 +360,7 @@ fn goal_card(ui: &mut egui::Ui, goal: &mut Goal, value: Goal, title: &str, how: 
             ui.horizontal(|ui| {
                 // choice mark (the whole card is the click area)
                 let (m, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
-                ui.painter().circle_stroke(m.center(), 6.0, egui::Stroke::new(1.0, egui::Color32::from_gray(if on { 0xd0 } else { 0x70 })));
+                ui.painter().circle_stroke(m.center(), 6.0, egui::Stroke::new(1.0, crate::lr::gray(if on { 0xd0 } else { 0x70 })));
                 if on {
                     ui.painter().circle_filled(m.center(), 3.0, lr::TEXT());
                 }
@@ -522,8 +522,8 @@ pub fn ui(ctx: &egui::Context) {
                     // drop area: photos or folders dragged onto the window land here (`take_dropped`)
                     let hovering = ui.ctx().input(|i| !i.raw.hovered_files.is_empty());
                     let area = egui::Frame::new()
-                        .stroke(egui::Stroke::new(1.0, if hovering { lr::TEXT() } else { egui::Color32::from_gray(0x30) }))
-                        .fill(if hovering { egui::Color32::from_gray(0x24) } else { egui::Color32::TRANSPARENT })
+                        .stroke(egui::Stroke::new(1.0, if hovering { lr::TEXT() } else { crate::lr::gray(0x30) }))
+                        .fill(if hovering { crate::lr::gray(0x24) } else { egui::Color32::TRANSPARENT })
                         .inner_margin(egui::Margin::same(4));
                     area.show(ui, |ui| {
                     egui::ScrollArea::vertical().max_height(250.0).min_scrolled_height(250.0).auto_shrink([false, false]).show(ui, |ui| {

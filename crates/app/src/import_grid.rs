@@ -84,7 +84,7 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
             (Some(a), _) => day_label(&a.tag),
             _ => String::new(),
         };
-        ui.label(egui::RichText::new(range.to_uppercase()).font(lr::semibold(11.0)).color(Color32::from_gray(0x9a)));
+        ui.label(egui::RichText::new(range.to_uppercase()).font(lr::semibold(11.0)).color(crate::lr::gray(0x9a)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut w = imp.cell_w;
             let r = ui.add_sized([90.0, 18.0], egui::Slider::new(&mut w, 96.0..=220.0).show_value(false));
@@ -95,7 +95,7 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
     let width = ui.available_width();
     let height = height - BAR_H - 6.0;
     if imp.cand.is_empty() {
-        egui::Frame::new().fill(lr::PANEL_DARK).show(ui, |ui| {
+        egui::Frame::new().fill(lr::PANEL_DARK()).show(ui, |ui| {
             ui.set_min_size(egui::vec2(width, height));
             ui.centered_and_justified(|ui| {
                 let camera = camera::chosen_state(imp).filter(|_| imp.cand.is_empty());
@@ -144,7 +144,7 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
     let mut day_toggle: Option<usize> = None;
     let mut hovered = None;
     let mut wanted: Vec<(PathBuf, String)> = Vec::new();
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
+    egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(4, 4)).show(ui, |ui| {
         ui.set_min_size(egui::vec2(width - 8.0, height - 8.0));
         egui::ScrollArea::vertical().id_salt("import-raster").auto_shrink([false, false]).max_height(height - 8.0).show_viewport(ui, |ui, viewport| {
             ui.set_height(total);
@@ -238,16 +238,16 @@ fn day_head(ui: &mut egui::Ui, imp: &Import, d: usize, cells: &[usize], rect: eg
     let selectable: Vec<usize> = cells.iter().copied().filter(|&ci| imp.selectable(ci)).collect();
     let on = selectable.iter().filter(|&&ci| imp.cells[ci].on).count();
     let check = egui::Rect::from_min_size(rect.left_center() + egui::vec2(4.0, -7.5), egui::vec2(15.0, 15.0));
-    p.rect_stroke(check, 0.0, egui::Stroke::new(1.0, Color32::from_gray(if resp.hovered() { 0xe0 } else { 0xb0 })), egui::StrokeKind::Inside);
+    p.rect_stroke(check, 0.0, egui::Stroke::new(1.0, crate::lr::gray(if resp.hovered() { 0xe0 } else { 0xb0 })), egui::StrokeKind::Inside);
     if !selectable.is_empty() && on == selectable.len() {
-        p.rect_filled(check.shrink(3.5), 0.0, Color32::from_gray(0xe8));
+        p.rect_filled(check.shrink(3.5), 0.0, crate::lr::gray(0xe8));
     } else if on > 0 {
-        p.rect_filled(egui::Rect::from_center_size(check.center(), egui::vec2(7.0, 2.0)), 0.0, Color32::from_gray(0xe8));
+        p.rect_filled(egui::Rect::from_center_size(check.center(), egui::vec2(7.0, 2.0)), 0.0, crate::lr::gray(0xe8));
     }
     let bytes: u64 = cells.iter().flat_map(|&ci| imp.filter.files(&imp.cand, &imp.cells[ci].members)).map(|i| imp.cand[i].size).sum();
     let t = format!("{} · {} · {}", day_label(&imp.days[d].tag).to_uppercase(), dialog::count(cells.len(), crate::tr("Foto"), crate::tr("Fotos")), dialog::size(bytes));
     p.text(check.right_center() + egui::vec2(8.0, 0.0), egui::Align2::LEFT_CENTER, t, lr::semibold(11.5), lr::TEXT());
-    p.hline(rect.x_range(), rect.bottom() - 1.0, egui::Stroke::new(1.0, Color32::from_gray(0x26)));
+    p.hline(rect.x_range(), rect.bottom() - 1.0, egui::Stroke::new(1.0, crate::lr::gray(0x26)));
     lr::hover_tip(ui, &resp, "Alle Fotos dieses Tages an- oder abwählen");
     resp.clicked() && !selectable.is_empty()
 }
@@ -269,7 +269,7 @@ fn paint_cell(ui: &mut egui::Ui, imp: &mut Import, ci: usize, rect: egui::Rect, 
     let name = cell_name(imp, c);
     let p = ui.painter();
     let inner = rect.shrink(3.0);
-    p.rect_filled(inner, 0.0, if hovered { Color32::from_gray(0x24) } else { Color32::from_gray(0x1a) });
+    p.rect_filled(inner, 0.0, if hovered { crate::lr::gray(0x24) } else { crate::lr::gray(0x1a) });
     let image = egui::Rect::from_min_size(inner.min + egui::vec2(4.0, 4.0), egui::vec2(inner.width() - 8.0, inner.height() - 26.0));
     match imp.thumbs.tex.get(&path) {
         Some(t) => {
@@ -279,16 +279,16 @@ fn paint_cell(ui: &mut egui::Ui, imp: &mut Import, ci: usize, rect: egui::Rect, 
             p.image(t.id(), egui::Rect::from_center_size(image.center(), sz * f), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), tint);
         }
         None => {
-            p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.5), Color32::from_gray(0x82));
+            p.text(image.center(), egui::Align2::CENTER_CENTER, &format, egui::FontId::proportional(10.5), crate::lr::gray(0x82));
         }
     }
     // check (light, not gold: gold is the main button only)
     if selectable {
         let check = egui::Rect::from_min_size(inner.min + egui::vec2(6.0, 6.0), egui::vec2(15.0, 15.0));
         p.rect_filled(check, 0.0, Color32::from_black_alpha(150));
-        p.rect_stroke(check, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xb0)), egui::StrokeKind::Inside);
+        p.rect_stroke(check, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xb0)), egui::StrokeKind::Inside);
         if on {
-            p.rect_filled(check.shrink(3.5), 0.0, Color32::from_gray(0xe8));
+            p.rect_filled(check.shrink(3.5), 0.0, crate::lr::gray(0xe8));
         }
     }
     // marks top right
@@ -375,7 +375,7 @@ pub(super) fn big_view(ui: &mut egui::Ui, imp: &mut Import) {
     imp.thumbs.request_big(&wanted);
     let (rect, _) = ui.allocate_exact_size(ui.available_size(), egui::Sense::hover());
     let p = ui.painter();
-    p.rect_filled(rect, 0.0, lr::IMAGE_BG);
+    p.rect_filled(rect, 0.0, lr::IMAGE_BG());
     let path = &wanted[0].0;
     let tex = imp.thumbs.big.get(path).or_else(|| imp.thumbs.tex.get(path));
     match tex {

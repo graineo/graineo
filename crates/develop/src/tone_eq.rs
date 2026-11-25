@@ -1,4 +1,4 @@
-//! Tonwert-Entzerrer (tone equalizer): exposure per brightness zone.
+//! Tonwert-Equalizer (tone equalizer): exposure per brightness zone.
 //!
 //! Nine zones from −8 EV to 0 EV (0 EV = white of the scene-linear image after exposure). Each zone gets an exposure
 //! correction of −2 … +2 EV; between the zones the correction is interpolated smoothly. The correction is a factor
@@ -454,6 +454,94 @@ impl<'a> Apply<'a> {
     }
 }
 
+/// Zone histogram: lower end in EV (one zone below the darkest slider, darker pixels count here).
+pub const HIST_MIN_EV: f32 = -9.0;
+/// Zone histogram: upper end in EV (one zone above white, brighter pixels count here).
+pub const HIST_MAX_EV: f32 = 1.0;
+/// Zone histogram: bins per EV.
+pub const HIST_PER_EV: usize = 16;
+/// Number of bins of the zone histogram.
+pub const HIST_BINS: usize = (HIST_MAX_EV - HIST_MIN_EV) as usize * HIST_PER_EV;
+
+/// Bin of a zone brightness in EV (outside the range: the first or last bin).
+#[inline]
+pub fn hist_bin(zone_ev: f32) -> usize {
+    (((zone_ev - HIST_MIN_EV) * HIST_PER_EV as f32).max(0.0) as usize).min(HIST_BINS - 1)
+}
+
+/// Collects the histogram of the zone brightness (the quantity the curve is evaluated at, see [`Apply::zone_ev`])
+/// while an image is rendered. Rows add their counts at once.
+#[derive(Debug)]
+pub struct HistSink {
+    bins: Vec<std::sync::atomic::AtomicU32>,
+    used: std::sync::atomic::AtomicBool,
+}
+
+impl Default for HistSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl HistSink {
+    pub fn new() -> Self {
+        Self { bins: (0..HIST_BINS).map(|_| std::sync::atomic::AtomicU32::new(0)).collect(), used: std::sync::atomic::AtomicBool::new(false) }
+    }
+
+    /// Add the counts of one row (or any part of the image).
+    pub fn add(&self, local: &[u32; HIST_BINS]) {
+        use std::sync::atomic::Ordering::Relaxed;
+        for (b, &n) in self.bins.iter().zip(local.iter()) {
+            if n > 0 {
+                b.fetch_add(n, Relaxed);
+            }
+        }
+        self.used.store(true, Relaxed);
+    }
+
+    /// Add the zone brightness of every pixel of a `w × h` image (`p(x, y)` = the pixel as the tone equalizer sees it).
+    pub fn add_image(&self, t: &Apply, w: usize, h: usize, p: impl Fn(usize, usize) -> [f32; 3] + Sync) {
+        (0..h).into_par_iter().for_each(|y| {
+            let mut local = [0u32; HIST_BINS];
+            for x in 0..w {
+                local[hist_bin(t.zone_ev(x, y, p(x, y)))] += 1;
+            }
+            self.add(&local);
+        });
+    }
+
+    /// The counts, `None` when nothing was added.
+    pub fn take(&self) -> Option<Vec<u32>> {
+        use std::sync::atomic::Ordering::Relaxed;
+        self.used.load(Relaxed).then(|| self.bins.iter().map(|b| b.load(Relaxed)).collect())
+    }
+}
+
+thread_local! {
+    static COLLECT: std::cell::RefCell<Option<Arc<HistSink>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` (a render on this thread) and collect the zone histogram of what it renders. `None` when nothing was
+/// collected (e.g. another view than the developed image). Rendering itself is unchanged: with the equalizer off the
+/// mask is computed only for the histogram and the gain stays exactly 1.
+pub fn collect<R>(f: impl FnOnce() -> R) -> (R, Option<Vec<u32>>) {
+    let sink = Arc::new(HistSink::new());
+    let prev = COLLECT.with(|c| c.replace(Some(sink.clone())));
+    let r = f();
+    COLLECT.with(|c| *c.borrow_mut() = prev);
+    (r, sink.take())
+}
+
+/// The histogram collector of this thread (set by [`collect`]).
+pub fn collector() -> Option<Arc<HistSink>> {
+    COLLECT.with(|c| c.borrow().clone())
+}
+
+/// Is the mask needed: for the equalizer itself ([`needed`]) or for a zone histogram collected on this thread?
+pub fn wanted(s: &crate::Settings) -> bool {
+    needed(s) || (s.view == crate::View::Developed && collector().is_some())
+}
+
 /// Is the tone equalizer needed for these settings (zones set or the mask shown)?
 pub fn needed(s: &crate::Settings) -> bool {
     s.view == crate::View::Developed && (s.tone_eq.active() || s.tone_eq_mask)
@@ -471,6 +559,25 @@ pub fn mask_for(given: Option<&Mask>, data: &[f32], w: usize, h: usize, white: f
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hist_bins_cover_range() {
+        assert_eq!(hist_bin(-100.0), 0);
+        assert_eq!(hist_bin(HIST_MIN_EV), 0);
+        assert_eq!(hist_bin(-8.0), HIST_PER_EV);
+        assert_eq!(hist_bin(0.0), (0.0 - HIST_MIN_EV) as usize * HIST_PER_EV);
+        assert_eq!(hist_bin(50.0), HIST_BINS - 1);
+        let sink = HistSink::new();
+        assert!(sink.take().is_none());
+        let mut row = [0u32; HIST_BINS];
+        row[3] = 2;
+        sink.add(&row);
+        sink.add(&row);
+        assert_eq!(sink.take().unwrap()[3], 4);
+        let ((), h) = collect(|| assert!(collector().is_some()));
+        assert!(h.is_none());
+        assert!(collector().is_none());
+    }
 
     /// Neutral: all zones at 0 → not active (the image stays bit-identical), and the curve itself is exactly 1.
     #[test]

@@ -219,8 +219,8 @@ fn decimal_comma(x: f32, digits: usize) -> String {
 /// Draw characteristic curves or spectra into a rectangle. `x`/`y` are the displayed ranges,
 /// `axes` switches on grid and labels (large display), `active` highlights one curve.
 fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f32), axes: bool, active: Option<usize>, spectrum: bool) {
-    p.rect_filled(r, 0.0, lr::PANEL_DARK);
-    p.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_gray(0x2a)), egui::StrokeKind::Inside);
+    p.rect_filled(r, 0.0, lr::PANEL_DARK());
+    p.rect_stroke(r, 0.0, Stroke::new(1.0, crate::lr::gray(0x2a)), egui::StrokeKind::Inside);
     let (margin_left, margin_bottom) = if axes { (30.0, 16.0) } else { (3.0, 3.0) };
     let field = Rect::from_min_max(r.min + Vec2::new(margin_left, 4.0), r.max - Vec2::new(5.0, margin_bottom));
     let map_px = |px: f32, py: f32| Pos2::new(field.left() + (px - x.0) / (x.1 - x.0) * field.width(), field.bottom() - (py - y.0) / (y.1 - y.0) * field.height());
@@ -230,7 +230,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
         let mut gx = (x.0 / step_x).ceil() * step_x;
         while gx <= x.1 {
             let a = map_px(gx, y.0);
-            p.line_segment([Pos2::new(a.x, field.top()), a], Stroke::new(1.0, Color32::from_gray(0x1e)));
+            p.line_segment([Pos2::new(a.x, field.top()), a], Stroke::new(1.0, crate::lr::gray(0x1e)));
             p.text(Pos2::new(a.x, field.bottom() + 8.0), egui::Align2::CENTER_CENTER, format!("{gx:.0}"), font.clone(), lr::TEXT_DIM());
             gx += step_x;
         }
@@ -238,7 +238,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
         let mut gy = (y.0 / step_y).ceil() * step_y;
         while gy <= y.1 + 1e-4 {
             let a = map_px(x.0, gy);
-            p.line_segment([a, Pos2::new(field.right(), a.y)], Stroke::new(1.0, Color32::from_gray(0x1e)));
+            p.line_segment([a, Pos2::new(field.right(), a.y)], Stroke::new(1.0, crate::lr::gray(0x1e)));
             p.text(Pos2::new(field.left() - 4.0, a.y), egui::Align2::RIGHT_CENTER, decimal_comma(gy, if step_y < 1.0 { 1 } else { 0 }), font.clone(), lr::TEXT_DIM());
             gy += step_y;
         }
@@ -265,7 +265,7 @@ fn draw(p: &egui::Painter, r: Rect, series: &[Series], x: (f32, f32), y: (f32, f
 fn question_mark(ui: &mut egui::Ui, center: Pos2, id: egui::Id) -> bool {
     let r = Rect::from_center_size(center, Vec2::splat(18.0));
     let resp = ui.interact(r, id, egui::Sense::click());
-    let color = if resp.hovered() { Color32::WHITE } else { lr::TEXT_DIM() };
+    let color = if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() };
     lr::paint_icon(ui.painter(), Rect::from_center_size(center, Vec2::splat(13.0)), lr::Icon::Info, color);
     resp.clicked()
 }
@@ -276,12 +276,12 @@ const LIST_SCROLL_GAP: f32 = 0.0;
 /// Calm list row: no box; selected a little lighter with a fine mark, hover barely lighter, a thin line below.
 fn list_row_background(p: &egui::Painter, r: Rect, active: bool, hovered: bool) {
     if active {
-        p.rect_filled(r, 0.0, Color32::from_gray(0x26));
-        p.rect_filled(Rect::from_min_size(r.min, Vec2::new(2.0, r.height())), 0.0, Color32::from_gray(0xc8));
+        p.rect_filled(r, 0.0, crate::lr::gray(0x26));
+        p.rect_filled(Rect::from_min_size(r.min, Vec2::new(2.0, r.height())), 0.0, crate::lr::gray(0xc8));
     } else if hovered {
-        p.rect_filled(r, 0.0, Color32::from_gray(0x1f));
+        p.rect_filled(r, 0.0, crate::lr::gray(0x1f));
     }
-    p.line_segment([Pos2::new(r.left(), r.bottom() - 0.5), Pos2::new(r.right(), r.bottom() - 0.5)], Stroke::new(1.0, Color32::from_gray(0x2a)));
+    p.line_segment([Pos2::new(r.left(), r.bottom() - 0.5), Pos2::new(r.right(), r.bottom() - 0.5)], Stroke::new(1.0, crate::lr::gray(0x2a)));
 }
 
 /// Head of a darkroom column in the style of the tool headers in Develop.
@@ -294,9 +294,9 @@ pub(crate) fn column_head(ui: &mut egui::Ui, title: &str, control: impl FnOnce(&
     let w = ui.available_width();
     ui.allocate_ui_with_layout(Vec2::new(w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         ui.set_min_size(Vec2::new(w, 24.0));
-        let g = lr::caps(ui.painter(), title, lr::semibold(11.5), Color32::from_gray(0xd8));
+        let g = lr::caps(ui.painter(), title, lr::semibold(11.5), crate::lr::gray(0xd8));
         let (r, _) = ui.allocate_exact_size(Vec2::new(g.size().x, 24.0), egui::Sense::hover());
-        ui.painter().galley(Pos2::new(r.left(), r.center().y - g.size().y / 2.0), g, Color32::WHITE);
+        ui.painter().galley(Pos2::new(r.left(), r.center().y - g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
         ui.add_space(10.0);
         control(ui)
     })
@@ -325,16 +325,19 @@ pub(crate) fn film_data_missing_hint(ui: &mut egui::Ui) {
     }
 }
 
-const CARD_LINE: Color32 = Color32::from_gray(0x33);
+#[allow(non_snake_case)]
+fn CARD_LINE() -> Color32 {
+    crate::lr::gray(0x33)
+}
 /// Running text in the info modal stays at a comfortable line length.
 const CARD_MEASURE: f32 = 520.0;
 
 /// Info modal: section heading with a fine line below.
 fn card_heading(ui: &mut egui::Ui, title: &str) {
-    let g = lr::caps_spaced(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), Color32::from_gray(0xbc), 1.0);
+    let g = lr::caps_spaced(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), crate::lr::gray(0xbc), 1.0);
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 20.0), egui::Sense::hover());
-    ui.painter().galley(Pos2::new(r.left(), r.top() + 2.0), g, Color32::WHITE);
-    ui.painter().line_segment([Pos2::new(r.left(), r.bottom() - 0.5), Pos2::new(r.right(), r.bottom() - 0.5)], Stroke::new(1.0, CARD_LINE));
+    ui.painter().galley(Pos2::new(r.left(), r.top() + 2.0), g, crate::lr::TEXT_STRONG());
+    ui.painter().line_segment([Pos2::new(r.left(), r.bottom() - 0.5), Pos2::new(r.right(), r.bottom() - 0.5)], Stroke::new(1.0, CARD_LINE()));
     ui.add_space(5.0);
 }
 
@@ -346,7 +349,7 @@ fn card_item(ui: &mut egui::Ui, text: &str) {
         ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, "·", egui::FontId::proportional(12.0), lr::TEXT_DIM());
         ui.vertical(|ui| {
             ui.set_max_width(ui.available_width().min(CARD_MEASURE));
-            card_text(ui, text, Color32::from_gray(0xd0), 12.0);
+            card_text(ui, text, crate::lr::gray(0xd0), 12.0);
         });
     });
     ui.add_space(5.0);
@@ -391,13 +394,13 @@ fn card_rows(ui: &mut egui::Ui, rows: &[(String, String)]) {
             ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, key, egui::FontId::proportional(11.0), lr::TEXT_DIM());
             ui.vertical(|ui| {
                 ui.set_max_width(ui.available_width());
-                card_text(ui, value, Color32::from_gray(0xd8), 11.5);
+                card_text(ui, value, crate::lr::gray(0xd8), 11.5);
             });
         });
         ui.add_space(5.0);
         let y = ui.cursor().top() - 0.5;
         if n + 1 < rows.len() {
-            ui.painter().line_segment([Pos2::new(ui.min_rect().left(), y), Pos2::new(ui.min_rect().left() + w, y)], Stroke::new(1.0, CARD_LINE));
+            ui.painter().line_segment([Pos2::new(ui.min_rect().left(), y), Pos2::new(ui.min_rect().left() + w, y)], Stroke::new(1.0, CARD_LINE()));
         }
         let _ = top;
     }
@@ -431,7 +434,7 @@ fn shelf_row(ui: &mut egui::Ui, stock: Option<&film::StockInfo>, id: &str, tex: 
         let ppp = ui.ctx().pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
         let thumb_rect = Rect::from_min_size(Pos2::new(snap(r.left() + 4.0), snap(r.top() + (ROW_H - FIELD.y) / 2.0)), FIELD);
-        p.rect_filled(thumb_rect, 0.0, lr::PANEL_DARK);
+        p.rect_filled(thumb_rect, 0.0, lr::PANEL_DARK());
         if let Some(t) = tex {
             crate::darkroom_shelf::paint_tile(p, thumb_rect, t, ppp);
         } else if waiting {
@@ -439,10 +442,10 @@ fn shelf_row(ui: &mut egui::Ui, stock: Option<&film::StockInfo>, id: &str, tex: 
         }
         let text_x = thumb_rect.right() + 10.0;
         let width = r.right() - text_x - SIGN_W;
-        let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT() });
+        let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), egui::TextStyle::Body.resolve(ui.style()), if active { crate::lr::TEXT_STRONG() } else { lr::TEXT() });
         job.wrap = egui::text::TextWrapping { max_width: width, max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
         let g = p.layout_job(job);
-        p.galley(Pos2::new(text_x, r.top() + 5.0), g, Color32::WHITE);
+        p.galley(Pos2::new(text_x, r.top() + 5.0), g, crate::lr::TEXT_STRONG());
         // the characterisation may take two lines
         let mut job = egui::text::LayoutJob::simple(sub.to_string(), egui::FontId::proportional(10.0), lr::TEXT_DIM(), width);
         job.wrap = egui::text::TextWrapping { max_width: width, max_rows: 2, break_anywhere: false, overflow_character: Some('…') };
@@ -489,7 +492,7 @@ fn foveon_section(ui: &mut egui::Ui, s: &mut develop::Settings, cal: Option<&dev
             Some(w) => crate::trf!("oben {o} · Mitte {m} · unten {u}", o = decimal_comma(w.w[2], 2), m = decimal_comma(w.w[1], 2), u = decimal_comma(w.w[0], 2)),
             None => " ".to_string(),
         };
-        let r = ui.add(egui::Label::new(egui::RichText::new(text).font(egui::FontId::monospace(10.5)).color(lr::ACCENT)).truncate());
+        let r = ui.add(egui::Label::new(egui::RichText::new(text).font(egui::FontId::monospace(10.5)).color(lr::ACCENT())).truncate());
         lr::hover_tip(ui, &r, "Anteil der drei Sensorschichten an der Belichtung des Films");
     }) {
         s.film.layer_exposure = d.layer_exposure;
@@ -507,9 +510,9 @@ fn slider(ui: &mut egui::Ui, label: &str, x: &mut f32, r: std::ops::RangeInclusi
 
 /// Narrow section heading (capitals, letter-spaced).
 pub(crate) fn header(ui: &mut egui::Ui, text: &str) {
-    let g = lr::caps(ui.painter(), text, lr::semibold(lr::UI_SIZE), Color32::from_gray(0xe2));
+    let g = lr::caps(ui.painter(), text, lr::semibold(lr::UI_SIZE), crate::lr::gray(0xe2));
     let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), egui::Sense::hover());
-    ui.painter().galley(Pos2::new(r.left(), r.center().y - g.size().y / 2.0), g, Color32::from_gray(0xe2));
+    ui.painter().galley(Pos2::new(r.left(), r.center().y - g.size().y / 2.0), g, crate::lr::gray(0xe2));
 }
 
 impl App {
@@ -783,7 +786,7 @@ impl App {
             }
             slider(ui, "Push / Pull", &mut f.push, -2.0..=3.0, 0.0, 0.25);
             if let Some(t) = ei_text.as_deref().filter(|t| !t.is_empty()) {
-                ui.label(egui::RichText::new(t).font(egui::FontId::monospace(10.5)).color(lr::ACCENT));
+                ui.label(egui::RichText::new(t).font(egui::FontId::monospace(10.5)).color(lr::ACCENT()));
             }
             slider(ui, "Filmkontrast", &mut f.film_gamma, 0.5..=1.5, 1.0, 0.01);
             slider(ui, "Filmbelichtung", &mut f.exposure, -3.0..=3.0, 0.0, 0.05);
@@ -894,11 +897,11 @@ impl App {
                     }
                     let tx = r.left() + 100.0;
                     let width = r.right() - tx - crate::darkroom_shelf::SIGN_W;
-                    let mut job = egui::text::LayoutJob::simple(paper_short_name(&p.name), egui::TextStyle::Body.resolve(ui.style()), if active { Color32::WHITE } else { lr::TEXT() }, width);
+                    let mut job = egui::text::LayoutJob::simple(paper_short_name(&p.name), egui::TextStyle::Body.resolve(ui.style()), if active { crate::lr::TEXT_STRONG() } else { lr::TEXT() }, width);
                     job.wrap.max_rows = 2;
                     let g = pa.layout_job(job);
                     let name_h = g.size().y;
-                    pa.galley(Pos2::new(tx, r.top() + 5.0), g, Color32::WHITE);
+                    pa.galley(Pos2::new(tx, r.top() + 5.0), g, crate::lr::TEXT_STRONG());
                     // characterisation below the name, up to two lines (fits the row also below a two-line name)
                     let sub = self.darkroom.subtitle(p);
                     let mut job = egui::text::LayoutJob::simple(sub, egui::FontId::proportional(10.0), lr::TEXT_DIM(), width);
@@ -1065,7 +1068,7 @@ impl App {
                     ui.add_space(6.0);
                     ui.scope(|ui| {
                         ui.set_max_width(ui.available_width().min(CARD_MEASURE));
-                        card_text(ui, &k.text, Color32::from_gray(0xe0), 12.5);
+                        card_text(ui, &k.text, crate::lr::gray(0xe0), 12.5);
                     });
                 }
                 ui.add_space(SECTION_GAP);
@@ -1105,7 +1108,7 @@ impl App {
                         ui.spacing_mut().item_spacing.x = 20.0;
                         let top = ui.cursor().top();
                         let mid = ui.cursor().left() + half + 10.0;
-                        ui.painter().line_segment([Pos2::new(mid, top + 4.0), Pos2::new(mid, top + 4.0 + 18.0 * (k.suitable.len().max(k.less_suitable.len()) as f32 + 1.4))], Stroke::new(1.0, CARD_LINE));
+                        ui.painter().line_segment([Pos2::new(mid, top + 4.0), Pos2::new(mid, top + 4.0 + 18.0 * (k.suitable.len().max(k.less_suitable.len()) as f32 + 1.4))], Stroke::new(1.0, CARD_LINE()));
                         for (title, list) in [("Gut für", &k.suitable), ("Weniger geeignet", &k.less_suitable)] {
                             ui.allocate_ui_with_layout(Vec2::new(half, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
                                 ui.set_width(half);
@@ -1154,13 +1157,13 @@ impl App {
                     let c = curve_color(i, k.characteristic_curves.len(), Some(i) == active, false);
                     let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
                     ui.painter().circle_filled(dot.center(), 3.5, c);
-                    ui.label(egui::RichText::new(&rh.name).small().color(if Some(i) == active { Color32::WHITE } else { lr::TEXT_DIM() }));
+                    ui.label(egui::RichText::new(&rh.name).small().color(if Some(i) == active { crate::lr::TEXT_STRONG() } else { lr::TEXT_DIM() }));
                     ui.add_space(6.0);
                 }
             });
             ui.label(egui::RichText::new(crate::tr("Belichtung (log, 0 = Mittelgrau) → Dichte")).small().color(lr::TEXT_DIM()));
             if !k.is_paper && marker.filled() > 0 {
-                ui.label(egui::RichText::new(crate::tr("Balken: wie viel vom Foto bei dieser Belichtung auf den Film fällt")).small().color(lr::ACCENT));
+                ui.label(egui::RichText::new(crate::tr("Balken: wie viel vom Foto bei dieser Belichtung auf den Film fällt")).small().color(lr::ACCENT()));
             }
             ui.add_space(8.0);
             if !k.spectrum.is_empty() {

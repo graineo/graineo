@@ -475,7 +475,7 @@ impl LibraryView {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.")).small().color(Color32::from_gray(0x8c))).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.")).small().color(crate::lr::gray(0x8c))).wrap());
             });
             if option_link(ui, crate::tr("Ordner schließen")) {
                 close = true;
@@ -533,9 +533,9 @@ fn option_link(ui: &mut egui::Ui, label: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::click());
     let hot = resp.hovered();
     if hot {
-        ui.painter().rect_filled(rect, 0.0, Color32::from_gray(0x2c));
+        ui.painter().rect_filled(rect, 0.0, crate::lr::gray(0x2c));
     }
-    let color = if hot { lr::TEXT() } else { Color32::from_gray(0xa4) };
+    let color = if hot { lr::TEXT() } else { crate::lr::gray(0xa4) };
     lr::paint_icon(ui.painter(), egui::Rect::from_center_size(egui::pos2(rect.left() + 9.0, rect.center().y), egui::vec2(10.0, 10.0)), lr::Icon::X, color);
     let font = egui::TextStyle::Body.resolve(ui.style());
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, color);
@@ -550,15 +550,15 @@ fn option_row(ui: &mut egui::Ui, on: &mut bool, label: &str, tip: &str) -> bool 
     let hot = resp.hovered();
     let painter = ui.painter();
     if hot {
-        painter.rect_filled(rect, 0.0, Color32::from_gray(0x2c));
+        painter.rect_filled(rect, 0.0, crate::lr::gray(0x2c));
     }
     let x0 = rect.left() + 4.0;
     let square = egui::Rect::from_center_size(egui::pos2(x0 + 5.0, rect.center().y), egui::vec2(10.0, 10.0));
-    painter.rect_stroke(square, 1.0, egui::Stroke::new(1.0, Color32::from_gray(if hot { 0xc0 } else { 0x80 })), egui::StrokeKind::Inside);
+    painter.rect_stroke(square, 1.0, egui::Stroke::new(1.0, crate::lr::gray(if hot { 0xc0 } else { 0x80 })), egui::StrokeKind::Inside);
     if *on {
-        painter.rect_filled(square.shrink(2.5), 0.0, Color32::from_gray(0xe0));
+        painter.rect_filled(square.shrink(2.5), 0.0, crate::lr::gray(0xe0));
     }
-    let color = if hot { lr::TEXT() } else { Color32::from_gray(0xa4) };
+    let color = if hot { lr::TEXT() } else { crate::lr::gray(0xa4) };
     let font = egui::TextStyle::Body.resolve(ui.style());
     let galley = painter.layout_no_wrap(label.to_string(), font, color);
     painter.galley(egui::pos2(x0 + 14.0, rect.center().y - galley.size().y / 2.0), galley, color);

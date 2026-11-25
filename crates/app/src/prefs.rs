@@ -237,9 +237,16 @@ struct Work {
     started: std::time::Instant,
 }
 
-const SECTIONS: [&str; 11] = ["Allgemein", "Oberfläche", "Bibliothek", "Entwickeln", "Export", "Objektive", "Suche", "Module", "Speicher", "Looks", "Browser"];
-/// Icon per section (number in [`symbol`])
-const SYMBOL_NR: [usize; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 2, 9];
+const SECTIONS: [&str; 12] = ["Allgemein", "Oberfläche", "Bibliothek", "Entwickeln", "Export", "Objektive", "Suche", "Module", "Speicher", "Looks", "Browser", "Kamera-Standards"];
+/// Icon per section (number in [`symbol`]; `usize::MAX` = Phosphor camera)
+const SYMBOL_NR: [usize; 12] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 2, 9, usize::MAX];
+/// Order of the sections in the list (indices into [`SECTIONS`]; the index stays the section's identity)
+const ORDER: [usize; 12] = [0, 1, 2, 3, 11, 4, 5, 6, 7, 8, 9, 10];
+/// Width of the section list: the longest name in every language at [`NAV_FONT`] plus icon and marks (checked by a test)
+const NAV_WIDTH: f32 = 168.0;
+const NAV_FONT: f32 = 12.0;
+/// Width of the scrolling content right of the list
+const CONTENT_WIDTH: f32 = 700.0;
 
 /// UI sizes (scales everything evenly: font, spacing, icons). Older saved values 0.9 / 1.0 / 1.15 stay valid.
 const STEPS: [f32; 7] = [0.9, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0];
@@ -446,11 +453,15 @@ pub fn ui(ctx: &egui::Context) {
     }
     let mut open = OPEN.load(Ordering::Relaxed);
     if !open {
+        // "Set as default for …" from Edit (camera_defaults.rs)
+        crate::camera_defaults::dialog_ui(ctx);
         return;
     }
     let mut area=SECTION.load(Ordering::Relaxed);
     show_window(ctx,&mut open,&mut area);
     SECTION.store(area,Ordering::Relaxed);
+    // "Change" of a camera default: its dialog lies above the preferences
+    crate::camera_defaults::dialog_ui(ctx);
     if running() {
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
     }
@@ -462,7 +473,7 @@ pub fn ui(ctx: &egui::Context) {
     if ended {
         *STATE.lock().unwrap() = None;
     }
-    OPEN.store(open && !ctx.input(|i| i.key_pressed(egui::Key::Escape)), Ordering::Relaxed);
+    OPEN.store(open && (crate::camera_defaults::dialog_open() || !ctx.input(|i| i.key_pressed(egui::Key::Escape))), Ordering::Relaxed);
 }
 
 
@@ -480,41 +491,46 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
         .open(open)
         .collapsible(false)
         .resizable(false)
-        .default_width(780.0)
+        .default_width(NAV_WIDTH + 12.0 + CONTENT_WIDTH)
         .constrain_to(ctx.content_rect())
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .frame(egui::Frame::window(&ctx.global_style()).inner_margin(egui::Margin::symmetric(14, 10)).corner_radius(0.0))
         .show(ctx, |ui| {
-            ui.set_width(780.0);
-            // Toolbar
+            ui.set_width(NAV_WIDTH + 12.0 + CONTENT_WIDTH);
+            let height = (ctx.content_rect().height() - 110.0).clamp(380.0, 560.0);
             let mut chosen = *area;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 2.0;
-                for i in 0..SECTIONS.len() {
-                    let name=localized::area_label(i);
-                    let (r, resp) = ui.allocate_exact_size(egui::vec2((780.0 - 20.0) / SECTIONS.len() as f32, 76.0), egui::Sense::click());
-                    let an = i == chosen;
-                    if an {
-                        ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x3a));
+            let mut kind = ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = 0.0;
+                // vertical list of the sections: icon + name, the active one lighter with a thin gold mark on the left
+                let (list, _) = ui.allocate_exact_size(egui::vec2(NAV_WIDTH, height), egui::Sense::hover());
+                ui.painter().rect_filled(list, 0.0, crate::lr::gray(0x1a));
+                for (row, &i) in ORDER.iter().enumerate() {
+                    let r = egui::Rect::from_min_size(list.min + egui::vec2(0.0, row as f32 * 30.0), egui::vec2(NAV_WIDTH, 28.0));
+                    let resp = ui.interact(r, egui::Id::unique(("prefs-nav", i)), egui::Sense::click());
+                    let on = i == chosen;
+                    if on {
+                        ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x33));
+                        ui.painter().rect_filled(egui::Rect::from_min_size(r.min, egui::vec2(2.0, r.height())), 0.0, lr::ACCENT());
                     } else if resp.hovered() {
-                        ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x2a));
+                        ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x26));
                     }
-                    let c = if an { Color32::WHITE } else { Color32::from_gray(0xb0) };
-                    symbol(ui.painter(), egui::Rect::from_center_size(r.center_top() + egui::vec2(0.0, 19.0), egui::vec2(28.0, 28.0)), SYMBOL_NR[i], c);
-                    let mut job=egui::text::LayoutJob::simple(name.to_owned(),egui::FontId::proportional(10.0),c,r.width()-4.0);
-                    job.wrap.break_anywhere=true;
-                    let text=ui.painter().layout_job(job);
-                    ui.painter().galley(egui::pos2(r.center().x-text.size().x/2.0,r.bottom()-4.0-text.size().y),text,c);
+                    let c = if on { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0xb0) };
+                    let icon = egui::Rect::from_center_size(egui::pos2(r.left() + 20.0, r.center().y), egui::vec2(20.0, 20.0));
+                    if SYMBOL_NR[i] == usize::MAX {
+                        lr::paint_icon(ui.painter(), icon.shrink(2.0), lr::Icon::Camera, c);
+                    } else {
+                        symbol(ui.painter(), icon, SYMBOL_NR[i], c);
+                    }
+                    ui.painter().with_clip_rect(r).text(egui::pos2(r.left() + 38.0, r.center().y), egui::Align2::LEFT_CENTER, localized::area_label(i), egui::FontId::proportional(NAV_FONT), c);
                     if resp.clicked() {
                         chosen = i;
                     }
                 }
-            });
+                ui.add_space(12.0);
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(CONTENT_WIDTH, height), egui::Sense::hover());
+                ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)))
+            }).inner;
             *area=chosen;
-            ui.separator();
-            // fixed content area
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(780.0, (ctx.content_rect().height()-150.0).clamp(160.0,470.0)), egui::Sense::hover());
-            let mut kind = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)));
             let mut area = egui::ScrollArea::vertical().id_salt(("prefs", chosen)).auto_shrink([false; 2]);
             // test aid for screenshots: GRAINEO_PREFS_SCROLL=<points> scrolls the page (only in test runs)
             if crate::env::var_os("GRAINEO_DATA_DIR").is_some() {
@@ -523,7 +539,7 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                 }
             }
             area.show(&mut kind, |ui| crate::sticky::scope(ui, |ui| {
-                ui.set_width(760.0);
+                ui.set_width(CONTENT_WIDTH - 20.0);
                 ui.spacing_mut().item_spacing.y = 4.0;
                 // A long value (path, model name, translation) never widens the page
                 lr::bounded(ui, |ui| match chosen {
@@ -537,6 +553,7 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                     7 => module(ui, ctx),
                     9 => crate::film_profiles_ui::settings(ui),
                     10 => crate::remote_access::settings_page(ui),
+                    11 => crate::camera_defaults::settings_page(ui),
                     _ => storage_section(ui),
                 })
             }));
@@ -559,7 +576,7 @@ pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut eg
         let g = lr::caps(p, &owned, lr::semibold(10.5), lr::TEXT_DIM());
         p.galley(egui::pos2(bar.left() + 4.0, bar.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
     });
-    egui::Frame::new().fill(Color32::from_gray(0x1d)).stroke(egui::Stroke::new(1.0, Color32::from_gray(0x2c))).corner_radius(0.0).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
+    egui::Frame::new().fill(crate::lr::gray(0x1d)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x2c))).corner_radius(0.0).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.spacing_mut().item_spacing.y = 2.0;
         content(ui);
@@ -592,7 +609,7 @@ fn row_wide(ui: &mut egui::Ui, name: &str, right: impl FnOnce(&mut egui::Ui)) {
 /// Separator between rows of a group.
 pub(crate) fn separator(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 5.0), egui::Sense::hover());
-    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, Color32::from_gray(0x2a)));
+    ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, crate::lr::gray(0x2a)));
 }
 
 /// Toggle (on/off) in Mac style. Returns: toggled.
@@ -616,7 +633,7 @@ pub(crate) fn value(ui: &mut egui::Ui, text: &str, a: Signal) {
         Signal::Green => Color32::from_rgb(0x4c, 0xc2, 0x6a),
         Signal::Yellow => Color32::from_rgb(0xe0, 0xb0, 0x40),
         Signal::Red => Color32::from_rgb(0xe0, 0x5c, 0x50),
-        Signal::Gray => Color32::from_gray(0x94),
+        Signal::Gray => crate::lr::gray(0x94),
     };
     let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
     ui.painter().circle_filled(r.center(), 4.0, c);
@@ -927,6 +944,8 @@ fn interface_section(ui: &mut egui::Ui, ctx: &egui::Context) {
             ui.label(egui::RichText::new(format!("{} / {} / {}", crate::shortcuts::display("ui_larger"), crate::shortcuts::display("ui_smaller"), crate::shortcuts::display("ui_reset"))).color(lr::TEXT_DIM()));
             set_scale(ctx, z);
         });
+        separator(ui);
+        row(ui, &crate::tr("Erscheinungsbild"), None, |ui| crate::theme::combo(ui, ctx));
         separator(ui);
         row(ui, &crate::tr("Schrift"), None, |ui| {
             let mut sans = lr::sans_font();
@@ -1320,7 +1339,7 @@ fn developed_counter(cache: &Arc<library::preview::Cache>) -> Option<(usize, usi
 
 /// Hint in yellow (space warnings in the settings).
 fn hint_yellow(ui: &mut egui::Ui, text: &str) {
-    ui.add(egui::Label::new(egui::RichText::new(text).small().color(Color32::from_rgb(0xe0, 0xb0, 0x40))).wrap());
+    ui.add(egui::Label::new(egui::RichText::new(text).small().color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xb0, 0x40)))).wrap());
 }
 
 /// Settings → Library → Previews: both levels, usage, regenerate.
@@ -1419,6 +1438,24 @@ fn previews_group(ui: &mut egui::Ui, z: &Option<State>) {
 
 fn develop_section(ui: &mut egui::Ui) {
     let z = state(ui);
+    // start values of new, unedited photos (camera_defaults.rs); a camera default overrides them for its values
+    group(ui, crate::tr("Startwerte neuer Fotos"), |ui| {
+        row(ui, crate::tr("Objektivkorrektur standardmäßig an"), Some(crate::tr("Für RAWs von Bayer- und X-Trans-Kameras, wenn ein Objektivprofil gefunden wird. Gilt beim ersten Öffnen eines unbearbeiteten Fotos; Sigma-Fotos bleiben wie bisher.")), |ui| {
+            let mut on = crate::camera_defaults::lens_default();
+            if toggle(ui, &mut on) {
+                crate::camera_defaults::set_lens_default(on);
+            }
+        });
+        separator(ui);
+        row(ui, crate::tr("Lichter neutral"), Some(crate::tr("Startwert des Reglers für neue Fotos (0 = wie bisher). „Zurücksetzen“ stellt weiter neutral.")), |ui| {
+            ui.spacing_mut().slider_width = 200.0;
+            let mut v = (crate::camera_defaults::highlight_neutral_default() * 100.0).round();
+            let r = ui.add(egui::Slider::new(&mut v, 0.0..=100.0).step_by(1.0).fixed_decimals(0));
+            if r.drag_stopped() || (r.changed() && !r.dragged()) {
+                crate::camera_defaults::set_highlight_neutral_default(v / 100.0);
+            }
+        });
+    });
     group(ui, crate::tr("Anzeige"), |ui| {
         row(ui, crate::tr("Breiter Farbraum in der Anzeige"), Some(crate::tr("Entwickeln zeigt die Farben ohne Beschneiden auf sRGB, wenn der Bildschirm mehr kann (MacBook Pro, EIZO): eingepasst, vergrößert, Lupe und Vergleich. Gilt für Foveon und alle anderen Formate, nicht für Film, Schwarzweiß und ältere Foveon-Kameras (DP1, DP2, SD15 …)")), |ui| {
             let mut an = crate::photo_display::wide_on();
@@ -1933,17 +1970,17 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
             ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), lr::TEXT_DIM()));
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
         } else if let Some(a) = own.as_ref().filter(|a| a.done && a.failed) {
-            ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), Color32::from_rgb(0xe0, 0x8c, 0x70)));
+            ui.add(dim(crate::menu::i18n::tr_msg(&a.text).to_string(), crate::lr::ui_accent(Color32::from_rgb(0xe0, 0x8c, 0x70))));
         } else if let Some(o) = other.as_ref().filter(|_| !busy) {
             let t = match (o.progress > 0.0).then_some(o.progress) {
                 Some(p) => crate::trf!("Gesperrt, solange {w} läuft ({p} %)", w = work_name(&o.what), p = (p * 100.0).floor() as u32),
                 None => crate::trf!("Gesperrt, solange {w} läuft", w = work_name(&o.what)),
             };
-            ui.add(dim(t, Color32::from_rgb(0xe0, 0xb0, 0x40)));
+            ui.add(dim(t, crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xb0, 0x40))));
         } else if let Some(t) = library::module::non_commercial(d) {
             // visibly marked: only for non-commercial use, licence and link
             let note = crate::trf!("Nur für nicht-kommerzielle Nutzung · {l}", l = t.name);
-            let r = ui.add(dim(note, Color32::from_rgb(0xe0, 0xb0, 0x40)));
+            let r = ui.add(dim(note, crate::lr::ui_accent(Color32::from_rgb(0xe0, 0xb0, 0x40))));
             let confirmed = library::module::confirmation(d).is_some();
             lr::hover_tip(ui, &r, &crate::trf!("{p}. Lizenz: {l} · Quelle: {r} · nicht von graineo bereitgestellt{c}", p = crate::tr(d.purpose), l = d.license, r = library::module::source_label(d), c = if confirmed { crate::tr(" · nicht-kommerzielle Nutzung bestätigt").to_string() } else { String::new() }));
             ui.hyperlink_to(egui::RichText::new(crate::tr("Lizenz")).small(), t.url);
@@ -2035,7 +2072,7 @@ fn storage_section(ui: &mut egui::Ui) {
                     if ui.button(crate::tr("Abbrechen")).clicked() {
                         NET_BIN_QUESTION.store(false, Ordering::SeqCst);
                     }
-                    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Endgültig leeren")).color(Color32::from_rgb(0xe0, 0x6c, 0x5a)))).clicked() {
+                    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Endgültig leeren")).color(crate::lr::ui_accent(Color32::from_rgb(0xe0, 0x6c, 0x5a))))).clicked() {
                         NET_BIN_QUESTION.store(false, Ordering::SeqCst);
                         net_bin_action(true);
                     }

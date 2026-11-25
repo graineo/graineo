@@ -128,7 +128,7 @@ impl App {
                 if n > 0 {
                     ui.add_space(4.0);
                     let (r, _) = ui.allocate_exact_size(egui::vec2(24.0, 1.0), egui::Sense::hover());
-                    ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x2c));
+                    ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x2c));
                     ui.add_space(4.0);
                 }
                 for (w, icon, tip) in g.iter() {
@@ -176,9 +176,9 @@ impl App {
         // "Auto" under Tone, color/black & white under Treatment, Reset at the bottom (⌥⇧⌘R).
         ui.horizontal(|ui| {
             ui.set_height(24.0);
-            let g = lr::caps(ui.painter(), title, lr::semibold(11.5), Color32::from_gray(0xd8));
+            let g = lr::caps(ui.painter(), title, lr::semibold(11.5), crate::lr::gray(0xd8));
             let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 24.0), egui::Sense::hover());
-            ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, Color32::WHITE);
+            ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
             if w == ToolTab::Crop {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| crate::help::info(ui, "freistellen-hilfe", "Freistellen & Ausrichten", &crate::help::CROP_ALIGN));
             }
@@ -216,11 +216,11 @@ impl App {
                 let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 30.0), egui::Sense::click());
                 let p = ui.painter();
                 if *i == active {
-                    p.rect_filled(rect, 0.0, Color32::from_gray(0x3a));
+                    p.rect_filled(rect, 0.0, crate::lr::gray(0x3a));
                 } else if resp.hovered() {
-                    p.rect_filled(rect, 0.0, Color32::from_gray(0x26));
+                    p.rect_filled(rect, 0.0, crate::lr::gray(0x26));
                 }
-                let color = if *i == active { Color32::WHITE } else { lr::TEXT() };
+                let color = if *i == active { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
                 p.text(rect.left_center() + egui::vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, crate::tr(name), egui::TextStyle::Body.resolve(ui.style()), color);
                 if *edited {
                     lr::paint_icon(p, egui::Rect::from_center_size(egui::pos2(rect.right() - 16.0, rect.center().y), egui::vec2(13.0, 13.0)), lr::Icon::Pencil, lr::TEXT_DIM());

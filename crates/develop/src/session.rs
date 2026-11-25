@@ -53,7 +53,7 @@ impl SppBase {
     /// Tone equalizer mask of the whole base (computed once per mask setting; crops take their part of it). `None`
     /// when the settings do not need it.
     pub fn toneq(&self, cal: &Calibration, s: &Settings) -> Option<crate::tone_eq::Mask> {
-        if !crate::tone_eq::needed(s) {
+        if !crate::tone_eq::wanted(s) {
             return None;
         }
         let mut g = self.toneq.lock().unwrap_or_else(|e| e.into_inner());
@@ -727,7 +727,7 @@ pub fn grain_region_from_base(cal: &Calibration, base: &SppBase, s: &Settings, r
 /// Tone equalizer analysis of the whole image, computed once per mask setting and kept with the image (crops take their
 /// part of it). The own pipeline's data are normalised to sensor saturation (white = 1).
 fn attach_toneq(lin: &mut Linear, s: &Settings) {
-    if crate::tone_eq::needed(s) && !lin.toneq.as_ref().is_some_and(|m| m.grid().fits(&s.tone_eq) && (m.width, m.height) == (lin.width, lin.height)) {
+    if crate::tone_eq::wanted(s) && !lin.toneq.as_ref().is_some_and(|m| m.grid().fits(&s.tone_eq) && (m.width, m.height) == (lin.width, lin.height)) {
         let grid = crate::tone_eq::Grid::analyze(&lin.data, lin.width, lin.height, 1.0, &s.tone_eq);
         lin.toneq = Some(crate::tone_eq::Mask::full(std::sync::Arc::new(grid)));
     }

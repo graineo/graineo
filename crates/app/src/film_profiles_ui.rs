@@ -272,7 +272,7 @@ pub fn settings(ui: &mut egui::Ui) {
 
 /// A framed row of the look settings (same look for sources and packages).
 fn row(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::new().fill(lr::PANEL_DARK).inner_margin(egui::Margin::symmetric(8, 5)).corner_radius(0.0).show(ui, |ui| {
+    egui::Frame::new().fill(lr::PANEL_DARK()).inner_margin(egui::Margin::symmetric(8, 5)).corner_radius(0.0).show(ui, |ui| {
         ui.set_width(ui.available_width());
         ui.horizontal(add);
     });
@@ -340,9 +340,9 @@ mod visible_tests {
 /// Conspicuous card instead of a silent neutral preview; the stored reference stays.
 pub fn missing_card(ui: &mut egui::Ui, s: &develop::Settings) {
     if let Some(text) = rawdev::film_profiles::missing(s) {
-        egui::Frame::new().fill(egui::Color32::from_rgb(0x30,0x28,0x1c)).inner_margin(10.0).corner_radius(0.0).show(ui, |ui| {
+        egui::Frame::new().fill(crate::lr::ui_rgb(0x30, 0x28, 0x1c)).inner_margin(10.0).corner_radius(0.0).show(ui, |ui| {
             ui.set_width((ui.available_width()-20.0).max(40.0));
-            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&text)).strong().color(egui::Color32::from_rgb(0xe8,0xbe,0x78))).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::menu::i18n::tr_msg(&text)).strong().color(crate::lr::ui_accent(egui::Color32::from_rgb(0xe8,0xbe,0x78)))).wrap());
             ui.add(egui::Label::new(crate::tr("Die Vorschau enthält diesen Look nicht. Der Profilverweis bleibt gespeichert.")).wrap());
             if ui.button(crate::tr("Profile verwalten …")).clicked() { manage(); }
         });

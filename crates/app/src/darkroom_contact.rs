@@ -330,7 +330,7 @@ impl App {
             // swallows clicks and drags so the image underneath stays still
             ui.allocate_rect(rect, egui::Sense::click_and_drag());
             let p = ui.painter_at(rect);
-            p.rect_filled(rect, 0.0, lr::IMAGE_BG);
+            p.rect_filled(rect, 0.0, lr::IMAGE_BG());
             let margin = 14.0;
             // Header: title, progress, help, close
             let header = Rect::from_min_size(rect.min + Vec2::new(margin, 8.0), Vec2::new(rect.width() - 2.0 * margin, 22.0));
@@ -339,7 +339,7 @@ impl App {
             let computing = model.is_ok() && (self.darkroom.contact.computing.is_some() || done < total || self.darkroom.contact.done.is_none());
             let print_on = self.darkroom.contact.print.an;
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(header).layout(egui::Layout::left_to_right(egui::Align::Center)));
-            child.label(egui::RichText::new(if print_on { crate::tr("KONTAKTABZUG") } else { crate::tr("PAPIERVERGLEICH") }).color(Color32::from_gray(0xe2)).strong());
+            child.label(egui::RichText::new(if print_on { crate::tr("KONTAKTABZUG") } else { crate::tr("PAPIERVERGLEICH") }).color(crate::lr::gray(0xe2)).strong());
             help::info(&mut child, "dk-kontakt", if print_on { crate::tr("Kontaktabzug") } else { crate::tr("Papiervergleich") }, &help::DR_CONTACT);
             if print_on {
                 // fixed place for the status; text changes, nothing moves
@@ -459,25 +459,25 @@ impl App {
                     let y = grid.top() + z as f32 * (zh + gap);
                     let differs = row.fields.len() > 1 && row.fields.iter().zip(&wide).any(|(a, b)| a.name != b.name);
                     let header_rect = Rect::from_min_size(Pos2::new(surface.left(), y), Vec2::new(label_b - 8.0, zh));
-                    let mut job = egui::text::LayoutJob::simple(row.name.clone(), egui::FontId::monospace(11.0), Color32::from_gray(0xd0), header_rect.width());
+                    let mut job = egui::text::LayoutJob::simple(row.name.clone(), egui::FontId::monospace(11.0), crate::lr::gray(0xd0), header_rect.width());
                     job.wrap.max_rows = 3;
                     let g = p.layout_job(job);
-                    p.galley(header_rect.left_top() + Vec2::new(0.0, 4.0), g, Color32::WHITE);
+                    p.galley(header_rect.left_top() + Vec2::new(0.0, 4.0), g, crate::lr::TEXT_STRONG());
                     for (sp, f) in row.fields.iter().enumerate() {
                         let cell = Rect::from_min_size(Pos2::new(grid.left() + sp as f32 * (zw + gap), y), Vec2::new(zw, zh));
                         let image = Rect::from_min_size(cell.min, Vec2::new(bw, bh));
                         let resp = ui.interact(image, egui::Id::NULL.with(("dk-kontakt", z, sp)), egui::Sense::click());
-                        p.rect_filled(image, 0.0, Color32::from_gray(0x14));
+                        p.rect_filled(image, 0.0, crate::lr::gray(0x14));
                         if let Some(t) = self.darkroom.contact.tex.get(&(z, sp)) {
                             p.image(t.id(), image, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
                         } else {
                             p.text(image.center(), egui::Align2::CENTER_CENTER, "…", egui::FontId::monospace(12.0), lr::TEXT_DIM());
                         }
                         let active = m.current == Some((z, sp));
-                        let outline = if active { Stroke::new(2.0, lr::ACCENT) } else if resp.hovered() { Stroke::new(1.0, Color32::from_gray(0x78)) } else { Stroke::new(1.0, Color32::from_gray(0x2e)) };
+                        let outline = if active { Stroke::new(2.0, lr::ACCENT()) } else if resp.hovered() { Stroke::new(1.0, crate::lr::gray(0x78)) } else { Stroke::new(1.0, crate::lr::gray(0x2e)) };
                         p.rect_stroke(image, 0.0, outline, egui::StrokeKind::Inside);
                         if differs || row.fields.len() == 1 {
-                            p.text(image.left_bottom() + Vec2::new(5.0, -5.0), egui::Align2::LEFT_BOTTOM, &f.name, egui::FontId::monospace(10.5), Color32::from_gray(0xe0));
+                            p.text(image.left_bottom() + Vec2::new(5.0, -5.0), egui::Align2::LEFT_BOTTOM, &f.name, egui::FontId::monospace(10.5), crate::lr::gray(0xe0));
                         }
                         if resp.clicked() {
                             pick = Some((z, sp));

@@ -13,10 +13,11 @@ pub const GROUPS: [(&str, &str); N] = [
     ("Fill Light", "Fill Light, Rauschbremse"),
     ("Präsenz", "Struktur, Klarheit, Dunst entfernen, Dynamik, Sättigung"),
     ("Farbstiche", "Lichter neutral, Lichter-Farbe, Lichter-Detail"),
-    ("Tonwert-Entzerrer", "Belichtung je Helligkeitszone, Maske"),
+    ("Tonwert-Equalizer", "Belichtung je Helligkeitszone, Maske"),
     ("Gradationskurve", "Punktkurve RGB, Rot, Grün, Blau"),
     ("Schwarzweiß", "Behandlung und Schichtmischung"),
     ("Farbmischer", ""),
+    ("Hauttöne", "Hautton, Hautsättigung"),
     ("Schichtmischer", "Foveon-Schichten frei auf Rot, Grün, Blau verteilen"),
     ("Color Grading", ""),
     ("Effekte", "Vignette, Korn, matte Tiefen"),
@@ -30,7 +31,7 @@ pub const GROUPS: [(&str, &str); N] = [
 ];
 
 /// Number of groups.
-pub const N: usize = 20;
+pub const N: usize = 21;
 
 /// Position of a group in [`GROUPS`] (access by name so that new groups do not shift the
 /// mapping).
@@ -54,10 +55,11 @@ pub fn for_section(title: &str) -> Option<Groups> {
     let names: &[&str] = match title {
         "Grundeinstellungen" => &["Profil", "Weißabgleich", "Tonwert", "Fill Light", "Präsenz"],
         "Farbstiche" => &["Farbstiche"],
-        "Tonwert-Entzerrer" => &["Tonwert-Entzerrer"],
+        "Tonwert-Equalizer" => &["Tonwert-Equalizer"],
         "Gradationskurve" => &["Gradationskurve"],
         "S/W-Mischung (Sensorschichten)" => &["Schwarzweiß"],
         "Farbmischer" => &["Farbmischer"],
+        "Hauttöne" => &["Hauttöne"],
         "Schichtmischer" => &["Schichtmischer"],
         "Color Grading" => &["Color Grading"],
         "Kalibrierung" => &["Profil"],
@@ -135,7 +137,7 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
         s.highlight_structure = src.highlight_structure;
         s.bypass.casts = src.bypass.casts;
     }
-    if on("Tonwert-Entzerrer") {
+    if on("Tonwert-Equalizer") {
         s.tone_eq = src.tone_eq.clone();
     }
     if on("Gradationskurve") {
@@ -149,6 +151,10 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
     if on("Farbmischer") {
         s.hsl = src.hsl;
         s.bypass.mixer = src.bypass.mixer;
+    }
+    if on("Hauttöne") {
+        s.skin_hue = src.skin_hue;
+        s.skin_sat = src.skin_sat;
     }
     if on("Schichtmischer") {
         s.layer_matrix = src.layer_matrix;

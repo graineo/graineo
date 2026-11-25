@@ -557,12 +557,12 @@ impl App {
                 let is_sel = self.print_room.sel.selected.contains(&image);
                 let is_main = main == Some(image);
                 if resp.hovered() && !is_sel {
-                    ui.painter().rect_filled(r, 0.0, Color32::from_gray(0x3c));
+                    ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x3c));
                 }
                 if is_main {
-                    ui.painter().rect_stroke(r.expand(1.0), 0.0, egui::Stroke::new(2.0, Color32::WHITE), egui::StrokeKind::Inside);
+                    ui.painter().rect_stroke(r.expand(1.0), 0.0, egui::Stroke::new(2.0, crate::lr::TEXT_STRONG()), egui::StrokeKind::Inside);
                 } else if is_sel {
-                    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, Color32::from_gray(0xc6)), egui::StrokeKind::Inside);
+                    ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, crate::lr::gray(0xc6)), egui::StrokeKind::Inside);
                 }
                 let img_area = Rect::from_min_size(r.min + egui::vec2(pad, pad), egui::vec2(r.width() - 2.0 * pad, layout.thumb_h));
                 match self.lib.thumbnail(file) {
@@ -576,13 +576,13 @@ impl App {
                     }
                     None => {
                         wanted.push(image);
-                        ui.painter().rect_filled(img_area, 0.0, Color32::from_gray(0x16));
+                        ui.painter().rect_filled(img_area, 0.0, crate::lr::gray(0x16));
                     }
                 }
                 // thin mark below the photos on the page shown
                 if marked.contains(&pos) {
                     let y = r.bottom() + MARK_H / 2.0 + 0.5;
-                    ui.painter().line_segment([egui::pos2(r.left() + 3.0, y), egui::pos2(r.right() - 3.0, y)], egui::Stroke::new(2.0, lr::GOLD));
+                    ui.painter().line_segment([egui::pos2(r.left() + 3.0, y), egui::pos2(r.right() - 3.0, y)], egui::Stroke::new(2.0, lr::GOLD()));
                 }
                 if resp.hovered() {
                     let name = e.name.clone();

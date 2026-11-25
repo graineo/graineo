@@ -429,19 +429,19 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
         let r = (sp.radius * points_per_width).max(3.0);
         let sel = z.selected == Some(Sel::Spot(i));
         let hot = hovered == Some(Sel::Spot(i));
-        let (main, width) = if sel { (Color32::WHITE, 2.5) } else if hot { (Color32::WHITE, 1.5) } else { (gold, 1.5) };
+        let (main, width) = if sel { (crate::lr::TEXT_STRONG(), 2.5) } else if hot { (crate::lr::TEXT_STRONG(), 1.5) } else { (gold, 1.5) };
         painter.circle_stroke(c, r + 1.0, egui::Stroke::new(width + 2.0, Color32::from_black_alpha(90)));
         painter.circle_stroke(c, r, egui::Stroke::new(width, main));
-        let faint = if sel { Color32::from_white_alpha(200) } else { Color32::from_rgba_unmultiplied(255, 230, 120, 140) };
+        let faint = if sel { crate::lr::overlay(200) } else { Color32::from_rgba_unmultiplied(255, 230, 120, 140) };
         painter.circle_stroke(q, r, egui::Stroke::new(if sel { 1.5 } else { 1.0 }, faint));
-        painter.line_segment([c, q], egui::Stroke::new(1.0, if sel { Color32::from_white_alpha(170) } else { Color32::from_rgba_unmultiplied(255, 230, 120, 110) }));
+        painter.line_segment([c, q], egui::Stroke::new(1.0, if sel { crate::lr::overlay(170) } else { Color32::from_rgba_unmultiplied(255, 230, 120, 110) }));
     }
     for (i, e) in red_eyes.iter().enumerate() {
         let c = to_screen(e.center);
         let r = (e.size[0].max(e.size[1]) * points_per_width).max(4.0);
         let sel = z.selected == Some(Sel::Eye(i));
         let hot = hovered == Some(Sel::Eye(i));
-        let (col, width) = if sel { (Color32::WHITE, 2.5) } else if hot { (Color32::from_rgb(255, 170, 170), 1.5) } else { (Color32::from_rgb(255, 120, 120), 1.5) };
+        let (col, width) = if sel { (crate::lr::TEXT_STRONG(), 2.5) } else if hot { (Color32::from_rgb(255, 170, 170), 1.5) } else { (Color32::from_rgb(255, 120, 120), 1.5) };
         painter.circle_stroke(c, r + 1.0, egui::Stroke::new(width + 2.0, Color32::from_black_alpha(90)));
         painter.circle_stroke(c, r, egui::Stroke::new(width, col));
     }
@@ -451,7 +451,7 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
     } else if z.tool != Tool::Off && hovered.is_none() {
         if let Some(pos) = hover {
             ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
-            painter.circle_stroke(pos, (z.radius * points_per_width).max(3.0), egui::Stroke::new(1.0, Color32::WHITE));
+            painter.circle_stroke(pos, (z.radius * points_per_width).max(3.0), egui::Stroke::new(1.0, crate::lr::TEXT_STRONG()));
         }
     }
     v.over_handle = hovered.is_some() || z.dragging.is_some();

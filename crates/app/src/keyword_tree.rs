@@ -145,15 +145,15 @@ pub fn show(
             let over_arrow = row.has_children && resp.hover_pos().is_some_and(|p| arrow.contains(p));
             let p = ui.painter();
             if is_on {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x4a));
+                p.rect_filled(r, 0.0, crate::lr::gray(0x4a));
             } else if resp.hovered() && !over_arrow {
-                p.rect_filled(r, 0.0, Color32::from_gray(0x2a));
+                p.rect_filled(r, 0.0, crate::lr::gray(0x2a));
             }
             let dim = row.count == 0 || !row.hit;
-            let color = if dim && !is_on { Color32::from_gray(0x7a) } else if is_on || resp.hovered() { Color32::WHITE } else { lr::TEXT() };
+            let color = if dim && !is_on { crate::lr::gray(0x7a) } else if is_on || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
             let font = egui::FontId::proportional(10.5);
             if row.has_children {
-                let c = if over_arrow { Color32::WHITE } else { Color32::from_gray(0x8a) };
+                let c = if over_arrow { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x8a) };
                 // the same triangle as the collection tree of the left panel
                 let m = arrow.center();
                 let pts = if row.open { vec![m + egui::vec2(-3.5, -2.0), m + egui::vec2(3.5, -2.0), m + egui::vec2(0.0, 2.5)] } else { vec![m + egui::vec2(-2.0, -3.5), m + egui::vec2(2.5, 0.0), m + egui::vec2(-2.0, 3.5)] };
@@ -169,7 +169,7 @@ pub fn show(
             // a hit of the column search is underlined (its parents shown only for context are dimmed)
             if row.hit && !dim && ui.data(|d| d.get_temp::<bool>(egui::Id::unique((salt.0, salt.1, "searching")))).unwrap_or(false) {
                 let y = r.bottom() - 2.5;
-                p.with_clip_rect(space).line_segment([egui::pos2(name_pos.x, y), egui::pos2(name_pos.x + name_w, y)], egui::Stroke::new(1.0, Color32::from_gray(0xb0)));
+                p.with_clip_rect(space).line_segment([egui::pos2(name_pos.x, y), egui::pos2(name_pos.x + name_w, y)], egui::Stroke::new(1.0, crate::lr::gray(0xb0)));
             }
             p.galley(egui::pos2(right - count_galley.size().x, r.center().y - count_galley.size().y / 2.0), count_galley, lr::TEXT_DIM());
             if over_arrow {
