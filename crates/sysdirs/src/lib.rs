@@ -85,10 +85,13 @@ pub fn test_program_dir() -> Option<PathBuf> {
 /// cargo (`cargo test` sets `CARGO`/`CARGO_MANIFEST_DIR` for it) or carries cargo's hash suffix
 /// (`name-<16 hex digits>`, when started by hand).
 fn is_test_program(exe: &Path, by_cargo: bool) -> bool {
-    let in_deps = exe.parent().and_then(Path::file_name).is_some_and(|n| n == "deps");
+    let parent = exe.parent().and_then(Path::file_name);
+    let in_deps = parent.is_some_and(|n| n == "deps");
+    // newer cargo puts test programs into `<build-dir>/<profile>/build/<crate>/<hash>/out/<crate>-<hash>`
+    let in_out = parent.is_some_and(|n| n == "out");
     let stem = exe.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let hashed = stem.rsplit_once('-').is_some_and(|(_, h)| h.len() == 16 && h.bytes().all(|b| b.is_ascii_hexdigit()));
-    in_deps && (by_cargo || hashed)
+    (in_deps && (by_cargo || hashed)) || (in_out && hashed)
 }
 
 /// The user's real logs folder, without the test redirection of [`app_logs_dir`].
@@ -205,6 +208,9 @@ mod tests {
         // the app installed in a folder named deps, not started by cargo
         assert!(!is_test_program(Path::new("/opt/deps/graineo"), false));
         assert!(!is_test_program(Path::new("/opt/deps/sub/graineo-0123456789abcdef"), true));
+        // newer cargo layout
+        assert!(is_test_program(Path::new("/t/release/build/sysdirs/0123456789abcdef/out/sysdirs-0123456789abcdef"), true));
+        assert!(!is_test_program(Path::new("/opt/out/graineo"), false));
     }
 
     #[test]
