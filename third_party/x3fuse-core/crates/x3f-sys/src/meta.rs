@@ -354,28 +354,44 @@ pub unsafe extern "C" fn x3f_get_prop_entry(
     0
 }
 
+/// Name of a Quattro CAMF `WhiteBalance` code, spelled as the keys of the camera's
+/// `WhiteBalanceGains` / `WhiteBalanceColorCorrections` lists ("Shade", "Fluorescent").
+fn quattro_wb_name(code: u32) -> &'static CStr {
+    match code {
+        2 => c"Sunlight",
+        3 => c"Shade",
+        4 => c"Overcast",
+        5 => c"Incandescent",
+        6 => c"Fluorescent",
+        7 => c"Flash",
+        8 => c"Custom",
+        11 => c"ColorTemp",
+        10 => c"AutoLSP",
+        _ => c"Auto",
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn x3f_get_wb(x3f: *mut x3f_t) -> *mut c_char {
     let mut wb_code: u32 = 0;
     let key = c"WhiteBalance";
     if unsafe { x3f_get_camf_unsigned(x3f, key.as_ptr() as *mut c_char, &mut wb_code) } != 0 {
         // Quattro: WhiteBalance is a numeric code mapping to a string.
-        // Strings live in static storage; cast the byte literal to *mut c_char
-        // because the C signature returns *mut. Callers do not free.
-        let s: &'static [u8] = match wb_code {
-            1 => b"Auto\0",
-            2 => b"Sunlight\0",
-            3 => b"Shadow\0",
-            4 => b"Overcast\0",
-            5 => b"Incandescent\0",
-            6 => b"Florescent\0",
-            7 => b"Flash\0",
-            8 => b"Custom\0",
-            11 => b"ColorTemp\0",
-            12 => b"AutoLSP\0",
-            _ => b"Auto\0",
-        };
-        return s.as_ptr() as *mut c_char;
+        // Strings live in static storage; cast to *mut c_char because the C
+        // signature returns *mut. Callers do not free.
+        // A preset without an entry in the gains list (e.g. ColorTemp) falls back to
+        // Auto, so the file can still be developed.
+        let name = quattro_wb_name(wb_code);
+        let mut value: *mut c_char = ptr::null_mut();
+        let listed = unsafe {
+            x3f_get_camf_property(
+                x3f,
+                c"WhiteBalanceGains".as_ptr() as *mut c_char,
+                name.as_ptr() as *mut c_char,
+                &mut value,
+            )
+        } != 0;
+        return if listed { name } else { c"Auto" }.as_ptr() as *mut c_char;
     }
 
     // Fall back to the header's pre-Quattro WB string. This is a fixed-size
@@ -565,6 +581,57 @@ static _A14: unsafe extern "C" fn(*mut x3f_t, *mut u32) -> c_int = x3f_get_max_r
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every white balance code a Quattro writes into CAMF `WhiteBalance` must name an entry
+    /// of the camera's `WhiteBalanceGains` list (Shade and Fluorescent were misspelled, so
+    /// files shot with those presets had no gains and could not be developed).
+    #[test]
+    fn quattro_wb_codes_use_camf_list_names() {
+        let names: Vec<&str> = [1u32, 2, 3, 4, 5, 6, 7, 8, 10]
+            .into_iter()
+            .map(|c| quattro_wb_name(c).to_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            ["Auto", "Sunlight", "Shade", "Overcast", "Incandescent", "Fluorescent", "Flash", "Custom", "AutoLSP"]
+        );
+        assert_eq!(quattro_wb_name(0).to_str().unwrap(), "Auto");
+    }
+
+    /// A real Quattro file whose decoded `WhiteBalance` code is rewritten in memory to each
+    /// preset: the as-shot white balance must resolve to gains (needs `X3F_QUATTRO_FILE`).
+    #[test]
+    fn quattro_file_resolves_gains_for_every_preset() {
+        let Some(path) = std::env::var_os("X3F_QUATTRO_FILE") else {
+            return;
+        };
+        let path = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+        unsafe {
+            let file = libc::fopen(path.as_ptr(), c"rb".as_ptr());
+            assert!(!file.is_null());
+            let x3f = x3f_new_from_file(file.cast());
+            assert!(!x3f.is_null());
+            for section in [x3f_get_camf(x3f), x3f_get_prop(x3f)] {
+                if !section.is_null() {
+                    assert_eq!(x3f_load_data(x3f, section), x3f_return_e_X3F_OK);
+                }
+            }
+            let entry = camf_find_by_name(x3f, c"WhiteBalance".as_ptr()).expect("Quattro file");
+            let code = entry.matrix_decoded as *mut u32;
+            for c in [1u32, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12] {
+                *code = c;
+                let wb = x3f_get_wb(x3f);
+                let mut gain = [0.0f64; 3];
+                assert_eq!(
+                    crate::x3f_get_gain(x3f, wb, gain.as_mut_ptr()),
+                    1,
+                    "code {c} ({:?})",
+                    CStr::from_ptr(wb)
+                );
+                assert!(gain.iter().all(|g| g.is_finite() && *g > 0.0), "code {c}: {gain:?}");
+            }
+        }
+    }
 
     #[test]
     fn matrix_accessor_rejects_invalid_storage_and_dimensions() {

@@ -483,3 +483,13 @@ leaves the step out):
   `spp_denoise/gpu.rs`: the kernels run after `osf_ratio` only when the gains differ from `[1, 1]`.
   `process/spp.rs` (`denoise_dispatch`): non-neutral gains no longer force the CPU path. With `[1, 1]` every result is
   bit-identical to before (the steps are not queued).
+
+
+## Quattro white balance names (November 2026)
+
+- 2026-11-25 (graineo): `meta.rs`, `x3f_get_wb`: the CAMF `WhiteBalance` codes 3 and 6 mapped to "Shadow" and
+  "Florescent", which are not keys of the `WhiteBalanceGains` / `WhiteBalanceColorCorrections` lists ("Shade",
+  "Fluorescent"); Quattro files shot with these presets had no gains and failed to develop. New `quattro_wb_name`
+  with the list spelling; a code whose name is not in `WhiteBalanceGains` (e.g. ColorTemp) falls back to "Auto".
+  Tests `quattro_wb_codes_use_camf_list_names`, `quattro_file_resolves_gains_for_every_preset` (`X3F_QUATTRO_FILE`).
+- 2026-11-25 (graineo): `meta.rs`, `quattro_wb_name`: code 10 is AutoLSP (code 12 and above fall back to Auto), matching the camera's own numbering.

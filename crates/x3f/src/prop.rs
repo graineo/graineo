@@ -60,7 +60,7 @@ pub fn quattro_wb_name(code: u32) -> &'static str {
         7 => "Flash",
         8 => "Custom",
         11 => "ColorTemp",
-        12 => "AutoLSP",
+        10 => "AutoLSP",
         _ => "Auto",
     }
 }

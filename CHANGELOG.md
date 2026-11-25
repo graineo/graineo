@@ -514,3 +514,7 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 - **Unknown cameras.** A raw file from a camera that is not supported yet now says so, names the model and suggests converting the file to DNG, instead of “cannot open”. On the Mac, graineo first tries the macOS raw engine. Damaged files are reported as damaged.
 - Small fixes: tooltips of tiles no longer cover their names, help cards have even margins, the noise brake row keeps a fixed place, the history shows temperature in Kelvin.
 
+
+## 1.5.3 · Fixes
+
+- **Sigma Quattro: Shade and Fluorescent white balance.** X3F files from the dp Quattro, sd Quattro and sd Quattro H shot with the Shade or Fluorescent preset can be opened and developed again (thanks for the report on the DPReview forum). A preset the file has no data for now falls back to Auto instead of failing. The “Auto (Natural)” preset of the sd Quattro H is now recognised correctly.
