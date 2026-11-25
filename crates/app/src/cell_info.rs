@@ -148,10 +148,10 @@ pub fn text(field: Field, z: &Row, name: &str, lang: Language) -> Option<String>
     }
 }
 
-/// A lens name as shown: the stored suffix " (fest)" of a built-in lens (see `library::exif::fixed_lens`)
+/// A lens name as shown: the stored suffix " (fixed)" of a built-in lens (see `library::exif::fixed_lens`)
 /// in the UI language. The stored value stays as it is, so search and the lens filter keep matching.
 pub(crate) fn lens_label(lens: &str) -> String {
-    match lens.strip_suffix(" (fest)") {
+    match lens.strip_suffix(" (fixed)") {
         Some(name) => format!("{name} ({})", crate::tr("fest")),
         None => lens.to_string(),
     }
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(capture_text("2024-05-11T14:03:22", Language::Fr).as_deref(), Some("11/05/2024 14:03"));
         assert_eq!(capture_text("2024-05-11", Language::Ja).as_deref(), Some("2024/05/11"));
         assert_eq!(lens_label("SIGMA 30mm f/2.8"), "SIGMA 30mm f/2.8");
-        assert!(lens_label("SIGMA 30mm f/2.8 (fest)").starts_with("SIGMA 30mm f/2.8 ("));
+        assert!(lens_label("SIGMA 30mm f/2.8 (fixed)").starts_with("SIGMA 30mm f/2.8 ("));
         assert_eq!(text(Field::Date, &z, "", Language::En).as_deref(), Some("2024-05-11 14:03"));
         assert_eq!(text(Field::Date, &Row { capture: Some("2024-05-11".into()), ..Row::default() }, "", Language::De).as_deref(), Some("11.05.2024"));
         assert_eq!(text(Field::Pixels, &z, "", Language::De).as_deref(), Some("6240 × 4160 · 26 MP"));

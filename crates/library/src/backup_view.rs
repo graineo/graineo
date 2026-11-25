@@ -133,6 +133,12 @@ pub fn restart_env(backup: Option<&Path>) -> Vec<(String, Option<String>)> {
 /// the same time.
 pub fn wait_for_parent() {
     let Some(pid) = std::env::var("GRAINEO_WAIT_PID").ok().and_then(|p| p.parse::<i32>().ok()) else { return };
+    #[cfg(windows)]
+    {
+        crate::update::wait_for_process(pid as u32, std::time::Duration::from_secs(15));
+        return;
+    }
+    #[allow(unreachable_code)]
     let t = std::time::Instant::now();
     while t.elapsed().as_secs() < 15 {
         #[cfg(unix)]
@@ -142,7 +148,7 @@ pub fn wait_for_parent() {
                 return;
             }
         }
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = pid;
             if t.elapsed().as_millis() > 1500 {

@@ -585,4 +585,19 @@ mod tests {
         assert_eq!(count(&db, "SELECT count(*) FROM keyword WHERE name IN ('A', 'B', 'AC', 'DC', 'Anna', 'Berlin')"), 0, "nothing split");
         std::fs::remove_dir_all(d).unwrap();
     }
+
+    /// A virtual copy belongs to the import and the collections of its original (forum report 1.5.5: a copy made in
+    /// a collection or in "Zuletzt importiert" was not in that view, Develop opened the next real photo instead).
+    #[test]
+    fn a_virtual_copy_joins_the_import_and_collections_of_its_original() {
+        let (d, db) = library();
+        let run = db.new_run("import", "").unwrap();
+        db.conn.execute("UPDATE image SET run = ?1", [run]).unwrap();
+        let c = db.create_collection("Auswahl").unwrap();
+        db.add_to_collection(c, &[20, 21]).unwrap();
+        let copy = crate::sync::create_copy(&db, 20, None).unwrap();
+        assert_eq!(count(&db, &format!("SELECT run FROM image WHERE id = {copy}")), run);
+        assert_eq!(db.images_of_collection(c).unwrap(), vec![20, copy, 21], "beside its original");
+        std::fs::remove_dir_all(d).unwrap();
+    }
 }

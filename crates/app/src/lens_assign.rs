@@ -1,4 +1,4 @@
-//! Assigning an own lens profile: the field "OBJEKTIVPROFIL" in the lens corrections, the dialog "Objektiv zuweisen"
+//! Assigning a lens profile ("Ändern …" in the lens corrections opens it): the dialog "Objektiv zuweisen"
 //! (this photo, the selection, or a default for all photos of a camera without lens name / with this lens name)
 //! and the requests that the other lens windows (wizard, window OBJEKTIVE) hand to the main window.
 //!
@@ -11,7 +11,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 
 use eframe::egui;
-use lensprof::assign::{self, Rule, Source};
+use lensprof::assign::{self, Rule};
 use lensprof::{OwnProfile, ProfileRef};
 
 use crate::dialog::{self, Answer, Buttons};
@@ -134,6 +134,36 @@ struct Dialog {
     candidates: Vec<Arc<OwnProfile>>,
     matching: Option<usize>,
     rx: Receiver<usize>,
+    /// lensfun lenses and Adobe profiles to choose from (filled by a helper thread)
+    lists: Option<Lists>,
+    lists_rx: Receiver<Lists>,
+}
+
+/// Profiles of the databases for the manual choice.
+struct Lists {
+    /// lensfun: (name, mounts, fits the camera without an adapter)
+    lensfun: Vec<(String, String, bool)>,
+    /// Adobe: (file name, label)
+    lcp: Vec<(String, String)>,
+}
+
+fn lists_for(maker: &str, model: &str) -> Lists {
+    let db = raw::lensfun::Database::active();
+    let cam = db.camera(maker, model);
+    let lensfun = db.lens_names().into_iter().map(|(n, m)| (n, m.join(", "), db.mount_fits(cam, &m))).collect();
+    let extra = library::settings::value("lcpFolder").as_str().map(std::path::PathBuf::from);
+    let mut lcp: Vec<(String, String)> = raw::lcp::index(extra.as_deref())
+        .iter()
+        .filter_map(|h| {
+            let f = h.path.file_name()?.to_str()?.to_string();
+            let lens = if h.lens_pretty.is_empty() { h.lens.clone() } else { h.lens_pretty.clone() };
+            let lens = if lens.is_empty() { h.model.clone() } else { lens };
+            Some((f, format!("{lens} · {} {}", h.make, h.model).trim().to_string()))
+        })
+        .collect();
+    lcp.sort_by_key(|(_, l)| l.to_lowercase());
+    lcp.dedup_by(|a, b| a.0 == b.0);
+    Lists { lensfun, lcp }
 }
 
 /// What the dialog decided; the main window carries it out.
@@ -155,8 +185,18 @@ pub fn open(ctx: &egui::Context, ident: Identity, current: Option<&str>, selecte
             c.request_repaint();
         })
         .ok();
+    let (ltx, lists_rx) = channel();
+    let (maker, model) = (ident.maker.clone(), ident.model.clone());
+    let c = ctx.clone();
+    std::thread::Builder::new()
+        .name("lens-profile-lists".into())
+        .spawn(move || {
+            let _ = ltx.send(lists_for(&maker, &model));
+            c.request_repaint();
+        })
+        .ok();
     let candidates = assign::candidates(&ident.maker, &ident.model);
-    DIALOG.with(|d| *d.borrow_mut() = Some(Dialog { choice: Choice::of_pin(current), scope: Scope::Photo, selected, candidates, ident, matching: None, rx }));
+    DIALOG.with(|d| *d.borrow_mut() = Some(Dialog { choice: Choice::of_pin(current), scope: Scope::Photo, selected, candidates, ident, matching: None, rx, lists: None, lists_rx }));
 }
 
 fn level_text(p: &OwnProfile) -> String {
@@ -169,6 +209,12 @@ fn level_text(p: &OwnProfile) -> String {
 
 /// Name and state of an assignment for display.
 pub fn profile_label(r: &str) -> String {
+    if let Some(n) = r.strip_prefix(raw::lens::PIN_LENSFUN) {
+        return format!("{n} · lensfun");
+    }
+    if let Some(n) = r.strip_prefix(raw::lens::PIN_LCP) {
+        return format!("{n} · Adobe");
+    }
     match ProfileRef::parse(r).and_then(|p| lensprof::store::load(&p)) {
         Some(p) => format!("{} · v{}", p.name, p.version),
         None => crate::tr("Profil fehlt").to_string(),
@@ -183,7 +229,11 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
         if let Ok(n) = d.rx.try_recv() {
             d.matching = Some(n);
         }
+        if let Ok(l) = d.lists_rx.try_recv() {
+            d.lists = Some(l);
+        }
         let mut open_wizard = false;
+        let mut open_room = false;
         let has_selection = d.selected > 1;
         let title = crate::tr("Objektiv zuweisen");
         let answer = dialog::show(
@@ -208,9 +258,17 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
                 if d.candidates.is_empty() {
                     ui.label(egui::RichText::new(crate::tr("Noch kein eigenes Profil für diese Kamera")).small().color(lr::TEXT_DIM()));
                 }
-                if ui.button(crate::tr("Neues Objektiv vermessen …")).clicked() {
-                    open_wizard = true;
-                }
+                ui.horizontal(|ui| {
+                    if ui.button(crate::tr("Neues Objektiv vermessen …")).clicked() {
+                        open_wizard = true;
+                    }
+                    // the window OBJEKTIVE (own profiles, measuring assistant); the panel has no button for it
+                    if ui.button(crate::tr("Objektive verwalten …")).clicked() {
+                        open_room = true;
+                    }
+                });
+                ui.add_space(4.0);
+                database_choice(ui, d);
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new(crate::tr("GILT FÜR")).small().color(lr::TEXT_DIM()));
                 ui.radio_value(&mut d.scope, Scope::Photo, crate::tr("dieses Foto"));
@@ -235,6 +293,9 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
         if open_wizard {
             request(Request::Wizard);
         }
+        if open_room {
+            request(Request::Room);
+        }
         match answer {
             Answer::Primary => {
                 let a = Applied { ident: d.ident.clone(), choice: d.choice.clone(), scope: d.scope };
@@ -250,6 +311,63 @@ pub fn ui(ctx: &egui::Context) -> Option<Applied> {
     })
 }
 
+/// The two choices from the databases: a lensfun lens (any mount, also adapted) or an Adobe profile (LCP).
+fn database_choice(ui: &mut egui::Ui, d: &mut Dialog) {
+    let Some(lists) = &d.lists else {
+        ui.label(egui::RichText::new(crate::tr("Profile werden gelesen …")).small().color(lr::TEXT_DIM()));
+        return;
+    };
+    let current = match &d.choice {
+        Choice::Profile(p) => p.clone(),
+        _ => String::new(),
+    };
+    let pin_lf = current.strip_prefix(raw::lens::PIN_LENSFUN).map(str::to_string);
+    let pin_lcp = current.strip_prefix(raw::lens::PIN_LCP).map(str::to_string);
+    let mut picked: Option<String> = None;
+    ui.horizontal(|ui| {
+        ui.add_sized([70.0, 18.0], egui::Label::new(egui::RichText::new("lensfun").small().color(lr::TEXT_DIM())));
+        let shown = pin_lf.clone().unwrap_or_else(|| "–".into());
+        egui::ComboBox::from_id_salt("lens-assign-lensfun").selected_text(shown).width(ui.available_width()).height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+            lr::list_menu(ui, "lens-assign-lensfun", lists.lensfun.len(), |ui, f| {
+                for (n, mounts, fits) in lists.lensfun.iter().filter(|(n, m, _)| f.shows(n) || f.shows(m)) {
+                    let text = if *fits { n.clone() } else { format!("{n}    ({mounts})") };
+                    if ui.selectable_label(pin_lf.as_deref() == Some(n), text).clicked() || f.take_enter() {
+                        picked = Some(format!("{}{n}", raw::lens::PIN_LENSFUN));
+                        ui.close();
+                    }
+                }
+            });
+        });
+    });
+    ui.horizontal(|ui| {
+        ui.add_sized([70.0, 18.0], egui::Label::new(egui::RichText::new("Adobe").small().color(lr::TEXT_DIM())));
+        let shown = pin_lcp.as_ref().map(|f| lists.lcp.iter().find(|(x, _)| x == f).map_or(f.clone(), |(_, l)| l.clone())).unwrap_or_else(|| "–".into());
+        ui.add_enabled_ui(!lists.lcp.is_empty(), |ui| {
+            egui::ComboBox::from_id_salt("lens-assign-lcp").selected_text(shown).width(ui.available_width()).height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+                lr::list_menu(ui, "lens-assign-lcp", lists.lcp.len(), |ui, f| {
+                    for (file, label) in lists.lcp.iter().filter(|(_, l)| f.shows(l)) {
+                        if ui.selectable_label(pin_lcp.as_deref() == Some(file), label).clicked() || f.take_enter() {
+                            picked = Some(format!("{}{file}", raw::lens::PIN_LCP));
+                            ui.close();
+                        }
+                    }
+                });
+            });
+        });
+    });
+    if let Some(p) = picked {
+        d.choice = Choice::Profile(p);
+    }
+    if lists.lcp.is_empty() {
+        ui.label(egui::RichText::new(crate::tr("Keine Adobe-Profile installiert")).small().color(lr::TEXT_DIM()));
+    }
+    if let Some(n) = &pin_lf {
+        if lists.lensfun.iter().any(|(m, _, fits)| m == n && !fits) {
+            dialog::hint(ui, "Anderes Bajonett: Das Profil gilt für das Objektiv am Originalbajonett. Mit Adapter stimmen Verzeichnung und Farbquerfehler meist, die Vignettierung nur ohne zusätzliche Abschattung durch den Adapter.");
+        }
+    }
+}
+
 /// Set the default (rule) for the camera and lens of `ident`; `Automatic` removes it.
 pub fn set_rule(ident: &Identity, choice: &Choice) -> std::io::Result<()> {
     match choice {
@@ -259,45 +377,3 @@ pub fn set_rule(ident: &Identity, choice: &Choice) -> std::io::Result<()> {
     }
 }
 
-/// Text of the state for the field in the lens corrections.
-fn state_text(ident: &Identity, pinned: Option<&str>) -> String {
-    match assign::source(&ident.maker, &ident.model, ident.lens.as_deref(), pinned) {
-        Source::Automatic => crate::tr("Automatisch (nach Objektivname)").to_string(),
-        Source::None => crate::tr("Kein eigenes Profil").to_string(),
-        Source::Photo(r) => format!("{} · {}", profile_label(&r), crate::tr("zugewiesen")),
-        Source::Rule(r) if r.is_empty() => format!("{} · {}", crate::tr("Kein eigenes Profil"), crate::tr("Vorgabe")),
-        Source::Rule(r) => format!("{} · {}", profile_label(&r), crate::tr("Vorgabe")),
-    }
-}
-
-/// Field "OBJEKTIVPROFIL" (two fixed rows and the buttons), part of the lens corrections.
-pub fn section(ui: &mut egui::Ui, s: &mut develop::Settings, ident: &Identity) {
-    if lr::group_label(ui, "Objektivprofil") {
-        s.raw.lens_profile = None;
-    }
-    let state = state_text(ident, s.raw.lens_profile.as_deref());
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(crate::tr("Profil")).small().color(lr::TEXT_DIM()));
-        ui.add(egui::Label::new(egui::RichText::new(state).small().color(lr::TEXT())).truncate());
-    });
-    // fixed second row: lens of the photo, or the note for Sigma
-    let note = if ident.foveon {
-        crate::tr("Sigma-X3F: Wirkung folgt").to_string()
-    } else {
-        ident.lens.as_deref().map(crate::cell_info::lens_label).unwrap_or_else(|| crate::tr("ohne Objektivangabe").to_string())
-    };
-    ui.label(egui::RichText::new(note).small().color(lr::TEXT_DIM()));
-    ui.horizontal(|ui| {
-        let r = ui.button(crate::tr("Zuweisen …"));
-        lr::hover_tip(ui, &r, "Eigenes Profil für dieses Foto, die Auswahl oder alle Fotos dieses Objektivs wählen");
-        if r.clicked() {
-            request(Request::Assign);
-        }
-        let r = ui.button(crate::tr("Objektive …"));
-        lr::hover_tip(ui, &r, "Fenster Objektive: Profile verwalten und neue Objektive vermessen");
-        if r.clicked() {
-            request(Request::Room);
-        }
-    });
-    ui.add_space(4.0);
-}

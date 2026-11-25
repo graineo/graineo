@@ -294,12 +294,20 @@ fn apply_on_import(ui: &mut egui::Ui, imp: &mut Import, collections: &[(i64, Str
             Choice::New => crate::tr("Neue Sammlung …").to_string(),
             Choice::Existing(id) => collections.iter().find(|s| s.0 == id).map(|s| s.1.clone()).unwrap_or_default(),
         };
-        egui::ComboBox::from_id_salt("imp-sammlung").selected_text(name).width(field_w).show_ui(ui, |ui| {
-            ui.selectable_value(&mut imp.collection, Choice::Nothing, crate::tr("Keine"));
-            ui.selectable_value(&mut imp.collection, Choice::New, crate::tr("Neue Sammlung …"));
-            for (id, n) in collections {
-                ui.selectable_value(&mut imp.collection, Choice::Existing(*id), n);
-            }
+        egui::ComboBox::from_id_salt("imp-sammlung").selected_text(name).width(field_w).height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+            crate::lr::list_menu(ui, "imp-sammlung", collections.len() + 2, |ui, f| {
+                if ui.selectable_value(&mut imp.collection, Choice::Nothing, crate::tr("Keine")).clicked()
+                    || ui.selectable_value(&mut imp.collection, Choice::New, crate::tr("Neue Sammlung …")).clicked()
+                {
+                    ui.close();
+                }
+                for (id, n) in collections.iter().filter(|(_, n)| f.shows(n)) {
+                    if ui.selectable_value(&mut imp.collection, Choice::Existing(*id), n).clicked() || f.take_enter() {
+                        imp.collection = Choice::Existing(*id);
+                        ui.close();
+                    }
+                }
+            });
         });
     });
     // the name field and the set always stay in place (dimmed unless a new collection is chosen)

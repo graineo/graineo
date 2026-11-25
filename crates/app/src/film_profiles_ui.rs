@@ -183,7 +183,7 @@ pub fn frame(ctx: &egui::Context) -> bool {
 
 pub fn settings(ui: &mut egui::Ui) {
     let s = snapshot(ui.ctx());
-    lr::group_label(ui, "Looks");
+    lr::subheading(ui, "Looks");
     ui.add_space(4.0);
     ui.add_enabled_ui(!s.running, |ui| {
         let mut discover = s.options.discover;

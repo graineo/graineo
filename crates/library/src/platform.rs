@@ -430,6 +430,63 @@ pub fn background_run<R: Send>(f: impl FnOnce() -> R + Send) -> R {
     TURN.run(background_pool(), f)
 }
 
+/// When the operating system last started, in seconds since 1970 (`None` if unknown). Tells a restart of the whole
+/// computer (blue screen, power cut, hard reset) apart from a program that merely ended.
+pub fn boot_time() -> Option<u64> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut tv: libc::timeval = unsafe { std::mem::zeroed() };
+        let mut len = std::mem::size_of::<libc::timeval>();
+        let mut mib = [libc::CTL_KERN, libc::KERN_BOOTTIME];
+        // SAFETY: sysctl writes at most `len` bytes into `tv`
+        let r = unsafe { libc::sysctl(mib.as_mut_ptr(), 2, (&mut tv as *mut libc::timeval).cast(), &mut len, std::ptr::null_mut(), 0) };
+        (r == 0 && tv.tv_sec > 0).then_some(tv.tv_sec as u64)
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+        // milliseconds since the start, sleep and hibernation included (a "shut down" with fast startup keeps counting,
+        // a restart after a blue screen starts at zero)
+        let up = unsafe { GetTickCount64() } / 1000;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
+        now.checked_sub(up)
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let s = std::fs::read_to_string("/proc/stat").ok()?;
+        s.lines().find_map(|l| l.strip_prefix("btime ")).and_then(|v| v.trim().parse().ok())
+    }
+    #[cfg(not(any(unix, windows)))]
+    None
+}
+
+/// Windows: when the system was last shut down or restarted in order (registry value `ShutdownTime`, written by the
+/// orderly shutdown, not after a blue screen or power cut), in seconds since 1970. `None` elsewhere or if unknown.
+pub fn last_clean_shutdown() -> Option<u64> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_LOCAL_MACHINE, RRF_RT_REG_BINARY};
+        let key: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\Windows\0".encode_utf16().collect();
+        let value: Vec<u16> = "ShutdownTime\0".encode_utf16().collect();
+        let mut data = [0u8; 8];
+        let mut len = data.len() as u32;
+        // SAFETY: reads at most `len` bytes into `data`; key and value names are NUL-terminated
+        let r = unsafe { RegGetValueW(HKEY_LOCAL_MACHINE, key.as_ptr(), value.as_ptr(), RRF_RT_REG_BINARY, std::ptr::null_mut(), data.as_mut_ptr().cast(), &mut len) };
+        if r != 0 || len != 8 {
+            return None;
+        }
+        filetime_to_unix(u64::from_le_bytes(data))
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+/// Windows FILETIME (100 ns since 1601) to seconds since 1970.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn filetime_to_unix(ft: u64) -> Option<u64> {
+    (ft / 10_000_000).checked_sub(11_644_473_600)
+}
+
 #[cfg(windows)]
 fn wide(p: &Path) -> Vec<u16> {
     use std::os::windows::ffi::OsStrExt;
@@ -439,6 +496,20 @@ fn wide(p: &Path) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The start of the system lies in the past (and after 2000); the shutdown time of Windows converts from FILETIME.
+    #[test]
+    fn boot_time_and_filetime() {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        if cfg!(any(unix, windows)) {
+            let b = boot_time().expect("boot time");
+            assert!(b > 946_684_800 && b <= now, "{b}");
+        }
+        assert_eq!(filetime_to_unix(116_444_736_000_000_000), Some(0));
+        // 2026-11-25 00:00:00 UTC
+        assert_eq!(filetime_to_unix(116_444_736_000_000_000 + 1_795_564_800 * 10_000_000), Some(1_795_564_800));
+        assert_eq!(filetime_to_unix(5), None);
+    }
 
     /// Tests lift the background pool to utility and back; its workers follow at once.
     #[cfg(target_os = "macos")]

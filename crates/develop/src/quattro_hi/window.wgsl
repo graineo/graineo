@@ -5,7 +5,8 @@ struct Job {
     width: u32,
     height: u32,
     radius: u32,
-    spare: u32,
+    // first row of this job: the image is computed in bands of rows (separate submits)
+    first_row: u32,
 }
 
 @group(0) @binding(0) var<storage, read> job: Job;
@@ -26,7 +27,8 @@ fn cell(x: i32, y: i32) -> vec3<f32> {
 // Range filter: weighted mean of the window, the weight looked up by the squared distance to the centre in steps
 // of the weight curve.
 @compute @workgroup_size(16, 16)
-fn range_mean(@builtin(global_invocation_id) id: vec3<u32>) {
+fn range_mean(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let id = vec3<u32>(gid.x, gid.y + job.first_row, gid.z);
     if (id.x >= job.width || id.y >= job.height) {
         return;
     }

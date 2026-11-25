@@ -310,6 +310,10 @@ impl Context {
         }));
         let lost = failure.clone();
         device.set_device_lost_callback(move |reason, message| {
+            // graineo: a lost device (driver reset, watchdog) is reported to the application
+            if reason != wgpu::DeviceLostReason::Destroyed {
+                crate::process::GPU_DEVICE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             *lost.lock().unwrap_or_else(|e| e.into_inner()) =
                 Some(format!("device lost ({reason:?}): {message}"));
         });
@@ -1230,6 +1234,7 @@ pub(crate) fn denoise_image(
 
     let mut stage_times: Vec<(&'static str, f64)> = Vec::new();
     let t_tiles = Instant::now();
+    let mut longest_batch = 0f64;
     let mut encoder = device.create_command_encoder(&Default::default());
     if !pre_steps.is_empty() {
         {
@@ -1241,12 +1246,13 @@ pub(crate) fn denoise_image(
                 pass.dispatch_workgroups(groups[0], groups[1], groups[2]);
             }
         }
+        // graineo: the whole-image prefilter in its own submit (see the batches below)
+        queue.submit([std::mem::replace(
+            &mut encoder,
+            device.create_command_encoder(&Default::default()),
+        )
+        .finish()]);
         if timing {
-            queue.submit([std::mem::replace(
-                &mut encoder,
-                device.create_command_encoder(&Default::default()),
-            )
-            .finish()]);
             wait("prefilter")?;
             eprintln!(
                 "SPP GPU   whole-image prefilter: {:.1} ms",
@@ -1338,8 +1344,11 @@ pub(crate) fn denoise_image(
             }
             read.unmap();
         } else {
-            // All batches in one command buffer; the parameters are at a separate offset
-            // per batch (group 0), so a single submit suffices.
+            // graineo: one command buffer per batch (parameters at a separate offset per
+            // batch, group 0). A single submit for all tiles took ≈ 150 ms on an M1 Pro for a
+            // Merrill; on a slow integrated GPU that can outlast the driver's watchdog
+            // (Windows TDR ≈ 2 s) and lose the device. Separate submits keep each job short;
+            // the queue runs them in order, so the result is the same.
             {
                 let mut pass = encoder.begin_compute_pass(&Default::default());
                 pass.set_bind_group(0, group0, &[]);
@@ -1358,9 +1367,20 @@ pub(crate) fn denoise_image(
                     count as u64 * tile_bytes,
                 );
             }
+            queue.submit([std::mem::replace(
+                &mut encoder,
+                device.create_command_encoder(&Default::default()),
+            )
+            .finish()]);
+            if timing {
+                let t_batch = Instant::now();
+                wait("batch")?;
+                longest_batch = longest_batch.max(t_batch.elapsed().as_secs_f64());
+            }
         }
     }
     if timing {
+        eprintln!("SPP GPU   longest batch submit: {:.1} ms", longest_batch * 1e3);
         queue.submit([std::mem::replace(
             &mut encoder,
             device.create_command_encoder(&Default::default()),

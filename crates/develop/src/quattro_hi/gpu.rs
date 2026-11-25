@@ -170,7 +170,11 @@ impl Card {
         let errors_before = pools::gpu_errors();
         let storage = wgpu::BufferUsages::STORAGE;
         let filled = |data: &[u8]| self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: None, contents: data, usage: storage });
-        let job = filled(bytemuck::cast_slice(&[w as u32, h as u32, radius as u32, 0u32]));
+        let job = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[w as u32, h as u32, radius as u32, 0u32]),
+            usage: storage | wgpu::BufferUsages::COPY_DST,
+        });
         let (image_buffer, factor_buffer, curve_buffer) = (filled(bytemuck::cast_slice(image)), filled(bytemuck::cast_slice(factors)), filled(bytemuck::cast_slice(curve)));
         let result = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: bytes, usage: storage | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
         let readback = self.device.create_buffer(&wgpu::BufferDescriptor { label: None, size: bytes, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
@@ -178,15 +182,33 @@ impl Card {
         let entries: Vec<wgpu::BindGroupEntry> = buffers.iter().enumerate().map(|(i, b)| wgpu::BindGroupEntry { binding: i as u32, resource: b.as_entire_binding() }).collect();
         let bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: None, layout: &self.layout, entries: &entries });
         let scope = self.device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        {
-            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None, timestamp_writes: None });
-            pass.set_bind_group(0, &bind, &[]);
-            pass.set_pipeline(&self.range_mean);
-            pass.dispatch_workgroups((w as u32).div_ceil(GROUP), (h as u32).div_ceil(GROUP), 1);
+        // bands of rows, one submit each: no single job may outlast the driver's watchdog on a slow card
+        let band = range_band_rows(w, radius);
+        let timed = std::env::var_os("GRAINEO_QUATTRO_TIMING").is_some();
+        let mut longest = 0f64;
+        for first in (0..h).step_by(band) {
+            let rows = band.min(h - first);
+            self.queue.write_buffer(&job, 12, bytemuck::cast_slice(&[first as u32]));
+            let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None, timestamp_writes: None });
+                pass.set_bind_group(0, &bind, &[]);
+                pass.set_pipeline(&self.range_mean);
+                pass.dispatch_workgroups((w as u32).div_ceil(GROUP), (rows as u32).div_ceil(GROUP), 1);
+            }
+            if first + rows >= h {
+                encoder.copy_buffer_to_buffer(&result, 0, &readback, 0, bytes);
+            }
+            self.queue.submit([encoder.finish()]);
+            if timed {
+                let started = std::time::Instant::now();
+                let _ = self.device.poll(wgpu::PollType::Wait { submission_index: None, timeout: Some(PATIENCE) });
+                longest = longest.max(started.elapsed().as_secs_f64());
+            }
         }
-        encoder.copy_buffer_to_buffer(&result, 0, &readback, 0, bytes);
-        self.queue.submit([encoder.finish()]);
+        if timed {
+            eprintln!("quattro timing: range filter r={radius} on the card: {} bands of {band} rows, longest submit {:.1} ms", h.div_ceil(band), longest * 1e3);
+        }
         let slice = readback.slice(..);
         self.wait_for(&slice, scope, errors_before)?;
         let view = slice.get_mapped_range().ok()?;
@@ -216,6 +238,17 @@ fn fits_memory(pixels: usize) -> bool {
 
 fn fits(pixels: usize, memory: Option<u64>) -> bool {
     memory.is_none_or(|m| (pixels as u64).saturating_mul(PEAK_BYTES_PER_PIXEL) as f64 <= m as f64 * PEAK_MEMORY_SHARE)
+}
+
+/// Window taps (cells × window area) the range filter computes per job: ≈ 20 ms on an M1 Pro, so even a card ten to
+/// fifty times slower stays well inside the driver's watchdog (Windows TDR ≈ 2 s). The bands are separate submits.
+const RANGE_TAPS_PER_JOB: usize = 1 << 27;
+
+/// Rows of the grid per range-filter job for a grid `w` wide and a window of `radius`: a multiple of [`GROUP`].
+fn range_band_rows(w: usize, radius: usize) -> usize {
+    let window = (2 * radius + 1) * (2 * radius + 1);
+    let rows = RANGE_TAPS_PER_JOB / (w.max(1) * window);
+    (rows / GROUP as usize).max(1) * GROUP as usize
 }
 
 /// Rows of the full-resolution image the joint filter computes per job: bounds the buffers on the card.

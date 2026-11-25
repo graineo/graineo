@@ -500,6 +500,15 @@ pub struct RawAdjust {
     /// Finished images (JPEG/HEIC/TIFF): lensfun correction on/off; None = automatic (off as long as
     /// it is not clear that the camera or phone has not already corrected)
     pub lens_image: Option<bool>,
+    /// Manual lens corrections that act with or without a profile (sliders −100 … +100, 0 = no change; not written
+    /// while 0, so the JSON of existing photos stays byte-identical): distortion (+ removes barrel distortion),
+    /// lateral color of the red and the blue channel (+ pulls the channel towards the centre).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lens_manual_distortion: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lens_manual_ca_red: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub lens_manual_ca_blue: f32,
     /// Assigned own lens profile `"id@version"`; `""` = explicitly none; `None` = automatic (rules, lens name).
     /// Not written while unset, so the JSON of existing photos stays byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -550,6 +559,9 @@ impl Default for RawAdjust {
             lens_vignette: 1.0,
             lens_ca: true,
             lens_image: None,
+            lens_manual_distortion: 0.0,
+            lens_manual_ca_red: 0.0,
+            lens_manual_ca_blue: 0.0,
             lens_profile: None,
             engine: None,
             look: String::new(),
@@ -939,6 +951,7 @@ mod lens_profile_tests {
     #[test]
     fn settings_json_unchanged_without_lens_profile() {
         assert!(!serde_json::to_string(&Settings::default()).unwrap().contains("lens_profile"));
+        assert!(!serde_json::to_string(&Settings::default()).unwrap().contains("lens_manual"));
         let s = Settings { raw: RawAdjust { lens_profile: Some("3fa9c0d1e2b4@2".into()), ..RawAdjust::default() }, ..Settings::default() };
         let t = serde_json::to_string(&s).unwrap();
         assert!(t.contains("\"lens_profile\":\"3fa9c0d1e2b4@2\""));

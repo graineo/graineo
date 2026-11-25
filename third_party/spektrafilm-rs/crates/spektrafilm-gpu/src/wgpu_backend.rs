@@ -1591,32 +1591,59 @@ impl WgpuBackend {
             pass.dispatch_workgroups((n + workgroup_size - 1) / workgroup_size, 1, 1);
         };
 
+        // graineo: one submit per step instead of one command buffer for the whole chain. A full
+        // export (4704×3136) took ≈ 1.3 s of GPU work in a single submit on an M1 Pro, which a slow
+        // integrated GPU stretches past the driver's watchdog (Windows TDR ≈ 2 s) and loses the
+        // device. The queue runs the submits in order, so the result is the same.
+        let timed = std::env::var_os("GRAINEO_FILM_GPU_TIMING").is_some();
+        let mut submits = 0usize;
+        let mut longest = (0f64, "");
+        let mut flush = |encoder: &mut wgpu::CommandEncoder, step: &'static str| {
+            let done = std::mem::replace(encoder, self.device.create_command_encoder(&Default::default()));
+            self.queue.submit(Some(done.finish()));
+            submits += 1;
+            if timed {
+                let started = std::time::Instant::now();
+                let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+                let ms = started.elapsed().as_secs_f64() * 1e3;
+                eprintln!("film chain step {step}: {ms:.1} ms");
+                if ms > longest.0 {
+                    longest = (ms, step);
+                }
+            }
+        };
         // 1. Front pass (hanatos or mallett): buf_a (rgb in) → buf_b (raw)
         dispatch(&mut encoder, &front_pipe.pipeline, &bg_front, n_pixels);
+        flush(&mut encoder, "1 Front pass hanatos");
         // 1a. Highlight boost on raw, before optical scatter.
         if let Some(hs) = highlight_state.as_ref() {
             hs.encode_passes(&mut encoder);
         }
+        flush(&mut encoder, "1a Highlight boost on");
         // 1a. Camera diffusion filter in-place on buf_b (raw), before
         //     halation — mirrors the CPU filming order.
         if let Some(ds) = diffusion_state.as_ref() {
             ds.encode_passes(&mut encoder, &buf_b);
         }
+        flush(&mut encoder, "1a Camera diffusion filter");
         // 1b. Camera lens blur on raw, after camera diffusion and before halation.
         if let Some(bs) = camera_lens_blur_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
             bs.encode_passes(&mut encoder, wg_xy, &buf_b);
         }
+        flush(&mut encoder, "1b Camera lens blur");
         // 1b. Halation in-place on buf_b. Uses buf_a as blur scratch (the
         //     input RGB image is no longer needed), buf_c / buf_d for the
         //     scatter outputs and halation accumulator.
         if let Some(hs) = halation_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
-            hs.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy);
+            hs.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy, &mut flush);
         }
+        flush(&mut encoder, "1b Halation inplace on");
         // 2. log10 in-place on buf_b: raw → log_raw (3 channels per thread).
         let (log10_pipe, log10_bg, _keepalive) = &bg_log10;
         dispatch(&mut encoder, &log10_pipe.pipeline, log10_bg, n_pixels);
+        flush(&mut encoder, "2 log10 inplace on");
         // 3. Density curve (film, normalized): buf_b (log_raw) → buf_a (density_cmy)
         dispatch(
             &mut encoder,
@@ -1624,17 +1651,20 @@ impl WgpuBackend {
             &bg_density_film,
             n_pixels,
         );
+        flush(&mut encoder, "3 Density curve film");
         // 3b. DIR couplers (operates on buf_a, mutates buf_b → log_raw_corrected,
         //     re-interps density curve back into buf_a).
         if let Some(ds) = dir_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
-            ds.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy);
+            ds.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy, &mut flush);
         }
+        flush(&mut encoder, "3b DIR couplers operates");
         // 3c. Grain (in-place on buf_a, optional post-blur via buf_b mid).
         if let Some(gs) = grain_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
-            gs.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy);
+            gs.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy, &mut flush);
         }
+        flush(&mut encoder, "3c Grain inplace on");
         // 4 + 5. Printing: print_spectral (buf_a → buf_b) then the print
         //     density curve (buf_b → buf_a). Skipped for scan_film — the
         //     scan pass consumes the film density already in buf_a.
@@ -1658,23 +1688,28 @@ impl WgpuBackend {
                 n_pixels,
             );
         }
+        flush(&mut encoder, "4 + 5 Printing printspectral bufa");
         // 6. Scan spectral: buf_a → buf_b (final rgb, clamped, NOT sRGB-encoded)
         dispatch(&mut encoder, &scan_pipe.pipeline, &bg_scan, n_pixels);
+        flush(&mut encoder, "6 Scan spectral bufa");
         // 6b. Glare (in place on buf_b).
         if let Some(gs) = glare_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
             gs.encode_passes(&mut encoder, n_pixels, workgroup_size, wg_xy);
         }
+        flush(&mut encoder, "6b Glare in place");
         // 6c. Output gamut compression (in place on buf_b) — after glare,
         //     before unsharp, mirroring the CPU scanning order.
         if let Some(gs) = gamut_state.as_ref() {
             gs.encode_passes(&mut encoder, n_pixels, workgroup_size);
         }
+        flush(&mut encoder, "6c Output gamut compression");
         // 6d. Scanner lens blur — after glare/gamut, before unsharp.
         if let Some(bs) = scanner_lens_blur_state.as_ref() {
             let wg_xy = (image.width.div_ceil(16), image.height.div_ceil(16));
             bs.encode_passes(&mut encoder, wg_xy, &buf_b);
         }
+        flush(&mut encoder, "6d Scanner lens blur");
         // 6d. Unsharp mask — last in-flight pass. Writes the final image
         //     back to buf_b so the readback path below is unchanged.
         if let Some(us) = unsharp_state.as_ref() {
@@ -1686,13 +1721,16 @@ impl WgpuBackend {
                 wg_xy,
                 &buf_b,
                 img_bytes as u64,
+                &mut flush,
             );
         }
+        flush(&mut encoder, "6d Unsharp mask last");
         // 6e. Final clamp + optional sRGB encode. This mirrors
         // Pipeline::apply_post_scan so the resident WGSL path can return
         // display-ready pixels without a CPU full-frame post pass.
         post_scan_state.encode_passes(&mut encoder, n_pixels);
 
+        flush(&mut encoder, "6e Final clamp optional");
         // Zero-copy path: when buf_b is mappable, skip the blit and map it
         // directly below. Otherwise stage it into the MAP_READ readback buffer.
         if let Some(rb) = readback.as_ref() {
@@ -1720,6 +1758,13 @@ impl WgpuBackend {
         map_target.unmap();
 
         let out = ImageBuf::from_data(image.width, image.height, f32_to_scalars(out_f32));
+        // graineo: `GRAINEO_FILM_GPU_TIMING=1` prints the wait for the chain's GPU work (measurements)
+        if std::env::var_os("GRAINEO_FILM_GPU_TIMING").is_some() {
+            eprintln!(
+                "film chain {}x{}: GPU work in {} submit(s), longest step {} {:.1} ms, wait {gpu_wait_ms:.1} ms",
+                image.width, image.height, submits + 1, longest.1, longest.0
+            );
+        }
         tracing::debug!(
             cpu_setup_ms = format!("{cpu_setup_ms:.1}"),
             gpu_wait_ms = format!("{gpu_wait_ms:.1}"),
@@ -2694,9 +2739,10 @@ impl HalationState {
         n_pixels: u32,
         workgroup_size: u32,
         wg_xy: (u32, u32),
+        flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str),
     ) {
         let _ = (&self.buf_c, &self.buf_d); // owned, just keepalive
-        let dispatch_blur = |enc: &mut wgpu::CommandEncoder, job: &BlurJob| {
+        let dispatch_blur = |enc: &mut wgpu::CommandEncoder, job: &BlurJob, flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str)| {
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("halation_blur_h"),
@@ -2706,6 +2752,7 @@ impl HalationState {
                 pass.set_bind_group(0, &job.bg_h, &[]);
                 pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
             }
+            flush(enc, "halation blur h");
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("halation_blur_v"),
@@ -2715,6 +2762,7 @@ impl HalationState {
                 pass.set_bind_group(0, &job.bg_v, &[]);
                 pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
             }
+            flush(enc, "halation blur v");
         };
         let dispatch_linear = |enc: &mut wgpu::CommandEncoder, job: &DispatchJob| {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -2730,7 +2778,7 @@ impl HalationState {
         if !self.scatter_steps.is_empty() {
             encoder.clear_buffer(&self.buf_d, 0, None);
             for (blur_job, add_job) in &self.scatter_steps {
-                dispatch_blur(encoder, blur_job);
+                dispatch_blur(encoder, blur_job, &mut *flush);
                 dispatch_linear(encoder, add_job);
             }
             dispatch_linear(encoder, &self.scatter_mix);
@@ -2741,7 +2789,7 @@ impl HalationState {
             encoder.clear_buffer(&self.buf_d, 0, None);
         }
         for (blur_job, add_job) in &self.halation_steps {
-            dispatch_blur(encoder, blur_job);
+            dispatch_blur(encoder, blur_job, &mut *flush);
             dispatch_linear(encoder, add_job);
         }
         if !self.halation_steps.is_empty() {
@@ -4277,6 +4325,7 @@ impl DirState {
         n_pixels: u32,
         workgroup_size: u32,
         wg_xy: (u32, u32),
+        flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str),
     ) {
         let dispatch_linear = |enc: &mut wgpu::CommandEncoder, job: &DispatchJob| {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -4287,7 +4336,7 @@ impl DirState {
             pass.set_bind_group(0, &job.bg, &[]);
             pass.dispatch_workgroups((n_pixels + workgroup_size - 1) / workgroup_size, 1, 1);
         };
-        let dispatch_blur = |enc: &mut wgpu::CommandEncoder, job: &BlurJob| {
+        let dispatch_blur = |enc: &mut wgpu::CommandEncoder, job: &BlurJob, flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str)| {
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("dir_blur_h"),
@@ -4297,6 +4346,7 @@ impl DirState {
                 pass.set_bind_group(0, &job.bg_h, &[]);
                 pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
             }
+            flush(enc, "DIR blur h");
             {
                 let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("dir_blur_v"),
@@ -4306,13 +4356,14 @@ impl DirState {
                 pass.set_bind_group(0, &job.bg_v, &[]);
                 pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
             }
+            flush(enc, "DIR blur v");
         };
 
         dispatch_linear(encoder, &self.matmul);
-        dispatch_blur(encoder, &self.blur_gaussian); // buf_correction → buf_gaussian
+        dispatch_blur(encoder, &self.blur_gaussian, &mut *flush); // buf_correction → buf_gaussian
         dispatch_linear(encoder, &self.lerp_clear); // buf_mix = (1-w) * buf_gaussian
         for (blur, acc) in self.tail_blurs.iter().zip(&self.tail_accumulate) {
-            dispatch_blur(encoder, blur); // buf_correction → buf_gaussian (tail component)
+            dispatch_blur(encoder, blur, &mut *flush); // buf_correction → buf_gaussian (tail component)
             dispatch_linear(encoder, acc); // buf_mix += w·amp_k * buf_gaussian
         }
         dispatch_linear(encoder, &self.subtract); // buf_b -= buf_acc
@@ -4565,6 +4616,7 @@ impl UnsharpState {
         wg_xy: (u32, u32),
         buf_b: &wgpu::Buffer,
         img_bytes: u64,
+        flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str),
     ) {
         // Blur H + V.
         {
@@ -4576,6 +4628,7 @@ impl UnsharpState {
             pass.set_bind_group(0, &self.blur.bg_h, &[]);
             pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
         }
+        flush(encoder, "unsharp blur h");
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("unsharp_blur_v"),
@@ -4585,6 +4638,7 @@ impl UnsharpState {
             pass.set_bind_group(0, &self.blur.bg_v, &[]);
             pass.dispatch_workgroups(wg_xy.0, wg_xy.1, 1);
         }
+        flush(encoder, "unsharp blur v");
         // Combine.
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -5447,6 +5501,7 @@ impl GrainState {
         n_pixels: u32,
         workgroup_size: u32,
         wg_xy: (u32, u32),
+        flush: &mut dyn FnMut(&mut wgpu::CommandEncoder, &'static str),
     ) {
         // graineo: polydisperse grain: copy, blur(density), per class noise → blur → add
         if let Some(cj) = &self.classes {
@@ -5475,12 +5530,14 @@ impl GrainState {
             if let Some(b) = &cj.mean_blur {
                 blur(encoder, b);
             }
+            flush(encoder, "grain mean");
             for (noise, b, add) in &cj.per_class {
                 run(encoder, noise);
                 if let Some(b) = b {
                     blur(encoder, b);
                 }
                 run(encoder, add);
+                flush(encoder, "grain class");
             }
             return;
         }
@@ -5494,6 +5551,7 @@ impl GrainState {
             pass.set_bind_group(0, &self.grain_dispatch.bg, &[]);
             pass.dispatch_workgroups((n_pixels + workgroup_size - 1) / workgroup_size, 1, 1);
         }
+        flush(encoder, "grain compute");
         // Optional post-blur.
         if let Some(b) = &self.blur {
             {

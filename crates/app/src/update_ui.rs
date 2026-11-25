@@ -5,11 +5,13 @@
 //!
 //! After an installation the new version confirms its start after a few seconds (only then the previous
 //! app goes to the trash); a version that did not start was put back by the relaunch helper and is
-//! reported here once.
+//! reported here once. Linux works the same way with the program folder instead of the app; if that folder cannot be
+//! replaced (system-wide installation, development build), the card only offers the release page and says why.
 //!
 //! Test hooks: `GRAINEO_UPDATE_URL` (local test server), `GRAINEO_UPDATE_AUTOINSTALL=<seconds>`
 //! (only together with `GRAINEO_UPDATE_URL`: install that many seconds after the card appeared,
-//! without a click). With `GRAINEO_DATA_DIR`, replaced apps go to `<data>/updates/trash` instead of
+//! without a click), `GRAINEO_UPDATE_TEST_DESKTOP=1` (Linux, only with `GRAINEO_UPDATE_URL`: refresh the menu entry
+//! and icon of `install.sh` also in a test run). With `GRAINEO_DATA_DIR`, replaced apps go to `<data>/updates/trash` instead of
 //! the system trash.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -25,7 +27,8 @@ use crate::lr;
 enum Phase {
     Idle,
     Checking,
-    Available { m: Manifest, since: f64 },
+    /// `manual`: why this system cannot install it by itself (shown on the card; only "open the release page")
+    Available { m: Manifest, since: f64, manual: Option<String> },
     Downloading { m: Manifest, done: u64, total: u64 },
     Installing { m: Manifest },
     /// Installed: quit, the new version starts by itself
@@ -170,7 +173,11 @@ fn spawn_check(ctx: &egui::Context, manual: bool) {
                 } else {
                     st.hidden = false;
                     st.line.clear();
-                    st.phase = Phase::Available { m, since: now };
+                    let manual = update::self_update_problem().map(|e| {
+                        crate::log(&format!("update: no automatic installation here: {e}"));
+                        reason(&e)
+                    });
+                    st.phase = Phase::Available { m, since: now, manual };
                 }
             }
             Ok(Check::UpToDate { current, latest }) => {
@@ -210,12 +217,9 @@ fn install(ctx: &egui::Context, m: Manifest) {
                     Err(e) => set(Phase::Failed { text: crate::trf!("Installiert; bitte graineo neu starten ({e}).", e = e), page: false }),
                 }
             }
-            Err(InstallError::NotWritable(p)) => {
-                crate::log(&format!("update: not writable {p}"));
-                set(Phase::Failed { text: crate::trf!("Der Ordner von graineo ist nicht beschreibbar ({p}). Lade die neue Version von der Release-Seite und ersetze die App von Hand.", p = p), page: true });
-            }
-            Err(InstallError::NotInstalled) => {
-                set(Phase::Failed { text: crate::tr("Diese graineo-Fassung ist nicht als App installiert. Lade die neue Version von der Release-Seite.").to_string(), page: true });
+            Err(e @ (InstallError::NotWritable(_) | InstallError::NotInstalled)) => {
+                crate::log(&format!("update: {e}"));
+                set(Phase::Failed { text: reason(&e), page: true });
             }
             Err(InstallError::NotMoved) => {
                 crate::log("update: app runs from a disk image or a translocated copy");
@@ -247,6 +251,18 @@ fn install(ctx: &egui::Context, m: Manifest) {
     });
 }
 
+/// Why the update cannot be installed here (program folder not writable, not an installed copy), in words.
+fn reason(e: &InstallError) -> String {
+    let linux = cfg!(target_os = "linux");
+    match e {
+        InstallError::NotWritable(p) if linux => crate::trf!("Der Programmordner von graineo ist für dich nicht beschreibbar ({p}). Lade das neue Paket von der Release-Seite und installiere es wie bisher.", p = p),
+        InstallError::NotWritable(p) => crate::trf!("Der Ordner von graineo ist nicht beschreibbar ({p}). Lade die neue Version von der Release-Seite und ersetze die App von Hand.", p = p),
+        InstallError::NotInstalled if linux => crate::tr("Diese graineo-Fassung stammt nicht aus dem Linux-Paket (install.sh oder entpackter Ordner). Lade die neue Version von der Release-Seite.").to_string(),
+        InstallError::NotInstalled => crate::tr("Diese graineo-Fassung ist nicht als App installiert. Lade die neue Version von der Release-Seite.").to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// Download, verify, replace. Returns what to start after quitting.
 fn run_install(ctx: &egui::Context, m: &Manifest) -> Result<update::Installed, InstallError> {
     let key = update::asset_key().ok_or(InstallError::NotInstalled)?;
@@ -265,7 +281,15 @@ fn run_install(ctx: &egui::Context, m: &Manifest) -> Result<update::Installed, I
         update::writable(parent)?;
         update::check_space(parent, size.saturating_mul(update::UNPACKED_FACTOR))?;
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    let dir = update::program_dir().ok_or(InstallError::NotInstalled)?;
+    #[cfg(target_os = "linux")]
+    {
+        update::linux_location(&dir)?;
+        let parent = dir.parent().ok_or(InstallError::NotInstalled)?;
+        update::check_space(parent, size.saturating_mul(update::UNPACKED_FACTOR))?;
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let dir = std::env::current_exe().ok().and_then(|e| e.parent().map(std::path::Path::to_path_buf)).ok_or(InstallError::NotInstalled)?;
         update::writable(&dir)?;
@@ -289,7 +313,17 @@ fn run_install(ctx: &egui::Context, m: &Manifest) -> Result<update::Installed, I
             let _ = std::fs::remove_file(&zip); // own download
         })
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        // menu entry and icon of install.sh; test runs with their own data folder leave the real ones alone, except
+        // with GRAINEO_UPDATE_TEST_DESKTOP=1 and a test server (throwaway test account, e.g. a container)
+        let test_desktop = crate::env::var("GRAINEO_UPDATE_TEST_DESKTOP").is_ok_and(|v| v == "1") && update::source_url().1;
+        let data = if crate::env::var_os("GRAINEO_DATA_DIR").is_some() && !test_desktop { None } else { sysdirs::app_data_dir() };
+        update::install_linux(&zip, &dir, key, &m.version, &update::current_version(), data.as_deref()).inspect_err(|_| {
+            let _ = std::fs::remove_file(&zip); // own download
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let exe = std::env::current_exe().map_err(|_| InstallError::NotInstalled)?;
         update::install_windows(&zip, &exe).inspect_err(|_| {
@@ -304,6 +338,8 @@ fn friendly(e: &str) -> String {
         crate::tr("Download abgebrochen oder unvollständig – prüfe die Internetverbindung und versuche es erneut").to_string()
     } else if e.contains("checksum") || e.starts_with("size ") || e.contains("larger than announced") {
         crate::tr("das geladene Paket ist beschädigt oder verändert und wurde verworfen").to_string()
+    } else if e.contains("another processor") {
+        crate::tr("das Paket passt nicht zu diesem Prozessor, es wurde verworfen").to_string()
     } else if e.starts_with("code signature") {
         crate::tr("die Signatur des Pakets passt nicht, es wurde verworfen").to_string()
     } else {
@@ -333,7 +369,7 @@ pub fn frame(ctx: &egui::Context, bottom: f32) -> Option<String> {
         return toast;
     }
     // Test hook: install without a click
-    if let Phase::Available { m, since } = &phase {
+    if let Phase::Available { m, since, manual: None } = &phase {
         if let (Ok(v), true) = (crate::env::var("GRAINEO_UPDATE_AUTOINSTALL"), update::source_url().1) {
             let delay = v.trim().parse::<f64>().unwrap_or(0.0);
             if ctx.input(|i| i.time) - since >= delay {
@@ -378,12 +414,16 @@ fn small(ui: &mut egui::Ui, t: &str) {
 
 fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
     match phase {
-        Phase::Available { m, .. } => {
+        Phase::Available { m, manual: why, .. } => {
             title(ui, &crate::trf!("graineo {v} ist verfügbar", v = m.version));
-            // a system without an update package (Linux): only a pointer to the release page
-            let manual = update::asset_key().is_none();
+            // a system without an update package, or a Linux program folder that cannot be replaced: only a pointer
+            // to the release page, with the reason
+            let manual = update::asset_key().is_none() || why.is_some();
             if manual {
                 small(ui, &format!("{} · {}", crate::trf!("Installiert: {a}", a = update::current_version()), crate::tr("Keine automatische Installation auf diesem System")));
+                if let Some(why) = why {
+                    small(ui, why);
+                }
             } else {
                 let size = update::asset_key().and_then(|k| m.asset(k)).map(|a| a.size).unwrap_or(0);
                 small(ui, &format!("{} · {}", crate::trf!("Installiert: {a}", a = update::current_version()), crate::dialog::size(size)));
@@ -408,13 +448,14 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
                 if ui.add(egui::Button::new(crate::tr("Später")).min_size(egui::vec2(70.0, 24.0)).corner_radius(0.0)).clicked() {
                     STATE.lock().unwrap_or_else(|e| e.into_inner()).hidden = true;
                 }
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Diese Version überspringen")).small().color(lr::TEXT_DIM())).frame(false)).clicked() {
-                        update::skip_version(&m.version);
-                        set(Phase::Idle);
-                    }
-                });
+                // next to the buttons only if it fits; the wide "open the release page" pushes it below them
+                if !manual {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| skip_link(ui, m));
+                }
             });
+            if manual {
+                skip_link(ui, m);
+            }
         }
         Phase::Downloading { m, done, total } => {
             title(ui, &crate::trf!("graineo {v} wird geladen …", v = m.version));
@@ -449,6 +490,14 @@ fn card(ui: &mut egui::Ui, phase: &Phase, german: bool) {
             });
         }
         Phase::Idle | Phase::Checking => {}
+    }
+}
+
+/// "Skip this version": hides the card and never offers this version automatically again.
+fn skip_link(ui: &mut egui::Ui, m: &Manifest) {
+    if ui.add(egui::Button::new(egui::RichText::new(crate::tr("Diese Version überspringen")).small().color(lr::TEXT_DIM())).frame(false)).clicked() {
+        update::skip_version(&m.version);
+        set(Phase::Idle);
     }
 }
 

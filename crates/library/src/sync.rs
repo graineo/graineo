@@ -347,8 +347,11 @@ pub fn reconcile_file_read(db: &Db, file: i64, path: &Path, format: &str, raw: b
 }
 
 /// Create a virtual copy (values from the original, name "Kopie N" or as given). Returns: image ID.
+/// The copy belongs where its original belongs: the same import ("Zuletzt importiert") and the same collections
+/// (also the quick collection), so it is shown in the view it was made in and can be opened there.
 pub fn create_copy(db: &Db, image: i64, name: Option<&str>) -> R<i64> {
-    let (file, stars, mark, et): (i64, i64, i64, i64) = db.conn.query_row("SELECT file, stars, flag, label FROM image WHERE id=?1", [image], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))).map_err(f)?;
+    let (file, stars, mark, et, run): (i64, i64, i64, i64, Option<i64>) =
+        db.conn.query_row("SELECT file, stars, flag, label, run FROM image WHERE id=?1", [image], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))).map_err(f)?;
     let names: Vec<String> = {
         let mut st = db.conn.prepare("SELECT copy FROM image WHERE file=?1 AND copy IS NOT NULL").map_err(f)?;
         let r = st.query_map([file], |r| r.get(0)).map_err(f)?.flatten().collect();
@@ -361,9 +364,17 @@ pub fn create_copy(db: &Db, image: i64, name: Option<&str>) -> R<i64> {
     let t = crate::now();
     crate::location::note_before_change(db, &[file]);
     db.conn
-        .execute(&format!("INSERT INTO image(id, file, copy, stars, flag, label, rating_time, changed) VALUES({},?1,?2,?3,?4,?5,?6,?6)", crate::merge::NEW_IMAGE_ID), params![file, name, stars, mark, et, t])
+        .execute(&format!("INSERT INTO image(id, file, copy, stars, flag, label, rating_time, changed, run) VALUES({},?1,?2,?3,?4,?5,?6,?6,?7)", crate::merge::NEW_IMAGE_ID), params![file, name, stars, mark, et, t, run])
         .map_err(f)?;
     let id = db.conn.last_insert_rowid();
+    // right after the original in each of its collections (a manual order keeps the pair together)
+    db.conn
+        .execute(
+            "INSERT OR IGNORE INTO collection_image(collection, image, position)
+             SELECT collection, ?2, position + 0.5 FROM collection_image WHERE image = ?1",
+            params![image, id],
+        )
+        .map_err(f)?;
     let ids = crate::keywords::ids_of(&db.conn, image)?;
     crate::keywords::set_ids(db, id, &ids, t, true)?;
     write_sidecar(db, file)?;

@@ -22,6 +22,8 @@ serde_json = "1"
 legacy_names = { path = "../legacy_names" }
 # color tables of the film profiles (zlib)
 flate2 = "1"
+# source archive of the lensfun database (update on request, lensfun_update.rs)
+tar = "0.4"
 # ONNX reader for the neural denoising (own, hand-written protobuf; ai_denoise.rs)
 faces = { path = "../faces" }
 

@@ -14,7 +14,16 @@
 //!    Fuji: nodes in the source radius, factor 1 + distortion/100, lateral CA 1 + ca,
 //!    vignetting value/100; Sony: nodes (i + ½)/(n − 1) in the target radius, factor 1 + d·2⁻¹⁴,
 //!    lateral CA 1 + ca·2⁻²¹, vignetting 2^(½ − 2^(v·2⁻¹³ − 1)). Radius 1 = half image diagonal.
-//! 2. **lensfun extract** ([`crate::lensfun`]) for cameras without embedded data.
+//!    Olympus/OM System ORF: makernote ImageProcessing IFD (0x2040) tags 0x150A (distortion
+//!    k2, k4, k6, scale) and 0x150C (lateral CA: red k0, k2, k4, blue k0, k2, k4), following
+//!    darktable (`src/common/exif.cc` "Olympus distortion/CA correction", `src/iop/lens.cc`
+//!    CORRECTION_TYPE_OLYMPUS): Rin/Rout = s·(1 + k2 (r s)² + k4 (r s)⁴ + k6 (r s)⁶) with 1 = corner;
+//!    CA on the distorted radius rd: Rin_c = rd·((1 + c0) + c2 rd² + c4 rd⁴). No vignetting data; if the
+//!    camera applied ShadingCompensation (CameraSettings 0x050C = 1) the raw is already corrected for
+//!    vignetting and lensfun vignetting is skipped (as darktable does).
+//!    Panasonic RW2: see [`panasonic`] (distortion only, after darktable). Nikon Z NEF: darktable documents no
+//!    embedded correction data for it (as of 11/2026), so none is read; lensfun covers Nikon Z lenses.
+//! 2. **lensfun database** ([`crate::lensfun`]) for cameras without embedded data.
 //!
 //! Application ([`Correction::apply`], in linear light after noise reduction and capture
 //! sharpening): first vignetting (function of the source radius), then distortion and lateral CA in
@@ -88,6 +97,8 @@ pub enum Source {
     Backup,
     Camera,
     Lensfun,
+    /// only the manual sliders (no profile)
+    Manual,
 }
 
 impl Source {
@@ -99,6 +110,7 @@ impl Source {
             Source::Backup => "Sicherung",
             Source::Camera => "Kamera",
             Source::Lensfun => "lensfun",
+            Source::Manual => "von Hand",
         }
     }
 }
@@ -198,6 +210,8 @@ pub struct Correction {
     pub vignette: Option<Part>,
     /// zoom of the automatic scaling (target coordinates are pulled towards the center by it)
     pub zoom: f32,
+    /// manual distortion and lateral color ([`LensOptions::manual`]); `None` = none (the profile path unchanged)
+    pub manual: Option<[f32; 3]>,
 }
 
 /// Which parts are applied (imported Lightroom settings: "Enable Profile Corrections", distortion/vignetting 0…200 %).
@@ -214,14 +228,92 @@ pub struct LensOptions {
     pub extra_folders: Option<std::path::PathBuf>,
     /// back up used LCP profiles privately automatically (on first use)
     pub backup_enabled: bool,
-    /// assigned own profile `"id@version"`; `Some("")` = explicitly none; `None` = automatic (by lens name)
+    /// assigned profile: own `"id@version"`, a lensfun lens `"lensfun:<name>"` ([`PIN_LENSFUN`]) or an Adobe
+    /// profile `"lcp:<file name>"` ([`PIN_LCP`]); `Some("")` = explicitly none; `None` = automatic (by lens name)
     pub pinned: Option<String>,
+    /// manual corrections with or without a profile: distortion, red and blue lateral color (−100 … +100, 0 = off)
+    pub manual: [f32; 3],
 }
 
 impl Default for LensOptions {
     fn default() -> Self {
-        Self { distortion: 1.0, vignette: 1.0, lateral_ca: true, lensfun: true, adobe: true, extra_folders: None, backup_enabled: true, pinned: None }
+        Self { distortion: 1.0, vignette: 1.0, lateral_ca: true, lensfun: true, adobe: true, extra_folders: None, backup_enabled: true, pinned: None, manual: [0.0; 3] }
     }
+}
+
+impl LensOptions {
+    /// Do the options ask for anything at all (profile parts or a manual correction)?
+    fn anything(&self) -> bool {
+        self.distortion != 0.0 || self.vignette != 0.0 || self.lateral_ca || self.has_manual()
+    }
+
+    fn has_manual(&self) -> bool {
+        self.manual != [0.0; 3]
+    }
+}
+
+/// Manual distortion: ratio source/target radius at the image corner for slider +100 is 1 − this.
+const MANUAL_DISTORTION: f32 = 0.12;
+/// Manual lateral color: radius scale of a channel per slider step (±100 → ±0.15 %, ≈ ±5 px in the corner of 24 MP).
+const MANUAL_CA: f32 = 1.5e-5;
+
+/// Version of the automatic profile choice (lensfun matching in [`crate::lensfun`], order of the sources). Raise it
+/// when the matching changes so that photos may get another profile; together with the database state it forms
+/// [`matching_stamp`], and stored previews of photos whose automatic choice changed are developed again.
+/// 1: full lensfun database, mount logic, fuzzy names, teleconverters (1.5.5).
+pub const MATCHING: u32 = 1;
+
+/// Stamp of the automatic choice: [`MATCHING`] and the commit of the lensfun data in use.
+///
+/// `None` while the database is still loading in the background (never blocks; for the UI thread).
+pub fn matching_stamp() -> Option<String> {
+    Some(format!("{MATCHING}/{}", Database::try_active()?.commit))
+}
+
+/// Name of the automatically chosen lensfun lens for a library photo (camera model as the library stores it, without
+/// the maker; lens name), `""` if none. Used to see which photos change when [`matching_stamp`] changes.
+pub fn auto_lensfun_name(camera: &str, lens: Option<&str>) -> String {
+    let db = Database::active();
+    let Some(cam) = db.camera("", camera) else { return String::new() };
+    db.lenses(cam, lens.as_slice()).first().and_then(|o| o.models.first().cloned()).unwrap_or_default()
+}
+
+/// Why no profile was found for a lens (UI text, German key): teleconverter, no lens name, camera or lens unknown to
+/// lensfun, lensfun knows the lens only for another mount.
+pub fn no_profile_reason(maker: &str, model: &str, lens: Option<&str>) -> &'static str {
+    let lens = lens.map(str::trim).filter(|l| !l.is_empty());
+    if lens.and_then(lensfun::teleconverter).is_some() {
+        return "Telekonverter erkannt";
+    }
+    let db = Database::active();
+    let Some(cam) = db.camera(maker, model) else { return "Kamera nicht in der Datenbank" };
+    let fixed = !db.mounts.iter().any(|(n, _)| *n == cam.mount);
+    let Some(l) = lens else {
+        return if fixed { "Objektiv nicht in der Datenbank" } else { "kein Objektivname in der Datei" };
+    };
+    // lensfun has the lens, but only for a mount that does not fit this camera (or with a larger crop factor)
+    if !fixed && db.lenses_any_mount(l).iter().any(|o| !db.mount_fits(Some(cam), &o.mounts)) {
+        return "anderes Bajonett";
+    }
+    "Objektiv nicht in der Datenbank"
+}
+
+/// Prefix of a manually chosen lensfun lens in [`LensOptions::pinned`] (followed by its first model name).
+pub const PIN_LENSFUN: &str = "lensfun:";
+/// Prefix of a manually chosen Adobe profile in [`LensOptions::pinned`] (followed by the LCP file name).
+pub const PIN_LCP: &str = "lcp:";
+
+/// lensfun profile for a manually chosen lens (by its first model name), also for an adapted lens of another mount.
+/// The camera comes from lensfun if known, otherwise the lens calibration's crop factor stands in.
+pub fn lensfun_pinned_profile(maker: &str, model: &str, name: &str, focal_length: Option<f32>, aperture: Option<f32>) -> Option<(lensfun::Profile, String)> {
+    let db = Database::active();
+    let lenses = db.lens_by_name(name);
+    let first = lenses.first()?;
+    let cam = db.camera(maker, model).cloned().unwrap_or_else(|| lensfun::Camera { maker: maker.into(), makers: vec![maker.into()], models: vec![model.into()], mount: String::new(), crop: first.crop });
+    let fitting: Vec<&lensfun::Lens> = lenses.iter().copied().filter(|o| o.crop <= cam.crop * 1.01).collect();
+    let p = lensfun::Profile::determine(&cam, if fitting.is_empty() { &lenses } else { &fitting }, focal_length, aperture)?;
+    let name = format!("lensfun: {}", p.name);
+    Some((p, name))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -362,6 +454,8 @@ pub struct Embedded {
     pub dng_vig: Option<([f64; 5], [f64; 2])>,
     /// DNG GainMap (averaged over all maps)
     pub dng_gainmap: Option<GainMap>,
+    /// the camera already corrected vignetting in the raw data (Olympus ShadingCompensation)
+    pub shading_done: bool,
 }
 
 impl Embedded {
@@ -456,6 +550,125 @@ fn sony(d: &[u8]) -> Option<Embedded> {
         Some((k, a))
     });
     Some(Embedded { source: "Sony (eingebettet)", geo: Some((nodes, g, false)), vig, ..Default::default() })
+}
+
+/// Olympus/OM System makernote: `(Tiff with base = makernote start, offset of the main IFD)`.
+/// Header "OLYMPUS\0II\x03\0" (IFD at 12) or "OM SYSTEM\0\0\0II\x03\0" (IFD at 16); offsets are
+/// relative to the makernote start (exiftool "Olympus" makernote types 2/3).
+fn olympus_makernote(d: &[u8]) -> Option<(Tiff<'_>, usize)> {
+    let t = Tiff::new_at(d, 0)?;
+    let mn = t.collect(&[0x927c]);
+    let (_, e) = mn.first()?;
+    let start = e.data.as_ptr() as usize - d.as_ptr() as usize;
+    let h = e.data;
+    let (bo, ifd) = if h.starts_with(b"OLYMPUS\0") {
+        (8, 12)
+    } else if h.starts_with(b"OM SYSTEM\0") {
+        (12, 16)
+    } else {
+        return None;
+    };
+    let le = match h.get(bo..bo + 2)? {
+        b"II" => true,
+        b"MM" => false,
+        _ => return None,
+    };
+    Some((Tiff { d, base: start, le }, ifd))
+}
+
+/// Sub-IFD of the Olympus makernote (tag `tag`): pointer (LONG/IFD) or embedded block (UNDEFINED).
+fn olympus_sub<'a>(t: &Tiff<'a>, entries: &[Entry<'a>], tag: u16) -> Option<Vec<Entry<'a>>> {
+    let e = entries.iter().find(|e| e.tag == tag)?;
+    let off = match e.type_name {
+        4 | 13 => *t.numbers(e).first()? as usize,
+        _ => (e.data.as_ptr() as usize).checked_sub(t.d.as_ptr() as usize + t.base)?,
+    };
+    t.ifd(off).map(|(v, _)| v)
+}
+
+fn olympus(d: &[u8]) -> Option<Embedded> {
+    let (t, ifd) = olympus_makernote(d)?;
+    let (main, _) = t.ifd(ifd)?;
+    let mut e = Embedded { source: "Olympus (eingebettet)", ..Default::default() };
+    if let Some(cs) = olympus_sub(&t, &main, 0x2020) {
+        e.shading_done = cs.iter().find(|x| x.tag == 0x050c).map(|x| t.numbers(x)).is_some_and(|v| v.len() == 1 && v[0] == 1.0);
+    }
+    let ip = olympus_sub(&t, &main, 0x2040);
+    let get = |k: u16| ip.as_ref().and_then(|ip| ip.iter().find(|x| x.tag == k)).map(|x| t.numbers(x));
+    // valid if any of the first three is non-zero (no correction = "0 0 0 1"), as in darktable
+    let dist = get(0x150a).filter(|v| v.len() == 4 && v[..3].iter().any(|x| *x != 0.0));
+    let ca = get(0x150c).filter(|v| v.len() == 6 && v.iter().any(|x| *x != 0.0));
+    if dist.is_some() || ca.is_some() {
+        let (s, k2, k4, k6) = dist.as_ref().map_or((1.0, 0.0, 0.0, 0.0), |v| (v[3] as f32, v[0] as f32, v[1] as f32, v[2] as f32));
+        let c: [f32; 6] = ca.as_ref().map_or([0.0; 6], |v| std::array::from_fn(|i| v[i] as f32));
+        let n = 129;
+        let nodes: Vec<f32> = (0..n).map(|i| i as f32 / (n - 1) as f32 * R_MAX).collect();
+        let g = nodes
+            .iter()
+            .map(|&r| {
+                let rs2 = (r * s).powi(2);
+                let m = s * (1.0 + rs2 * (k2 + rs2 * (k4 + rs2 * k6)));
+                let rd = m * r;
+                let rd2 = rd * rd;
+                let (fr, fb) = if r > 0.0 { (rd * (c[0] + rd2 * (c[1] + rd2 * c[2])) / r, rd * (c[3] + rd2 * (c[4] + rd2 * c[5])) / r) } else { (c[0] * m, c[3] * m) };
+                [m + fr, m, m + fb]
+            })
+            .collect();
+        e.geo = Some((nodes, g, false));
+    }
+    (!e.is_empty() || e.shading_done).then_some(e)
+}
+
+/// Panasonic/Leica RW2/RWL: IFD0 tag 0x0119 (DistortionInfo, 16 signed 16-bit values, little-endian) and the
+/// makernote tag 0x008a (1 = the camera already compensated vignetting in the raw data), following darktable
+/// (`src/common/exif.cc` "Panasonic distortion correction", `src/iop/lens.cc` CORRECTION_TYPE_PANASONIC;
+/// GPL-3.0-or-later, © darktable developers; layout after ExifTool PanasonicRaw and the notes of
+/// trou/panasonic-rw2) – rewritten in Rust: enabled if the low nibble of value 7 is 1; scale = 1/(1 + v5/32768),
+/// a = v8/32768, b = v4/32768, c = v11/32768; Ru = Rd·(1 + scale·(a Rd² + b Rd⁴ + c Rd⁶)) with 1 = half image
+/// diagonal (Rd source, Ru target), inverted by fixed-point iteration. No lateral CA or vignetting data.
+/// Scale of the Panasonic distortion model, `None` if the correction is off (low nibble of value 7 not 1) or the
+/// denominator 1 + v5/32768 is not positive (v5 = −32768 would divide by zero, below that the sign flips).
+fn panasonic_scale(v7: f32, v5: f32) -> Option<f32> {
+    let denom = 1.0 + v5 / 32768.0;
+    ((v7 as i32) & 0x0f == 1 && denom > 0.0).then(|| 1.0 / denom)
+}
+
+fn panasonic(d: &[u8]) -> Option<Embedded> {
+    let t = Tiff::new_at(d, 0)?;
+    let tags = t.collect(&[0x0119, 0x927c]);
+    let mut e = Embedded { source: "Panasonic (eingebettet)", ..Default::default() };
+    if let Some((_, mn)) = tags.iter().find(|(k, _)| *k == 0x927c) {
+        // "Panasonic\0\0\0", IFD at 12, offsets relative to the TIFF start
+        if mn.data.starts_with(b"Panasonic\0") {
+            let start = mn.data.as_ptr() as usize - d.as_ptr() as usize;
+            if let Some((entries, _)) = t.ifd(start + 12) {
+                e.shading_done = entries.iter().find(|x| x.tag == 0x008a).map(|x| t.numbers(x)).is_some_and(|v| v.len() == 1 && v[0] == 1.0);
+            }
+        }
+    }
+    if let Some((_, di)) = tags.iter().find(|(k, _)| *k == 0x0119).filter(|(_, x)| x.data.len() == 32) {
+        let v: Vec<f32> = di.data.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32).collect();
+        if let Some(sc) = panasonic_scale(v[7], v[5]) {
+            let (a, b, c) = (v[8] / 32768.0, v[4] / 32768.0, v[11] / 32768.0);
+            let n = 129;
+            let nodes: Vec<f32> = (0..n).map(|i| i as f32 / (n - 1) as f32 * R_MAX).collect();
+            let g = nodes
+                .iter()
+                .map(|&r| {
+                    let mut rd = r;
+                    for _ in 0..4 {
+                        let rd2 = rd * rd;
+                        let f = 1.0 + sc * rd2 * (a + rd2 * (b + rd2 * c));
+                        rd = if f > 1e-6 { r / f } else { r };
+                    }
+                    let m = if r > 0.0 { rd / r } else { 1.0 };
+                    [m; 3]
+                })
+                .collect();
+            e.geo = Some((nodes, g, false));
+        }
+    }
+    (!e.is_empty() || e.shading_done).then_some(e)
 }
 
 fn dng(d: &[u8]) -> Option<Embedded> {
@@ -571,12 +784,14 @@ fn spline(k: &[f32], y: &[f32], x: f32) -> f32 {
 }
 
 impl RawFile {
-    /// Embedded correction data (Fuji/Sony/DNG) – None if there is none.
+    /// Embedded correction data (Fuji/Sony/Olympus/Panasonic/DNG) – None if there is none.
     pub fn lens_embedded(&self) -> Option<Embedded> {
         let d = self.source.buf();
         match self.info.format.as_str() {
             "RAF" => fuji(d),
             "ARW" => sony(d),
+            "ORF" => olympus(d),
+            "RW2" | "RWL" => panasonic(d),
             "DNG" => dng(d),
             _ => None,
         }
@@ -587,14 +802,18 @@ impl RawFile {
     /// Sources in this order; per part (geometry, vignetting) the first hit wins:
     /// 0. own, self-measured profiles (`lens-profiles/own/`),
     /// 1. local Adobe LCP profiles (read at runtime), automatically backed up privately along the way
-    ///    (exception: Fujifilm/Sony with a built-in profile → 3.),
+    ///    (exception: Fujifilm/Sony/Olympus with a built-in profile → 3.),
     /// 2. private backup (`~/Library/Application Support/graineo/lens-profiles/`),
-    /// 3. correction data from the camera (DNG opcodes, Fuji/Sony),
-    /// 4. lensfun extract.
+    /// 3. correction data from the camera (DNG opcodes, Fuji/Sony/Olympus),
+    /// 4. lensfun database.
     /// If nothing is found, the correction stays off (None).
     pub fn lens_correction(&self, w: usize, h: usize, o: &LensOptions) -> Option<Correction> {
         // linear DNG (e.g. Apple ProRAW) is already corrected; Canon sRAW (linear, CR2) however is not
-        if (self.info.sensor == Sensor::Linear && self.info.format == "DNG") || (o.distortion == 0.0 && o.vignette == 0.0 && !o.lateral_ca) {
+        // linear DNG (already corrected): only the manual sliders
+        if self.info.sensor == Sensor::Linear && self.info.format == "DNG" {
+            return o.has_manual().then(|| Correction::manual_only(w, h, o.manual));
+        }
+        if !o.anything() {
             return None;
         }
         let i = &self.info;
@@ -627,19 +846,25 @@ impl RawFile {
         let embedded = self.lens_embedded().unwrap_or_default();
         // exception: Fujifilm/Sony bring a built-in profile; the reference exports then use
         // that one (measured: X100 previews match the embedded data, not the LCP).
-        let camera_first = matches!(i.format.as_str(), "RAF" | "ARW") && embedded.geo.is_some();
+        let camera_first = matches!(i.format.as_str(), "RAF" | "ARW" | "ORF" | "RW2" | "RWL") && embedded.geo.is_some();
         // 0. own profiles, 1./2. Adobe LCP or private backup
         let obj = i.exif.lens.as_deref();
         // assigned profile: found by its reference; missing or switched off → no own profile (camera/lensfun/none follow)
+        let pin_lensfun = o.pinned.as_deref().and_then(|p| p.strip_prefix(PIN_LENSFUN));
+        let pin_lcp = o.pinned.as_deref().and_then(|p| p.strip_prefix(PIN_LCP));
         let own = match o.pinned.as_deref() {
+            _ if pin_lensfun.is_some() || pin_lcp.is_some() => None,
             Some(r) => lensprof::ProfileRef::parse(r).and_then(|r| lensprof::store::load(&r)),
             None => lensprof::store::find_auto(&i.maker, &i.model, obj),
         };
         let custom_profile = own
             .filter(|s| !s.profile.entries.is_empty() && s.profile.covers(i.exif.focal_length))
             .map(|s| (s.profile.clone(), format!("{}.json", s.id), Source::Custom));
-        if custom_profile.is_some() || (o.adobe && !camera_first) {
-            let found: Option<(lcp::Profile, String, Source)> = if custom_profile.is_some() { custom_profile } else { match lcp::search(&i.maker, &i.model, obj, o.extra_folders.as_deref()) {
+        if custom_profile.is_some() || pin_lcp.is_some() || (o.adobe && !camera_first && pin_lensfun.is_none()) {
+            let found: Option<(lcp::Profile, String, Source)> = if custom_profile.is_some() { custom_profile } else if let Some(f) = pin_lcp {
+                // manual choice: exactly this file (whatever lens or camera it was made for)
+                lcp::by_file(f, o.extra_folders.as_deref()).and_then(|h| lcp::load(&h.path)).map(|p| (p, f.to_string(), Source::AdobeLcp))
+            } else { match lcp::search(&i.maker, &i.model, obj, o.extra_folders.as_deref()) {
                 Some(header) => lcp::load(&header.path).filter(|p| p.covers(i.exif.focal_length)).map(|p| {
                     if o.backup_enabled {
                         // silent: errors while backing up do not prevent the correction
@@ -655,7 +880,7 @@ impl RawFile {
                 let distance = i.exif.distance.or_else(|| if i.format.starts_with("CR") { canon_focus(self.source.buf(), &i.format) } else { None });
                 let a = prof.select(i.exif.focal_length, i.exif.aperture, distance);
                 // sensor size: only compensate for a clearly different crop factor (profile of another camera)
-                let crop_img = Database::built_in().camera(&i.maker, &i.model).map(|k| k.crop as f64).unwrap_or(a.crop);
+                let crop_img = Database::active().camera(&i.maker, &i.model).map(|k| k.crop as f64).unwrap_or(a.crop);
                 let compensation = if (crop_img / a.crop - 1.0).abs() > 0.1 { crop_img / a.crop } else { 1.0 };
                 let basis = LcpParam {
                     geo: a.geo,
@@ -673,10 +898,23 @@ impl RawFile {
                     t.lcp = Some(LcpParam { vig: None, ..basis.clone() });
                     geometry = Some(t);
                 }
-                if a.vig.is_some() {
+                if a.vig.is_some() && !embedded.shading_done {
                     let mut t = part(name, kind, img, Radial::from_func(|_| [1.0; 3]));
                     t.lcp = Some(LcpParam { strength: o.vignette as f64, ..basis });
                     vignette = Some(t);
+                }
+            }
+        }
+        // manually chosen lensfun lens: before the camera data
+        if let Some(name) = pin_lensfun {
+            if let Some((p, label)) = lensfun_pinned_profile(&i.maker, &i.model, name, i.exif.focal_length, i.exif.aperture) {
+                if geometry.is_none() && (p.distortion.is_some() || p.lateral_ca.is_some()) {
+                    let pp = p.clone();
+                    geometry = Some(part(label.clone(), Source::Lensfun, img, Radial::from_func(|r| mix(pp.geometry(r)))));
+                }
+                if vignette.is_none() && p.vignette.is_some() && !embedded.shading_done {
+                    let s = o.vignette;
+                    vignette = Some(part(label, Source::Lensfun, img, Radial::from_func(|r| [1.0 - s * (1.0 - p.falloff(r)); 3])));
                 }
             }
         }
@@ -740,17 +978,18 @@ impl RawFile {
             }
         }
         // 4. lensfun
-        if o.lensfun && (geometry.is_none() || vignette.is_none()) {
-            let db = Database::built_in();
+        if o.lensfun && pin_lensfun.is_none() && (geometry.is_none() || vignette.is_none()) {
+            let db = Database::active();
             if let Some(cam_entry) = db.camera(&i.maker, &i.model) {
-                let obj = db.lenses(cam_entry, i.exif.lens.as_deref());
+                let names: Vec<&str> = [i.exif.lens.as_deref(), i.exif.lens_db.as_deref()].into_iter().flatten().collect();
+                let obj = db.lenses(cam_entry, &names);
                 if let Some(p) = lensfun::Profile::determine(cam_entry, &obj, i.exif.focal_length, i.exif.aperture) {
                     let name = format!("lensfun: {}", p.name);
                     if geometry.is_none() && (p.distortion.is_some() || p.lateral_ca.is_some()) {
                         let pp = p.clone();
                         geometry = Some(part(name.clone(), Source::Lensfun, img, Radial::from_func(|r| mix(pp.geometry(r)))));
                     }
-                    if vignette.is_none() && p.vignette.is_some() {
+                    if vignette.is_none() && p.vignette.is_some() && !embedded.shading_done {
                         let s = o.vignette;
                         vignette = Some(part(name, Source::Lensfun, img, Radial::from_func(|r| [1.0 - s * (1.0 - p.falloff(r)); 3])));
                     }
@@ -763,12 +1002,7 @@ impl RawFile {
         if o.vignette == 0.0 {
             vignette = None;
         }
-        if geometry.is_none() && vignette.is_none() {
-            return None;
-        }
-        let mut k = Correction { width: w, height: h, geometry, vignette, zoom: 1.0 };
-        k.zoom = k.auto_zoom();
-        Some(k)
+        Correction::finish(w, h, geometry, vignette, o.manual)
     }
 }
 
@@ -779,9 +1013,49 @@ impl RawFile {
 use lensprof::resample::{lanczos_table, sample};
 
 impl Correction {
-    /// Source coordinate per channel for the target pixel (x, y).
+    /// Finished correction from the profile parts and the manual sliders; `None` if nothing is left.
+    fn finish(w: usize, h: usize, mut geometry: Option<Part>, vignette: Option<Part>, manual: [f32; 3]) -> Option<Correction> {
+        let manual = (manual != [0.0; 3]).then_some(manual);
+        if manual.is_some() && geometry.is_none() {
+            geometry = Some(Part { source: Source::Manual.short().into(), kind: Source::Manual, placement: Placement::image_center(w, h), f: Radial::from_func(|_| [1.0; 3]), lcp: None, map: None });
+        }
+        if geometry.is_none() && vignette.is_none() {
+            return None;
+        }
+        let mut k = Correction { width: w, height: h, geometry, vignette, zoom: 1.0, manual };
+        k.zoom = k.auto_zoom();
+        Some(k)
+    }
+
+    /// Only the manual sliders (no profile).
+    fn manual_only(w: usize, h: usize, manual: [f32; 3]) -> Correction {
+        Self::finish(w, h, None, None, manual).expect("manual correction")
+    }
+
+    /// Source coordinate per channel for the target pixel (x, y), with the manual sliders around the profile.
     #[inline]
     fn source(&self, g: &Part, x: f32, y: f32) -> [[f32; 2]; 3] {
+        let Some(m) = self.manual else { return self.source_profile(g, x, y) };
+        let (cx, cy) = ((self.width as f32 - 1.0) * 0.5, (self.height as f32 - 1.0) * 0.5);
+        let unit = (self.width as f32).hypot(self.height as f32) * 0.5;
+        // distortion: target → intermediate radius, before the zoom and the profile
+        let (dx, dy) = (x - cx, y - cy);
+        let r2 = (dx * dx + dy * dy) / (unit * unit);
+        let f = 1.0 - m[0] / 100.0 * MANUAL_DISTORTION * r2;
+        let mut q = self.source_profile(g, cx + dx * f, cy + dy * f);
+        // lateral color: scale the red and blue source points around the centre
+        for (c, v) in [(0, m[1]), (2, m[2])] {
+            if v != 0.0 {
+                let s = 1.0 + v * MANUAL_CA;
+                q[c] = [cx + (q[c][0] - cx) * s, cy + (q[c][1] - cy) * s];
+            }
+        }
+        q
+    }
+
+    /// Source coordinate per channel of the profile alone.
+    #[inline]
+    fn source_profile(&self, g: &Part, x: f32, y: f32) -> [[f32; 2]; 3] {
         if let Some(l) = &g.lcp {
             let (mx, my) = ((self.width as f32 - 1.0) * 0.5, (self.height as f32 - 1.0) * 0.5);
             return l.source((mx + (x - mx) * self.zoom) as f64, (my + (y - my) * self.zoom) as f64);
@@ -823,7 +1097,7 @@ impl Correction {
     }
 
     fn clone_without_tables(&self) -> Correction {
-        Correction { width: self.width, height: self.height, geometry: None, vignette: None, zoom: self.zoom }
+        Correction { width: self.width, height: self.height, geometry: None, vignette: None, zoom: self.zoom, manual: self.manual }
     }
 
     /// Apply the correction to a linear RGB image (size must match).
@@ -894,10 +1168,16 @@ impl Correction {
 /// lensfun correction for a finished image (JPEG/HEIC/TIFF), `w`×`h` = whole camera image
 /// (not cropped). Returns: correction and profile name.
 pub fn lensfun_img(maker: &str, model: &str, lens: Option<&str>, focal_length: Option<f32>, aperture: Option<f32>, w: usize, h: usize, o: &LensOptions) -> Option<(Correction, String)> {
-    if o.distortion == 0.0 && o.vignette == 0.0 && !o.lateral_ca {
+    if !o.anything() {
         return None;
     }
-    let (p, name) = lensfun_profile(maker, model, lens, focal_length, aperture)?;
+    let found = match o.pinned.as_deref().and_then(|p| p.strip_prefix(PIN_LENSFUN)) {
+        Some(n) => lensfun_pinned_profile(maker, model, n, focal_length, aperture),
+        None => lensfun_profile(maker, model, lens, focal_length, aperture),
+    };
+    let Some((p, name)) = found else {
+        return o.has_manual().then(|| (Correction::manual_only(w, h, o.manual), Source::Manual.short().to_string()));
+    };
     let img = Placement::image_center(w, h);
     let dv = o.distortion;
     let qf = o.lateral_ca;
@@ -919,19 +1199,14 @@ pub fn lensfun_img(maker: &str, model: &str, lens: Option<&str>, focal_length: O
         let pp = p.clone();
         part(Radial::from_func(move |r| [1.0 - s * (1.0 - pp.falloff(r)); 3]))
     }).filter(|_| s != 0.0);
-    if geometry.is_none() && vignette.is_none() {
-        return None;
-    }
-    let mut k = Correction { width: w, height: h, geometry, vignette, zoom: 1.0 };
-    k.zoom = k.auto_zoom();
-    Some((k, name))
+    Correction::finish(w, h, geometry, vignette, o.manual).map(|k| (k, name))
 }
 
 /// Matching lensfun profile (camera from make/model, lens from EXIF or built-in).
 pub fn lensfun_profile(maker: &str, model: &str, lens: Option<&str>, focal_length: Option<f32>, aperture: Option<f32>) -> Option<(lensfun::Profile, String)> {
-    let db = Database::built_in();
+    let db = Database::active();
     let cam_entry = db.camera(maker, model)?;
-    let obj = db.lenses(cam_entry, lens);
+    let obj = db.lenses(cam_entry, lens.as_slice());
     let p = lensfun::Profile::determine(cam_entry, &obj, focal_length, aperture)?;
     let name = format!("lensfun: {}", p.name);
     Some((p, name))
@@ -1020,6 +1295,87 @@ impl Correction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panasonic_scale_needs_a_positive_denominator() {
+        assert_eq!(panasonic_scale(1.0, 0.0), Some(1.0));
+        assert_eq!(panasonic_scale(0.0, 0.0), None);
+        assert_eq!(panasonic_scale(1.0, -32768.0), None);
+        assert!(panasonic_scale(1.0, -32767.0).is_some_and(f32::is_finite));
+    }
+
+    #[test]
+    fn pinned_lensfun_lens_also_adapted() {
+        let db = Database::active();
+        let sony = db.camera("SONY", "ILCE-7M4").expect("A7 IV");
+        let ef = db.lens_names().into_iter().find(|(n, _)| n == "Canon EF 50mm f/1.4 USM").expect("EF 50");
+        assert!(!db.mount_fits(Some(sony), &ef.1), "EF on E is adapted");
+        let (p, name) = lensfun_pinned_profile("SONY", "ILCE-7M4", "Canon EF 50mm f/1.4 USM", Some(50.0), Some(2.0)).expect("profile");
+        assert!(name.contains("EF 50mm") && p.distortion.is_some());
+        // a camera unknown to lensfun still gets the chosen lens
+        assert!(lensfun_pinned_profile("Nobody", "Cam 1", "Canon EF 50mm f/1.4 USM", Some(50.0), None).is_some());
+        assert!(lensfun_pinned_profile("SONY", "ILCE-7M4", "no such lens", None, None).is_none());
+    }
+
+    /// Embedded data of real files (free samples, raw.pixls.us); `GRAINEO_TEST_LENS_FILES` = files separated by ':'.
+    #[test]
+    fn embedded_of_sample_files() {
+        let Ok(list) = std::env::var("GRAINEO_TEST_LENS_FILES") else { return };
+        for f in list.split(':').filter(|f| !f.is_empty()) {
+            let Ok(r) = crate::RawFile::open(std::path::Path::new(f)) else { eprintln!("{f}: cannot open"); continue };
+            let e = r.lens_embedded();
+            let centre = e.as_ref().and_then(|e| e.geo.as_ref()).map(|(_, g, _)| g[0][1]);
+            eprintln!("{f}: embedded centre factor {centre:?}");
+            let corner = e.as_ref().and_then(|e| e.geo.as_ref()).map(|(k, g, _)| spline(k, &g.iter().map(|v| v[1]).collect::<Vec<_>>(), 1.0));
+            let lf = lensfun_profile(&r.info.maker, &r.info.model, r.info.exif.lens.as_deref(), r.info.exif.focal_length, r.info.exif.aperture).map(|p| p.0.geometry(1.0)[1]);
+            eprintln!("{f}: lensfun corner factor {lf:?}");
+            let (w, h) = (r.info.width, r.info.height);
+            let c = r.lens_correction(w, h, &LensOptions { adobe: false, ..Default::default() });
+            eprintln!(
+                "{f}: {} {} · {:?} {:?} mm · embedded {:?} corner factor {corner:?} shading {:?} · correction geo {:?} vig {:?} zoom {:?}",
+                r.info.maker,
+                r.info.model,
+                r.info.exif.lens,
+                r.info.exif.focal_length,
+                e.as_ref().map(|e| e.source),
+                e.as_ref().map(|e| e.shading_done),
+                c.as_ref().and_then(|c| c.geometry.as_ref().map(|g| g.source.clone())),
+                c.as_ref().and_then(|c| c.vignette.as_ref().map(|g| g.source.clone())),
+                c.as_ref().map(|c| c.zoom)
+            );
+        }
+    }
+
+    #[test]
+    fn manual_sliders_without_profile() {
+        let o = LensOptions { distortion: 0.0, vignette: 0.0, lateral_ca: false, manual: [0.0; 3], ..Default::default() };
+        assert!(!o.anything());
+        assert!(Correction::finish(100, 80, None, None, [0.0; 3]).is_none());
+        let k = Correction::finish(1000, 800, None, None, [50.0, 0.0, 0.0]).expect("manual");
+        assert_eq!(k.geometry.as_ref().map(|g| g.kind), Some(Source::Manual));
+        // + removes barrel distortion: the corner takes its pixel from further in, the zoom keeps the borders filled
+        let g = k.geometry.as_ref().unwrap();
+        let q = k.source_profile(g, 0.0, 0.0);
+        let corner = k.source(g, 0.0, 0.0);
+        assert!(corner[1][0] > q[1][0] && corner[1][1] > q[1][1], "{corner:?} vs {q:?}");
+        // red + pulls the red channel inwards: its source point lies further out than green
+        let k = Correction::finish(1000, 800, None, None, [0.0, 100.0, -100.0]).unwrap();
+        let g = k.geometry.as_ref().unwrap();
+        let s = k.source(g, 10.0, 10.0);
+        assert!(s[0][0] < s[1][0] && s[2][0] > s[1][0], "{s:?}");
+        // zero sliders keep the profile path identical
+        let k = Correction::finish(1000, 800, Some(g.clone()), None, [0.0; 3]).unwrap();
+        assert!(k.manual.is_none());
+    }
+
+    #[test]
+    fn reasons_without_profile() {
+        assert_eq!(no_profile_reason("Canon", "EOS R5", Some("EF70-200mm f/2.8L IS III USM +1.4x III")), "Telekonverter erkannt");
+        assert_eq!(no_profile_reason("Nobody", "Cam 1", Some("X 50mm")), "Kamera nicht in der Datenbank");
+        assert_eq!(no_profile_reason("SONY", "ILCE-7M4", None), "kein Objektivname in der Datei");
+        assert_eq!(no_profile_reason("SONY", "ILCE-7M4", Some("Canon EF 50mm f/1.4 USM")), "anderes Bajonett");
+        assert_eq!(no_profile_reason("SONY", "ILCE-7M4", Some("Foo 13mm F9 Wonder")), "Objektiv nicht in der Datenbank");
+    }
 
     #[test]
     fn spline_bounds() {

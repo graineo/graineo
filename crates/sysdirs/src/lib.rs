@@ -5,7 +5,7 @@
 //! `$XDG_STATE_HOME` or `~/.local/state`, system data `/usr/share`).
 //! The functions return the base; the caller appends the program name (`graineo`).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Name of the app's folders (Application Support, Caches, Logs) – in one place, so the app can be renamed.
 pub const APP: &str = "graineo";
@@ -60,7 +60,39 @@ pub fn app_cache_dir(app: &str) -> Option<PathBuf> {
 }
 
 /// Log folder of an app (macOS `~/Library/Logs/<app>`, Windows `%LOCALAPPDATA%\<app>\Logs`).
+/// Test and development runs never write into the real logs folder: with `GRAINEO_DATA_DIR` the logs go to
+/// `<DATA>/logs`, a cargo test program without it gets `<temp>/graineo-test-<pid>/logs` (same folder as the
+/// library's safety net for test programs).
 pub fn app_logs_dir(app: &str) -> Option<PathBuf> {
+    if let Some(d) = env_path("GRAINEO_DATA_DIR") {
+        return Some(d.join("logs"));
+    }
+    if let Some(d) = test_program_dir() {
+        return Some(d.join("logs"));
+    }
+    real_logs_dir(app)
+}
+
+/// Is this a cargo test program (`<target>/<profile>/deps/…`)? Then its own folder in the temp directory.
+pub fn test_program_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let by_cargo = std::env::var_os("CARGO").is_some() || std::env::var_os("CARGO_MANIFEST_DIR").is_some();
+    is_test_program(&exe, by_cargo).then(|| std::env::temp_dir().join(format!("graineo-test-{}", std::process::id())))
+}
+
+/// A folder named `deps` alone is no proof: the app may be installed in one (e.g. `/opt/deps/graineo`), and then
+/// its data would land in the temp directory. A cargo test program lies in `deps/` **and** is either started by
+/// cargo (`cargo test` sets `CARGO`/`CARGO_MANIFEST_DIR` for it) or carries cargo's hash suffix
+/// (`name-<16 hex digits>`, when started by hand).
+fn is_test_program(exe: &Path, by_cargo: bool) -> bool {
+    let in_deps = exe.parent().and_then(Path::file_name).is_some_and(|n| n == "deps");
+    let stem = exe.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let hashed = stem.rsplit_once('-').is_some_and(|(_, h)| h.len() == 16 && h.bytes().all(|b| b.is_ascii_hexdigit()));
+    in_deps && (by_cargo || hashed)
+}
+
+/// The user's real logs folder, without the test redirection of [`app_logs_dir`].
+fn real_logs_dir(app: &str) -> Option<PathBuf> {
     if cfg!(windows) {
         env_path("LOCALAPPDATA").map(|l| l.join(app).join("Logs"))
     } else if cfg!(target_os = "linux") {
@@ -164,6 +196,23 @@ pub fn display_path(p: &std::path::Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_deps_folder_alone_is_no_test_program() {
+        let t = Path::new("/w/target/release/deps/library-0123456789abcdef");
+        assert!(is_test_program(t, false));
+        assert!(is_test_program(Path::new("/w/target/release/deps/x"), true));
+        // the app installed in a folder named deps, not started by cargo
+        assert!(!is_test_program(Path::new("/opt/deps/graineo"), false));
+        assert!(!is_test_program(Path::new("/opt/deps/sub/graineo-0123456789abcdef"), true));
+    }
+
+    #[test]
+    fn test_programs_never_get_the_real_logs_folder() {
+        let logs = app_logs_dir(APP).unwrap();
+        assert_ne!(Some(logs.clone()), real_logs_dir(APP));
+        assert!(logs.starts_with(std::env::temp_dir()) || std::env::var_os("GRAINEO_DATA_DIR").is_some(), "{}", logs.display());
+    }
 
     #[test]
     fn network_paths_are_recognised_as_text() {

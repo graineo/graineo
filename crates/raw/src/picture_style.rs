@@ -1,12 +1,14 @@
 //! Camera picture style from the makernote: Fujifilm film simulation (with dynamic range, highlight/
 //! shadow tone, color, grain, Color Chrome), Canon Picture Style, Ricoh image mode ("Image
-//! Control"), Sony Creative Style.
+//! Control"), Sony Creative Style, Nikon Picture Control, Olympus/OM System Picture Mode, Panasonic Photo Style.
 //!
 //! Own small reader (read-only) based on public documentation of the tag tables (exiftool
-//! "FujiFilm Tags", "Canon Tags" → ProcessingInfo, "Sony Tags", "Pentax Tags"; exiv2). Nothing is
+//! "FujiFilm Tags", "Canon Tags" → ProcessingInfo, "Sony Tags", "Pentax Tags", "Nikon Tags" → PictureControlData, "Olympus Tags" → CameraSettings,
+//! "Panasonic Tags"; exiv2). Nothing is
 //! taken from the firmware: only the values the camera itself writes into
 //! the file are read. Read from RAW (RAF → embedded JPEG, CR3 → CMT1/CMT3 boxes,
-//! DNG → DNGPrivateData or EXIF MakerNote, CR2/ARW → EXIF MakerNote) or camera JPEG.
+//! DNG → DNGPrivateData or EXIF MakerNote, CR2/ARW/NEF/ORF → EXIF MakerNote, RW2 → EXIF of the embedded JPEG) or
+//! camera JPEG.
 //! Sigma (fp, fp L, BF; Bayer/DNG): Color Mode as text in makernote tag 0x003d.
 //! Ricoh image mode: tag number and values checked against the camera JPEGs of own images.
 
@@ -223,6 +225,18 @@ pub(crate) fn jpeg_exif(d: &[u8]) -> Option<usize> {
     None
 }
 
+/// Panasonic RW2 ("IIU\0"): position and length of the embedded JPEG (IFD0 tag 0x002e JpgFromRaw).
+fn rw2_jpeg(header: &[u8]) -> Option<(u64, usize)> {
+    if !header.starts_with(b"IIU\0") {
+        return None;
+    }
+    let t = Tiff { d: header, le: true, basis: 0 };
+    let ifd0 = t.ifd(t.u32(4)? as usize, 0)?;
+    let e = ifd0.iter().find(|e| e.tag == 0x002e)?;
+    let off = t.u32(e.e + 8)? as u64;
+    Some((off, e.n as usize))
+}
+
 pub(crate) fn find(d: &[u8], needle: &[u8]) -> Option<usize> {
     d.windows(needle.len()).position(|w| w == needle)
 }
@@ -236,6 +250,11 @@ impl Source {
         if header.starts_with(b"FUJIFILMCCD-RAW") {
             let off = u32::from_be_bytes(header.get(84..88)?.try_into().ok()?) as u64;
             let len = u32::from_be_bytes(header.get(88..92)?.try_into().ok()?) as usize;
+            let j = read_range(&mut f, off, len.min(head).min(RAF_JPEG))?;
+            let tiff = jpeg_exif(&j)?;
+            return Some(Self { d: j, tiff, cmt3: None, truncated: false });
+        }
+        if let Some((off, len)) = rw2_jpeg(&header) {
             let j = read_range(&mut f, off, len.min(head).min(RAF_JPEG))?;
             let tiff = jpeg_exif(&j)?;
             return Some(Self { d: j, tiff, cmt3: None, truncated: false });
@@ -263,6 +282,12 @@ impl Source {
             // RAF: embedded JPEG (offset/length at bytes 84/88, big endian), EXIF at the start
             let off = u32::from_be_bytes(header.get(84..88)?.try_into().ok()?) as u64;
             let len = u32::from_be_bytes(header.get(88..92)?.try_into().ok()?) as usize;
+            let j = read_range(&mut f, off, len.min(RAF_JPEG))?;
+            let tiff = jpeg_exif(&j)?;
+            return Some(Self { d: j, tiff, cmt3: None, truncated: false });
+        }
+        if let Some((off, len)) = rw2_jpeg(&header) {
+            // RW2: the EXIF data (with the makernote) lie in the embedded JPEG
             let j = read_range(&mut f, off, len.min(RAF_JPEG))?;
             let tiff = jpeg_exif(&j)?;
             return Some(Self { d: j, tiff, cmt3: None, truncated: false });
@@ -442,6 +467,12 @@ pub(crate) enum Kind {
     RicohOld,
     /// Sigma (fp, fp L, BF): "SIGMA\0\0\0" + 2 bytes, then IFD; value offsets relative to the TIFF header
     Sigma,
+    /// Nikon type 2: "Nikon\0" + version, own TIFF header at +10, offsets relative to it
+    Nikon,
+    /// Olympus / OM System: offsets relative to the makernote start (old "OLYMP\0": relative to the TIFF header)
+    Olympus,
+    /// Panasonic: "Panasonic\0\0\0", offsets relative to the TIFF header
+    Panasonic,
     Unknown,
 }
 
@@ -503,6 +534,32 @@ pub(crate) fn parse_makernote<'a>(d: &'a [u8], p: usize, len: usize, le: bool, t
         let t = Tiff { d, le, basis: tiff };
         let entries = t.ifd(p + 10, tiff)?;
         return Some(Makernote { t, basis: tiff, entries, kind: Kind::Sigma });
+    }
+    if header.starts_with(b"Nikon\0") {
+        let base = p + 10;
+        let t = Tiff::new_at(d, base)?;
+        let at = base + t.u32(base + 4)? as usize;
+        let entries = t.ifd(at, base)?;
+        return Some(Makernote { t, basis: base, entries, kind: Kind::Nikon });
+    }
+    if header.starts_with(b"OLYMPUS\0") || header.starts_with(b"OM SYSTEM\0") {
+        // "OLYMPUS\0II\x03\0" (12 bytes) or "OM SYSTEM\0\0\0II\x04\0" (16 bytes), offsets relative to the makernote start
+        let s = if header.starts_with(b"OLYMPUS\0") { 8 } else { 12 };
+        let le = header.get(s..s + 2)? == b"II";
+        let t = Tiff { d, le, basis: p };
+        let entries = t.ifd(p + s + 4, p)?;
+        return Some(Makernote { t, basis: p, entries, kind: Kind::Olympus });
+    }
+    if header.starts_with(b"OLYMP\0") {
+        // old Olympus: count after the 8-byte header, offsets relative to the TIFF header
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p + 8, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Olympus });
+    }
+    if header.starts_with(b"Panasonic\0") {
+        let t = Tiff { d, le, basis: tiff };
+        let entries = t.ifd(p + 12, tiff)?;
+        return Some(Makernote { t, basis: tiff, entries, kind: Kind::Panasonic });
     }
     if header.starts_with(b"AOC\0") || header.starts_with(b"PENTAX \0") {
         let s = if header.starts_with(b"AOC\0") { 4 } else { 8 };
@@ -573,6 +630,9 @@ fn evaluate(q: &Source) -> Option<PictureStyle> {
         Kind::Pentax => ricoh(&mn, &mut b),
         Kind::RicohOld => ricoh_alt(&mn, &mut b),
         Kind::Sigma => sigma(&mn, &mut b),
+        Kind::Nikon => nikon(&mn, &mut b),
+        Kind::Olympus => olympus(&mn, &mut b),
+        Kind::Panasonic => panasonic(&mn, &mut b),
         Kind::Unknown => b.style = "unknown".into(),
     }
     // makernote texts (Sony, Sigma) end up in look names and file names
@@ -831,6 +891,101 @@ fn sigma(mn: &Makernote, b: &mut PictureStyle) {
     }
 }
 
+/// Nikon (exiftool "Nikon Tags"): 0x0023 PictureControlData, not encrypted. Version "0100"/"0200": name at byte 4,
+/// base at 24; "0300" and later: name at 8, base at 28 (each 20 bytes of text). A custom Picture Control keeps its
+/// own name; the base tells which standard control it starts from.
+fn nikon(mn: &Makernote, b: &mut PictureStyle) {
+    let data = mn.entries.iter().find(|e| e.tag == 0x0023).and_then(|e| {
+        let p = mn.t.value_pos_base(e, mn.basis)?;
+        mn.t.get(p, e.n as usize)
+    });
+    let text = |d: &[u8], at: usize| -> Option<String> {
+        let s: String = d.get(at..at + 20)?.iter().take_while(|&&c| c != 0).map(|&c| c as char).collect();
+        Some(s.trim().to_string()).filter(|s| !s.is_empty())
+    };
+    let Some(d) = data else {
+        b.style = "unknown".into();
+        return;
+    };
+    let v3 = d.get(..2).is_some_and(|v| v != b"01" && v != b"02");
+    let (name, base) = if v3 { (text(d, 8), text(d, 28)) } else { (text(d, 4), text(d, 24)) };
+    b.style = name.as_deref().map(slug).filter(|s| !s.is_empty()).unwrap_or_else(|| "unknown".into());
+    if let Some(v) = d.get(..4) {
+        b.details.push(("PictureControlVersion", v.iter().map(|&c| c as char).collect()));
+    }
+    if let Some(x) = base.filter(|x| Some(x) != name.as_ref()) {
+        b.details.push(("PictureControlBase", x));
+    }
+    // 0x0022 ActiveD-Lighting: 0 off, otherwise a level or automatic (adapts the camera JPEG to the scene)
+    if let Some(x) = mn.number(0x0022) {
+        b.details.push(("ActiveDLighting", x.to_string()));
+    }
+}
+
+/// Olympus / OM System (exiftool "Olympus CameraSettings"): sub-IFD 0x2020, in it 0x0520 PictureMode
+/// (first value), 0x0529 ArtFilter. Old makernotes without the sub-IFD stay "unknown".
+fn olympus(mn: &Makernote, b: &mut PictureStyle) {
+    let cs = mn.entries.iter().find(|e| e.tag == 0x2020).and_then(|e| {
+        let off = mn.t.u32(e.e + 8)? as usize;
+        let entries = mn.t.ifd(mn.basis + off, mn.basis)?;
+        Some(Makernote { t: Tiff { d: mn.t.d, le: mn.t.le, basis: mn.basis }, basis: mn.basis, entries, kind: Kind::Olympus })
+    });
+    let mode = cs.as_ref().and_then(|c| c.number(0x0520));
+    b.style = match mode {
+        Some(1) => "vivid",
+        Some(2) => "natural",
+        Some(3) => "muted",
+        Some(4) => "portrait",
+        Some(5) => "i-enhance",
+        Some(6) => "e-portrait",
+        Some(7) => "color-creator",
+        Some(9) => "color-profile-1",
+        Some(10) => "color-profile-2",
+        Some(11) => "color-profile-3",
+        Some(12) => "monochrome-profile-1",
+        Some(13) => "monochrome-profile-2",
+        Some(14) => "monochrome-profile-3",
+        Some(17) => "art-mode",
+        Some(18) => "monochrome-profile-4",
+        Some(256) => "monotone",
+        Some(512) => "sepia",
+        _ => "unknown",
+    }
+    .to_string();
+    if let Some(x) = mode {
+        b.details.push(("PictureMode", x.to_string()));
+    }
+    if let Some(x) = cs.as_ref().and_then(|c| c.number(0x0529)).filter(|&x| x != 0) {
+        b.details.push(("ArtFilter", x.to_string()));
+    }
+}
+
+/// Panasonic (exiftool "Panasonic Tags"): 0x0089 PhotoStyle.
+fn panasonic(mn: &Makernote, b: &mut PictureStyle) {
+    let v = mn.number(0x0089);
+    b.style = match v {
+        Some(0) => "auto",
+        Some(1) => "standard",
+        Some(2) => "vivid",
+        Some(3) => "natural",
+        Some(4) => "monochrome",
+        Some(5) => "scenery",
+        Some(6) => "portrait",
+        Some(8) => "cinelike-d",
+        Some(9) => "cinelike-v",
+        Some(11) => "l-monochrome",
+        Some(12) => "like709",
+        Some(15) => "l-monochrome-d",
+        Some(17) => "v-log",
+        Some(18) => "cinelike-d2",
+        _ => "unknown",
+    }
+    .to_string();
+    if let Some(x) = v {
+        b.details.push(("PhotoStyle", x.to_string()));
+    }
+}
+
 /// Lowercase key from a style name: "Teal and Orange" → `teal-and-orange`, "709 Look" → `709-look`.
 fn slug(t: &str) -> String {
     let t = t.to_ascii_lowercase().replace('&', " and ");
@@ -906,6 +1061,34 @@ mod tests {
         assert_eq!(name_part(".."), "--");
         assert_eq!(name_part("a..b"), "a..b");
         assert_eq!(name_part(&"x".repeat(500)).len(), 64);
+    }
+
+    /// Nikon Picture Control, Olympus Picture Mode, Panasonic Photo Style from free sample files (raw.pixls.us,
+    /// first file of each camera folder) in `GRAINEO_TEST_STYLE_SAMPLES`; skipped without it or when a file is missing.
+    #[test]
+    fn nikon_olympus_panasonic_styles_from_samples() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_STYLE_SAMPLES") else { return };
+        let base = Path::new(&dir);
+        for (f, style, detail) in [
+            ("nikon-d750.NEF", "standard", "0200"),
+            ("nikon-d610.NEF", "landscape", "0100"),
+            ("nikon-d7200.NEF", "neutral", "0200"),
+            ("nikon-zfc.NEF", "auto", "0300"),
+            ("oly-em5.ORF", "natural", "2"),
+            ("oly-em1m3.ORF", "muted", "3"),
+            ("oly-epl9.ORF", "vivid", "1"),
+            ("pana-g80.RW2", "natural", "3"),
+            ("pana-lx100.RW2", "standard", "1"),
+        ] {
+            let p = base.join(f);
+            if !p.exists() {
+                continue;
+            }
+            let s = read(&p).expect(f);
+            assert_eq!(s.style, style, "{f}");
+            assert!(s.details.iter().any(|(_, v)| v == detail), "{f}: {:?}", s.details);
+            assert_eq!(format!("{:?}", Some(&s)), format!("{:?}", read_large(&p).as_ref()), "{f}: small head and large read agree");
+        }
     }
 
     /// Sample files (internal, not in the repository): skipped if missing.

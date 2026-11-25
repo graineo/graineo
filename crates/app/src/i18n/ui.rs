@@ -111,6 +111,34 @@ pub fn tr<'a>(de: &'a str) -> &'a str {
     translated(de).map(|s| s.as_str()).unwrap_or(de)
 }
 
+/// Every form of a text shown in the current language, for searches: the text itself, its German key and its
+/// English text (also for labels of the Fluent catalogue, [`super::Text`]). Unknown texts give only themselves.
+pub fn search_forms(shown: &str) -> Vec<String> {
+    let mut out = vec![shown.to_string()];
+    let en = dictionary_of(Language::En);
+    let key = if en.contains_key(shown) {
+        Some(shown.to_string())
+    } else if language() == Language::De || language() == Language::En {
+        en.iter().find(|(_, v)| v.as_str() == shown).map(|(k, _)| k.clone())
+    } else {
+        dictionary_of(language()).iter().find(|(_, v)| v.as_str() == shown).map(|(k, _)| k.clone())
+    };
+    if let Some(k) = key {
+        if let Some(e) = en.get(&k) {
+            out.push(e.clone());
+        }
+        out.push(k);
+    }
+    for &t in super::Text::ALL {
+        let here = super::text(t);
+        if here == shown || super::text_in(Language::De, t) == shown {
+            out.extend([here, super::text_in(Language::En, t), super::text_in(Language::De, t)].map(str::to_string));
+        }
+    }
+    out.dedup();
+    out
+}
+
 #[allow(non_snake_case)]
 fn translated(de: &str) -> Option<&'static String> {
     let t = dictionary().get(de);

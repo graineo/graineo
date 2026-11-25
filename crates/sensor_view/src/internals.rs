@@ -71,7 +71,7 @@ pub(crate) fn analyze(rb: &RawImage, _o: &Options) -> Result<(Vec<Layer>, Value)
     m.insert("fuji_dr".into(), fuji_dr.unwrap_or(Value::Null));
     m.insert("picture_style".into(), style.unwrap_or(Value::Null));
     m.insert("baseline_exposure_ev".into(), json!(i.baseline_exposure));
-    m.insert("camera_ev".into(), json!(raw::development::camera_ev(&i.maker, &i.model)));
+    m.insert("camera_ev".into(), json!(raw::development::camera_ev_for(&i.maker, &i.model, i.baseline_exposure)));
     m.insert("dng_profile".into(), json!(i.dng_profile));
     m.insert("orientation".into(), json!(i.orientation));
     m.insert("corrections".into(), json!(i.corrections));

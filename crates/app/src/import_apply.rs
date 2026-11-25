@@ -42,18 +42,27 @@ pub(super) fn combo(ui: &mut egui::Ui, name: &mut String, width: f32) -> egui::R
     egui::ComboBox::from_id_salt("imp-vorgabe")
         .selected_text(shown)
         .width(width)
-        .height(360.0)
+        .height(f32::INFINITY)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
         .show_ui(ui, |ui| {
-            ui.selectable_value(name, String::new(), crate::tr("Keine"));
-            let mut group = String::new();
-            for (g, p) in choices() {
-                if g != group {
-                    ui.separator();
-                    ui.label(egui::RichText::new(crate::tr(&g).to_uppercase()).small().color(crate::lr::TEXT_DIM()));
-                    group = g;
+            let all = choices();
+            crate::lr::list_menu(ui, "imp-vorgabe", all.len() + 1, |ui, f| {
+                if ui.selectable_value(name, String::new(), crate::tr("Keine")).clicked() {
+                    ui.close();
                 }
-                ui.selectable_value(name, p.name.clone(), crate::tr(&p.name));
-            }
+                let mut group = String::new();
+                for (g, p) in all.into_iter().filter(|(_, p)| f.shows(crate::tr(&p.name))) {
+                    if g != group {
+                        ui.separator();
+                        ui.label(egui::RichText::new(crate::tr(&g).to_uppercase()).small().color(crate::lr::TEXT_DIM()));
+                        group = g;
+                    }
+                    if ui.selectable_value(name, p.name.clone(), crate::tr(&p.name)).clicked() || f.take_enter() {
+                        *name = p.name.clone();
+                        ui.close();
+                    }
+                }
+            });
         })
         .response
 }

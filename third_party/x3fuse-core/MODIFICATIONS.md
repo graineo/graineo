@@ -493,3 +493,13 @@ leaves the step out):
   with the list spelling; a code whose name is not in `WhiteBalanceGains` (e.g. ColorTemp) falls back to "Auto".
   Tests `quattro_wb_codes_use_camf_list_names`, `quattro_file_resolves_gains_for_every_preset` (`X3F_QUATTRO_FILE`).
 - 2026-11-25 (graineo): `meta.rs`, `quattro_wb_name`: code 10 is AutoLSP (code 12 and above fall back to Auto), matching the camera's own numbering.
+
+## GPU jobs bounded, lost device reported (November 2026)
+
+- 2026-11-25 (graineo): `spp_denoise/gpu.rs` (`denoise_image`): one submit per batch of tiles and a separate submit
+  for the whole-image prefilter instead of one command buffer for all tiles (≈ 150 ms on an M1 Pro for a Merrill),
+  so no single job outlasts the driver's watchdog on a slow GPU. Same commands in the same order, results unchanged.
+  `X3F_SPP_TIMING` also prints the longest batch submit.
+- 2026-11-25 (graineo): `process.rs`: `GPU_DEVICE_LOST` and `gpu_device_lost()` (re-exported by `x3f-sys` and
+  `x3f-core`), set by the device-lost callbacks in `denoise/gpu.rs` and `spp_denoise/gpu.rs` (not for a deliberately
+  destroyed device), so the application can switch its other GPU paths off and tell the user.

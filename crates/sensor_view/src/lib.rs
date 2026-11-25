@@ -419,7 +419,7 @@ impl RawImage {
     /// Exposure of the default development in EV (base + camera + BaselineExposure + Fuji DR).
     pub fn standard_ev(&self) -> f32 {
         match &self.info {
-            Some(i) => raw::BASE_EV + raw::development::camera_ev(&i.maker, &i.model) + i.baseline_exposure + raw::development::fuji_compensation(&i.maker, &i.model, i.exif.iso, i.fuji_dr),
+            Some(i) => raw::BASE_EV + raw::development::camera_ev_for(&i.maker, &i.model, i.baseline_exposure) + i.baseline_exposure + raw::development::fuji_compensation(&i.maker, &i.model, i.exif.iso, i.fuji_dr),
             None => raw::BASE_EV,
         }
     }

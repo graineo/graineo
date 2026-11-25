@@ -5,7 +5,10 @@
 //!
 //! Behaviour in the image:
 //! - The circles are visible while the "Retouch" tool of the right rail is open or a retouching tool is active, hidden
-//!   otherwise; H (or the switch in the panel) inverts that everywhere (hide in the tool, show outside of it).
+//!   otherwise; H (or the eye button in the panel) inverts that everywhere (hide in the tool, also with an active
+//!   heal/clone tool, show outside of it). Hidden circles cannot be hit; an active tool still places new spots.
+//! - Shown circles step aside on their own while the pointer is not over the photo or a slider is dragged, so the
+//!   result can be judged without them.
 //! - A click on a circle selects the spot (highlighted, source with a line), dragging moves the spot or its source.
 //!   Radius and opacity act on the selected spot, ⌫/Del deletes it, Esc ends the tool and the selection.
 //! - Only with an active tool does a click on a free area place something new; dragging while placing sets the source.
@@ -63,6 +66,8 @@ struct View {
     toggled: bool,
     /// the pointer was over a circle in the last frame (then the image does not zoom or pan on click/drag)
     over_handle: bool,
+    /// the circles were drawn in the last frame (not hidden, pointer over the photo, no slider dragged; tests)
+    drawn: bool,
 }
 
 fn key() -> egui::Id {
@@ -127,10 +132,21 @@ pub fn toggle_overlays(ctx: &Context) {
     save_view(ctx, v);
 }
 
-/// Are retouch spots and mask outlines shown right now?
+/// Are retouch spots and mask outlines shown right now? The default (shown with an active tool or in the "Retouch"
+/// tool) is inverted by H.
 pub fn overlays_visible(ctx: &Context) -> bool {
     let v = view(ctx);
-    active(ctx) || (!v.masks_open && v.panel_open != v.toggled)
+    let tool = active(ctx);
+    if v.masks_open && !tool {
+        return false;
+    }
+    (tool || v.panel_open) != v.toggled
+}
+
+/// Test hook `GRAINEO_RETOUCH_TEST` (only with `GRAINEO_DATA_DIR`).
+fn test_hook() -> Option<String> {
+    crate::env::var_os("GRAINEO_DATA_DIR")?;
+    crate::env::var("GRAINEO_RETOUCH_TEST").ok().filter(|v| v == "1" || v == "hidden")
 }
 
 /// Is a retouching tool active (then clicks in the image belong to it)?
@@ -178,8 +194,12 @@ fn delete(sel: Sel, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>) {
 /// Section "Retouch" of the "Retouch" tool.
 pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, index: usize) {
     let mut z = state(ui.ctx(), index);
-    // test hook GRAINEO_RETOUCH_TEST=1 (only with GRAINEO_DATA_DIR): three spots, the second selected
-    if spots.is_empty() && crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_RETOUCH_TEST").as_deref() == Ok("1") {
+    // test hook GRAINEO_RETOUCH_TEST=1|hidden (only with GRAINEO_DATA_DIR): three spots, the second selected;
+    // `hidden`: hidden as with H (screenshots)
+    if spots.is_empty() && test_hook().is_some() {
+        if test_hook().as_deref() == Some("hidden") && !view(ui.ctx()).toggled {
+            toggle_overlays(ui.ctx());
+        }
         for (x, y) in [(0.3, 0.4), (0.5, 0.5), (0.7, 0.3)] {
             spots.push(Spot { clone: false, center: [x, y], source: [x + 0.08, y + 0.05], radius: 0.02, opacity: 1.0 });
         }
@@ -208,15 +228,14 @@ pub fn panel(ui: &mut Ui, spots: &mut Vec<Spot>, red_eyes: &mut Vec<RedEye>, ind
             }
         });
         ui.add_space(4.0);
-        // switch with a clear state; with an active tool the circles are always visible; the key is in the tooltip
+        // eye button: show or hide the marks (also with an active tool); the key is in the tooltip
         ui.horizontal(|ui| {
             let visible = overlays_visible(ui.ctx());
-            let label = if visible { crate::tr("Punkte sichtbar") } else { crate::tr("Punkte verborgen") };
-            let r = ui.add_enabled(z.tool == Tool::Off, egui::Button::new(label).selected(visible));
-            lr::tip_key(ui, &r, crate::tr("Retusche-Punkte im Bild zeigen oder verbergen"), "overlays");
-            if r.clicked() {
+            let icon = if visible { lr::Icon::Eye } else { lr::Icon::EyeSlash };
+            if lr::icon_button_hint(ui, icon, !visible, &lr::with_shortcut("Markierungen ein/aus", "overlays")) {
                 toggle_overlays(ui.ctx());
             }
+            lr::note(ui, if visible { crate::tr("Markierungen sichtbar") } else { crate::tr("Markierungen ausgeblendet") });
         });
         // what is there and what is selected (fixed line)
         let mut line = if spots.is_empty() && red_eyes.is_empty() {
@@ -298,15 +317,18 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
     let mut z = state(&ctx, index);
     let mut v = view(&ctx);
     z.selected = valid(z.selected, spots, red_eyes);
-    if !overlays_visible(&ctx) {
+    let shown = overlays_visible(&ctx);
+    if !shown {
         // hidden circles cannot stay selected (⌫ would otherwise not reach the photo, the panel would name an invisible spot)
         z.selected = None;
         z.confirm_all = false;
         z.dragging = None;
         v.over_handle = false;
-        save(&ctx, z);
-        save_view(&ctx, v);
-        return;
+        if z.tool == Tool::Off {
+            save(&ctx, z);
+            save_view(&ctx, v);
+            return;
+        }
     }
     let to_screen = |p: [f32; 2]| -> Pos2 {
         let u = frame.from_src([p[0] * full[0], p[1] * full[1]]);
@@ -335,6 +357,10 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
     }
     // Element under the pointer: sources first, then spots, then pupils (the last placed is on top)
     let handle_at = |p: Pos2, spots: &[Spot], red_eyes: &[RedEye]| -> Option<(Sel, bool)> {
+        // hidden circles cannot be hit (an active tool places new spots blindly)
+        if !shown {
+            return None;
+        }
         let near = |m: Pos2, r: f32| m.distance(p) <= r.max(6.0) + 3.0;
         let r = |sp: &Spot| sp.radius * points_per_width;
         (0..spots.len())
@@ -359,7 +385,7 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
                 }
                 None => None,
             };
-            if let Some((s, _, _)) = z.dragging {
+            if let Some((s, _, _)) = z.dragging.filter(|_| shown) {
                 z.selected = Some(s);
             }
         }
@@ -408,11 +434,11 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
                     match z.tool {
                         Tool::RedEyes if red_eyes.len() < 64 => {
                             red_eyes.push(RedEye { center: p, size: [z.radius, z.radius], angle: 0.0, density: 0.9, darken: 0.5 });
-                            z.selected = Some(Sel::Eye(red_eyes.len() - 1));
+                            z.selected = shown.then(|| Sel::Eye(red_eyes.len() - 1));
                         }
                         Tool::Heal | Tool::CloneStamp if spots.len() < 256 => {
                             spots.push(Spot { clone: z.tool == Tool::CloneStamp, center: p, source: source_for(p, z.radius), radius: z.radius, opacity: 1.0 });
-                            z.selected = Some(Sel::Spot(spots.len() - 1));
+                            z.selected = shown.then(|| Sel::Spot(spots.len() - 1));
                         }
                         _ => z.selected = None,
                     }
@@ -421,9 +447,14 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
         }
     }
     let hovered = hover.and_then(|p| handle_at(p, spots, red_eyes)).map(|(s, _)| s);
+    // the circles step aside while the pointer is elsewhere (not over the photo) or a slider is dragged,
+    // so the result can be judged without them; a drag of a circle itself keeps them
+    // (the screenshot hook has no pointer over the photo)
+    let elsewhere = z.dragging.is_none() && (hover.is_none() || ctx.dragged_id().is_some_and(|id| id != resp.id)) && test_hook().is_none();
+    let draw = shown && !elsewhere;
     // Drawing: selected element white and thicker (source with a line), the hovered one brighter
     let gold = Color32::from_rgb(255, 230, 120);
-    for (i, sp) in spots.iter().enumerate() {
+    for (i, sp) in spots.iter().enumerate().filter(|_| draw) {
         let c = to_screen(sp.center);
         let q = to_screen(sp.source);
         let r = (sp.radius * points_per_width).max(3.0);
@@ -436,7 +467,7 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
         painter.circle_stroke(q, r, egui::Stroke::new(if sel { 1.5 } else { 1.0 }, faint));
         painter.line_segment([c, q], egui::Stroke::new(1.0, if sel { crate::lr::overlay(170) } else { Color32::from_rgba_unmultiplied(255, 230, 120, 110) }));
     }
-    for (i, e) in red_eyes.iter().enumerate() {
+    for (i, e) in red_eyes.iter().enumerate().filter(|_| draw) {
         let c = to_screen(e.center);
         let r = (e.size[0].max(e.size[1]) * points_per_width).max(4.0);
         let sel = z.selected == Some(Sel::Eye(i));
@@ -454,7 +485,8 @@ pub fn overlay(ui: &Ui, resp: &egui::Response, painter: &egui::Painter, rect: eg
             painter.circle_stroke(pos, (z.radius * points_per_width).max(3.0), egui::Stroke::new(1.0, crate::lr::TEXT_STRONG()));
         }
     }
-    v.over_handle = hovered.is_some() || z.dragging.is_some();
+    v.over_handle = shown && (hovered.is_some() || z.dragging.is_some());
+    v.drawn = draw;
     save(&ctx, z);
     save_view(&ctx, v);
 }
@@ -483,6 +515,12 @@ mod tests {
 
     fn press(ctx: &Context, k: egui::Key, spots: &mut Vec<Spot>, eyes: &mut Vec<RedEye>) {
         run(ctx, vec![egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }], spots, eyes);
+    }
+
+    /// pointer to `p` and one more frame (hover is known from the frame after the move)
+    fn hover(ctx: &Context, p: Pos2, spots: &mut Vec<Spot>, eyes: &mut Vec<RedEye>) {
+        run(ctx, vec![egui::Event::PointerMoved(p)], spots, eyes);
+        run(ctx, Vec::new(), spots, eyes);
     }
 
     fn spot(x: f32, y: f32) -> Spot {
@@ -546,7 +584,7 @@ mod tests {
         save(&ctx, State { image: 0, tool: Tool::Heal, ..Default::default() });
         let (mut spots, mut eyes) = (Vec::new(), Vec::new());
         run(&ctx, Vec::new(), &mut spots, &mut eyes);
-        assert!(overlays_visible(&ctx), "an active tool always shows the circles");
+        assert!(overlays_visible(&ctx), "an active tool shows the circles");
         click(&ctx, egui::pos2(60.0, 60.0), &mut spots, &mut eyes);
         assert_eq!(spots.len(), 1);
         assert_eq!(state(&ctx, 0).selected, Some(Sel::Spot(0)));
@@ -557,5 +595,45 @@ mod tests {
         // hidden circles cannot be hit
         click(&ctx, egui::pos2(60.0, 60.0), &mut spots, &mut eyes);
         assert_eq!(state(&ctx, 0).selected, None);
+    }
+
+    #[test]
+    fn h_hides_the_marks_while_healing() {
+        let ctx = Context::default();
+        set_panel_open(&ctx, true, false);
+        save(&ctx, State { image: 0, tool: Tool::Heal, ..Default::default() });
+        let (mut spots, mut eyes) = (vec![spot(0.25, 0.5)], Vec::new());
+        hover(&ctx, egui::pos2(150.0, 40.0), &mut spots, &mut eyes);
+        assert!(view(&ctx).drawn, "pointer over the photo: circles drawn");
+        toggle_overlays(&ctx);
+        assert!(!overlays_visible(&ctx) && active(&ctx), "H hides the circles with an active heal tool");
+        hover(&ctx, egui::pos2(150.0, 40.0), &mut spots, &mut eyes);
+        assert!(!view(&ctx).drawn);
+        // hidden: a click on the old spot places a new one instead of selecting it, and nothing is selected
+        click(&ctx, egui::pos2(60.0, 60.0), &mut spots, &mut eyes);
+        assert_eq!(spots.len(), 2, "the tool still places spots");
+        assert!(!has_selection(&ctx) && !grabs_pointer(&ctx));
+        toggle_overlays(&ctx);
+        assert!(overlays_visible(&ctx));
+        // the state is kept until the tool changes
+        toggle_overlays(&ctx);
+        set_panel_open(&ctx, false, false);
+        set_panel_open(&ctx, true, false);
+        assert!(overlays_visible(&ctx), "another tool and back: shown again");
+    }
+
+    #[test]
+    fn marks_step_aside_when_the_pointer_leaves_the_photo() {
+        let ctx = Context::default();
+        set_panel_open(&ctx, true, false);
+        let (mut spots, mut eyes) = (vec![spot(0.25, 0.5)], Vec::new());
+        hover(&ctx, egui::pos2(150.0, 40.0), &mut spots, &mut eyes);
+        assert!(view(&ctx).drawn);
+        // pointer beside the photo (e.g. on a slider of the panel)
+        hover(&ctx, egui::pos2(280.0, 190.0), &mut spots, &mut eyes);
+        assert!(!view(&ctx).drawn, "pointer not over the photo: circles hidden");
+        assert!(overlays_visible(&ctx), "only drawn hidden, the switch stays");
+        hover(&ctx, egui::pos2(150.0, 40.0), &mut spots, &mut eyes);
+        assert!(view(&ctx).drawn, "back over the photo: shown again");
     }
 }

@@ -288,25 +288,28 @@ pub fn HIST_CHANNELS() -> [Color32; 3] {
     }
 }
 
+/// Opacity of the black info box of the dark theme (was 150: only 3.9:1 for its text over a white photo).
+const INFO_BOX_DARK_ALPHA: u8 = 190;
+
 /// Opacity of the image info box on the photo (medium and light theme; dark keeps its black box).
 pub const INFO_BOX_ALPHA: f32 = 0.88;
 
 /// Ground of the image info box on the photo: panel color of the theme, slightly transparent, so the box belongs
-/// to the interface; dark theme: the former black box.
+/// to the interface; dark theme: a black box, dense enough that its text keeps 4.5:1 over a white photo.
 pub fn info_box_fill() -> Color32 {
     if theme() == Theme::Dark {
-        return Color32::from_black_alpha(150);
+        return Color32::from_black_alpha(INFO_BOX_DARK_ALPHA);
     }
     let p = PANEL();
     Color32::from_rgba_unmultiplied(p.r(), p.g(), p.b(), (INFO_BOX_ALPHA * 255.0).round() as u8)
 }
 
-/// Text colors of the image info box: (main rows, file name, notices in yellow). Dark as before; the other themes
-/// use TEXT_STRONG and TEXT and a yellow of their own, all ≥ 4.5:1 over a black and a white photo through the box
-/// (contrast_tests).
+/// Text colors of the image info box: (main rows, file name, notices in yellow). Dark: light grays on the black box;
+/// the other themes use TEXT_STRONG and TEXT and a yellow of their own. In every theme all are ≥ 4.5:1 over a black
+/// and a white photo through the box (contrast_tests).
 pub fn info_box_text() -> (Color32, Color32, Color32) {
     match theme() {
-        Theme::Dark => (gray(0xd8), gray(0x9a), Color32::from_rgb(0xd2, 0xae, 0x52)),
+        Theme::Dark => (gray(0xd8), gray(0xb0), Color32::from_rgb(0xd2, 0xae, 0x52)),
         Theme::Medium => (TEXT_STRONG(), TEXT(), Color32::from_rgb(0xf4, 0xd8, 0x8c)),
         Theme::Light => (TEXT_STRONG(), TEXT(), Color32::from_rgb(0x3e, 0x2c, 0x00)),
     }
@@ -324,8 +327,8 @@ pub fn clip_triangle(lit: bool) -> Color32 {
 pub fn scope_pixel(t: Theme, light: [f32; 3]) -> Color32 {
     let q = |x: f32| (x.clamp(0.0, 1.0) * 255.0) as u8;
     match t {
-        Theme::Dark => Color32::from_rgb(q(light[0]), q(light[1]), q(light[2])),
-        Theme::Medium => {
+        // empty cells transparent: the ground of the display (SCOPE_BG) shows through instead of a black image
+        Theme::Dark | Theme::Medium => {
             let a = light[0].max(light[1]).max(light[2]).min(1.0);
             Color32::from_rgba_premultiplied(q(light[0].min(a)), q(light[1].min(a)), q(light[2].min(a)), q(a))
         }
@@ -361,6 +364,19 @@ pub fn CATEGORY_LABEL() -> Color32 {
 #[inline]
 pub fn SLIDER_LABEL() -> Color32 {
     gray(if high_contrast() { 0xe8 } else { 0xc4 })
+}
+/// Subheadings inside sections: dimmer than TEXT_DIM (≥ 3:1 on every ground, contrast_tests), so they
+/// separate from the slider names below them.
+#[allow(non_snake_case)]
+#[inline]
+pub fn SUBHEAD_LABEL() -> Color32 {
+    gray(if high_contrast() { 0xd0 } else { 0xb0 })
+}
+/// Hairlines (category and subheading rules).
+#[allow(non_snake_case)]
+#[inline]
+pub fn RULE() -> Color32 {
+    gray(0x3a)
 }
 /// Extra vertical space per slider row.
 pub const SLIDER_AIR: f32 = 4.0;
@@ -1027,24 +1043,95 @@ fn name_hover(ui: &egui::Ui, name: egui::Response, name_text: egui::Rect, id: eg
     }
 }
 
-/// Group heading inside a section (e.g. "Tone"). With ⌥ held down
-/// it becomes "Reset Tone"; double-click resets as well.
-pub fn group_label(ui: &mut egui::Ui, text: &str) -> bool {
+/// Font size of subheadings: one step below the UI size and the category header.
+pub const SUBHEAD_SIZE: f32 = 10.0;
+/// Letter spacing of subheadings (wider than slider names, so they read as headings).
+const SUBHEAD_SPACING: f32 = 1.5;
+/// Space above a subheading that follows other content (the first one under a section header gets none).
+pub const SUBHEAD_GAP: f32 = 16.0;
+/// Row height of a subheading.
+pub const SUBHEAD_HEIGHT: f32 = 16.0;
+
+/// Paint a subheading into `rect`: small spaced capitals and a hairline filling the rest of the row.
+pub fn subheading_paint(painter: &egui::Painter, rect: egui::Rect, text: &str, color: Color32) {
+    subheading_paint_ex(painter, rect, text, color, true);
+}
+
+/// As [`subheading_paint`]; `rule = false` leaves out the hairline (heads of boxed groups, where the frame
+/// already bundles the content).
+pub fn subheading_paint_ex(painter: &egui::Painter, rect: egui::Rect, text: &str, color: Color32, rule: bool) {
+    let g = caps_spaced(painter, text, egui::FontId::proportional(SUBHEAD_SIZE), color, SUBHEAD_SPACING);
+    let w = g.size().x;
+    painter.galley(egui::pos2(rect.left(), rect.center().y - g.size().y / 2.0), g, color);
+    let x = rect.left() + w + 8.0;
+    if rule && x + 4.0 < rect.right() {
+        let y = rect.center().y.round() + 0.5;
+        painter.line_segment([egui::pos2(x, y), egui::pos2(rect.right(), y)], egui::Stroke::new(1.0, RULE()));
+    }
+}
+
+/// Space above a subheading: [`SUBHEAD_GAP`] after other content, nothing extra as the first item of a block.
+fn subheading_gap(ui: &mut egui::Ui) {
+    let first = ui.min_rect().height() < 1.0;
+    if !first {
+        ui.add_space((SUBHEAD_GAP - ui.spacing().item_spacing.y).max(0.0));
+    }
+}
+
+/// Subheading inside a section (e.g. "Tone"), full width with a hairline. With ⌥ held down
+/// it becomes "Reset Tone"; double-click resets as well. Returns: reset requested?
+pub fn subheading(ui: &mut egui::Ui, text: &str) -> bool {
+    subheading_with(ui, text, 0.0, |_| ()).0
+}
+
+/// [`subheading`] with controls at its right end (e.g. "Auto" or "?"), `right` points wide; the hairline ends before them.
+pub fn subheading_with<R>(ui: &mut egui::Ui, text: &str, right: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> (bool, R) {
+    let (reset, out, _) = subheading_core(ui, text, right, add);
+    (reset, out)
+}
+
+/// [`subheading`] over a block of controls (`add`) that has a help card ([`crate::help::for_slider`] with `text` and
+/// `hint`): while the pointer is over the heading or the block, a "?" appears right behind the heading text, as
+/// behind the names of sliders. Returns: (reset requested, result of `add`).
+pub fn subheading_help<R>(ui: &mut egui::Ui, text: &str, hint: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> (bool, R) {
+    let (reset, _, text_rect) = subheading_core(ui, text, 0.0, |_| ());
+    let out = add(ui);
+    if let Some(card) = crate::help::for_slider(text, hint) {
+        let block = egui::Rect::from_min_max(egui::pos2(ui.max_rect().left(), text_rect.top()), egui::pos2(ui.max_rect().right(), ui.cursor().top().max(text_rect.bottom())));
+        let hot = ui.is_enabled() && ui.rect_contains_pointer(block);
+        let q = egui::pos2(text_rect.right() + 10.0, text_rect.center().y);
+        crate::help::question_mark(ui, q, ui.scope_id().with(("subheading-help", text)), hot, text, hint, card, "");
+    }
+    (reset, out)
+}
+
+/// [`subheading_with`], also returning the rect of the heading text.
+fn subheading_core<R>(ui: &mut egui::Ui, text: &str, right: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> (bool, R, egui::Rect) {
     remember_section(text);
+    subheading_gap(ui);
     let alt = ui.input(|i| i.modifiers.alt);
     let shown = if alt { crate::trf!("{text} zurücksetzen", text = crate::tr(text)) } else { text.to_string() };
-    let color = if alt { ACCENT() } else { gray(0xbc) };
-    let g = caps_spaced(ui.painter(), &shown, egui::FontId::proportional(10.5), color, 1.0);
-    let (rect, r) = ui.allocate_exact_size(egui::vec2(g.size().x, 16.0), egui::Sense::click());
-    ui.painter().galley(egui::pos2(rect.left(), rect.center().y - g.size().y / 2.0), g, color);
-    // in lists without sections (film shelf of the darkroom) the group heading sticks to the top
+    let color = if alt { ACCENT() } else { SUBHEAD_LABEL() };
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), SUBHEAD_HEIGHT), egui::Sense::hover());
+    let line = rect.with_max_x((rect.right() - if right > 0.0 { right + 6.0 } else { 0.0 }).max(rect.left()));
+    subheading_paint(ui.painter(), line, &shown, color);
+    // only the text reacts to clicks (reset), not the empty line
+    let tw = caps_spaced(ui.painter(), &shown, egui::FontId::proportional(SUBHEAD_SIZE), color, SUBHEAD_SPACING).size().x;
+    let text_rect = rect.with_max_x((rect.left() + tw).min(rect.right()));
+    let r = ui.interact(text_rect, ui.scope_id().with(("subheading", text)), egui::Sense::click());
+    // in lists without sections (film shelf of the darkroom) the subheading sticks to the top
     let owned = text.to_string();
-    let band = egui::Rect::from_min_max(egui::pos2(rect.left(), rect.top() - 4.0), egui::pos2(rect.left() + ui.available_width().max(rect.width()), rect.bottom() + 4.0));
-    crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.id().with(("gruppe", text)), band, move |p, bar, _| {
-        let g = caps_spaced(p, &owned, egui::FontId::proportional(10.5), gray(0xbc), 1.0);
-        p.galley(egui::pos2(bar.left(), bar.center().y - g.size().y / 2.0), g, gray(0xbc));
+    crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.id().with(("gruppe", text)), rect.expand2(egui::vec2(0.0, 4.0)), move |p, bar, _| {
+        subheading_paint(p, egui::Rect::from_center_size(bar.center(), egui::vec2(bar.width(), SUBHEAD_HEIGHT)), &owned, SUBHEAD_LABEL());
     });
-    r.double_clicked() || (alt && r.clicked())
+    let out = if right > 0.0 {
+        let area = egui::Rect::from_min_max(egui::pos2((rect.right() - right).max(rect.left()), rect.top() - 2.0), egui::pos2(rect.right(), rect.bottom() + 2.0));
+        let mut child = ui.new_child(egui::UiBuilder::new().id_salt(("subheading_with", text)).max_rect(area).layout(egui::Layout::right_to_left(egui::Align::Center)));
+        add(&mut child)
+    } else {
+        add(ui)
+    };
+    (r.double_clicked() || (alt && r.clicked()), out, text_rect)
 }
 
 fn decimals(step: f64) -> usize {
@@ -1906,15 +1993,11 @@ pub fn scope_image(rgb: &[u8], width: usize, height: usize, scope: Scope) -> egu
                         o[j] += v * tint[k][j];
                     }
                 }
-                if t == Theme::Dark {
-                    Color32::from_rgb((o[0].min(1.0) * 255.0) as u8, (o[1].min(1.0) * 255.0) as u8, (o[2].min(1.0) * 255.0) as u8)
-                } else {
-                    scope_pixel(t, o)
-                }
+                scope_pixel(t, o)
             } else {
                 let v = lum(c[0]);
                 match t {
-                    Theme::Dark => Color32::from_rgb((v * 225.0) as u8, (v * 240.0) as u8, (v * 225.0) as u8),
+                    Theme::Dark => scope_pixel(t, [v * 225.0 / 255.0, v * 240.0 / 255.0, v * 225.0 / 255.0]),
                     // luminance trace: dark grey ink on the light ground
                     Theme::Light => Color32::from_rgba_premultiplied((v * 0x30 as f32) as u8, (v * 0x34 as f32) as u8, (v * 0x30 as f32) as u8, (v * 255.0) as u8),
                     Theme::Medium => scope_pixel(t, [v * 225.0 / 255.0, v * 240.0 / 255.0, v * 225.0 / 255.0]),
@@ -2215,6 +2298,24 @@ pub fn tone_curve(ui: &mut egui::Ui, curve: &mut develop::ToneCurve, channel: us
         }
     }
     painter.add(egui::Shape::line(samples(&work), Stroke::new(1.6, color)));
+    // while a point is dragged: guide lines through it to both axes and its values input → output next to it
+    // test aid (own data folder only): GRAINEO_CURVE_GUIDE=<point> shows the guides of that point as while dragging
+    let guide_test = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_CURVE_GUIDE").ok()).and_then(|v| v.parse::<usize>().ok());
+    if let Some(p) = drag.or(guide_test).and_then(|i| work.get(i)).copied() {
+        let at = to_screen(p);
+        let guide = Stroke::new(1.0, color.gamma_multiply(0.55));
+        painter.extend(egui::Shape::dashed_line(&[egui::pos2(at.x, rect.top()), egui::pos2(at.x, rect.bottom())], guide, 3.0, 3.0));
+        painter.extend(egui::Shape::dashed_line(&[egui::pos2(rect.left(), at.y), egui::pos2(rect.right(), at.y)], guide, 3.0, 3.0));
+        let text = format!("{:.0} → {:.0}", p[0] * 255.0, p[1] * 255.0);
+        let font = egui::FontId::proportional(10.0);
+        let g = painter.layout_no_wrap(text, font, TEXT_STRONG());
+        // beside the point, kept inside the field (left of it near the right edge, below it near the top)
+        let x = if at.x + 8.0 + g.size().x + 4.0 > rect.right() { at.x - 8.0 - g.size().x } else { at.x + 8.0 };
+        let y = if at.y - 8.0 - g.size().y < rect.top() { at.y + 8.0 } else { at.y - 8.0 - g.size().y };
+        let r = egui::Rect::from_min_size(egui::pos2(x, y), g.size()).expand2(egui::vec2(3.0, 1.0));
+        painter.rect_filled(r, 2.0, PANEL_DARK().gamma_multiply(0.9));
+        painter.galley(r.min + egui::vec2(3.0, 1.0), g, TEXT_STRONG());
+    }
     let hover_pt = if drag.is_none() { pointer.filter(|_| resp.hovered()).and_then(|q| nearest(&work, q)) } else { None };
     for (i, p) in work.iter().enumerate() {
         let active = drag == Some(i) || hover_pt == Some(i);
@@ -2349,6 +2450,8 @@ pub enum Icon {
     /// Grid and filmstrip: expand / collapse all series
     ArrowsOutLineH,
     ArrowsInLineH,
+    /// "Reset all settings" in the footer of the editing trays
+    ArrowArcLeft,
 }
 
 impl Icon {
@@ -2444,6 +2547,7 @@ impl Icon {
             Icon::Palette => '\u{e6c8}',
             Icon::ArrowsOutLineH => '\u{e534}',
             Icon::ArrowsInLineH => '\u{e530}',
+            Icon::ArrowArcLeft => '\u{e014}',
         }
     }
 }
@@ -3307,6 +3411,11 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
 
 /// Name above a control, as with the sliders (capitals, left). Returns: row, text rect, id for the help "?".
 fn label_above(ui: &mut egui::Ui, label: &str) -> (egui::Rect, egui::Rect, egui::Id) {
+    // empty label: the caller draws a subheading above instead (no extra row)
+    if label.is_empty() {
+        let at = egui::Rect::from_min_size(ui.cursor().min, egui::vec2(ui.available_width(), 0.0));
+        return (at, at, ui.scope_id().with(("lr-choice", label)));
+    }
     let (row, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 17.0), egui::Sense::hover());
     let color = if ui.is_enabled() { gray(0xa4) } else { gray(0x5c) };
     let text = label_caps(ui.painter(), row.left_center(), label, color);
@@ -3454,12 +3563,15 @@ pub fn icon_select(
         let r = ui
             .allocate_ui_with_layout(egui::vec2(combo_w, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.set_max_width(combo_w);
-                egui::ComboBox::from_id_salt(("lr-icon-select", id)).selected_text(icon_text(icon, name)).width(combo_w).truncate().height(400.0).show_ui(ui, |ui| {
-                    for (i, (icon, text)) in items.iter().enumerate() {
-                        if ui.selectable_label(selected == Some(i), icon_text(*icon, crate::tr(text))).clicked() {
-                            picked = Some(i);
+                egui::ComboBox::from_id_salt(("lr-icon-select", id)).selected_text(icon_text(icon, name)).width(combo_w).truncate().height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+                    list_menu(ui, ("lr-icon-select", id), items.len(), |ui, f| {
+                        for (i, (icon, text)) in items.iter().enumerate().filter(|(_, (_, t))| f.shows(crate::tr(t))) {
+                            if ui.selectable_label(selected == Some(i), icon_text(*icon, crate::tr(text))).clicked() || f.take_enter() {
+                                picked = Some(i);
+                                ui.close();
+                            }
                         }
-                    }
+                    });
                 })
             })
             .inner;
@@ -3502,6 +3614,36 @@ mod tests {
             icon = out.platform_output.cursor_icon;
         }
         icon
+    }
+
+    /// "Treatment" and "White balance" are subheadings over their control; the help "?" appears behind the heading
+    /// while the pointer is over the control below it, and not when the pointer is elsewhere.
+    #[test]
+    fn subheading_over_a_block_shows_its_help_mark() {
+        for title in ["Behandlung", "Weißabgleich"] {
+            assert!(crate::help::for_slider(title, "").is_some(), "{title}: no help card");
+            let marks = |pointer: egui::Pos2| {
+                let ctx = egui::Context::default();
+                let mut n = 0;
+                for _ in 0..3 {
+                    let input = egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(300.0, 200.0))),
+                        events: vec![egui::Event::PointerMoved(pointer)],
+                        ..Default::default()
+                    };
+                    let out = crate::ui_test::run(&ctx, input, |ui| {
+                        subheading_help(ui, title, "", |ui| {
+                            ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::hover());
+                        });
+                    });
+                    n = out.shapes.iter().filter(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.text() == "?")).count();
+                }
+                n
+            };
+            // the pointer over the block (below the heading row) vs. far below it
+            assert_eq!(marks(egui::pos2(100.0, 40.0)), 1, "{title}: no ? while the block is hovered");
+            assert_eq!(marks(egui::pos2(100.0, 190.0)), 0, "{title}: ? without hover");
+        }
     }
 
     #[test]
@@ -3894,6 +4036,62 @@ pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool) -
     clicked
 }
 
+/// From this many entries a list menu ([`list_menu`]) shows a search field at its top.
+pub const LIST_MENU_SEARCH_FROM: usize = 15;
+
+/// Filter state of a [`list_menu`] for one frame: which entries to show and whether Enter picks the first one.
+pub struct ListFilter {
+    query: String,
+    enter: std::cell::Cell<bool>,
+}
+
+impl ListFilter {
+    /// Is the entry with this text shown (empty query: all; otherwise case-insensitive part of the text)?
+    pub fn shows(&self, text: &str) -> bool {
+        self.query.is_empty() || text.to_lowercase().contains(&self.query)
+    }
+    /// For the first shown, selectable entry: was Enter pressed in the search field with a query typed? True at most once per frame;
+    /// the caller then takes the entry as if clicked and closes the menu.
+    pub fn take_enter(&self) -> bool {
+        !self.query.is_empty() && self.enter.take()
+    }
+}
+
+/// Body of a long list menu (pop-up menu, context submenu or the list of a ComboBox): the entries scroll inside a
+/// height bounded by the window (they never run past the window edge), and from [`LIST_MENU_SEARCH_FROM`] entries a
+/// search field sits fixed at the top, focused when the menu opens. Typing filters at once (case-insensitive part of
+/// the text, checked by the caller with [`ListFilter::shows`]), Enter takes the first shown entry
+/// ([`ListFilter::take_enter`]), Esc closes the menu. A ComboBox using it should get a large `.height(…)`, so only
+/// this list scrolls. Inspired by greycard.
+pub fn list_menu<R>(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, count: usize, add: impl FnOnce(&mut egui::Ui, &ListFilter) -> R) -> R {
+    let id = egui::Id::new(("list-menu", id));
+    let mut filter = ListFilter { query: String::new(), enter: std::cell::Cell::new(false) };
+    if count >= LIST_MENU_SEARCH_FROM {
+        // (frame last shown, text): a menu shown again after a pause starts empty and takes the focus
+        let frame = ui.ctx().cumulative_frame_nr();
+        let (last, mut text) = ui.data_mut(|d| d.get_temp::<(u64, String)>(id)).unwrap_or((0, String::new()));
+        let fresh = last + 1 < frame;
+        if fresh {
+            text.clear();
+        }
+        let r = edit_field(ui, egui::TextEdit::singleline(&mut text).hint_text(crate::tr("Suchen …")).desired_width(ui.available_width().max(160.0)));
+        if fresh {
+            r.request_focus();
+        }
+        let (enter, esc) = ui.input(|i| (i.key_pressed(egui::Key::Enter), i.key_pressed(egui::Key::Escape)));
+        if esc {
+            ui.close();
+        }
+        filter.enter.set(enter && (r.has_focus() || r.lost_focus()));
+        filter.query = text.trim().to_lowercase();
+        ui.data_mut(|d| d.insert_temp(id, (frame, text)));
+        ui.add_space(2.0);
+    }
+    // the window height minus room for the menu's own position and the search field
+    let max_h = (ui.ctx().content_rect().height() - 120.0).max(120.0);
+    egui::ScrollArea::vertical().id_salt(id.with("scroll")).max_height(max_h).show(ui, |ui| add(ui, &filter)).inner
+}
+
 /// [`menu_item`] that, while disabled, tells why: `why` as a tooltip after the usual delay ([`hover_tip`]). Enabled
 /// entries look and act as [`menu_item`].
 pub fn menu_item_why(ui: &mut egui::Ui, text: &str, shortcut: &str, enabled: bool, why: &str) -> bool {
@@ -4095,7 +4293,6 @@ mod contrast_tests {
         #[test]
     fn wcag_contrast_of_the_palette() {
         let _lock = super::theme_tests::LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let known_dark: [&str; 0] = [];
         let mut failures = Vec::new();
         let mut table = String::from("| Thema | Kontrast | Paar | Verhältnis | Grenze |\n|---|---|---|---|---|\n");
         for (t, tn) in [(0u8, "Dunkel"), (1, "Mittel"), (2, "Hell")] {
@@ -4104,7 +4301,7 @@ mod contrast_tests {
                 HIGH_CONTRAST.store(hc, std::sync::atomic::Ordering::Relaxed);
                 let grounds = [("PANEL", PANEL()), ("PANEL_DARK", PANEL_DARK()), ("GROUP_FILL", GROUP_FILL()), ("BUTTON_FILL", BUTTON_FILL()), ("WINDOW", ui_rgb(0x1e, 0x1f, 0x22)), ("IMAGE_BG", IMAGE_BG())];
                 let mut checks: Vec<(String, f64, f64)> = Vec::new();
-                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0)] {
+                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0), ("SUBHEAD_LABEL", SUBHEAD_LABEL(), 3.0)] {
                     let (gn, w) = grounds.iter().map(|(gn, g)| (*gn, ratio(c, *g))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
                     checks.push((format!("{n} / {gn}"), w, min));
                 }
@@ -4118,8 +4315,9 @@ mod contrast_tests {
                 checks.push(("BLUE_TEXT / PANEL".into(), ratio(BLUE_TEXT(), PANEL()), 4.5));
                 checks.push(("ON_GOLD / GOLD".into(), ratio(ON_GOLD(), GOLD()), 4.5));
                 checks.push(("ON_BLUE / BLUE".into(), ratio(ON_BLUE(), BLUE()), 4.5));
-                if t != 0 {
-                    // image info box on the photo: text against the box composited over a black and a white photo
+                {
+                    // image info box on the photo (every theme): text against the box composited over a black and a
+                    // white photo
                     let fill = info_box_fill();
                     let a = fill.a() as f64 / 255.0;
                     let over = |photo: f64| {
@@ -4154,7 +4352,7 @@ mod contrast_tests {
                     let ok = w >= min;
                     table += &format!("| {tn} | {mode} | {pair} | {w:.2} | {min} {} |\n", if ok { "" } else { "✗" });
                     let key = format!("{tn}/{mode} {}", pair.split(' ').next().unwrap());
-                    if !ok && !known_dark.contains(&key.as_str()) {
+                    if !ok {
                         failures.push(format!("{key}: {w:.2} < {min}"));
                     }
                 }

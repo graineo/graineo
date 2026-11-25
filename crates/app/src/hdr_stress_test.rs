@@ -2092,7 +2092,11 @@ impl Batch {
         // the sources are never touched
         let frames: i64 = self.lab.db().conn.query_row(&format!("SELECT count(*) FROM file WHERE status = 0 AND id IN ({})", self.lab.frames.iter().map(|f| f.0.to_string()).collect::<Vec<_>>().join(",")), [], |r| r.get(0)).unwrap_or(-1);
         if frames != self.lab.frames.len() as i64 {
-            return Err(format!("{frames} of {} source frames are left in the library", self.lab.frames.len()));
+            // what became of them (status per file, the folder on disk), so a failure names its cause
+            let ids = self.lab.frames.iter().map(|f| f.0.to_string()).collect::<Vec<_>>().join(",");
+            let db = self.lab.db();
+            let states: Vec<String> = db.conn.prepare(&format!("SELECT id, status FROM file WHERE id IN ({ids})")).and_then(|mut st| st.query_map([], |r| Ok(format!("{}:{}", r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))).map(|r| r.flatten().collect())).unwrap_or_default();
+            return Err(format!("{frames} of {} source frames are left in the library (file:status {states:?}, folder on disk {})", self.lab.frames.len(), self.lab.dir.is_dir()));
         }
         self.lab.check_new_photos()
     }

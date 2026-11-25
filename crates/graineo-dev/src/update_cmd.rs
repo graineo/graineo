@@ -6,7 +6,9 @@
 //! - `update-sign FILE [--key KEYFILE]`: write `FILE.sig` (base64 signature over the bytes of FILE).
 //! - `update-verify FILE [--pubkey BASE64]`: check `FILE.sig` (default: the keys built into the app).
 //! - `update-manifest OUT --version V [--date D] [--notes MD] [--notes-de MD] --asset KEY FILE URL …`:
-//!   write `latest.json` with size and SHA-256 of each package.
+//!   write `latest.json` with size and SHA-256 of each package. `--base FILE`: start from an existing, signed
+//!   `latest.json` of the same version (its signature `FILE.sig` must be valid with a built-in key) and keep its date,
+//!   notes and packages; `--asset` entries add or replace packages (`scripts/linux-sign.sh` adds the Linux packages).
 
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
@@ -98,7 +100,7 @@ fn write_secret(path: &Path, seed: &str) -> Result<()> {
 }
 
 fn manifest(args: &[String]) -> Result<()> {
-    let usage = "usage: graineo-dev update-manifest OUT --version V [--date D] [--notes MD] [--notes-de MD] --asset KEY FILE URL …";
+    let usage = "usage: graineo-dev update-manifest OUT --version V [--base LATEST_JSON] [--date D] [--notes MD] [--notes-de MD] --asset KEY FILE URL …";
     let out = args.first().context(usage)?;
     let version = option(args, "--version").context(usage)?;
     anyhow::ensure!(library::update::parse_version(&version).is_some(), "invalid version {version}");
@@ -108,17 +110,31 @@ fn manifest(args: &[String]) -> Result<()> {
             _ => Ok(None),
         }
     };
-    let date = option(args, "--date").unwrap_or_else(|| {
+    // existing list of this release: only trusted with a valid signature by a key built into the app
+    let base = match option(args, "--base") {
+        Some(b) => {
+            let data = std::fs::read(&b).with_context(|| b.clone())?;
+            let sig = std::fs::read_to_string(format!("{b}.sig")).with_context(|| format!("{b}.sig"))?;
+            let keys: Vec<String> = library::update::built_in_keys().into_iter().map(str::to_string).collect();
+            library::update::verify_any(&data, &sig, &keys).map_err(|e| anyhow::anyhow!("{b}: {e}"))?;
+            let m = library::update::parse_manifest(&data, false).map_err(anyhow::Error::msg)?;
+            anyhow::ensure!(m.version == version, "{b}: version {} instead of {version}", m.version);
+            Some(m)
+        }
+        None => None,
+    };
+    let date = option(args, "--date").or_else(|| base.as_ref().map(|m| m.date.clone())).unwrap_or_else(|| {
         let o = std::process::Command::new("date").args(["-u", "+%Y-%m-%d"]).output();
         o.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default()
     });
-    let mut assets = Vec::new();
+    let mut assets: Vec<(String, library::update::Asset)> = base.as_ref().map(|m| m.assets.clone()).unwrap_or_default();
     let mut i = 0;
     while i < args.len() {
         if args[i] == "--asset" {
             let (key, file, url) = (args.get(i + 1).context(usage)?, args.get(i + 2).context(usage)?, args.get(i + 3).context(usage)?);
             let size = std::fs::metadata(file).with_context(|| file.clone())?.len();
             let sha256 = library::relocate::sha256(Path::new(file)).map_err(anyhow::Error::msg)?;
+            assets.retain(|(k, _)| k != key);
             assets.push((key.clone(), library::update::Asset { url: url.clone(), sha256, size }));
             i += 4;
         } else {
@@ -126,7 +142,9 @@ fn manifest(args: &[String]) -> Result<()> {
         }
     }
     anyhow::ensure!(!assets.is_empty(), "{usage}");
-    let m = library::update::Manifest { version, date, notes: read("--notes")?.unwrap_or_default(), notes_de: read("--notes-de")?, assets };
+    let notes = read("--notes")?.or_else(|| base.as_ref().map(|m| m.notes.clone())).unwrap_or_default();
+    let notes_de = read("--notes-de")?.or_else(|| base.as_ref().and_then(|m| m.notes_de.clone()));
+    let m = library::update::Manifest { version, date, notes, notes_de, assets };
     let text = library::update::manifest_json(&m);
     // the file must be accepted by the app's own parser
     library::update::parse_manifest(text.as_bytes(), true).map_err(anyhow::Error::msg)?;

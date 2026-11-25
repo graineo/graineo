@@ -60,7 +60,8 @@ impl Choice {
                         _ => None,
                     }
                 })
-                .unwrap_or(Language::De),
+                // Unsupported system language: English reaches more people than German.
+                .unwrap_or(Language::En),
         }
     }
 }
@@ -101,13 +102,58 @@ fn preferred_languages() -> Vec<String> {
     let languages: Retained<NSArray<NSString>> = unsafe { msg_send![class, preferredLanguages] };
     languages.iter().map(|s| s.to_string()).collect()
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
 fn preferred_languages() -> Vec<String> {
-    std::env::var("LC_ALL")
-        .or_else(|_| std::env::var("LANG"))
-        .ok()
-        .into_iter()
+    use windows_sys::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
+    // Windows does not set LANG/LC_ALL; the display languages of the user come from the MUI API
+    // ("de-DE\0en-US\0\0"). Read-only, no registry access.
+    let mut count = 0u32;
+    let mut len = 0u32;
+    // SAFETY: a null buffer asks only for the required length (in UTF-16 units).
+    if unsafe { GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, std::ptr::null_mut(), &mut len) } == 0 || len == 0 {
+        return posix_languages(|k| std::env::var(k).ok());
+    }
+    let mut buffer = vec![0u16; len as usize];
+    // SAFETY: the buffer holds exactly `len` UTF-16 units, as requested by the first call.
+    if unsafe { GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, buffer.as_mut_ptr(), &mut len) } == 0 {
+        return posix_languages(|k| std::env::var(k).ok());
+    }
+    buffer.truncate(len as usize);
+    split_multi_string(&buffer)
+}
+#[cfg(not(any(target_os = "macos", windows)))]
+fn preferred_languages() -> Vec<String> {
+    posix_languages(|k| std::env::var(k).ok())
+}
+/// Splits a Windows multi-string (names separated by NUL, ended by two NULs) into its names.
+#[cfg_attr(not(any(windows, test)), allow(dead_code))]
+fn split_multi_string(buffer: &[u16]) -> Vec<String> {
+    buffer
+        .split(|c| *c == 0)
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| String::from_utf16(part).ok())
         .collect()
+}
+/// Language list after POSIX rules: `LANGUAGE` (list separated by ':') is only honored when a
+/// locale is set and it is not "C"/"POSIX"; then `LC_ALL`, `LC_MESSAGES`, `LANG` (first one set).
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn posix_languages(var: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    let locale = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .filter_map(&var)
+        .find(|v| !v.trim().is_empty());
+    let plain = |v: &str| {
+        let base = v.split(['.', '@']).next().unwrap_or("").trim();
+        (!base.is_empty() && base != "C" && base != "POSIX").then(|| base.to_owned())
+    };
+    let mut out = Vec::new();
+    if let Some(locale) = locale.as_deref().and_then(plain) {
+        if let Some(list) = var("LANGUAGE") {
+            out.extend(list.split(':').filter_map(plain));
+        }
+        out.push(locale);
+    }
+    out
 }
 fn saved_choice(saved: &serde_json::Value) -> Choice {
     if saved.is_null() {
@@ -116,8 +162,9 @@ fn saved_choice(saved: &serde_json::Value) -> Choice {
     if let Some(choice) = saved.as_str().and_then(Choice::from_key) {
         return choice;
     }
-    super::diagnose("i18n: unbekannte Spracheinstellung, Rückfall Deutsch");
-    Choice::De
+    // An unreadable value is treated like no choice: follow the system language.
+    super::diagnose("i18n: unknown language setting, following the system language");
+    Choice::System
 }
 fn initial() -> State {
     let saved = library::settings::value("language");
@@ -182,7 +229,9 @@ impl Drop for TestLanguage {
 mod tests {
     use super::*;
     #[test]
-    fn language_resolution_is_pure_and_has_german_fallback() {
+    // Unsupported system languages fall back to English (DPReview, Windows user: German UI on an
+    // English system and no way found to switch). An explicit choice stays as saved.
+    fn language_resolution_is_pure_and_has_english_fallback() {
         let prefs = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(Choice::System.resolve(&prefs(&["de-AT"])), Language::De);
         assert_eq!(Choice::System.resolve(&prefs(&["en-GB"])), Language::En);
@@ -193,19 +242,55 @@ mod tests {
         assert_eq!(Choice::System.resolve(&prefs(&["ja-JP"])), Language::Ja);
         assert_eq!(Choice::System.resolve(&prefs(&["es-419"])), Language::Es);
         assert_eq!(Choice::System.resolve(&prefs(&["it-IT", "en-US"])), Language::En);
-        assert_eq!(Choice::System.resolve(&prefs(&["it-IT"])), Language::De);
-        assert_eq!(Choice::System.resolve(&[]), Language::De);
+        assert_eq!(Choice::System.resolve(&prefs(&["it-IT"])), Language::En);
+        assert_eq!(Choice::System.resolve(&prefs(&["it-IT", "de-CH"])), Language::De);
+        assert_eq!(Choice::System.resolve(&[]), Language::En);
         assert_eq!(Choice::De.resolve(&prefs(&["en"])), Language::De);
         assert_eq!(Choice::En.resolve(&prefs(&["de"])), Language::En);
         assert!(Choice::from_key("../photo").is_none());
         assert_eq!(Choice::from_key("system"), Some(Choice::System));
     }
     #[test]
-    fn invalid_saved_language_falls_back_to_german() {
+    // An unreadable saved value no longer forces German; it follows the system language like a
+    // missing value (which itself falls back to English). Valid saved choices are kept.
+    fn invalid_saved_language_follows_system() {
         assert_eq!(saved_choice(&serde_json::Value::Null), Choice::System);
         assert_eq!(saved_choice(&serde_json::json!("en")), Choice::En);
-        assert_eq!(saved_choice(&serde_json::json!(42)), Choice::De);
-        assert_eq!(saved_choice(&serde_json::json!("unknown")), Choice::De);
+        assert_eq!(saved_choice(&serde_json::json!("de")), Choice::De);
+        assert_eq!(saved_choice(&serde_json::json!(42)), Choice::System);
+        assert_eq!(saved_choice(&serde_json::json!("unknown")), Choice::System);
+    }
+    #[test]
+    fn windows_multi_string_is_split() {
+        let w = |s: &str| s.encode_utf16().collect::<Vec<u16>>();
+        assert_eq!(split_multi_string(&w("de-DE\0en-US\0\0")), vec!["de-DE", "en-US"]);
+        assert_eq!(split_multi_string(&w("en-GB\0\0")), vec!["en-GB"]);
+        assert!(split_multi_string(&w("\0\0")).is_empty());
+        assert!(split_multi_string(&[]).is_empty());
+        let langs = split_multi_string(&w("it-IT\0fr-FR\0\0"));
+        assert_eq!(Choice::System.resolve(&langs), Language::Fr);
+    }
+    #[test]
+    fn posix_language_list_order() {
+        let env = |pairs: &'static [(&'static str, &'static str)]| {
+            move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string())
+        };
+        // LANGUAGE is a ':' list and comes first
+        assert_eq!(
+            posix_languages(env(&[("LANGUAGE", "fr:en_GB"), ("LANG", "de_DE.UTF-8")])),
+            vec!["fr", "en_GB", "de_DE"]
+        );
+        // LC_ALL beats LC_MESSAGES beats LANG
+        assert_eq!(
+            posix_languages(env(&[("LC_ALL", "ja_JP.UTF-8"), ("LC_MESSAGES", "fr_FR"), ("LANG", "de_DE")])),
+            vec!["ja_JP"]
+        );
+        assert_eq!(posix_languages(env(&[("LC_MESSAGES", "es_ES@euro"), ("LANG", "de_DE")])), vec!["es_ES"]);
+        // C/POSIX locale: LANGUAGE is ignored, nothing is preferred -> English fallback
+        assert!(posix_languages(env(&[("LANGUAGE", "de"), ("LANG", "C.UTF-8")])).is_empty());
+        assert!(posix_languages(env(&[("LANGUAGE", "de")])).is_empty());
+        assert!(posix_languages(env(&[])).is_empty());
+        assert_eq!(Choice::System.resolve(&posix_languages(env(&[("LANG", "C")]))), Language::En);
     }
     #[test]
     fn ui_override_is_thread_local_and_restored() {

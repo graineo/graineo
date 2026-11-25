@@ -21,7 +21,7 @@
 
 pub mod gate;
 pub mod gpu;
-pub use gpu::{gpu_allowed, gpu_error, gpu_errors, gpu_fits_memory, gpu_lost, physical_memory, set_gpu_allowed, GPU_BYTES_PER_PIXEL, GPU_MEMORY_SHARE};
+pub use gpu::{gpu_allowed, gpu_error, gpu_errors, gpu_fits_memory, gpu_lost, physical_memory, set_gpu_allowed, take_gpu_lost_notice, GPU_BYTES_PER_PIXEL, GPU_MEMORY_SHARE};
 pub use gate::{all, intent, set_intent, with_intent, Acquire, Gate, Guard, Intent, Snapshot};
 
 use std::cell::Cell;

@@ -42,7 +42,7 @@ pub use x3f_sys::merrill_new;
 pub use x3f_sys::{set_highlight_hook, HighlightHook, HighlightInput};
 /// graineo addition: diagnostics of the SPP GPU noise reduction.
 pub use x3f_sys::{
-    spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, SppCaCorrection, SppNoiseSliders, SppPrepared, SppWorking,
+    gpu_device_lost, spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, SppCaCorrection, SppNoiseSliders, SppPrepared, SppWorking,
 };
 // graineo addition: BM3D only on the colour
 pub use x3f_sys::{chroma_bm3d_rgb, ChromaBm3dInfo, Control};

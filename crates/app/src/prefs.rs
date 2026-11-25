@@ -17,6 +17,8 @@ use std::sync::{Arc, Mutex};
 mod localized;
 #[path = "prefs_cache.rs"]
 mod cache_limit_ui;
+#[path = "prefs_search.rs"]
+mod search;
 use crate::menu::i18n::{self, Text};
 
 use eframe::egui;
@@ -30,6 +32,10 @@ pub const EXPLORER_MENU_LABEL: &str = "Mit graineo ansehen";
 
 static OPEN: AtomicBool = AtomicBool::new(false);
 static SECTION: AtomicUsize = AtomicUsize::new(0);
+/// Text of the search field; not empty = search mode (all matching rows instead of one section)
+static QUERY: Mutex<String> = Mutex::new(String::new());
+/// ⌘F was pressed: focus the search field in the next drawing
+static FOCUS_SEARCH: AtomicBool = AtomicBool::new(false);
 /// Last measured usage (SPP cache: bytes, images, paused); `None` = measure again
 static STATS: Mutex<Option<(u64, usize, bool)>> = Mutex::new(None);
 /// States determined in the background (None = being determined)
@@ -341,6 +347,12 @@ pub fn open_section(name: &str) {
     if let Some(i) = SECTIONS.iter().position(|b| b.eq_ignore_ascii_case(name) || b.starts_with(name)) {
         SECTION.store(i, Ordering::Relaxed);
     }
+    // test aid for screenshots: GRAINEO_PREFS_SEARCH=<text> fills the search field (only in test runs)
+    if crate::env::var_os("GRAINEO_DATA_DIR").is_some() {
+        if let Ok(q) = crate::env::var("GRAINEO_PREFS_SEARCH") {
+            *QUERY.lock().unwrap() = q;
+        }
+    }
     open();
 }
 
@@ -457,6 +469,15 @@ pub fn ui(ctx: &egui::Context) {
         crate::camera_defaults::dialog_ui(ctx);
         return;
     }
+    // ⌘F: search field of the settings (taken before the library's search field sees it)
+    if crate::shortcuts::pressed(ctx, "prefs_search") {
+        ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::F));
+        FOCUS_SEARCH.store(true, Ordering::Relaxed);
+    }
+    // Esc with text in the search field: empty it and show the last chosen section again (the window stays open)
+    if !QUERY.lock().unwrap().is_empty() && !crate::camera_defaults::dialog_open() && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        QUERY.lock().unwrap().clear();
+    }
     let mut area=SECTION.load(Ordering::Relaxed);
     show_window(ctx,&mut open,&mut area);
     SECTION.store(area,Ordering::Relaxed);
@@ -501,20 +522,37 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
             let mut chosen = *area;
             let mut kind = ui.horizontal_top(|ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
-                // vertical list of the sections: icon + name, the active one lighter with a thin gold mark on the left
-                let (list, _) = ui.allocate_exact_size(egui::vec2(NAV_WIDTH, height), egui::Sense::hover());
+                // search field above the list of the sections
+                let (column, _) = ui.allocate_exact_size(egui::vec2(NAV_WIDTH, height), egui::Sense::hover());
+                let mut field = ui.new_child(egui::UiBuilder::new().id_salt("prefs-search-field").max_rect(column).layout(egui::Layout::top_down(egui::Align::Min)));
+                {
+                    let mut q = QUERY.lock().unwrap();
+                    let resp = lr::search_field(&mut field, &mut q, "prefs", crate::tr("Einstellungen durchsuchen"), NAV_WIDTH);
+                    lr::tip_key(&field, &resp, "Einstellungen durchsuchen", "prefs_search");
+                    if FOCUS_SEARCH.swap(false, Ordering::Relaxed) {
+                        resp.request_focus();
+                    }
+                }
+                let searching = !QUERY.lock().unwrap().trim().is_empty();
+                let hits = search::hits();
+                // vertical list of the sections: icon + name, the active one lighter with a thin gold mark on the left;
+                // while searching: number of hits on the right, sections without hits dimmed
+                let list = egui::Rect::from_min_max(column.min + egui::vec2(0.0, lr::BAR_H + 8.0), column.max);
                 ui.painter().rect_filled(list, 0.0, crate::lr::gray(0x1a));
                 for (row, &i) in ORDER.iter().enumerate() {
                     let r = egui::Rect::from_min_size(list.min + egui::vec2(0.0, row as f32 * 30.0), egui::vec2(NAV_WIDTH, 28.0));
                     let resp = ui.interact(r, egui::Id::unique(("prefs-nav", i)), egui::Sense::click());
-                    let on = i == chosen;
+                    let on = i == chosen && !searching;
                     if on {
                         ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x33));
                         ui.painter().rect_filled(egui::Rect::from_min_size(r.min, egui::vec2(2.0, r.height())), 0.0, lr::ACCENT());
                     } else if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x26));
                     }
-                    let c = if on { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0xb0) };
+                    let c = if on { crate::lr::TEXT_STRONG() } else if searching && hits[i] == 0 { crate::lr::gray(0x5c) } else { crate::lr::gray(0xb0) };
+                    if searching && hits[i] > 0 {
+                        ui.painter().text(egui::pos2(r.right() - 10.0, r.center().y), egui::Align2::RIGHT_CENTER, hits[i].to_string(), egui::FontId::proportional(NAV_FONT - 1.0), lr::TEXT_DIM());
+                    }
                     let icon = egui::Rect::from_center_size(egui::pos2(r.left() + 20.0, r.center().y), egui::vec2(20.0, 20.0));
                     if SYMBOL_NR[i] == usize::MAX {
                         lr::paint_icon(ui.painter(), icon.shrink(2.0), lr::Icon::Camera, c);
@@ -524,6 +562,8 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                     ui.painter().with_clip_rect(r).text(egui::pos2(r.left() + 38.0, r.center().y), egui::Align2::LEFT_CENTER, localized::area_label(i), egui::FontId::proportional(NAV_FONT), c);
                     if resp.clicked() {
                         chosen = i;
+                        // a section chosen in the list ends the search
+                        QUERY.lock().unwrap().clear();
                     }
                 }
                 ui.add_space(12.0);
@@ -531,6 +571,20 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                 ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Min)))
             }).inner;
             *area=chosen;
+            let query = QUERY.lock().unwrap().trim().to_string();
+            if !query.is_empty() {
+                // search mode: every matching row of every section, as real controls
+                egui::ScrollArea::vertical().id_salt("prefs-search").auto_shrink([false; 2]).show(&mut kind, |ui| {
+                    ui.set_width(CONTENT_WIDTH - 20.0);
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    let n = search::run(ui, &query, |ui, i| section(ui, ctx, i));
+                    if n == 0 {
+                        ui.add_space(8.0);
+                        ui.label(egui::RichText::new(crate::trf!("Nichts gefunden für „{q}“", q = query)).color(lr::TEXT_DIM()));
+                    }
+                });
+                return;
+            }
             let mut area = egui::ScrollArea::vertical().id_salt(("prefs", chosen)).auto_shrink([false; 2]);
             // test aid for screenshots: GRAINEO_PREFS_SCROLL=<points> scrolls the page (only in test runs)
             if crate::env::var_os("GRAINEO_DATA_DIR").is_some() {
@@ -542,22 +596,27 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                 ui.set_width(CONTENT_WIDTH - 20.0);
                 ui.spacing_mut().item_spacing.y = 4.0;
                 // A long value (path, model name, translation) never widens the page
-                lr::bounded(ui, |ui| match chosen {
-                    0 => localized::general(ui),
-                    1 => interface_section(ui, ctx),
-                    2 => library(ui),
-                    3 => develop_section(ui),
-                    4 => export(ui),
-                    5 => lenses_section(ui),
-                    6 => ai(ui, ctx),
-                    7 => module(ui, ctx),
-                    9 => crate::film_profiles_ui::settings(ui),
-                    10 => crate::remote_access::settings_page(ui),
-                    11 => crate::camera_defaults::settings_page(ui),
-                    _ => storage_section(ui),
-                })
+                lr::bounded(ui, |ui| section(ui, ctx, chosen))
             }));
         });
+}
+
+/// Content of one section (index into [`SECTIONS`]).
+fn section(ui: &mut egui::Ui, ctx: &egui::Context, i: usize) {
+    match i {
+        0 => localized::general(ui),
+        1 => interface_section(ui, ctx),
+        2 => library(ui),
+        3 => develop_section(ui),
+        4 => export(ui),
+        5 => lenses_section(ui),
+        6 => ai(ui, ctx),
+        7 => module(ui, ctx),
+        9 => crate::film_profiles_ui::settings(ui),
+        10 => crate::remote_access::settings_page(ui),
+        11 => crate::camera_defaults::settings_page(ui),
+        _ => storage_section(ui),
+    }
 }
 
 // ─────────────────────────────────────────────────────────── Building blocks
@@ -566,15 +625,19 @@ const NAME_WIDTH: f32 = 290.0;
 
 /// Group: capitals heading and box.
 pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+    if search::active(ui) {
+        // search pass: no heading or box, only the rows (which place themselves in the results)
+        search::set_group(title);
+        content(ui);
+        return;
+    }
     ui.add_space(8.0);
-    let g = lr::caps(ui.painter(), title, lr::semibold(10.5), lr::TEXT_DIM());
-    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), g.size().y + 4.0), egui::Sense::hover());
-    ui.painter().galley(r.min + egui::vec2(4.0, 0.0), g, lr::TEXT_DIM());
+    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 16.0), egui::Sense::hover());
+    lr::subheading_paint_ex(ui.painter(), r.with_min_x(r.left() + 4.0), title, lr::SUBHEAD_LABEL(), false);
     // the heading sticks to the top of a long settings page while the group scrolls
     let owned = title.to_string();
     crate::sticky::register(crate::sticky::RANK_CATEGORY, ui.id().with(("gruppe", title)), r.expand2(egui::vec2(0.0, 3.0)), move |p, bar, _| {
-        let g = lr::caps(p, &owned, lr::semibold(10.5), lr::TEXT_DIM());
-        p.galley(egui::pos2(bar.left() + 4.0, bar.center().y - g.size().y / 2.0), g, lr::TEXT_DIM());
+        lr::subheading_paint_ex(p, egui::Rect::from_center_size(bar.center(), egui::vec2(bar.width(), 16.0)).translate(egui::vec2(4.0, 0.0)), &owned, lr::SUBHEAD_LABEL(), false);
     });
     egui::Frame::new().fill(crate::lr::gray(0x1d)).stroke(egui::Stroke::new(1.0, crate::lr::gray(0x2c))).corner_radius(0.0).inner_margin(egui::Margin::symmetric(12, 6)).show(ui, |ui| {
         ui.set_width(ui.available_width());
@@ -585,6 +648,22 @@ pub(crate) fn group(ui: &mut egui::Ui, title: &str, content: impl FnOnce(&mut eg
 
 /// Row: name on the left (fixed width), control on the right, optionally a grey line below.
 pub(crate) fn row(ui: &mut egui::Ui, name: &str, description: Option<&str>, right: impl FnOnce(&mut egui::Ui)) {
+    searchable(ui, name, description, |ui| row_body(ui, name, description, right));
+}
+
+/// Draw a row as usual, or – while the settings are searched – only if it matches, then into the results.
+fn searchable(ui: &mut egui::Ui, name: &str, description: Option<&str>, draw: impl FnOnce(&mut egui::Ui)) {
+    match search::check(ui, name, description) {
+        search::Check::Normal => draw(ui),
+        search::Check::Skip => {}
+        search::Check::Draw(mut target) => {
+            draw(&mut target);
+            search::done(&target);
+        }
+    }
+}
+
+fn row_body(ui: &mut egui::Ui, name: &str, description: Option<&str>, right: impl FnOnce(&mut egui::Ui)) {
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         let (r, _) = ui.allocate_exact_size(egui::vec2(NAME_WIDTH, 24.0), egui::Sense::hover());
         ui.painter().with_clip_rect(r).text(r.left_center(), egui::Align2::LEFT_CENTER, crate::tr(name), egui::FontId::proportional(lr::UI_SIZE), lr::TEXT());
@@ -600,9 +679,11 @@ pub(crate) fn row(ui: &mut egui::Ui, name: &str, description: Option<&str>, righ
 
 /// Row whose name is longer than the name column: name on the left, controls on the right.
 fn row_wide(ui: &mut egui::Ui, name: &str, right: impl FnOnce(&mut egui::Ui)) {
-    ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.label(egui::RichText::new(name).color(lr::TEXT()));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
+    searchable(ui, name, None, |ui| {
+        ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new(name).color(lr::TEXT()));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), right);
+        });
     });
 }
 
@@ -1464,6 +1545,17 @@ fn develop_section(ui: &mut egui::Ui) {
             }
         });
         separator(ui);
+        row(ui, crate::tr("Beurteilungsrahmen"), Some(crate::tr("Rand um das Foto in Prozent der kürzeren Seite (Mittelgrau mit weißem Rahmen, Knopf unter dem Foto)")), |ui| {
+            let mut w = crate::assessment::width();
+            egui::ComboBox::from_id_salt("prefs-assessment-width").selected_text(format!("{w} %")).width(80.0).show_ui(ui, |ui| {
+                for x in crate::assessment::WIDTHS {
+                    if ui.selectable_value(&mut w, x, format!("{x} %")).changed() {
+                        crate::assessment::set_width(x);
+                    }
+                }
+            });
+        });
+        separator(ui);
         row_wide(ui, crate::tr("Farbproof beim Start"), |ui| {
             crate::help::info(ui, "prefs-farbproof", crate::tr("Farbproof"), &crate::help::PROOF);
             let mut start = crate::proof::start();
@@ -1500,8 +1592,8 @@ fn develop_section(ui: &mut egui::Ui) {
         row(ui, crate::tr("Grafikkarte verwenden"), Some(crate::tr("Aus: alles rechnet auf dem Prozessor (Rauschminderung, Film, Masken, andere RAW-Formate). Langsamer, der Lüfter läuft eher an; wirkt ab dem nächsten Rechnen")), |ui| {
             let mut an = gpu_setting();
             if toggle(ui, &mut an) {
-                library::settings::set("useGpu", json!(an));
-                pools::set_gpu_allowed(an);
+                // saves, applies and notes it in the start marker (a crash of the computer then counts, see gpu_guard)
+                crate::gpu_guard::set_gpu(an);
             }
         });
         separator(ui);
@@ -1691,14 +1783,119 @@ fn lenses_section(ui: &mut egui::Ui) {
         separator(ui);
         row(ui, crate::tr("Kamera"), None, |ui| value(ui, crate::tr("aus der RAW-Datei"), Signal::Green));
         separator(ui);
-        row(ui, "lensfun", None, |ui| value(ui, crate::tr("Auszug enthalten (CC BY-SA)"), Signal::Green));
+        lensfun_rows(ui);
     });
+}
+
+/// State of "Objektivprofile aktualisieren": (running, text of the last result, failed).
+static LENSFUN_UPDATE: std::sync::Mutex<Option<(bool, String, bool)>> = std::sync::Mutex::new(None);
+
+/// "17.11.2026 · 37238fc" for a lensfun commit and date.
+fn lensfun_state(commit: &str, date: &str) -> String {
+    let d: Vec<&str> = date.split('-').collect();
+    let date = if d.len() == 3 { format!("{}.{}.{}", d[2], d[1], d[0]) } else { date.to_string() };
+    format!("{date} · {}", commit.get(..7).unwrap_or(commit))
+}
+
+/// lensfun: state of the built-in and of a downloaded database, update on request (the only network access for lens
+/// profiles), back to the built-in one.
+fn lensfun_rows(ui: &mut egui::Ui) {
+    // parsed in the background ([`raw::lensfun::start_loading`]); until then placeholders
+    let (built, active) = (raw::lensfun::Database::try_built_in(), raw::lensfun::Database::try_active());
+    let Some((built, active)) = built.zip(active) else {
+        row(ui, crate::tr("lensfun mitgeliefert"), None, |ui| crate::dialog::pending(ui, crate::tr("lädt …")));
+        ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
+        return;
+    };
+    let downloaded = !active.is_built_in();
+    row(ui, crate::tr("lensfun mitgeliefert"), Some(crate::tr("Objektivprofile der lensfun-Datenbank (CC BY-SA), mit graineo ausgeliefert")), |ui| {
+        let state = lensfun_state(&built.commit, &built.date);
+        value(ui, &state, if downloaded { Signal::Gray } else { Signal::Green });
+    });
+    separator(ui);
+    let (running, message, failed) = LENSFUN_UPDATE.lock().unwrap().clone().unwrap_or((false, String::new(), false));
+    row(ui, crate::tr("lensfun geladen"), Some(crate::tr("Lädt nur auf Klick den neuesten Stand der lensfun-Datenbank aus dem lensfun-Projekt, prüft ihn und nutzt ihn statt der mitgelieferten")), |ui| {
+        let r = ui.add_enabled_ui(!running, |ui| lr::secondary_button(ui, None, "Objektivprofile aktualisieren")).inner;
+        lr::hover_tip(ui, &r, "Neueste lensfun-Daten laden");
+        if r.clicked() {
+            *LENSFUN_UPDATE.lock().unwrap() = Some((true, String::new(), false));
+            let ctx = ui.ctx().clone();
+            std::thread::Builder::new()
+                .name("lensfun-update".into())
+                .spawn(move || {
+                    let (text, failed) = match raw::lensfun_update::update() {
+                        Ok(raw::lensfun_update::Outcome::Installed { commit, date, cameras, lenses }) => {
+                            (crate::trf!("Geladen: {s} · {c} Kameras, {l} Objektive", s = lensfun_state(&commit, &date), c = cameras, l = lenses), false)
+                        }
+                        Ok(raw::lensfun_update::Outcome::Current { .. }) => (crate::tr("Schon aktuell").to_string(), false),
+                        Err(e) => {
+                            crate::log(&format!("lensfun update: {e}"));
+                            (crate::trf!("Fehlgeschlagen: {e}", e = e), true)
+                        }
+                    };
+                    *LENSFUN_UPDATE.lock().unwrap() = Some((false, text, failed));
+                    ctx.request_repaint();
+                })
+                .ok();
+        }
+        if downloaded {
+            let r = lr::secondary_button(ui, None, "Zurück auf mitgelieferte");
+            lr::hover_tip(ui, &r, "Geladene Daten entfernen");
+            if r.clicked() && !running {
+                // removing the file and reloading run off the UI thread
+                *LENSFUN_UPDATE.lock().unwrap() = Some((true, String::new(), false));
+                let ctx = ui.ctx().clone();
+                std::thread::Builder::new()
+                    .name("lensfun-revert".into())
+                    .spawn(move || {
+                        let (text, failed) = match raw::lensfun_update::revert() {
+                            Ok(()) => (crate::tr("Mitgelieferte Datenbank in Verwendung").to_string(), false),
+                            Err(e) => (crate::trf!("Fehlgeschlagen: {e}", e = e), true),
+                        };
+                        *LENSFUN_UPDATE.lock().unwrap() = Some((false, text, failed));
+                        ctx.request_repaint();
+                    })
+                    .ok();
+            }
+        }
+        if running {
+            crate::dialog::pending(ui, crate::tr("lädt …"));
+        } else if downloaded {
+            value(ui, &crate::trf!("{s} · in Verwendung", s = lensfun_state(&active.commit, &active.date)), Signal::Green);
+        } else {
+            value(ui, crate::tr("keine"), Signal::Gray);
+        }
+    });
+    if !message.is_empty() {
+        ui.label(egui::RichText::new(&message).small().color(if failed { Color32::from_rgb(0xe0, 0x5c, 0x50) } else { lr::TEXT_DIM() }));
+    }
+}
+
+/// Search words of the stage cards of the search model: names of the stages (German and English) and terms.
+fn search_model_words() -> String {
+    let mut w = String::from("modell model stufe stage clip siglip semantisch semantic bedeutung meaning ki ai ");
+    for s in library::search_model::STAGES {
+        let t = s.info().title;
+        w.push_str(t);
+        w.push(' ');
+        w.push_str(crate::tr(t));
+        w.push(' ');
+        for f in crate::menu::i18n::search_forms(t) {
+            w.push_str(&f);
+            w.push(' ');
+        }
+    }
+    w
 }
 
 fn ai(ui: &mut egui::Ui, ctx: &egui::Context) {
     let z = state(ui);
     // choice of the search model in stages (prefs_search_model.rs), first: the most important decision of the page
-    group(ui, crate::tr("Suchmodell"), |ui| crate::prefs_search_model::cards(ui, ctx));
+    group(ui, crate::tr("Suchmodell"), |ui| {
+        // the stage cards have no rows: searched as one block (no model work while it does not match)
+        let words = search_model_words();
+        search::block(ui, crate::tr("Suchmodell"), &words, |ui| crate::prefs_search_model::cards(ui, ctx));
+    });
     group(ui, crate::tr("KI-Beschreibungen"), |ui| {
         row(ui, crate::tr("Beschreibungen"), None, |ui| match &z {
             Some(z) if z.ai_count > 0 => value(ui, &crate::trf!("{a} Fotos beschrieben", a = thousands(z.ai_count)), Signal::Green),
@@ -1904,7 +2101,6 @@ const MODEL_STATUS_W: f32 = 190.0;
 /// Abbrechen / Entfernen …); below one dimmed line: purpose and license, while working the progress with percent
 /// and size, an error or why the button waits. Fixed heights, so nothing jumps when the state changes.
 fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module::Definition, st: Option<(library::module::Status, u64)>) {
-    use library::module::Status;
     let total: u64 = d.files.iter().map(|f| f.size).sum();
     let own = work_of(d.id);
     let busy = own.as_ref().is_some_and(|a| !a.done);
@@ -1913,6 +2109,13 @@ fn model_row(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module
     let ids: Vec<&str> = library::module::ALL.iter().map(|d| d.id).collect();
     let other = running_other(&ids);
     let name = short_model_name(d);
+    let label = name.clone();
+    searchable(ui, &label, None, |ui| model_row_body(ui, ctx, d, st, total, own, busy, removing, other, name));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn model_row_body(ui: &mut egui::Ui, ctx: &egui::Context, d: &'static library::module::Definition, st: Option<(library::module::Status, u64)>, total: u64, own: Option<Work>, busy: bool, removing: bool, other: Option<Work>, name: String) {
+    use library::module::Status;
     ui.allocate_ui_with_layout(egui::vec2(ui.available_width(), 28.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
         let Some((st, size)) = st else {
             determining(ui);

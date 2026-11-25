@@ -6,6 +6,9 @@
 # for a separate colima profile).
 # NATIVE=1: no Docker, use the cargo build of this machine (CI runner, ARCH from `uname -m`); SKIP_BUILD=1 then
 # only packages an existing `cargo build --release -p graineo -p graineo-dev`.
+# Test packages for the update test (never for a release): GRAINEO_UPDATE_TEST_PUBKEY_BUILD=<base64 public key> compiles
+# a test key in, which the app trusts only in a test run (GRAINEO_DATA_DIR and GRAINEO_UPDATE_URL); TARGET_VOLUME
+# picks another build volume, CARGO_PROFILE_RELEASE_LTO / _CODEGEN_UNITS are passed on for faster test builds.
 # Result: dist/graineo-<version>-linux-<arch>-experimental.tar.gz plus dist/SHA256SUMS
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -29,7 +32,12 @@ if [ "${NATIVE:-0}" = 1 ]; then
   cp "$BIN/graineo" "$BIN/graineo-dev" "$D/"
 else
   IMAGE=graineo-linux-build
-  VOLUME=graineo-linux-target-$ARCH
+  VOLUME=${TARGET_VOLUME:-graineo-linux-target-$ARCH}
+  EXTRA=()
+  for v in GRAINEO_UPDATE_TEST_PUBKEY_BUILD CARGO_PROFILE_RELEASE_LTO CARGO_PROFILE_RELEASE_CODEGEN_UNITS; do
+    [ -n "${!v:-}" ] && EXTRA+=(-e "$v=${!v}")
+  done
+  [ -n "${GRAINEO_UPDATE_TEST_PUBKEY_BUILD:-}" ] && echo "WARNING: test package with a compiled-in update test key, never publish it" >&2
   docker build -q -t $IMAGE scripts/linux > /dev/null
   docker volume create "$VOLUME" > /dev/null
   docker volume create graineo-linux-cargo > /dev/null
@@ -37,7 +45,7 @@ else
   RUST_REMAP="--remap-path-prefix=/src=graineo --remap-path-prefix=/root/.cargo=cargo"
   docker run --rm --cpus "${CPUS:-5}" -v "$PWD":/src:ro -v "$VOLUME":/target -v graineo-linux-cargo:/root/.cargo/registry \
     -e CARGO_TARGET_DIR=/target -e CARGO_PROFILE_RELEASE_DEBUG=0 -e CARGO_PROFILE_RELEASE_STRIP=true \
-    -e RUSTFLAGS="$RUST_REMAP" -w /src $IMAGE \
+    -e RUSTFLAGS="$RUST_REMAP" ${EXTRA[@]+"${EXTRA[@]}"} -w /src $IMAGE \
     cargo build --release -j "${CPUS:-5}" -p graineo -p graineo-dev
   # (the temporary folder of the Mac is not shared with the VM: copy out of a container instead of a bind mount)
   CID=$(docker create -v "$VOLUME":/target $IMAGE)
@@ -59,7 +67,7 @@ MimeType=image/jpeg;image/png;image/tiff;image/x-sigma-x3f;image/x-canon-cr2;ima
 Terminal=false
 DESK
 cat > "$D/README-linux.txt" <<README
-graineo $VER, EXPERIMENTAL Linux build ($ARCH). Not tested on real hardware, not signed, no automatic updates.
+graineo $VER, EXPERIMENTAL Linux build ($ARCH). Not tested on real hardware. Updates install themselves when the program folder is writable (as with install.sh).
 Face detection and Apple Photos are not available. Needs a Vulkan driver (Mesa: mesa-vulkan-drivers; with
 lavapipe also without a GPU, slow), libxkbcommon, fontconfig and X11 or Wayland.
 Install: ./install.sh   (program and film data to ~/.local/share/graineo/app, command ~/.local/bin/graineo,
@@ -78,7 +86,10 @@ cp crates/app/assets/fonts/OFL-*.txt crates/app/assets/fonts/LICENSE-Phosphor.tx
 # Film simulation data next to the program (develop::film looks for spektrafilm/)
 mkdir -p "$D/spektrafilm"
 cp -R third_party/spektrafilm-rs/data/profiles third_party/spektrafilm-rs/data/luts third_party/spektrafilm-rs/data/filters "$D/spektrafilm/"
-COPYFILE_DISABLE=1 tar -C "$TMP" -czf "dist/graineo-$VER-linux-$ARCH-experimental.tar.gz" graineo
+# macOS tar (bsdtar) would add extended attributes (com.apple.provenance) that GNU tar reports on every file
+TAR_OPTS=()
+tar --version 2> /dev/null | grep -q bsdtar && TAR_OPTS=(--no-xattrs --no-mac-metadata)
+COPYFILE_DISABLE=1 tar ${TAR_OPTS[@]+"${TAR_OPTS[@]}"} -C "$TMP" -czf "dist/graineo-$VER-linux-$ARCH-experimental.tar.gz" graineo
 rm -rf "$TMP"
 (cd dist && if command -v sha256sum > /dev/null; then sha256sum "graineo-$VER-linux-$ARCH-experimental.tar.gz"; else shasum -a 256 "graineo-$VER-linux-$ARCH-experimental.tar.gz"; fi >> SHA256SUMS.new)
 # keep lines of other architectures, replace the one of this package

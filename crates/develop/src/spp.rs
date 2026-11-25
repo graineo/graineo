@@ -286,6 +286,15 @@ pub fn gpu_adapter() -> Result<String, String> {
     x3f_core::spp_gpu_adapter()
 }
 
+/// Hands a lost GPU device of the Sigma noise reduction (x3fuse-core keeps its own device) to
+/// [`pools::gpu_lost`], so every GPU path takes the processor and the app can tell the user. Cheap; called per frame.
+pub fn sync_gpu_lost() {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if x3f_core::gpu_device_lost() && !DONE.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        pools::gpu_lost("Sigma noise reduction", "device lost");
+    }
+}
+
 /// Frees the cached GPU buffers of the noise reduction (≈ 0.9 GB).
 pub fn gpu_release() {
     x3f_core::spp_gpu_release();

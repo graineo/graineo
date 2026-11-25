@@ -53,7 +53,7 @@ pub struct Stage {
     pub name: &'static str,
     pub marker: &'static str,
     pub revision: u64,
-    done_name: &'static str,
+    pub done_name: &'static str,
     pub selects: fn(Group) -> bool,
 }
 

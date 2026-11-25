@@ -132,11 +132,7 @@ pub fn data_dir() -> PathBuf {
 /// Safety net for test runs without `GRAINEO_DATA_DIR`: a cargo test binary (`…/deps/…`) gets
 /// its own empty folder in the temp directory and never opens the real library, previews or settings.
 pub fn test_binary_dir() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let s = exe.to_string_lossy();
-    // cargo puts test programs into `<target dir>/<profile>/deps/` (the target dir may be named anything)
-    let is_test = s.contains("/deps/") || s.contains("\\deps\\");
-    is_test.then(|| std::env::temp_dir().join(format!("graineo-test-{}", std::process::id())))
+    sysdirs::test_program_dir()
 }
 
 /// One-time switch to English names of files and folders the app created under German names (graineo 1.0 and

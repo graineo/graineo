@@ -261,6 +261,23 @@ fn load(path: &PathBuf, settings: &Settings, keep_going: impl Fn() -> bool) -> R
     previews.spp = exact;
     let histograms = develop::layer_histograms(&previews.sensor.lin, HISTOGRAM_BINS);
     let p = &session.props;
+    // geometry in the log (Help → Report a Problem sends it): a photo shown in the wrong shape can be traced to the
+    // file (forum report, Classic file narrow and tall, not reproducible with the sample files)
+    {
+        let ([w, h], raw) = (session.size(), session.raw());
+        crate::log(&format!(
+            "open {}: geometry: sensor {}×{} (format {}), image {w}×{h}, orientation {} quarter(s) (header {:?}°, PROP {:?}), preview {}×{}",
+            path.display(),
+            raw.columns,
+            raw.rows,
+            x3f::read_raw_header(path).map_or(0, |r| r.format),
+            session.cal.orientation,
+            x3f::read_header_rotation(path),
+            p.get("ROTATION"),
+            previews.sensor.lin.width,
+            previews.sensor.lin.height,
+        ));
+    }
     let get = |k: &str| p.get(k).unwrap_or("–").to_string();
     let program = match p.get("PMODE").unwrap_or("") {
         "P" => "Programmautomatik".to_string(),

@@ -215,7 +215,7 @@ impl App {
 
     /// Test strip in the left part of the bottom panel.
     pub(crate) fn darkroom_strip_draw(&mut self, ui: &mut egui::Ui, index: usize) {
-        lr::group_label(ui, "Probestreifen");
+        lr::subheading(ui, "Probestreifen");
         let Some(pi) = self.darkroom_strip_paper(index) else {
             let text = crate::darkroom::no_paper_text(&self.entries[index].settings.film);
             ui.add(egui::Label::new(egui::RichText::new(text).color(lr::TEXT_DIM())).wrap());

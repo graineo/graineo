@@ -8675,6 +8675,16 @@ pub fn spp_last_used_gpu() -> bool {
     spp::LAST_USED_GPU.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// graineo addition: set when a GPU device of the noise reduction was lost (driver reset,
+/// watchdog timeout). The failed device is kept and every later call computes on the CPU.
+pub(crate) static GPU_DEVICE_LOST: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// graineo addition: was a GPU device of the noise reduction lost (see `GPU_DEVICE_LOST`)?
+pub fn gpu_device_lost() -> bool {
+    GPU_DEVICE_LOST.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// graineo addition: frees the buffers cached by the SPP GPU noise reduction
 /// (≈ 0.9 GB GPU/unified memory at Merrill size). The next GPU run allocates
 /// them again (≈ 50–150 ms extra).

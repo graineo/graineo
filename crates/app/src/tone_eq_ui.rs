@@ -249,8 +249,8 @@ fn parse_value(t: &str) -> Option<f32> {
 }
 
 /// The graph: the correction that acts (main slider plus zones) over the zone histogram, the base shape of the main
-/// slider dashed. One point is always selected; every interaction changes only zone values, the neighbours are not
-/// moved (between the zones the line is the curve the calculation uses).
+/// slider dashed. Every interaction changes only zone values; moving a point takes its neighbours along by half (⌘:
+/// only the point; between the zones the line is the curve the calculation uses).
 fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
     let width = ui.available_width();
     let (outer, _) = ui.allocate_exact_size(egui::vec2(width, GRAPH_HEIGHT + SCALE_HEIGHT), egui::Sense::hover());
@@ -334,8 +334,9 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
             let z = near(q, &s.tone_eq.zones).unwrap_or_else(|| zone_at(ev_of(q.x)));
             sel = Some(z);
             if resp.drag_started() {
-                // relative drag: the point never jumps to the pointer, it follows the movement from here
-                ui.data_mut(|d| d.insert_temp(drag_id, (s.tone_eq.zones[z], q.y)));
+                // relative drag: the point never jumps to the pointer, it follows the movement from here (all zones
+                // kept, so the neighbours that follow are moved from their own start values)
+                ui.data_mut(|d| d.insert_temp(drag_id, (s.tone_eq.zones, q.y)));
             }
         }
     }
@@ -346,21 +347,23 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
                 crate::history::reset_gesture();
             }
         } else if resp.dragged() {
-            let start: Option<(f32, f32)> = ui.data(|d| d.get_temp(drag_id));
-            if let (Some((v0, y0)), Some(q)) = (start, ui.input(|inp| inp.pointer.interact_pos())) {
-                let fine = ui.input(|i| i.modifiers.alt);
-                s.tone_eq.zones[z] = drag_value(v0, v_of(q.y) - v_of(y0), fine);
+            let start: Option<([f32; ZONES], f32)> = ui.data(|d| d.get_temp(drag_id));
+            if let (Some((z0, y0)), Some(q)) = (start, ui.input(|inp| inp.pointer.interact_pos())) {
+                let (fine, solo) = ui.input(|i| (i.modifiers.alt, i.modifiers.command));
+                let v = drag_value(z0[z], v_of(q.y) - v_of(y0), fine);
+                s.tone_eq.zones = with_neighbours(&z0, z, v - z0[z], !solo);
             }
         }
     }
     if resp.drag_stopped() {
-        ui.data_mut(|d| d.remove::<(f32, f32)>(drag_id));
+        ui.data_mut(|d| d.remove::<([f32; ZONES], f32)>(drag_id));
     }
     // keyboard (only while the graph has the focus): ↑/↓ step the selected zone, ←/→ select the neighbour, Esc ends
     if resp.has_focus() {
         FOCUS_MS.store(clock(), Ordering::Relaxed);
         ui.memory_mut(|m| m.set_focus_lock_filter(id, egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, escape: true, ..Default::default() }));
         let mut step = 0.0;
+        let mut solo = false;
         let mut moved = 0i32;
         let mut esc = false;
         ui.input_mut(|i| {
@@ -371,6 +374,15 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
                 while i.consume_key(m, egui::Key::ArrowDown) {
                     step -= k;
                 }
+            }
+            // ⌘: only this point, the neighbours stay
+            while i.consume_key(egui::Modifiers::COMMAND, egui::Key::ArrowUp) {
+                step += KEY_STEP;
+                solo = true;
+            }
+            while i.consume_key(egui::Modifiers::COMMAND, egui::Key::ArrowDown) {
+                step -= KEY_STEP;
+                solo = true;
             }
             while i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowRight) {
                 moved += 1;
@@ -389,7 +401,8 @@ fn graph(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
             let z = (sel.unwrap_or(ZONES / 2) as i32 + moved).clamp(0, ZONES as i32 - 1) as usize;
             sel = Some(z);
             if step != 0.0 {
-                s.tone_eq.zones[z] = snap(s.tone_eq.zones[z] + step);
+                let v = snap(s.tone_eq.zones[z] + step);
+                s.tone_eq.zones = with_neighbours(&s.tone_eq.zones, z, v - s.tone_eq.zones[z], !solo);
             }
         }
     } else if !editing && !resp.dragged() {
@@ -528,6 +541,27 @@ fn snap(v: f32) -> f32 {
     ((v / 0.01).round() * 0.01).clamp(-MAX_EV, MAX_EV)
 }
 
+/// Share of a point's movement that its two neighbours take along (soft editing: a single zone rarely wants to move
+/// alone; ⌘ moves only the point). It is the value at one zone distance of a smooth raised-cosine falloff that reaches
+/// zero at two zones, so overlapping edits blend like overlapping range weights instead of forming steps (credit in
+/// the changelog); it only shapes the editing gesture, the stored zones and the calculation are unchanged.
+const NEIGHBOUR_SHARE: f32 = 0.5;
+
+/// Zones after moving zone `z` by `delta` from `start`: with `follow` the direct neighbours move by
+/// [`NEIGHBOUR_SHARE`] of it (limited and rounded like every zone value), the other zones stay.
+fn with_neighbours(start: &[f32; ZONES], z: usize, delta: f32, follow: bool) -> [f32; ZONES] {
+    let mut out = *start;
+    out[z] = snap(start[z] + delta);
+    if follow {
+        for n in [z.wrapping_sub(1), z + 1] {
+            if n < ZONES {
+                out[n] = snap(start[n] + delta * NEIGHBOUR_SHARE);
+            }
+        }
+    }
+    out
+}
+
 /// Zone value while dragging: start value plus the vertical movement (in EV of the graph), with ⌥ a fifth of it.
 /// Without ⌥ the value catches at 0 (within [`ZERO_CATCH`]), so the neutral point is easy to hit.
 fn drag_value(start: f32, moved: f32, fine: bool) -> f32 {
@@ -615,6 +649,23 @@ mod tests {
         assert_eq!(drag_value(0.2, -0.17, false), 0.0);
         assert!((drag_value(0.2, -0.17, true) - 0.17).abs() < 1e-6);
         assert_eq!(drag_value(0.0, 10.0, false), MAX_EV);
+    }
+
+    #[test]
+    fn neighbours_follow_by_half_unless_solo() {
+        let z0 = [0.0; ZONES];
+        let a = with_neighbours(&z0, 4, 1.0, true);
+        assert_eq!((a[3], a[4], a[5]), (0.5, 1.0, 0.5));
+        assert_eq!((a[2], a[6]), (0.0, 0.0));
+        let b = with_neighbours(&z0, 4, 1.0, false);
+        assert_eq!((b[3], b[4], b[5]), (0.0, 1.0, 0.0));
+        // edge zones have one neighbour; a neighbour keeps its own start value
+        let mut z1 = z0;
+        z1[1] = 0.3;
+        let c = with_neighbours(&z1, 0, -0.4, true);
+        assert!((c[0] + 0.4).abs() < 1e-6 && (c[1] - 0.1).abs() < 1e-6);
+        let d = with_neighbours(&z0, ZONES - 1, 0.2, true);
+        assert!((d[ZONES - 2] - 0.1).abs() < 1e-6);
     }
 
     #[test]

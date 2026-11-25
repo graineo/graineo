@@ -1059,10 +1059,20 @@ fn any_tiff_jpeg(path: &Path, min: u32) -> Option<(RgbImage, Meta)> {
 }
 
 /// JPEG previews (offset, length) of IFD0 and its SubIFDs: JPEGInterchangeFormat 0x0201/0x0202 with Compression 6 or
-/// without a Compression entry (Samsung SRW leaves it out).
+/// without a Compression entry (Samsung SRW leaves it out). Also the IFDs chained after IFD0: Pentax PEF keeps its
+/// full-size JPEG in IFD2 (IFD1 holds a 160 px thumbnail), not in a SubIFD.
 fn tiff_jpegs(t: &Tiff, ifd0: usize) -> Vec<(u64, usize)> {
     let mut ifds = vec![ifd0];
     ifds.extend(t.numbers(ifd0, 330).unwrap_or_default().into_iter().map(|o| o as usize));
+    let mut next = ifd0;
+    for _ in 0..8 {
+        let Some(n) = t.u16_(next).and_then(|n| t.u32_(next + 2 + n as usize * 12)).map(|o| o as usize) else { break };
+        if n == 0 || ifds.contains(&n) {
+            break;
+        }
+        ifds.push(n);
+        next = n;
+    }
     ifds.into_iter()
         .filter(|&ifd| matches!(t.number(ifd, 259), Some(6) | None))
         .filter_map(|ifd| Some((t.number(ifd, 0x0201)? as u64, t.number(ifd, 0x0202)? as usize)))
@@ -2370,12 +2380,62 @@ mod tests {
 }
 
 #[cfg(test)]
+mod x3f_shape_tests {
+    use super::*;
+
+    /// Shape check for X3F (`GRAINEO_TEST_X3F_DIR`, every X3F there; skipped without it): the library thumbnail
+    /// (embedded preview turned by the header rotation) and the upright size the library stores (preview size and
+    /// orientation, see `exif::read`) describe the same shape. A mismatch draws a photo squeezed into a cell of the
+    /// other orientation (forum report, Classic file shown narrow and tall).
+    #[test]
+    fn x3f_thumbnail_and_stored_shape_agree() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_X3F_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_X3F_DIR not set, skipped");
+            return;
+        };
+        let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("x3f"))).collect();
+        files.sort();
+        let mut checked = 0;
+        for p in &files {
+            let Ok((img, _)) = load(p, "X3F", 320) else {
+                eprintln!("{}: no embedded preview", p.display());
+                continue;
+            };
+            let thumb = img.width() as f32 / img.height() as f32;
+            let c = crate::exif::read(p, "X3F").unwrap_or_default();
+            let (Some(w), Some(h)) = (c.width, c.height) else {
+                eprintln!("{}: thumbnail {}×{}, no stored size", p.display(), img.width(), img.height());
+                continue;
+            };
+            let stored = if matches!(c.orientation, Some(5..=8)) { h as f32 / w as f32 } else { w as f32 / h as f32 };
+            eprintln!("{}: thumbnail {}×{} ({thumb:.3}), stored {w}×{h} orientation {:?} ({stored:.3}), header rotation {:?}", p.display(), img.width(), img.height(), c.orientation, x3f::read_header_rotation(p));
+            assert!((thumb / stored - 1.0).abs() < 0.05, "{}: thumbnail {thumb:.3} against stored {stored:.3}", p.display());
+            checked += 1;
+        }
+        eprintln!("checked: {checked} of {}", files.len());
+    }
+}
+
+#[cfg(test)]
 mod nef_tests {
     use super::*;
 
     /// NEF/NRW sample files (`GRAINEO_TEST_NEF_DIR`, e.g. the CC0 files of raw.pixls.us; skipped without it): the
     /// fast way finds a preview for every file, also for High Efficiency NEFs, with the same aspect ratio and
     /// orientation as the RAW reader's full-size preview.
+    /// Pentax PEF keeps its full-size JPEG in IFD2 (chained after IFD0, not a SubIFD): the large level comes from it
+    /// instead of developing the sensor data. `GRAINEO_TEST_PEF`: a PEF file (e.g. a K-5 file from raw.pixls.us).
+    #[test]
+    fn pef_takes_the_full_size_jpeg() {
+        let Some(p) = std::env::var_os("GRAINEO_TEST_PEF").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_PEF not set, skipped");
+            return;
+        };
+        let (img, meta) = nef_fast(&p, 2560).expect("no fast preview from the PEF");
+        assert!(img.width().max(img.height()) >= 2560, "{}×{}", img.width(), img.height());
+        assert!(meta.camera.as_deref().is_some_and(|c| c.to_ascii_uppercase().contains("PENTAX")), "{:?}", meta.camera);
+    }
+
     #[test]
     fn nef_fast_matches_the_raw_reader() {
         let Some(dir) = std::env::var_os("GRAINEO_TEST_NEF_DIR").map(std::path::PathBuf::from) else {

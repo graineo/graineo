@@ -4932,7 +4932,7 @@ Hebt (+) oder senkt (−) die Belichtung dieser Helligkeitszone, in Blendenstufe
 Stellt die Maske ein, die jede Bildstelle einer Zone zuordnet.	Ajusta la máscara que asigna cada punto de la imagen a una zona.
 • **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **Suavizado** – tamaño de las áreas de la máscara (porcentaje del lado largo). Más: más tranquilo, los detalles conservan su contraste; menos: actúa más como una curva.\n• **Bordes** – precisión con que la máscara sigue los bordes. Más alto: menos halos en los bordes, pero las estructuras finas se separan más.\n\nLa máscara se calcula una vez por ajuste para toda la imagen.
 Ein Regler für Schatten und Lichter, mit Schutz der jeweils anderen Seite.	Un solo control para sombras e iluminaciones, que protege el otro lado.
-• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0 · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **Equilibrio a la derecha** – aclara sombras y medios tonos. Las luces desde un paso por debajo del blanco quedan garantizadas sin cambios, no se quema nada nuevo.\n• **Equilibrio a la izquierda** – oscurece luces y medios tonos. Las sombras profundas quedan garantizadas sin cambios.\n\nUna máscara que suaviza superficies y se detiene en los bordes hace que superficies enteras (una cara a contraluz) se aclaren juntas, sin halos en los bordes.\n### Gráfico\nNueve zonas de −8 EV (casi negro, izquierda) a 0 EV (blanco, derecha) y, detrás, el histograma de la foto en la misma luminosidad de zona. La línea dorada muestra el efecto total: la forma base del Equilibrio (discontinua) más las zonas. El gráfico solo cambia las zonas; las vecinas no se mueven y entre ellas la línea es tan suave como el cálculo. Las zonas ajustadas pueden anular la protección del Equilibrio.\n### Controles\nSolo un clic elige un punto (dorado); la rueda siempre desplaza solo el panel · Arrastrar: zona más clara/oscura, con ⌥ fino, se detiene en 0 · ↑/↓ ±0,05, con ⇧ ±0,25, con ⌥ ±0,01 · ←/→ zona vecina · Doble clic en el punto: 0 · Doble clic en los valores de abajo: escribirlo · Esc o clic fuera: terminar la selección\n### Máscara\n**Suavizado** y **Bordes** ajustan la máscara, **Máscara** la muestra en la foto en escala de grises.
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0; die Nachbarn gehen zur Hälfte mit, ⌘ nur dieser Punkt · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **Equilibrio a la derecha** – aclara sombras y medios tonos. Las luces desde un paso por debajo del blanco quedan garantizadas sin cambios, no se quema nada nuevo.\n• **Equilibrio a la izquierda** – oscurece luces y medios tonos. Las sombras profundas quedan garantizadas sin cambios.\n\nUna máscara que suaviza superficies y se detiene en los bordes hace que superficies enteras (una cara a contraluz) se aclaren juntas, sin halos en los bordes.\n### Gráfico\nNueve zonas de −8 EV (casi negro, izquierda) a 0 EV (blanco, derecha) y, detrás, el histograma de la foto en la misma luminosidad de zona. La línea dorada muestra el efecto total: la forma base del Equilibrio (discontinua) más las zonas. El gráfico solo cambia las zonas; las vecinas no se mueven y entre ellas la línea es tan suave como el cálculo. Las zonas ajustadas pueden anular la protección del Equilibrio.\n### Controles\nSolo un clic elige un punto (dorado); la rueda siempre desplaza solo el panel · Arrastrar: zona más clara/oscura, con ⌥ fino, se detiene en 0; los vecinos siguen a la mitad, ⌘ solo este punto · ↑/↓ ±0,05, con ⇧ ±0,25, con ⌥ ±0,01 · ←/→ zona vecina · Doble clic en el punto: 0 · Doble clic en los valores de abajo: escribirlo · Esc o clic fuera: terminar la selección\n### Máscara\n**Suavizado** y **Bordes** ajustan la máscara, **Máscara** la muestra en la foto en escala de grises.
 Die Zone zählt ab Weiß nach der Belichtung: 0 EV sind die hellsten Lichter, −4 EV die Mitteltöne, −8 EV fast Schwarz. Nachbarzonen werden weich mitgenommen; benachbarte Regler daher ähnlich stellen, sonst kann der Tonverlauf kippen. Die Zonen kommen zum Ausgleich hinzu.	Las zonas se cuentan desde el blanco tras la exposición: 0 EV son las iluminaciones más claras, −4 EV los medios tonos, −8 EV casi negro. Las zonas vecinas se mueven suavemente; ajusta los controles vecinos de forma parecida, o la gradación puede invertirse. Las zonas se suman al equilibrio.
 Ausgleich	Equilibrio
 Feineinstellung	Ajuste fino
@@ -7166,3 +7166,83 @@ Hell (Erscheinungsbild)	Claro
 Zone {z}	Zona {z}
 Punkt	Punto
 Ausgleich {b} · Punkt {v}	Equilibrio {b} · punto {v}
+Einstellungen durchsuchen	Buscar en los ajustes
+Nichts gefunden für „{q}“	No se encontró nada para «{q}»
+Der Programmordner von graineo ist für dich nicht beschreibbar ({p}). Lade das neue Paket von der Release-Seite und installiere es wie bisher.	La carpeta del programa graineo no tiene permisos de escritura para ti ({p}). Descarga el nuevo paquete de la página de versiones e instálalo como siempre.
+Diese graineo-Fassung stammt nicht aus dem Linux-Paket (install.sh oder entpackter Ordner). Lade die neue Version von der Release-Seite.	Esta copia de graineo no procede del paquete para Linux (install.sh o carpeta descomprimida). Descarga la nueva versión de la página de versiones.
+das Paket passt nicht zu diesem Prozessor, es wurde verworfen	el paquete no corresponde a este procesador y se ha descartado
+Suchen …	Buscar…
+Grafikkarte nicht mehr verfügbar – graineo rechnet bis zum Neustart auf dem Prozessor (langsamer)	Tarjeta gráfica no disponible: graineo calcula con el procesador hasta reiniciar (más lento)
+Farbe oder Schwarzweiß.	Color o blanco y negro.
+**Schwarzweiß** entwickelt das Foto in Graustufen. Bei Sigma-Fotos mischt graineo dafür die Sensorschichten direkt (Abschnitt „S/W-Mischung“). Zurück auf **Farbe** stellt das farbige Bild wieder her.	**Blanco y negro** revela la foto en escala de grises. En las fotos Sigma, graineo mezcla directamente las capas del sensor (sección «Mezcla B/N»). Volver a **Color** restablece la imagen en color.
+Welches Licht im Foto als neutral gilt.	Qué luz se considera neutra en la foto.
+**Wie Aufnahme** übernimmt die Einstellung der Kamera, **Automatisch** schätzt sie aus dem Bild, die Vorgaben (Tageslicht, Schatten, Bewölkt …) passen zu typischem Licht. Mit der Pipette eine Stelle anklicken, die weiß oder grau sein soll. Temperatur und Tönung darunter stimmen fein nach.	**Como en la toma** usa el ajuste de la cámara, **Automático** lo estima a partir de la imagen y los ajustes preestablecidos (Luz de día, Sombra, Nublado …) se adaptan a luces típicas. Con el cuentagotas, haz clic en un punto que deba ser blanco o gris. Temperatura y Matiz, debajo, lo afinan.
+Profile werden gelesen …	Leyendo perfiles …
+Keine Adobe-Profile installiert	No hay perfiles de Adobe instalados
+Profil (eigenes, lensfun oder Adobe) für dieses Foto, die Auswahl oder alle Fotos dieses Objektivs wählen	Elegir un perfil (propio, lensfun o Adobe) para esta foto, la selección o todas las fotos de este objetivo
+Anderes Bajonett: Das Profil gilt für das Objektiv am Originalbajonett. Mit Adapter stimmen Verzeichnung und Farbquerfehler meist, die Vignettierung nur ohne zusätzliche Abschattung durch den Adapter.	Otra montura: el perfil es para el objetivo en su montura original. Con adaptador, la distorsión y la aberración cromática lateral suelen coincidir; el viñeteado solo si el adaptador no añade sombra propia.
+Telekonverter erkannt: kein automatisches Profil (das Objektiv allein beschreibt die Kombination nicht)	Teleconversor detectado: sin perfil automático (el objetivo solo no describe la combinación)
+Verzeichnung manuell	Distorsión manual
+Farbsaum Rot	Franja roja
+Farbsaum Blau	Franja azul
+Plus entfernt tonnenförmige, Minus kissenförmige Verzeichnung; wirkt zusätzlich zum Profil	Más elimina la distorsión de barril, menos la de cojín; actúa además del perfil
+Zieht den Rotkanal zur Bildmitte (+) oder zum Rand (−), gegen rote oder cyanfarbene Säume an den Bildrändern	Desplaza el canal rojo hacia el centro (+) o hacia el borde (−), contra franjas rojas o cian en los bordes de la imagen
+Zieht den Blaukanal zur Bildmitte (+) oder zum Rand (−), gegen blaue oder gelbe Säume an den Bildrändern	Desplaza el canal azul hacia el centro (+) o hacia el borde (−), contra franjas azules o amarillas en los bordes de la imagen
+Korrigiert Verzeichnung, Farbquerfehler und Vignettierung. Quelle der Reihe nach:\n• eigenes Profil\n• Adobe-Profil aus dem DNG Converter (lokal gelesen)\n• Daten der Kamera in der Datei\n• lensfun\n\nDas Etikett nennt die verwendete Quelle. Unter „Objektivprofil → Zuweisen …“ lässt sich jedes lensfun- oder Adobe-Profil von Hand wählen, auch für adaptierte Objektive.	Corrige la distorsión, la aberración cromática lateral y el viñeteado. Fuentes en este orden:\n• perfil propio\n• perfil de Adobe del DNG Converter (leído localmente)\n• datos de la cámara en el archivo\n• lensfun\n\nLa etiqueta indica la fuente usada. En «Perfil de objetivo → Asignar …» se puede elegir a mano cualquier perfil de lensfun o de Adobe, también para objetivos adaptados.
+Regler von Hand, mit oder ohne Profil; sie wirken zusätzlich zur Profilkorrektur. 0 ändert nichts.\n• **Verzeichnung manuell** – Plus entfernt tonnenförmige Verzeichnung (gerade Linien wölben sich nach außen), Minus kissenförmige.\n• **Farbsaum Rot / Blau** – verschieben einen Farbkanal zur Bildmitte (+) oder zum Rand (−), bis farbige Säume an kontrastreichen Kanten am Bildrand verschwinden.	Reguladores manuales, con o sin perfil; actúan además de la corrección del perfil. 0 no cambia nada.\n• **Distorsión manual** – más elimina la distorsión de barril (las líneas rectas se curvan hacia fuera), menos la de cojín.\n• **Franja roja / azul** – desplazan un canal de color hacia el centro (+) o hacia el borde (−) hasta que desaparezcan las franjas de color en bordes contrastados cerca del borde de la imagen.
+lensfun mitgeliefert	lensfun incluido
+Objektivprofile der lensfun-Datenbank (CC BY-SA), mit graineo ausgeliefert	Perfiles de objetivos de la base de datos lensfun (CC BY-SA), incluidos con graineo
+lensfun geladen	lensfun descargado
+Lädt nur auf Klick den neuesten Stand der lensfun-Datenbank aus dem lensfun-Projekt, prüft ihn und nutzt ihn statt der mitgelieferten	Descarga solo al hacer clic el estado más reciente de la base de datos lensfun del proyecto lensfun, lo comprueba y lo usa en lugar del incluido
+Geladen: {s} · {c} Kameras, {l} Objektive	Descargado: {s} · {c} cámaras, {l} objetivos
+Schon aktuell	Ya está actualizado
+Fehlgeschlagen: {e}	Error: {e}
+Mitgelieferte Datenbank in Verwendung	Base de datos incluida en uso
+{s} · in Verwendung	{s} · en uso
+Objektivprofile aktualisieren	Actualizar perfiles de objetivos
+Zurück auf mitgelieferte	Volver al incluido
+Neueste lensfun-Daten laden	Descargar los datos lensfun más recientes
+Geladene Daten entfernen	Eliminar los datos descargados
+Zuordnung	Asignación
+von Hand	manual
+Sigma-Objektivdaten	datos de objetivo de Sigma
+kein Profil gefunden – Sigma-Objektivdaten nicht gefunden	no se encontró perfil – no se encontraron datos de objetivo de Sigma
+kein Profil gefunden	no se encontró perfil
+unbekannt	desconocido
+Fujifilm (eingebettet)	Fujifilm (incrustado)
+Sony (eingebettet)	Sony (incrustado)
+Olympus (eingebettet)	Olympus (incrustado)
+Panasonic (eingebettet)	Panasonic (incrustado)
+Telekonverter erkannt	teleconversor detectado
+Kamera nicht in der Datenbank	cámara no está en la base de datos
+kein Objektivname in der Datei	sin nombre de objetivo en el archivo
+anderes Bajonett	otra montura
+Objektiv nicht in der Datenbank	objetivo no está en la base de datos
+Kein Profil gefunden	No se encontró perfil
+Nur für Merrill-Kameras	Solo cámaras Merrill
+In Monochrom keine Korrektur	Sin corrección en monocromo
+Sigma-Objektivdaten nicht gefunden	No se encontraron datos de objetivo de Sigma
+Objektiv unbekannt	Objetivo desconocido
+Einklappen	Contraer
+Aufklappen	Expandir
+Verzeichnung, Farbquerfehler	Distorsión, aberración cromática lateral
+Geladene lensfun-Daten fehlerhaft, mitgelieferte in Verwendung	Datos lensfun descargados defectuosos, se usan los incluidos
+Objektive verwalten …	Gestionar objetivos …
+Beurteilungsrahmen	Marco de evaluación
+Rand um das Foto in Prozent der kürzeren Seite (Mittelgrau mit weißem Rahmen, Knopf unter dem Foto)	Margen alrededor de la foto en porcentaje del lado corto (gris medio con marco blanco, botón bajo la foto)
+Beurteilungsrahmen: Foto auf Mittelgrau mit weißem Rand ein/aus	Marco de evaluación: foto sobre gris medio con borde blanco sí/no
+Auto (Helligkeit)	Auto (luminosidad)
+Auto (RGB)	Auto (RGB)
+Schwarz- und Weißpunkt aus dem Histogramm	Punto negro y blanco desde el histograma
+Je Kanal, gleicht Farbstiche aus	Por canal, corrige dominantes de color
+graineo rechnet ohne Grafikkarte	graineo calcula sin la tarjeta gráfica
+Der Rechner wurde neu gestartet, während graineo lief (z. B. nach einem Bluescreen). Zur Sicherheit rechnet graineo jetzt nur auf dem Prozessor.	El ordenador se reinició mientras graineo estaba en marcha (por ejemplo, tras una pantalla azul). Por seguridad, graineo calcula ahora solo con el procesador.
+Einstellungen → Entwickeln → Leistung → Grafikkarte verwenden	Ajustes → Revelar → Rendimiento → Usar la tarjeta gráfica
+Grafikkarte wieder verwenden	Volver a usar la tarjeta gráfica
+Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: im Task-Manager den Prozess graineo.exe (PID {pid}) beenden und graineo neu starten.	Si no se ve ninguna ventana de graineo, un inicio anterior está bloqueado: finaliza el proceso graineo.exe (PID {pid}) en el Administrador de tareas y vuelve a iniciar graineo.
+Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: in der Aktivitätsanzeige den Prozess graineo (PID {pid}) beenden und graineo neu starten.	Si no se ve ninguna ventana de graineo, un inicio anterior está bloqueado: sal del proceso graineo (PID {pid}) en el Monitor de Actividad y vuelve a iniciar graineo.
+graineo konnte kein Fenster öffnen.\n\n{e}\n\nBitte die Datei start.log aus dem Protokollordner an die Entwickler schicken.	graineo no pudo abrir una ventana.\n\n{e}\n\nEnvía el archivo start.log de la carpeta de registros a los desarrolladores.
+Markierungen sichtbar	Marcas visibles
+Markierungen ausgeblendet	Marcas ocultas
+Die Grafikkarte wurde zurückgesetzt (Grafikwechsel oder Energiesparen). graineo wird beendet und kann sofort neu gestartet werden; Bearbeitungen sind gespeichert.	La tarjeta gráfica se ha reiniciado (cambio de gráfica o suspensión). graineo se cerrará y puede volver a abrirse de inmediato; tus ediciones están guardadas.
+Markierungen ein/aus	Mostrar/ocultar marcas

@@ -120,7 +120,7 @@ impl Shot {
             (!v.is_empty()).then_some((lo, hi))
         };
         let fmt = |v: f64| if v.fract() == 0.0 { format!("{v:.0}") } else { format!("{v}") };
-        let lens = model.as_deref().and_then(crate::exif::fixed_lens).map(|l| l.trim_end_matches(" (fest)").to_string()).or_else(|| {
+        let lens = model.as_deref().and_then(crate::exif::fixed_lens).map(|l| l.trim_end_matches(" (fixed)").to_string()).or_else(|| {
             let (f0, f1) = range("LENSFRANGE")?;
             let focal = if f0 == f1 { format!("{}mm", fmt(f0)) } else { format!("{}-{}mm", fmt(f0), fmt(f1)) };
             Some(match range("LENSARANGE") {

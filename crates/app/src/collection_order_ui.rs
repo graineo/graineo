@@ -208,10 +208,15 @@ impl LibraryView {
     pub(super) fn set_choice(ui: &mut egui::Ui, salt: &str, sets: &[(Option<i64>, String)], parent: &mut Option<i64>) {
         ui.label(egui::RichText::new(crate::tr("Im Sammlungssatz")).small().color(lr::TEXT_DIM()));
         let shown = sets.iter().find(|(id, _)| id == parent).map(|(_, n)| n.clone()).unwrap_or_default();
-        egui::ComboBox::from_id_salt(salt).selected_text(shown).width(ui.available_width()).show_ui(ui, |ui| {
-            for (id, n) in sets {
-                ui.selectable_value(parent, *id, n);
-            }
+        egui::ComboBox::from_id_salt(salt).selected_text(shown).width(ui.available_width()).height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+            lr::list_menu(ui, salt, sets.len(), |ui, f| {
+                for (id, n) in sets.iter().filter(|(_, n)| f.shows(n)) {
+                    if ui.selectable_value(parent, *id, n).clicked() || f.take_enter() {
+                        *parent = *id;
+                        ui.close();
+                    }
+                }
+            });
         });
     }
 

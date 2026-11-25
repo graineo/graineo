@@ -48,6 +48,15 @@ pub fn gpu_error(source: &str, message: &str) {
     }
 }
 
+/// The app has shown the lost device to the user (see [`take_gpu_lost_notice`]).
+static LOST_SHOWN: AtomicBool = AtomicBool::new(false);
+
+/// `true` exactly once after a GPU device was lost, so the app can tell the user that it now computes on the
+/// processor (slower, same results).
+pub fn take_gpu_lost_notice() -> bool {
+    LOST.load(Ordering::Relaxed) && !LOST_SHOWN.swap(true, Ordering::Relaxed)
+}
+
 /// Number of GPU errors caught so far (see [`gpu_error`]).
 pub fn gpu_errors() -> u64 {
     ERRORS.load(Ordering::Relaxed)

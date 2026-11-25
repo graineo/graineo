@@ -1143,6 +1143,45 @@ pub mod app {
     pub const DEVELOP_SCOPE: &[(&str, &str)] = &[("histogramm", "histogram"), ("vektorskop", "vectorscope")];
 }
 
+// ═════════════════════════════════════════════════════════════════════════ lens names
+
+pub mod lens {
+    //! The lens name the library gives a camera with a fixed lens (`library::exif::fixed_lens`) carried a German
+    //! suffix up to 1.5.4: "SIGMA 30mm f/2.8 (fest)". Since 1.5.5 it is " (fixed)" (translated only for display).
+    //! Libraries are fixed once when opened (`library::db`), lens assignment rules when read.
+
+    use std::borrow::Cow;
+
+    /// Suffix of a fixed lens: (old, new).
+    pub const FIXED_SUFFIX: (&str, &str) = (" (fest)", " (fixed)");
+
+    /// A stored lens name with the current suffix.
+    pub fn fixed_lens_name(lens: &str) -> Cow<'_, str> {
+        match lens.strip_suffix(FIXED_SUFFIX.0) {
+            Some(name) => Cow::Owned(format!("{name}{}", FIXED_SUFFIX.1)),
+            None => Cow::Borrowed(lens),
+        }
+    }
+
+    /// Statements that switch a library (schema 20) to the new suffix: lens names of files and the text of rules of
+    /// smart collections (`lens:"… (fest)"`). Idempotent.
+    /// Read-only check whether [`FIX_LIBRARY_SQL`] has anything to do (1/0).
+    pub const NEEDS_FIX_SQL: &str = "SELECT EXISTS(SELECT 1 FROM file WHERE lens LIKE '% (fest)') OR EXISTS(SELECT 1 FROM collection WHERE rules LIKE '% (fest)%')";
+
+    pub const FIX_LIBRARY_SQL: &str = "UPDATE file SET lens = substr(lens, 1, length(lens) - 7) || ' (fixed)' WHERE lens LIKE '% (fest)';
+         UPDATE collection SET rules = replace(rules, ' (fest)', ' (fixed)') WHERE rules LIKE '% (fest)%';";
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn suffix() {
+            assert_eq!(super::fixed_lens_name("SIGMA 30mm f/2.8 (fest)"), "SIGMA 30mm f/2.8 (fixed)");
+            assert_eq!(super::fixed_lens_name("XF23mmF2 R WR"), "XF23mmF2 R WR");
+            assert_eq!(super::FIXED_SUFFIX.0.len(), 7);
+        }
+    }
+}
+
 // keep the imports used by later sections
 #[allow(unused)]
 fn _uses(d: impl for<'de> Deserializer<'de>) -> Option<String> {

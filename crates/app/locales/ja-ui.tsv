@@ -4932,7 +4932,7 @@ Hebt (+) oder senkt (−) die Belichtung dieser Helligkeitszone, in Blendenstufe
 Stellt die Maske ein, die jede Bildstelle einer Zone zuordnet.	画像の各点をゾーンに割り当てるマスクを設定します。
 • **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **スムージング** – マスク領域の大きさ（長辺に対する割合）。大きいほど落ち着き、ディテールのコントラストが保たれる。小さいほどカーブに近い効果。\n• **エッジ** – マスクがエッジにどれだけ沿うか。高いほどエッジのハローが減るが、細かな構造が分かれやすくなる。\n\nマスクは設定ごとに画像全体で一度だけ計算されます。
 Ein Regler für Schatten und Lichter, mit Schutz der jeweils anderen Seite.	シャドウとハイライトを一つのスライダーで、反対側を保護しながら調整。
-• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0 · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **バランスを右へ** – シャドウと中間調を明るくします。白から1段下より明るいハイライトは必ずそのまま残り、新たな白飛びは生じません。\n• **バランスを左へ** – ハイライトと中間調を暗くします。深いシャドウは必ずそのまま残ります。\n\n面を滑らかにしエッジで止まるマスクにより、面全体（逆光の顔など）がまとまって明るくなり、エッジにハロは出ません。\n### グラフ\n−8 EV（ほぼ黒、左）から 0 EV（白、右）までの9つのゾーン。背景には同じゾーン明るさでの写真のヒストグラム。金色の線は実際に効く合計（破線のバランスの基本形＋ゾーン）を示します。グラフで変わるのはゾーンだけで、隣のゾーンは動かず、間の線は計算どおりに滑らかにつながります。設定したゾーンはバランスの保護を上書きすることがあります。\n### 操作\nクリックして初めて点を選択（金色）。マウスホイールは常にパネルをスクロールするだけ · ドラッグ：ゾーンを明るく/暗く、⌥ で微調整、0 で止まる · ↑/↓ ±0.05、⇧ で ±0.25、⌥ で ±0.01 · ←/→ 隣のゾーン · 点をダブルクリック：0 · 下の値をダブルクリック：数値入力 · Esc または外側をクリック：選択を終了\n### マスク\n**スムージング** と **エッジ** でマスクを調整し、**マスク** で写真にグレースケールで表示します。
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0; die Nachbarn gehen zur Hälfte mit, ⌘ nur dieser Punkt · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen.	• **バランスを右へ** – シャドウと中間調を明るくします。白から1段下より明るいハイライトは必ずそのまま残り、新たな白飛びは生じません。\n• **バランスを左へ** – ハイライトと中間調を暗くします。深いシャドウは必ずそのまま残ります。\n\n面を滑らかにしエッジで止まるマスクにより、面全体（逆光の顔など）がまとまって明るくなり、エッジにハロは出ません。\n### グラフ\n−8 EV（ほぼ黒、左）から 0 EV（白、右）までの9つのゾーン。背景には同じゾーン明るさでの写真のヒストグラム。金色の線は実際に効く合計（破線のバランスの基本形＋ゾーン）を示します。グラフで変わるのはゾーンだけで、隣のゾーンは動かず、間の線は計算どおりに滑らかにつながります。設定したゾーンはバランスの保護を上書きすることがあります。\n### 操作\nクリックして初めて点を選択（金色）。マウスホイールは常にパネルをスクロールするだけ · ドラッグ：ゾーンを明るく/暗く、⌥ で微調整、0 で止まる。隣の点は半分だけ動き、⌘ でこの点のみ · ↑/↓ ±0.05、⇧ で ±0.25、⌥ で ±0.01 · ←/→ 隣のゾーン · 点をダブルクリック：0 · 下の値をダブルクリック：数値入力 · Esc または外側をクリック：選択を終了\n### マスク\n**スムージング** と **エッジ** でマスクを調整し、**マスク** で写真にグレースケールで表示します。
 Die Zone zählt ab Weiß nach der Belichtung: 0 EV sind die hellsten Lichter, −4 EV die Mitteltöne, −8 EV fast Schwarz. Nachbarzonen werden weich mitgenommen; benachbarte Regler daher ähnlich stellen, sonst kann der Tonverlauf kippen. Die Zonen kommen zum Ausgleich hinzu.	ゾーンは露出後の白から数えます：0 EV が最も明るいハイライト、−4 EV が中間調、−8 EV がほぼ黒。隣のゾーンもなめらかに連動するため、隣り合うスライダーは近い値にしてください。そうしないと階調が破綻することがあります。ゾーンはバランスに加算されます。
 Ausgleich	バランス
 Feineinstellung	詳細設定
@@ -7166,3 +7166,83 @@ Hell (Erscheinungsbild)	ライト
 Zone {z}	ゾーン {z}
 Punkt	ポイント
 Ausgleich {b} · Punkt {v}	バランス {b} · ポイント {v}
+Einstellungen durchsuchen	設定を検索
+Nichts gefunden für „{q}“	「{q}」に一致する項目はありません
+Der Programmordner von graineo ist für dich nicht beschreibbar ({p}). Lade das neue Paket von der Release-Seite und installiere es wie bisher.	graineoのプログラムフォルダーに書き込み権限がありません（{p}）。リリースページから新しいパッケージをダウンロードし、これまでどおりインストールしてください。
+Diese graineo-Fassung stammt nicht aus dem Linux-Paket (install.sh oder entpackter Ordner). Lade die neue Version von der Release-Seite.	このgraineoはLinuxパッケージ（install.shまたは展開したフォルダー）から入れたものではありません。リリースページから新しいバージョンをダウンロードしてください。
+das Paket passt nicht zu diesem Prozessor, es wurde verworfen	パッケージがこのプロセッサーに合わないため破棄しました
+Suchen …	検索…
+Grafikkarte nicht mehr verfügbar – graineo rechnet bis zum Neustart auf dem Prozessor (langsamer)	グラフィックカードが使用できません – 再起動までプロセッサで処理します（低速）
+Farbe oder Schwarzweiß.	カラーまたはモノクロ。
+**Schwarzweiß** entwickelt das Foto in Graustufen. Bei Sigma-Fotos mischt graineo dafür die Sensorschichten direkt (Abschnitt „S/W-Mischung“). Zurück auf **Farbe** stellt das farbige Bild wieder her.	**白黒**は写真をグレースケールで現像します。Sigma の写真では、graineo がセンサーの各層を直接ミックスします（「白黒ミックス」セクション）。**カラー**に戻すとカラー画像に戻ります。
+Welches Licht im Foto als neutral gilt.	写真の中でどの光をニュートラルとみなすか。
+**Wie Aufnahme** übernimmt die Einstellung der Kamera, **Automatisch** schätzt sie aus dem Bild, die Vorgaben (Tageslicht, Schatten, Bewölkt …) passen zu typischem Licht. Mit der Pipette eine Stelle anklicken, die weiß oder grau sein soll. Temperatur und Tönung darunter stimmen fein nach.	**撮影時の設定**はカメラの設定を使い、**自動**は画像から推定し、プリセット（昼光、日陰、曇り …）は典型的な光に合わせます。スポイトで白またはグレーであるべき箇所をクリックします。下の色温度と色かぶり補正で微調整します。
+Profile werden gelesen …	プロファイルを読み込み中 …
+Keine Adobe-Profile installiert	Adobe プロファイルがインストールされていません
+Profil (eigenes, lensfun oder Adobe) für dieses Foto, die Auswahl oder alle Fotos dieses Objektivs wählen	この写真、選択範囲、またはこのレンズの全写真にプロファイル（カスタム、lensfun、Adobe）を選択
+Anderes Bajonett: Das Profil gilt für das Objektiv am Originalbajonett. Mit Adapter stimmen Verzeichnung und Farbquerfehler meist, die Vignettierung nur ohne zusätzliche Abschattung durch den Adapter.	別マウント：このプロファイルは元のマウントでのレンズ用です。アダプター使用時、歪曲と倍率色収差は通常合いますが、周辺減光はアダプターによる追加のけられがない場合のみ合います。
+Telekonverter erkannt: kein automatisches Profil (das Objektiv allein beschreibt die Kombination nicht)	テレコンバーターを検出：自動プロファイルなし（レンズ単体では組み合わせを表せません）
+Verzeichnung manuell	手動歪曲補正
+Farbsaum Rot	色収差 赤
+Farbsaum Blau	色収差 青
+Plus entfernt tonnenförmige, Minus kissenförmige Verzeichnung; wirkt zusätzlich zum Profil	プラスで樽型、マイナスで糸巻き型の歪曲を補正。プロファイルに加えて作用します
+Zieht den Rotkanal zur Bildmitte (+) oder zum Rand (−), gegen rote oder cyanfarbene Säume an den Bildrändern	赤チャンネルを中心（+）または端（−）へ寄せ、画像周辺の赤やシアンの色ずれを補正します
+Zieht den Blaukanal zur Bildmitte (+) oder zum Rand (−), gegen blaue oder gelbe Säume an den Bildrändern	青チャンネルを中心（+）または端（−）へ寄せ、画像周辺の青や黄の色ずれを補正します
+Korrigiert Verzeichnung, Farbquerfehler und Vignettierung. Quelle der Reihe nach:\n• eigenes Profil\n• Adobe-Profil aus dem DNG Converter (lokal gelesen)\n• Daten der Kamera in der Datei\n• lensfun\n\nDas Etikett nennt die verwendete Quelle. Unter „Objektivprofil → Zuweisen …“ lässt sich jedes lensfun- oder Adobe-Profil von Hand wählen, auch für adaptierte Objektive.	歪曲、倍率色収差、周辺減光を補正します。ソースの順序：\n• カスタムプロファイル\n• DNG Converter の Adobe プロファイル（ローカルで読み込み）\n• ファイル内のカメラデータ\n• lensfun\n\nラベルに使用中のソースが表示されます。「レンズプロファイル → 割り当て …」で、アダプター使用のレンズも含め、任意の lensfun または Adobe プロファイルを手動で選べます。
+Regler von Hand, mit oder ohne Profil; sie wirken zusätzlich zur Profilkorrektur. 0 ändert nichts.\n• **Verzeichnung manuell** – Plus entfernt tonnenförmige Verzeichnung (gerade Linien wölben sich nach außen), Minus kissenförmige.\n• **Farbsaum Rot / Blau** – verschieben einen Farbkanal zur Bildmitte (+) oder zum Rand (−), bis farbige Säume an kontrastreichen Kanten am Bildrand verschwinden.	手動スライダー。プロファイルの有無にかかわらず、プロファイル補正に加えて作用します。0 では何も変わりません。\n• **手動歪曲補正** – プラスで樽型歪曲（直線が外側に膨らむ）、マイナスで糸巻き型を補正。\n• **色収差 赤 / 青** – 画像周辺のコントラストの強いエッジの色ずれが消えるまで、色チャンネルを中心（+）または端（−）へずらします。
+lensfun mitgeliefert	lensfun 同梱
+Objektivprofile der lensfun-Datenbank (CC BY-SA), mit graineo ausgeliefert	lensfun データベースのレンズプロファイル（CC BY-SA）、graineo に同梱
+lensfun geladen	lensfun ダウンロード済み
+Lädt nur auf Klick den neuesten Stand der lensfun-Datenbank aus dem lensfun-Projekt, prüft ihn und nutzt ihn statt der mitgelieferten	クリック時のみ lensfun プロジェクトから最新の lensfun データベースをダウンロードし、検証して同梱版の代わりに使用します
+Geladen: {s} · {c} Kameras, {l} Objektive	ダウンロード済み：{s} · カメラ {c}、レンズ {l}
+Schon aktuell	すでに最新です
+Fehlgeschlagen: {e}	失敗しました：{e}
+Mitgelieferte Datenbank in Verwendung	同梱データベースを使用中
+{s} · in Verwendung	{s} · 使用中
+Objektivprofile aktualisieren	レンズプロファイルを更新
+Zurück auf mitgelieferte	同梱版に戻す
+Neueste lensfun-Daten laden	最新の lensfun データを取得
+Geladene Daten entfernen	ダウンロードしたデータを削除
+Zuordnung	割り当て
+von Hand	手動
+Sigma-Objektivdaten	Sigma レンズデータ
+kein Profil gefunden – Sigma-Objektivdaten nicht gefunden	プロファイルなし – Sigma レンズデータが見つかりません
+kein Profil gefunden	プロファイルが見つかりません
+unbekannt	不明
+Fujifilm (eingebettet)	Fujifilm（埋め込み）
+Sony (eingebettet)	Sony（埋め込み）
+Olympus (eingebettet)	Olympus（埋め込み）
+Panasonic (eingebettet)	Panasonic（埋め込み）
+Telekonverter erkannt	テレコンバーターを検出
+Kamera nicht in der Datenbank	カメラがデータベースにありません
+kein Objektivname in der Datei	ファイルにレンズ名がありません
+anderes Bajonett	別マウント
+Objektiv nicht in der Datenbank	レンズがデータベースにありません
+Kein Profil gefunden	プロファイルが見つかりません
+Nur für Merrill-Kameras	Merrill カメラのみ
+In Monochrom keine Korrektur	モノクロでは補正なし
+Sigma-Objektivdaten nicht gefunden	Sigma レンズデータが見つかりません
+Objektiv unbekannt	レンズ不明
+Einklappen	折りたたむ
+Aufklappen	展開
+Verzeichnung, Farbquerfehler	歪曲、倍率色収差
+Geladene lensfun-Daten fehlerhaft, mitgelieferte in Verwendung	ダウンロードした lensfun データに不具合、同梱版を使用
+Objektive verwalten …	レンズを管理 …
+Beurteilungsrahmen	評価用フレーム
+Rand um das Foto in Prozent der kürzeren Seite (Mittelgrau mit weißem Rahmen, Knopf unter dem Foto)	写真の周囲の余白（短辺に対する％、中間グレーと白い枠、写真の下のボタン）
+Beurteilungsrahmen: Foto auf Mittelgrau mit weißem Rand ein/aus	評価用フレーム：中間グレー上に白枠付きで表示 オン/オフ
+Auto (Helligkeit)	自動（明るさ）
+Auto (RGB)	自動（RGB）
+Schwarz- und Weißpunkt aus dem Histogramm	ヒストグラムから黒点と白点
+Je Kanal, gleicht Farbstiche aus	チャンネルごと、色かぶりを補正
+graineo rechnet ohne Grafikkarte	graineo はグラフィックカードを使わずに処理しています
+Der Rechner wurde neu gestartet, während graineo lief (z. B. nach einem Bluescreen). Zur Sicherheit rechnet graineo jetzt nur auf dem Prozessor.	graineo の実行中にコンピュータが再起動しました（ブルースクリーンの後など）。安全のため、graineo は現在プロセッサのみで処理します。
+Einstellungen → Entwickeln → Leistung → Grafikkarte verwenden	設定 → 現像 → パフォーマンス → グラフィックカードを使用
+Grafikkarte wieder verwenden	グラフィックカードを再び使用
+Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: im Task-Manager den Prozess graineo.exe (PID {pid}) beenden und graineo neu starten.	graineo のウィンドウが表示されない場合は、以前の起動が停止しています。タスクマネージャーで graineo.exe（PID {pid}）を終了し、graineo を再起動してください。
+Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: in der Aktivitätsanzeige den Prozess graineo (PID {pid}) beenden und graineo neu starten.	graineo のウィンドウが表示されない場合は、以前の起動が停止しています。アクティビティモニタで graineo（PID {pid}）を終了し、graineo を再起動してください。
+graineo konnte kein Fenster öffnen.\n\n{e}\n\nBitte die Datei start.log aus dem Protokollordner an die Entwickler schicken.	graineo はウィンドウを開けませんでした。\n\n{e}\n\nログフォルダの start.log を開発者に送ってください。
+Markierungen sichtbar	マーカー表示中
+Markierungen ausgeblendet	マーカー非表示
+Die Grafikkarte wurde zurückgesetzt (Grafikwechsel oder Energiesparen). graineo wird beendet und kann sofort neu gestartet werden; Bearbeitungen sind gespeichert.	グラフィックカードがリセットされました（グラフィック切り替えまたはスリープ）。graineo は終了します。すぐに再起動できます。編集内容は保存されています。
+Markierungen ein/aus	マーカーの表示/非表示

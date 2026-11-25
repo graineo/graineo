@@ -226,6 +226,10 @@ pub fn run(file: &str, rest: &[String]) -> Result<()> {
         if let Some(ob) = &e.lens {
             eprintln!("lens: {ob} · profile: {}", e.lens_source.unwrap_or("–"));
         }
+        if let Some(em) = rf.lens_embedded() {
+            let g = em.geo.as_ref().map(|(k, g, _)| format!("geometry factor R/G/B at r=1: {:?}", k.iter().position(|r| *r >= 1.0).map(|i| g[i])));
+            eprintln!("embedded: {} · {} · camera shading compensation {}", em.source, g.unwrap_or("no geometry".into()), em.shading_done);
+        }
         if let Some(f) = &e.color {
             eprintln!("color: {:.0} K (weight illuminant 1: {:.2}){} · exposure {:+.2} EV ({})", f.kelvin, f.weight, if f.forward { " · ForwardMatrix" } else { "" }, e.ev, evs.join(", "));
         }

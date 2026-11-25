@@ -87,8 +87,8 @@ impl Options {
             device_days: 30,
             dir: library::data_dir().join("remote"),
             // test runs with their own data folder keep the log there too
-            log_file: if std::env::var_os("GRAINEO_DATA_DIR").is_some() { None } else { sysdirs::app_logs_dir("graineo").map(|d| d.join("remote-access.log")) }
-                .or_else(|| Some(library::data_dir().join("logs").join("remote-access.log"))),
+            // test runs (own data folder, cargo test program) get their own logs folder from `app_logs_dir`
+            log_file: sysdirs::app_logs_dir(library::APP).map(|d| d.join("remote-access.log")).or_else(|| Some(library::data_dir().join("logs").join("remote-access.log"))),
         }
     }
 }

@@ -72,6 +72,7 @@ fn complete_from_header(e: Option<crate::imageio::Properties>, path: &Path, form
 
 fn capture_of(e: crate::imageio::Properties, path: &Path, format: &str) -> Capture {
     let lens = e.lens.or_else(|| if format == "NEF" { nikon_lens(path) } else { None });
+    let lens = lens.or_else(|| fixed_lens_of(e.maker.as_deref().unwrap_or(""), e.camera.as_deref()?).map(str::to_string));
     Capture { camera: e.camera, lens, aperture: e.aperture, focal: e.focal, iso: e.iso, time: e.time, capture: e.capture, width: None, height: None, orientation: e.orientation.filter(|o| (1..=8).contains(o)) }
 }
 
@@ -169,40 +170,143 @@ fn date(s: &str) -> Option<String> {
     crate::imageio_common::exif_date(s)
 }
 
-/// Cameras with a fixed lens: camera name (case-insensitive) → lens name. Added only where the file
-/// itself carries no lens name.
-const FIXED_LENSES: &[(&str, &str)] = &[
-    ("FinePix X100", "FUJINON 23mm f/2 (fest)"),
-    ("X100S", "FUJINON 23mm f/2 (fest)"),
-    ("X100T", "FUJINON 23mm f/2 (fest)"),
-    ("X100F", "FUJINON 23mm f/2 (fest)"),
-    ("X100V", "FUJINON 23mm f/2 (fest)"),
-    ("X100VI", "FUJINON 23mm f/2 (fest)"),
-    ("SIGMA DP1 Merrill", "SIGMA 19mm f/2.8 (fest)"),
-    ("SIGMA DP2 Merrill", "SIGMA 30mm f/2.8 (fest)"),
-    ("SIGMA DP3 Merrill", "SIGMA 50mm f/2.8 (fest)"),
-    ("SIGMA dp0 Quattro", "SIGMA 14mm f/4 (fest)"),
-    ("SIGMA dp1 Quattro", "SIGMA 19mm f/2.8 (fest)"),
-    ("SIGMA dp2 Quattro", "SIGMA 30mm f/2.8 (fest)"),
-    ("SIGMA dp3 Quattro", "SIGMA 50mm f/2.8 (fest)"),
-    ("GR", "GR 18.3mm f/2.8 (fest)"),
-    ("GR II", "GR 18.3mm f/2.8 (fest)"),
-    ("RICOH GR III", "GR 18.3mm f/2.8 (fest)"),
-    ("RICOH GR IV", "GR 18.3mm f/2.8 (fest)"),
-    ("RICOH GR IIIx", "GR 26.1mm f/2.8 (fest)"),
+/// Cameras with a fixed lens: (maker, EXIF model name (case-insensitive), lens name). Added only where the file
+/// itself carries no lens name. The maker is a lowercase word of the EXIF make ("FUJIFILM", "RICOH IMAGING
+/// COMPANY, LTD.", "OLYMPUS IMAGING CORP." …), so a short model name such as "X10" or "GR" only counts for its maker.
+/// Odd-looking model names are what the cameras write: "STYLUS1,1s" (Olympus Stylus 1s), "DC-FZ10002" (Panasonic
+/// FZ1000 II), as in the camera list of the RAW decoder rawler.
+const FIXED_LENSES: &[(&str, &str, &str)] = &[
+    ("fujifilm", "FinePix X100", "FUJINON 23mm f/2 (fixed)"),
+    ("fujifilm", "X100S", "FUJINON 23mm f/2 (fixed)"),
+    ("fujifilm", "X100T", "FUJINON 23mm f/2 (fixed)"),
+    ("fujifilm", "X100F", "FUJINON 23mm f/2 (fixed)"),
+    ("fujifilm", "X100V", "FUJINON 23mm f/2 (fixed)"),
+    ("fujifilm", "X100VI", "FUJINON 23mm f/2 (fixed)"),
+    ("sigma", "SIGMA DP1 Merrill", "SIGMA 19mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA DP2 Merrill", "SIGMA 30mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA DP3 Merrill", "SIGMA 50mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA dp0 Quattro", "SIGMA 14mm f/4 (fixed)"),
+    ("sigma", "SIGMA dp1 Quattro", "SIGMA 19mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA dp2 Quattro", "SIGMA 30mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA dp3 Quattro", "SIGMA 50mm f/2.8 (fixed)"),
+    ("ricoh", "GR", "GR 18.3mm f/2.8 (fixed)"),
+    ("ricoh", "GR II", "GR 18.3mm f/2.8 (fixed)"),
+    ("ricoh", "RICOH GR III", "GR 18.3mm f/2.8 (fixed)"),
+    ("ricoh", "RICOH GR IV", "GR 18.3mm f/2.8 (fixed)"),
+    ("ricoh", "RICOH GR IIIx", "GR 26.1mm f/2.8 (fixed)"),
+    // further compact cameras with a fixed lens (EXIF model name; focal range and aperture from the makers'
+    // data sheets, cross-checked with the lensfun compact-camera entries)
+    ("sigma", "SIGMA DP1", "SIGMA 16.6mm f/4 (fixed)"),
+    ("sigma", "SIGMA DP1S", "SIGMA 16.6mm f/4 (fixed)"),
+    ("sigma", "SIGMA DP1X", "SIGMA 16.6mm f/4 (fixed)"),
+    ("sigma", "SIGMA DP2", "SIGMA 24.2mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA DP2S", "SIGMA 24.2mm f/2.8 (fixed)"),
+    ("sigma", "SIGMA DP2X", "SIGMA 24.2mm f/2.8 (fixed)"),
+    ("fujifilm", "FinePix X10", "FUJINON 7.1-28.4mm f/2-2.8 (fixed)"),
+    ("fujifilm", "X10", "FUJINON 7.1-28.4mm f/2-2.8 (fixed)"),
+    ("fujifilm", "X20", "FUJINON 7.1-28.4mm f/2-2.8 (fixed)"),
+    ("fujifilm", "X30", "FUJINON 7.1-28.4mm f/2-2.8 (fixed)"),
+    ("fujifilm", "X70", "FUJINON 18.5mm f/2.8 (fixed)"),
+    ("fujifilm", "XF10", "FUJINON 18.5mm f/2.8 (fixed)"),
+    ("fujifilm", "XQ1", "FUJINON 6.4-25.6mm f/1.8-4.9 (fixed)"),
+    ("fujifilm", "XQ2", "FUJINON 6.4-25.6mm f/1.8-4.9 (fixed)"),
+    ("sony", "DSC-RX100", "ZEISS Vario-Sonnar T* 10.4-37.1mm f/1.8-4.9 (fixed)"),
+    ("sony", "DSC-RX100M2", "ZEISS Vario-Sonnar T* 10.4-37.1mm f/1.8-4.9 (fixed)"),
+    ("sony", "DSC-RX100M3", "ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"),
+    ("sony", "DSC-RX100M4", "ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"),
+    ("sony", "DSC-RX100M5", "ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"),
+    ("sony", "DSC-RX100M5A", "ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"),
+    ("sony", "DSC-RX100M6", "ZEISS Vario-Sonnar T* 9-72mm f/2.8-4.5 (fixed)"),
+    ("sony", "DSC-RX100M7", "ZEISS Vario-Sonnar T* 9-72mm f/2.8-4.5 (fixed)"),
+    ("sony", "ZV-1", "ZEISS Vario-Sonnar T* 9.4-25.7mm f/1.8-2.8 (fixed)"),
+    ("sony", "DSC-RX10", "ZEISS Vario-Sonnar T* 8.8-73.3mm f/2.8 (fixed)"),
+    ("sony", "DSC-RX10M2", "ZEISS Vario-Sonnar T* 8.8-73.3mm f/2.8 (fixed)"),
+    ("sony", "DSC-RX10M3", "ZEISS Vario-Sonnar T* 8.8-220mm f/2.4-4 (fixed)"),
+    ("sony", "DSC-RX10M4", "ZEISS Vario-Sonnar T* 8.8-220mm f/2.4-4 (fixed)"),
+    ("sony", "DSC-RX1", "ZEISS Sonnar T* 35mm f/2 (fixed)"),
+    ("sony", "DSC-RX1R", "ZEISS Sonnar T* 35mm f/2 (fixed)"),
+    ("sony", "DSC-RX1RM2", "ZEISS Sonnar T* 35mm f/2 (fixed)"),
+    ("leica", "LEICA Q (Typ 116)", "SUMMILUX 28mm f/1.7 ASPH. (fixed)"),
+    ("leica", "LEICA Q2", "SUMMILUX 28mm f/1.7 ASPH. (fixed)"),
+    ("leica", "LEICA Q2 MONOCHROM", "SUMMILUX 28mm f/1.7 ASPH. (fixed)"),
+    ("leica", "LEICA Q3", "SUMMILUX 28mm f/1.7 ASPH. (fixed)"),
+    ("leica", "LEICA Q3 43", "APO-SUMMICRON 43mm f/2 ASPH. (fixed)"),
+    ("leica", "LEICA X1", "ELMARIT 24mm f/2.8 ASPH. (fixed)"),
+    ("leica", "LEICA X2", "ELMARIT 24mm f/2.8 ASPH. (fixed)"),
+    ("leica", "LEICA X (Typ 113)", "SUMMILUX 23mm f/1.7 ASPH. (fixed)"),
+    ("canon", "Canon PowerShot G7 X", "Canon 8.8-36.8mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G7 X Mark II", "Canon 8.8-36.8mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G7 X Mark III", "Canon 8.8-36.8mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G5 X", "Canon 8.8-36.8mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G5 X Mark II", "Canon 8.8-44mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G9 X", "Canon 10.2-30.6mm f/2-4.9 (fixed)"),
+    ("canon", "Canon PowerShot G9 X Mark II", "Canon 10.2-30.6mm f/2-4.9 (fixed)"),
+    ("canon", "Canon PowerShot G1 X", "Canon 15.1-60.4mm f/2.8-5.8 (fixed)"),
+    ("canon", "Canon PowerShot G1 X Mark II", "Canon 12.5-62.5mm f/2-3.9 (fixed)"),
+    ("canon", "Canon PowerShot G1 X Mark III", "Canon 15-45mm f/2.8-5.6 (fixed)"),
+    ("canon", "Canon PowerShot G15", "Canon 6.1-30.5mm f/1.8-2.8 (fixed)"),
+    ("canon", "Canon PowerShot G16", "Canon 6.1-30.5mm f/1.8-2.8 (fixed)"),
+    ("panasonic", "DMC-LX100", "LEICA DC VARIO-SUMMILUX 10.9-34mm f/1.7-2.8 (fixed)"),
+    ("panasonic", "DC-LX100M2", "LEICA DC VARIO-SUMMILUX 10.9-34mm f/1.7-2.8 (fixed)"),
+    ("panasonic", "DMC-LX7", "LEICA DC VARIO-SUMMILUX 4.7-17.7mm f/1.4-2.3 (fixed)"),
+    ("panasonic", "DMC-LX10", "LEICA DC VARIO-SUMMILUX 8.8-26.4mm f/1.4-2.8 (fixed)"),
+    ("panasonic", "DMC-LX15", "LEICA DC VARIO-SUMMILUX 8.8-26.4mm f/1.4-2.8 (fixed)"),
+    ("panasonic", "DMC-FZ1000", "LEICA DC VARIO-ELMARIT 9.1-146mm f/2.8-4 (fixed)"),
+    ("panasonic", "DC-FZ10002", "LEICA DC VARIO-ELMARIT 9.1-146mm f/2.8-4 (fixed)"),
+    ("panasonic", "DMC-FZ2000", "LEICA DC VARIO-ELMARIT 8.8-176mm f/2.8-4.5 (fixed)"),
+    ("panasonic", "DMC-FZ2500", "LEICA DC VARIO-ELMARIT 8.8-176mm f/2.8-4.5 (fixed)"),
+    ("panasonic", "DMC-FZ200", "LEICA DC VARIO-ELMARIT 4.5-108mm f/2.8 (fixed)"),
+    ("panasonic", "DMC-FZ300", "LEICA DC VARIO-ELMARIT 4.5-108mm f/2.8 (fixed)"),
+    ("panasonic", "DMC-TZ100", "LEICA DC VARIO-ELMARIT 9.1-91mm f/2.8-5.9 (fixed)"),
+    ("panasonic", "DMC-TZ101", "LEICA DC VARIO-ELMARIT 9.1-91mm f/2.8-5.9 (fixed)"),
+    ("panasonic", "DMC-ZS100", "LEICA DC VARIO-ELMARIT 9.1-91mm f/2.8-5.9 (fixed)"),
+    ("panasonic", "DC-TZ200", "LEICA DC VARIO-ELMAR 8.8-132mm f/3.3-6.4 (fixed)"),
+    ("panasonic", "DC-ZS200", "LEICA DC VARIO-ELMAR 8.8-132mm f/3.3-6.4 (fixed)"),
+    ("olympus", "STYLUS1", "OLYMPUS 6-64.3mm f/2.8 (fixed)"),
+    ("olympus", "STYLUS1,1s", "OLYMPUS 6-64.3mm f/2.8 (fixed)"),
+    ("olympus", "XZ-1", "OLYMPUS 6-24mm f/1.8-2.5 (fixed)"),
+    ("olympus", "XZ-2", "OLYMPUS 6-24mm f/1.8-2.5 (fixed)"),
+    ("olympus", "TG-4", "OLYMPUS 4.5-18mm f/2-4.9 (fixed)"),
+    ("olympus", "TG-5", "OLYMPUS 4.5-18mm f/2-4.9 (fixed)"),
+    ("olympus", "TG-6", "OLYMPUS 4.5-18mm f/2-4.9 (fixed)"),
+    ("olympus", "TG-7", "OM SYSTEM 4.5-18mm f/2-4.9 (fixed)"),
+    ("nikon", "COOLPIX A", "NIKKOR 18.5mm f/2.8 (fixed)"),
+    ("nikon", "COOLPIX P7700", "NIKKOR 6-42.8mm f/2-4 (fixed)"),
+    ("nikon", "COOLPIX P7800", "NIKKOR 6-42.8mm f/2-4 (fixed)"),
+    ("nikon", "COOLPIX P950", "NIKKOR 4.3-357mm f/2.8-6.5 (fixed)"),
+    ("nikon", "COOLPIX P1000", "NIKKOR 4.3-539mm f/2.8-8 (fixed)"),
+    ("nikon", "COOLPIX P1100", "NIKKOR 4.3-539mm f/2.8-8 (fixed)"),
 ];
 
-/// Lens name the library gives a camera with a fixed lens (case-insensitive camera name), e.g. for the
-/// lens measurement of X3F files, which carry no lens name.
+/// Does the EXIF make belong to the maker word of [`FIXED_LENSES`]? (Olympus cameras since 2021 say "OM Digital
+/// Solutions".)
+fn maker_matches(key: &str, make: &str) -> bool {
+    let m = make.to_ascii_lowercase();
+    m.contains(key) || (key == "olympus" && m.contains("om digital"))
+}
+
+/// Lens name the library gives a camera with a fixed lens: EXIF make and model (case-insensitive). With an empty
+/// make only model names that name their maker themselves ("SIGMA DP2 Merrill", "LEICA Q2", "RICOH GR III") count.
+pub fn fixed_lens_of(make: &str, model: &str) -> Option<&'static str> {
+    let (make, model) = (make.trim(), model.trim());
+    FIXED_LENSES
+        .iter()
+        .find(|(k, c, _)| c.eq_ignore_ascii_case(model) && if make.is_empty() { maker_matches(k, c) } else { maker_matches(k, make) })
+        .map(|(_, _, l)| *l)
+}
+
+/// [`fixed_lens_of`] without a make, e.g. for the lens measurement of X3F files, which carry no lens name.
 pub fn fixed_lens(camera: &str) -> Option<&'static str> {
-    FIXED_LENSES.iter().find(|(c, _)| c.eq_ignore_ascii_case(camera.trim())).map(|(_, l)| *l)
+    fixed_lens_of("", camera)
 }
 
 /// Add the lens for cameras with a fixed lens. Returns: changed files.
 pub fn add_fixed_lens(db: &Db) -> Result<usize, String> {
     let f = |e: rusqlite::Error| e.to_string();
     let mut n = 0;
-    for (camera, lens) in FIXED_LENSES {
+    // the library keeps no make: only model names that name their maker (short names get their lens when read,
+    // see `capture_of`)
+    for (_, camera, lens) in FIXED_LENSES.iter().filter(|(k, c, _)| maker_matches(k, c)) {
         n += db.conn.execute("UPDATE file SET lens=?2 WHERE lens IS NULL AND lower(camera)=lower(?1)", params![camera, lens]).map_err(f)?;
     }
     Ok(n)
@@ -296,6 +400,21 @@ pub fn backfill_with(db: &Db, max: usize, cancel: &AtomicBool, progress: &dyn Fn
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_lenses_need_the_right_maker() {
+        assert_eq!(fixed_lens_of("FUJIFILM", "X10"), Some("FUJINON 7.1-28.4mm f/2-2.8 (fixed)"));
+        assert_eq!(fixed_lens_of("SomeOther", "X10"), None);
+        assert_eq!(fixed_lens("X10"), None, "short name without make");
+        assert_eq!(fixed_lens_of("RICOH IMAGING COMPANY, LTD.", "GR"), Some("GR 18.3mm f/2.8 (fixed)"));
+        assert_eq!(fixed_lens_of("PENTAX", "GR"), None);
+        assert_eq!(fixed_lens("RICOH GR III"), Some("GR 18.3mm f/2.8 (fixed)"));
+        assert_eq!(fixed_lens("SIGMA DP2 Merrill"), Some("SIGMA 30mm f/2.8 (fixed)"));
+        assert_eq!(fixed_lens_of("OM Digital Solutions", "TG-7"), Some("OM SYSTEM 4.5-18mm f/2-4.9 (fixed)"));
+        assert_eq!(fixed_lens_of("OLYMPUS IMAGING CORP.", "STYLUS1,1s"), Some("OLYMPUS 6-64.3mm f/2.8 (fixed)"));
+        assert_eq!(fixed_lens_of("Panasonic", "DC-FZ10002"), Some("LEICA DC VARIO-ELMARIT 9.1-146mm f/2.8-4 (fixed)"));
+        assert_eq!(fixed_lens_of("SONY", "dsc-rx100m3"), Some("ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"));
+    }
 
     /// A file that cannot be opened (network drive asleep) is not taken as "read, no data": it stays open for the
     /// next start (before 0.108 capture date, camera and lens stayed empty for good). Same for the text fields.

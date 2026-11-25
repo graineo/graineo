@@ -55,3 +55,9 @@ perf_measure.rs:Look-Stufe (CPU)
 perf_measure.rs:Hochladen (Falschfarben)
 perf_measure.rs:Falschfarben gesamt
 perf_measure.rs:Falschfarben
+prefs_search.rs:Größe der Oberfläche
+prefs_search.rs:zoom skalierung scale scaling schriftgröße font size groß klein bigger smaller
+prefs_search.rs:lüfter lüftung leise laut fan quiet noise akku battery strom energie sparsam power performance leistung
+prefs_search.rs:trash löschen delete nas netzwerk network smb
+prefs.rs:modell model stufe stage clip siglip semantisch semantic bedeutung meaning ki ai 
+prefs_search.rs:kamera kameras camera cameras standard standards default defaults startwerte start values vorgabe vorgaben preset presets objektiv lens rauschen noise schärfen sharpen profil profile

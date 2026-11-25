@@ -284,13 +284,22 @@ impl App {
             let shown = matches!(self.tool_rail_active(), ToolTab::Edit | ToolTab::Masks | ToolTab::Retouch) && (active == loaded || kind(active) == kind(loaded));
             self.pinned_histogram(ui, shown, active == loaded);
         }
+        // fixed footer below the scroll area (copy / paste / reset, edit_footer.rs): its room is kept free first
+        let footer = self.current.is_some() && crate::edit_footer::shown_in(self.tool_rail_active());
+        let footer_enabled = self.active_entry() == self.current.as_ref().map(|c| c.index);
         let mut surface = egui::ScrollArea::vertical().id_salt("bearbeiten").auto_shrink([false; 2]).max_width(w);
+        if footer {
+            surface = surface.max_height((ui.available_height() - crate::edit_footer::HEIGHT).max(0.0));
+        }
         // Test hook: GRAINEO_SIDEBAR_SCROLL=<points> scrolls the Edit panel on the first draw (for screenshots)
         if let Some(px) = crate::scroll_hold::first_offset(ui, "edit", self.current.is_some() && self.loading.is_none()) {
             surface = surface.vertical_scroll_offset(px);
         }
         // placeholder frames (photo opened again, another photo loading) keep the scroll position (scroll_hold.rs)
         surface.show(ui, |ui| crate::scroll_hold::scope(ui, "edit", |ui| ((), self.edit_panel_content(ui))));
+        if footer {
+            self.edit_footer(ui, footer_enabled);
+        }
     }
 
     /// Scrolled content of the Edit panel; returns true while only a placeholder stands in for the controls.

@@ -290,7 +290,7 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
             continue;
         }
         if access != crate::location::Reach::Yes {
-            steps.push(Step::Offline(s.id));
+            steps.push(Step::Offline { root: s.id, path: s.path.clone() });
             b.offline.push((s.path.clone(), count));
             b.status_changed += files.values().flat_map(|m| m.values()).filter(|d| d.status != 2).count();
             done += s_expected;
@@ -537,8 +537,10 @@ const BLOCK: usize = 500;
 
 /// Change from the run over the disk; written afterwards in short blocks ([`write_steps`]).
 enum Step {
-    /// root folder not reachable
-    Offline(i64),
+    /// root folder not reachable. With its path: root ids are reused (`INTEGER PRIMARY KEY`), so a root removed
+    /// while this run was on its way and a root added after it can have the same id – the step must not mark the
+    /// files of that other root as offline.
+    Offline { root: i64, path: String },
     /// file missing on disk (only if the entry has not been moved in the meantime)
     Missing { id: i64, folder: i64, name: String },
     /// file back or size/modification time changed
@@ -570,9 +572,12 @@ fn write_steps(db: &Db, steps: &[Step], run: i64, b: &mut Report, new_files: &mu
         let tx = db.conn.unchecked_transaction()?;
         for s in block {
             match s {
-                Step::Offline(root) => {
+                Step::Offline { root, path } => {
                     // merged photos (status 3) have no file: never "drive missing"
-                    tx.execute("UPDATE file SET status=2 WHERE folder IN (SELECT id FROM folder WHERE root=?1) AND status <> 3", [root])?;
+                    tx.execute(
+                        "UPDATE file SET status=2 WHERE folder IN (SELECT o.id FROM folder o JOIN root_folder s ON s.id = o.root WHERE s.id=?1 AND s.path=?2) AND status <> 3",
+                        params![root, path],
+                    )?;
                 }
                 Step::Missing { id, folder, name } => {
                     tx.execute("UPDATE file SET status=1 WHERE id=?1 AND folder=?2 AND name=?3", params![id, folder, name])?;
@@ -756,4 +761,38 @@ pub fn add_root(db: &Db, folder: &Path, progress: &dyn Fn(&str)) -> Result<(i64,
     let b = reconcile(db, Some(id), progress)?;
     db.mark_run(b.run, "folder").map_err(|e| e.to_string())?;
     Ok((id, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A run that found its root offline must not mark the files of a root added later under the same id (ids of
+    /// removed roots are reused). Seen in the HDR stress tests under heavy load: a late sync of a closed lab marked
+    /// all frames of the next lab as "drive missing".
+    #[test]
+    fn offline_step_never_hits_a_newer_root_with_the_same_id() {
+        let base = std::env::temp_dir().join(format!("graineo-reconcile-reuse-{}-{}", std::process::id(), crate::now()));
+        let (a, b) = (base.join("a"), base.join("b"));
+        for d in [&a, &b] {
+            std::fs::create_dir_all(d).unwrap();
+            std::fs::write(d.join("x.jpg"), b"not a photo").unwrap();
+        }
+        let db = Db::open(&base.join("library.sqlite")).unwrap();
+        let (ra, _) = add_root(&db, &a, &|_| {}).unwrap();
+        let old_path: String = db.conn.query_row("SELECT path FROM root_folder WHERE id=?1", [ra], |r| r.get(0)).unwrap();
+        crate::manage::remove_folder(&db, ra, "").unwrap();
+        let (rb, _) = add_root(&db, &b, &|_| {}).unwrap();
+        assert_eq!(ra, rb, "the id of the removed root is taken again (else this test checks nothing)");
+        let mut report = Report::default();
+        write_steps(&db, &[Step::Offline { root: ra, path: old_path }], 0, &mut report, &mut Vec::new()).unwrap();
+        let offline: i64 = db.conn.query_row("SELECT count(*) FROM file d JOIN folder o ON o.id = d.folder WHERE o.root = ?1 AND d.status = 2", [rb], |r| r.get(0)).unwrap();
+        assert_eq!(offline, 0, "files of the new root were marked offline");
+        let path_b: String = db.conn.query_row("SELECT path FROM root_folder WHERE id=?1", [rb], |r| r.get(0)).unwrap();
+        write_steps(&db, &[Step::Offline { root: rb, path: path_b }], 0, &mut report, &mut Vec::new()).unwrap();
+        let offline: i64 = db.conn.query_row("SELECT count(*) FROM file d JOIN folder o ON o.id = d.folder WHERE o.root = ?1 AND d.status = 2", [rb], |r| r.get(0)).unwrap();
+        assert!(offline > 0, "its own offline step still applies");
+        drop(db);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 }

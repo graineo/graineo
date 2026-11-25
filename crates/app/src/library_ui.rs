@@ -26,6 +26,8 @@ mod library_facets_job;
 mod library_filter_bar;
 #[path = "library_load.rs"]
 mod library_load;
+#[path = "library_view_memory.rs"]
+mod library_view_memory;
 #[path = "library_manage.rs"]
 mod library_manage;
 #[path = "metadata_reread_ui.rs"]
@@ -292,7 +294,7 @@ pub struct SourceImage {
     pub aspect: Option<f32>,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum SortOrder {
     CaptureTime,
     Name,
@@ -528,6 +530,8 @@ pub struct LibraryView {
     view_sort_chosen: bool,
     /// sort direction reversed (arrow next to the sort order)
     sort_reversed: bool,
+    /// view as last written to the settings (library_view_memory.rs); `None` until restored at startup
+    remembered_view: Option<library_view_memory::ViewState>,
     /// version of the visible list (incremented on every refilter) – Develop syncs against it
     list_version: u64,
     /// fingerprint of the visible list as Develop sees it (see `list_fingerprint`)
@@ -992,6 +996,7 @@ impl LibraryView {
             sort_order: SortOrder::CaptureTime,
             view_sort_chosen: false,
             sort_reversed: false,
+            remembered_view: None,
             centre_width: f32::INFINITY,
             list_version: 0,
             list_fingerprint: 0,
@@ -1213,6 +1218,7 @@ impl LibraryView {
         let Some(ctx) = self.quick_ctx.clone() else { return };
         self.restore_open_collections();
         self.restore_source();
+        self.restore_view();
         self.test_filter(&ctx);
         self.start_ms = self.opened_at.elapsed().as_secs_f64() * 1000.0;
         crate::log(&format!("library: {} images ready after {:.0} ms", self.rows.len(), self.start_ms));
@@ -3373,6 +3379,7 @@ impl LibraryView {
             let _t = crate::frame_watch::section("library: filter bar");
             self.filter_bar(ui);
         }
+        self.remember_view(ui.ctx());
         self.not_in_catalog_banner(ui);
         self.dupes_banner(ui);
         {
@@ -5427,10 +5434,15 @@ impl LibraryView {
                     ui.horizontal(|ui| {
                         lr::field_label(ui, crate::tr("Satz"));
                         let names: Vec<String> = self.kw_sets.iter().map(|x| x.0.clone()).collect();
-                        egui::ComboBox::from_id_salt("bib-sw-satz").selected_text(names.get(self.kw_set).cloned().unwrap_or_default()).width(150.0).show_ui(ui, |ui| {
-                            for (i, n) in names.iter().enumerate() {
-                                ui.selectable_value(&mut self.kw_set, i, n);
-                            }
+                        egui::ComboBox::from_id_salt("bib-sw-satz").selected_text(names.get(self.kw_set).cloned().unwrap_or_default()).width(150.0).height(f32::INFINITY).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show_ui(ui, |ui| {
+                            lr::list_menu(ui, "bib-sw-satz", names.len(), |ui, f| {
+                                for (i, n) in names.iter().enumerate().filter(|(_, n)| f.shows(n)) {
+                                    if ui.selectable_value(&mut self.kw_set, i, n).clicked() || f.take_enter() {
+                                        self.kw_set = i;
+                                        ui.close();
+                                    }
+                                }
+                            });
                         });
                     });
                     let set_words = self.kw_sets.get(self.kw_set).map(|x| x.1.clone()).unwrap_or_default();
@@ -8131,6 +8143,25 @@ impl LibraryView {
         let cache = self.generator.as_ref()?.cache().clone();
         let jobs = self.rows.iter().filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && files.contains(&z.file)).map(|z| self.task(z, preview::small())).collect();
         Some((cache, jobs))
+    }
+
+    /// Non-Sigma RAWs (originals) with their lens name, for [`crate::lens_matching`]. `None` until the library has been
+    /// read.
+    pub fn lens_matching_candidates(&self) -> Option<(Arc<preview::Cache>, Vec<(crate::sigma_refresh::Candidate, Option<String>)>)> {
+        if self.db.is_none() || self.first_loading() || self.reloading() {
+            return None;
+        }
+        let cache = self.generator.as_ref()?.cache().clone();
+        let cands = self
+            .rows
+            .iter()
+            .filter(|z| z.copy.is_none() && z.folder != VIEW_FOLDER && library::is_raw(&z.format) && z.format != "X3F" && z.format != "X3I")
+            .map(|z| {
+                let c = crate::sigma_refresh::Candidate { image: z.image, file: z.file, path: self.path_of(z), key: self.key(z), group: crate::sigma_refresh::Group::CameraLook, camera: z.camera.clone().unwrap_or_default() };
+                (c, z.lens.clone())
+            })
+            .collect();
+        Some((cache, cands))
     }
 
     /// Photos that may need a new preview (see `sigma_refresh`): X3F of the Sigma cameras affected by the changes of

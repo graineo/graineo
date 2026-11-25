@@ -28,6 +28,7 @@ pub mod markesteijn;
 pub mod lcp;
 pub mod dcp;
 pub mod lensfun;
+pub mod lensfun_update;
 pub mod lens;
 pub mod noise;
 mod rcd;

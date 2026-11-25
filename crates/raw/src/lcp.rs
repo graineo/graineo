@@ -182,6 +182,11 @@ pub fn search(maker: &str, model: &str, lens: Option<&str>, additional: Option<&
     candidates.filter(|k| model_matches(&k.model, model) && is_fixed(k)).max_by_key(|k| score(k) * 2 + (k.lens.is_empty() || obj.as_deref() == Some(&n(&k.lens))) as i32).cloned()
 }
 
+/// Profile by its file name (manual choice; the name is stored, so a profile found in another folder still matches).
+pub fn by_file(name: &str, additional: Option<&Path>) -> Option<Header> {
+    index(additional).iter().find(|h| h.path.file_name().and_then(|f| f.to_str()) == Some(name)).cloned()
+}
+
 // ---------------------------------------------------------------------------------------------
 // Read a profile
 

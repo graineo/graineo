@@ -258,7 +258,7 @@ impl App {
             (ctx.content_rect().width()-90.0).max(300.0),
             |ui| {
                 // Save
-                lr::group_label(ui, "Aktuelle Einstellungen speichern");
+                lr::subheading(ui, "Aktuelle Einstellungen speichern");
                 ui.horizontal(|ui| {
                     crate::lr::edit_field(ui, egui::TextEdit::singleline(&mut st.name).hint_text(crate::tr("Name des Filmlooks")).desired_width(300.0));
                     let ok = film_an && !st.name.trim().is_empty();

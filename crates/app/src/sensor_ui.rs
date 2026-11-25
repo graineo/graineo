@@ -226,9 +226,7 @@ impl App {
                 if toggle_row(ui, Some(SensorRaw::icon(Overlay::Mosaic)), crate::tr("Mosaik mit Pixelgitter"), &crate::shortcuts::display(Overlay::Mosaic.key_id()), on, busy) {
                     self.sensor_toggle_mosaic(ui.ctx());
                 }
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    lr::group_label(ui, "Demosaik");
+                lr::subheading_with(ui, "Demosaik", 24.0, |ui| {
                     help::info(ui, "sensor-demosaik", "Demosaik-Verfahren", &help::SENSOR_DEMOSAIC);
                 });
                 ui.add(egui::Label::new(egui::RichText::new(crate::tr("Nur zum Vergleichen – ändert die Entwicklung nicht.")).small().color(lr::TEXT_DIM())).wrap());

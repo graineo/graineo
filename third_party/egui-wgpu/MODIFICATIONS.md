@@ -14,3 +14,7 @@ Made for graineo (November 2026). Everything else is unchanged.
   colour space and/or mark pixels outside it (soft proof, gamut warning); other textures pass unchanged.
 - `src/capture.rs`: screenshots of a `Rgba16Float` surface (clamped to 8 bit for the image; the
   unclamped values are kept in `LAST_FLOAT_CAPTURE` for measurements).
+- `src/renderer.rs` (25.11.2026): `update_buffers` no longer panics when `queue.write_buffer_with` returns
+  `None` (device lost or invalid after a graphics switch or sleep): the error is logged once, the slices are
+  cleared and the frame is skipped (`render` draws nothing). `render` no longer panics on missing slices.
+  Test hook `TEST_STAGING_FAILURE` (static flag) simulates the failure.

@@ -523,3 +523,41 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 
 - **Tone Equalizer: scrolling no longer changes points.** The mouse wheel over the graph now only scrolls the panel. Click or drag a point to select it; arrow keys adjust it (⇧ coarse, ⌥ fine), ←/→ move to the next zone, Esc or a click elsewhere ends the selection, double-click resets a point.
 - The value line of the Tone Equalizer fits in every language (two fixed lines).
+
+## 1.5.5 · Lens Corrections for Many More Lenses, Search in Settings, Windows Fixes
+
+- graineo no longer crashes when its window returns after the graphics card was switched or put to sleep; after any crash the app now really quits so it can be started again.
+- **Long lists get a search field.** Collection, preset and collection-set lists stay within the window and scroll; from 15 entries a search field at the top filters as you type, Enter takes the first match, Esc closes (inspired by greycard).
+- **Pentax PEF previews use the embedded full-size JPEG** instead of developing the raw data (inspired by greycard).
+
+- **Settings can be searched.** A search field above the list of sections (⌘F while the settings are open) shows every matching setting from all sections at once, ready to use, grouped by section. The list shows how many matches each section has. Labels, hints and related words are searched (for example “dark”, “cache”, “fan”), in the current language and in English, regardless of case and accents. Esc clears the field and returns to the last section.
+- **The library keeps sort order and thumbnail size across restarts.** Sort order (capture time, file name, stars), its direction, the thumbnail size, and whether the metadata columns are open were reset on every start (all platforms). They are now remembered.
+- Subheadings inside panel sections (Tone, Presence, Sharpening, Defringe, film and darkroom groups, settings groups) now stand apart from the control names: small spaced capitals in a muted grey with a fine rule to the end of the row and more space above.
+- **Linux: updates install themselves.** Like on macOS and Windows, graineo downloads the new version, checks it (signed checksum list, version, processor), replaces its program folder in one step and restarts; if the new version does not start, the previous one is put back. This works when the program folder is writable for you, as with `install.sh` or an unpacked folder; otherwise the notice links to the release page and says why. The menu entry and icon from `install.sh` are refreshed. Linux packages are offered a little after each release, once they are built and signed.
+- The left and right side panels stay open or closed across restarts.
+- Search in Settings also finds Looks, Camera Defaults and the search model cards.
+- Treatment and White Balance have a help card (“?” behind the subheading).
+- The shooting info on the photo is easier to read in the dark theme.
+- **Lens corrections for many more lenses.** graineo now ships the complete lensfun database (about 1,580 lenses and 1,060 cameras, state of 17 November 2026) instead of an excerpt, and finds lenses for every interchangeable-lens system (Micro Four Thirds, Sony E, Nikon Z/F, Fujifilm X, L-Mount …) even when the camera writes a shorter name, for example “OLYMPUS M.12-40mm F2.8”.
+- **Olympus and OM System: the camera's own lens correction is used** (distortion and lateral chromatic aberration from the raw file, following darktable). If the camera already corrected vignetting in the raw data, graineo does not correct it a second time.
+- Cameras of other makers start closer to the camera's own brightness (Nikon, Olympus/OM System, Panasonic, Pentax PEF).
+- Many more compact cameras with a built-in lens get their lens name in the library (Sony RX, Leica Q, Canon G, Panasonic LX and others).
+- The camera's picture setting is now read for Nikon (Picture Control), Olympus/OM System (Picture Mode) and Panasonic (Photo Style).
+- **Choose any lens profile by hand.** “Assign …” in the lens corrections now offers every lensfun lens and every locally installed lens profile (LCP), with a search field, also for adapted lenses of another mount.
+- **Panasonic raw files use the camera's own distortion correction** (following darktable). Lens names with a teleconverter no longer get a wrong automatic profile.
+- **Manual lens corrections.** Distortion and red/blue fringe sliders work with or without a profile.
+- **Update lens profiles** (Settings → Lenses) downloads the newest lensfun database only when you click it; “Back to built-in” returns to the shipped one.
+- The lens corrections are tidier: the lens on top, the profile in use below it (or why none was found) with a pencil to choose another, the rest folded under Fine Adjustment.
+- Photos whose automatic lens profile changes after an update get new previews.
+- **Assessment frame** (after ISO 12646): a button next to “Show faces” under the photo (⇧B) shows the photo smaller on neutral mid grey with a white frame; the margin (2/5/10 %) is set in Settings → Develop.
+- **Tone equalizer:** dragging a point (or ↑/↓) now takes its two neighbours along by half, for smoother changes; ⌘ moves only the point. Existing edits are unchanged (inspired by Foveonic (H Dot)).
+- **Tone curve:** “Auto (Brightness)” and “Auto (RGB)” set the black and white points from the histogram (per channel for RGB, which also removes colour casts). While dragging a point, guide lines and its input → output values are shown.
+- Copy, Paste and Reset all settings now sit in a fixed row at the bottom of the editing panels and no longer scroll away.
+- Waveform and RGB parade in the dark theme no longer show a black box; the display background follows the theme.
+- **Windows: the interface follows the system language.** graineo now reads the display languages of Windows (and `LANGUAGE` on Linux); languages graineo does not offer fall back to English instead of German. A language chosen in the settings stays.
+- **Safer start after a system crash.** If the computer restarted while graineo was computing on the graphics card (for example after a blue screen), graineo starts with “Use graphics card” switched off and says so once, with a button to switch it back on. The graphics card warm-up at the start now runs quietly a few seconds later, only when the graphics card is allowed, and is skipped on integrated Intel graphics under Windows.
+- **Virtual copies show up where they were made.** A copy made in a collection, the quick collection or “Recently imported” now belongs there too (next to its original), so it can be opened and edited; before, Develop opened the next photo instead (thanks for the report on the DSLR-Forum).
+- **Retouch: hide the marks.** An eye button in the Retouch panel (H) hides the spot circles, also while Heal or Clone is active; new spots can still be placed. The circles also step aside while the pointer is off the photo or a slider is dragged.
+
+
+- Crop & Straighten: at large interface sizes in a small window, the second perspective slider (Horizontal) and the buttons below it could sit out of view. Opening or switching a tool now scrolls its settings into view, and the duplicate "Perspective" subheading is gone.

@@ -215,7 +215,7 @@ pub use color_modes::{
 };
 pub use process::get_merge_frame_controlled;
 pub use process::{
-    spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, spp_working_image,
+    gpu_device_lost, spp_gpu_adapter, spp_gpu_release, spp_last_used_gpu, spp_working_image,
     spp_working_image_ca, spp_working_image_detail, spp_working_image_sliders,
     spp_working_image_with, spp_prepared_image, spp_mono_working_image,
     SppPrepared, SppWorking,

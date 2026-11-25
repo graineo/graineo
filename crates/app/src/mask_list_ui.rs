@@ -124,10 +124,8 @@ pub fn tiles(ui: &mut Ui, salt: &str, path: &Path) -> Option<NewKind> {
         if g > 0 {
             ui.add_space(4.0);
         }
-        let font = egui::FontId::proportional(10.0);
-        let t = lr::caps_spaced(ui.painter(), title, font, lr::TEXT_DIM(), 0.8);
-        let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), t.size().y + 4.0), egui::Sense::hover());
-        ui.painter().galley(egui::pos2(r.left() + lr::TEXT_INSET, r.top() + 1.0), t, lr::TEXT_DIM());
+        let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 16.0), egui::Sense::hover());
+        lr::subheading_paint(ui.painter(), r.with_min_x(r.left() + lr::TEXT_INSET), title, lr::SUBHEAD_LABEL());
         let w = ui.available_width();
         let gap = 4.0;
         let cell_w = (w - 2.0 * gap) / 3.0;

@@ -71,7 +71,7 @@ impl App {
         let response =
             egui::Modal::new(egui::Id::unique("darkroom-light-points")).show(ctx, |ui| {
                 ui.set_width(width);
-                lr::group_label(ui, "Probe · Lichtpunkte");
+                lr::subheading(ui, "Probe · Lichtpunkte");
                 let (labels, _) =
                     ui.allocate_exact_size(egui::vec2(width, 20.), egui::Sense::hover());
                 for i in 0..9 {

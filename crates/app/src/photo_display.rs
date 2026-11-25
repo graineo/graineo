@@ -41,7 +41,9 @@ pub fn prefer_float_surface() {
 /// At start (App::new): remember the render state of the window.
 pub fn init(cc: &eframe::CreationContext) {
     if let Some(rs) = cc.wgpu_render_state.clone() {
-        crate::log(&format!("display: surface {:?}", rs.target_format));
+        let a = rs.adapter.get_info();
+        crate::log(&format!("display: surface {:?}, adapter {} ({:?}, {:?}, vendor 0x{:04x}, driver {} {})", rs.target_format, a.name, a.backend, a.device_type, a.vendor, a.driver, a.driver_info));
+        crate::gpu_guard::note_window_adapter(&a);
         // wgpu ends the program on an uncaught GPU error (panic in the main thread, the window simply disappears):
         // in the window it costs one picture instead – logged (the first 20, then every 1000th)
         static GPU_ERRORS: AtomicUsize = AtomicUsize::new(0);
@@ -51,6 +53,12 @@ pub fn init(cc: &eframe::CreationContext) {
                 crate::log(&format!("display: GPU error #{n} (caught, the app goes on): {e}"));
             }
         }));
+        // a lost device (driver reset, graphics switch, sleep) cannot be recovered by eframe: end cleanly (crash_log)
+        rs.device.set_device_lost_callback(|reason, message| {
+            if reason != wgpu::DeviceLostReason::Destroyed {
+                crate::crash_log::note_device_lost(format!("{reason:?}: {message}"));
+            }
+        });
         let _ = RENDER_STATE.set(rs);
     }
 }

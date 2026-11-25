@@ -86,6 +86,10 @@ impl Gpu {
         }));
         let lost = failure.clone();
         device.set_device_lost_callback(move |reason, message| {
+            // graineo: a lost device (driver reset, watchdog) is reported to the application
+            if reason != wgpu::DeviceLostReason::Destroyed {
+                crate::process::GPU_DEVICE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             *lost.lock().unwrap_or_else(|e| e.into_inner()) =
                 Some(format!("device lost ({reason:?}): {message}"));
         });

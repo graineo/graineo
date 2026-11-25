@@ -287,18 +287,60 @@ pub fn default_tone() -> Sigmoid {
 /// tone curve. General value plus correction per camera (calibrated on the test bench).
 pub const BASE_EV: f32 = 1.0;
 
-/// Camera correction of the base exposure (EV): deviation of the midtones against reference exports, measured per model as the median over 45 to 190 unedited
-/// photos of process version 2012 and newer (own measurement on own exports, `graineo-dev lr-comparison`). Models without
-/// an entry get 0.
+/// Camera correction of the base exposure (EV) from the per-model table only (0 without an entry); see
+/// [`camera_ev_for`] for the rule every camera gets.
 pub fn camera_ev(maker: &str, model: &str) -> f32 {
-    // test hook for comparisons: GRAINEO_CAMERA_EV=<EV> replaces the correction
-    if let Some(v) = std::env::var("GRAINEO_CAMERA_EV").ok().and_then(|v| v.parse::<f32>().ok()) {
+    if let Some(v) = ev_override() {
         return v;
     }
+    camera_table_ev(maker, model).unwrap_or(0.0)
+}
+
+/// Correction of the base exposure (EV) for any camera:
+/// 1. the per-model table ([`camera_table_ev`], measured against reference exports of own cameras) wins;
+/// 2. a DNG with `BaselineExposure` != 0 needs nothing more (the file states its own offset, added separately);
+/// 3. otherwise the maker default ([`maker_ev`]), measured against the embedded camera JPEG of free sample files
+///    (raw.pixls.us, 3 to 6 cameras per maker).
+pub fn camera_ev_for(maker: &str, model: &str, baseline_exposure: f32) -> f32 {
+    if let Some(v) = ev_override() {
+        return v;
+    }
+    match camera_table_ev(maker, model) {
+        Some(v) => v,
+        None if baseline_exposure != 0.0 => 0.0,
+        None => maker_ev(maker),
+    }
+}
+
+/// Test hook for comparisons: `GRAINEO_CAMERA_EV=<EV>` replaces the correction.
+fn ev_override() -> Option<f32> {
+    std::env::var("GRAINEO_CAMERA_EV").ok().and_then(|v| v.parse::<f32>().ok())
+}
+
+/// Maker default of the base exposure (EV) for cameras without a table entry and without a DNG `BaselineExposure`:
+/// the negated median deviation of the mean brightness against the embedded camera JPEG (own measurement on free
+/// sample files). Taken only where the median is at least 0.15 EV and most cameras of the maker deviate in the same
+/// direction; Canon, Sony and Fujifilm stay at 0 (median within 0.1 EV).
+/// Pentax: the cameras' own DNGs state -0.5 EV (`BaselineExposure`), the PEF files of the same cameras do not.
+pub fn maker_ev(maker: &str) -> f32 {
+    let h = maker.to_ascii_uppercase();
+    match () {
+        _ if h.contains("OLYMPUS") || h.starts_with("OM DIGITAL") || h.starts_with("OM SYSTEM") => 0.60,
+        _ if h.contains("NIKON") => 0.23,
+        _ if h.contains("PANASONIC") => 0.15,
+        _ if h.contains("PENTAX") => -0.50,
+        _ => 0.0,
+    }
+}
+
+/// Per-model correction of the base exposure (EV): deviation of the midtones against reference exports, measured per
+/// model as the median over 45 to 190 unedited photos of process version 2012 and newer (own measurement on own
+/// exports, `graineo-dev lr-comparison`). `None`: model not in the table.
+fn camera_table_ev(maker: &str, model: &str) -> Option<f32> {
     let m = model.to_ascii_uppercase();
     let m = m.trim();
     let h = maker.to_ascii_uppercase();
-    match () {
+    Some(match () {
         _ if h.contains("CANON") && m.contains("EOS RP") => 0.20,
         _ if h.contains("CANON") && m == "EOS 5D" => 0.14,
         // Ricoh: check GR IIIx before GR III (the name contains it)
@@ -311,8 +353,8 @@ pub fn camera_ev(maker: &str, model: &str) -> f32 {
         _ if h.contains("FUJI") && m.contains("X100") && !m.contains("X100F") && !m.contains("X100V") && !m.contains("X100S") && !m.contains("X100T") => -0.04,
         _ if h.contains("FUJI") && m.contains("X-PRO1") => 0.10,
         _ if h.contains("FUJI") && m.contains("X-E2") => 0.22,
-        _ => 0.0,
-    }
+        _ => return None,
+    })
 }
 
 /// Exposure offset from the Fuji dynamic range setting: DR200 exposes the raw data
@@ -812,7 +854,7 @@ impl RawFile {
         // exposure
         let mut ev_parts = vec![("Grund", BASE_EV)];
         if o.camera_ev {
-            let k = camera_ev(&i.maker, &i.model);
+            let k = camera_ev_for(&i.maker, &i.model, i.baseline_exposure);
             if k != 0.0 {
                 ev_parts.push(("Kamera", k));
             }
@@ -914,7 +956,7 @@ mod camera_saturation_tests {
 
 #[cfg(test)]
 mod iso_compensation_tests {
-    use super::{fuji_compensation, fuji_lightroom_offset, camera_ev};
+    use super::{fuji_compensation, fuji_lightroom_offset, camera_ev, camera_ev_for};
 
     #[test]
     fn only_fuji_gets_compensation() {
@@ -963,6 +1005,19 @@ mod iso_compensation_tests {
         assert_eq!(camera_ev("Canon", "Canon EOS RP"), 0.20);
         assert_eq!(camera_ev("Canon", "Canon EOS 5D Mark II"), 0.0);
         assert_eq!(camera_ev("SIGMA", "SIGMA DP2 Merrill"), 0.0);
+    }
+
+    #[test]
+    fn camera_correction_rule_for_other_cameras() {
+        // the table wins (own cameras unchanged), a DNG baseline replaces the maker default
+        assert_eq!(camera_ev_for("Canon", "Canon EOS RP", 0.0), 0.20);
+        assert_eq!(camera_ev_for("NIKON CORPORATION", "NIKON D750", 0.0), 0.23);
+        assert_eq!(camera_ev_for("NIKON CORPORATION", "NIKON D750", -0.5), 0.0);
+        assert_eq!(camera_ev_for("OLYMPUS IMAGING CORP.", "E-M5", 0.0), 0.60);
+        assert_eq!(camera_ev_for("OM Digital Solutions", "OM-1", 0.0), 0.60);
+        assert_eq!(camera_ev_for("PENTAX", "PENTAX K-1", 0.0), -0.50);
+        assert_eq!(camera_ev_for("Canon", "Canon EOS 6D", 0.0), 0.0);
+        assert_eq!(camera_ev_for("RICOH IMAGING COMPANY, LTD.", "GR II", -0.2), 0.20);
     }
 }
 

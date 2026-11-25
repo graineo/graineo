@@ -265,6 +265,10 @@ pub struct Renderer {
     /// graineo: colour proof of photo textures, written into the uniform buffer on change.
     photo_proof: [f32; 32],
 
+    /// graineo: the last `update_buffers` could not fill the GPU buffers (device lost or invalid after a
+    /// graphics switch / sleep): `render` then draws nothing instead of panicking.
+    skip_frame: bool,
+
     /// Storage for resources shared with all invocations of [`CallbackTrait`]'s methods.
     ///
     /// See also [`CallbackTrait`].
@@ -493,6 +497,7 @@ impl Renderer {
             texture_bind_group_layout,
             texture_flag_buffers,
             photo_proof: [0.0; 32],
+            skip_frame: false,
             textures: HashMap::default(),
             next_user_texture_id: 0,
             samplers: HashMap::default(),
@@ -518,6 +523,10 @@ impl Renderer {
         screen_descriptor: &ScreenDescriptor,
     ) {
         profiling::function_scope!();
+
+        if self.skip_frame {
+            return;
+        }
 
         let pixels_per_point = screen_descriptor.pixels_per_point;
         let size_in_pixels = screen_descriptor.size_in_pixels;
@@ -555,12 +564,11 @@ impl Renderer {
                     // Skip rendering zero-sized clip areas.
                     if let Primitive::Mesh(_) = primitive {
                         // If this is a mesh, we need to advance the index and vertex buffer iterators:
-                        index_buffer_slices
-                            .next()
-                            .expect("You must call .update_buffers() before .render()");
-                        vertex_buffer_slices
-                            .next()
-                            .expect("You must call .update_buffers() before .render()");
+                        if index_buffer_slices.next().is_none()
+                            || vertex_buffer_slices.next().is_none()
+                        {
+                            return;
+                        }
                     }
                     continue;
                 }
@@ -570,12 +578,12 @@ impl Renderer {
 
             match primitive {
                 Primitive::Mesh(mesh) => {
-                    let index_buffer_slice = index_buffer_slices
-                        .next()
-                        .expect("You must call .update_buffers() before .render()");
-                    let vertex_buffer_slice = vertex_buffer_slices
-                        .next()
-                        .expect("You must call .update_buffers() before .render()");
+                    // graineo: missing slices (buffers not filled this frame) end the frame quietly
+                    let (Some(index_buffer_slice), Some(vertex_buffer_slice)) =
+                        (index_buffer_slices.next(), vertex_buffer_slices.next())
+                    else {
+                        return;
+                    };
 
                     if let Some(Texture { bind_group, .. }) = self.textures.get(&mesh.texture_id) {
                         render_pass.set_bind_group(1, bind_group, &[]);
@@ -1042,6 +1050,7 @@ impl Renderer {
     ) -> Vec<wgpu::CommandBuffer> {
         profiling::function_scope!();
 
+        self.skip_frame = false;
         let screen_size_in_points = screen_descriptor.screen_size_in_points();
 
         let uniform_buffer_content = UniformBuffer {
@@ -1101,12 +1110,18 @@ impl Renderer {
                 NonZeroU64::new(required_index_buffer_size).unwrap(),
             );
 
-            let Some(mut index_buffer_staging) = index_buffer_staging else {
-                panic!(
+            let Some(mut index_buffer_staging) = index_buffer_staging.filter(|_| !test_staging_failure()) else {
+                // graineo: happens when the device is lost or invalid (graphics switch, sleep);
+                // skip this frame instead of panicking
+                log_staging_failure(&format!(
                     "Failed to create staging buffer for index data. Index count: {index_count}. Required index buffer size: {required_index_buffer_size}. Actual size {} and capacity: {} (bytes)",
                     self.index_buffer.buffer.size(),
                     self.index_buffer.capacity
-                );
+                ));
+                self.index_buffer.slices.clear();
+                self.vertex_buffer.slices.clear();
+                self.skip_frame = true;
+                return Vec::new();
             };
 
             let mut index_offset = 0;
@@ -1147,12 +1162,18 @@ impl Renderer {
                 NonZeroU64::new(required_vertex_buffer_size).unwrap(),
             );
 
-            let Some(mut vertex_buffer_staging) = vertex_buffer_staging else {
-                panic!(
+            let Some(mut vertex_buffer_staging) = vertex_buffer_staging.filter(|_| !test_staging_failure()) else {
+                // graineo: happens when the device is lost or invalid (graphics switch, sleep);
+                // skip this frame instead of panicking
+                log_staging_failure(&format!(
                     "Failed to create staging buffer for vertex data. Vertex count: {vertex_count}. Required vertex buffer size: {required_vertex_buffer_size}. Actual size {} and capacity: {} (bytes)",
                     self.vertex_buffer.buffer.size(),
                     self.vertex_buffer.capacity
-                );
+                ));
+                self.index_buffer.slices.clear();
+                self.vertex_buffer.slices.clear();
+                self.skip_frame = true;
+                return Vec::new();
             };
 
             let mut vertex_offset = 0;
@@ -1350,3 +1371,20 @@ const _: () = {
     const fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<Renderer>();
 };
+
+/// graineo: log a failed staging buffer once (then every 1000th time).
+fn log_staging_failure(message: &str) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COUNT: AtomicUsize = AtomicUsize::new(0);
+    let n = COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+    if n == 1 || n % 1000 == 0 {
+        log::error!("egui-wgpu: frame skipped (#{n}): {message}");
+    }
+}
+
+/// graineo: test hook – while set, `update_buffers` behaves as if `write_buffer_with` returned `None`.
+pub static TEST_STAGING_FAILURE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn test_staging_failure() -> bool {
+    TEST_STAGING_FAILURE.load(std::sync::atomic::Ordering::Relaxed)
+}

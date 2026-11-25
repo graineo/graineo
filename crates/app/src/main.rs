@@ -12,6 +12,10 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod edit_footer;
+mod assessment;
+mod curve_auto;
+mod panel_memory;
 mod camera_defaults;
 mod theme;
 mod highlight_ui;
@@ -141,6 +145,7 @@ mod apple_photos_ui;
 mod photokit;
 mod lens_app;
 mod lens_assign;
+mod lens_matching;
 mod lens_room;
 mod lens_wizard;
 mod lens_grid_pdf;
@@ -158,6 +163,7 @@ mod photo_compare_ui;
 mod apple_raw;
 #[cfg(test)] mod ui_test;
 #[cfg(test)] mod list_switch_test;
+#[cfg(test)] mod virtual_copy_open_test;
 #[cfg(test)] mod people_develop_test;
 #[cfg(test)] mod grid_selection_test;
 #[cfg(test)] mod view_folder_refresh_test;
@@ -201,6 +207,7 @@ mod test_image;
 mod update_ui;
 mod binning_ui;
 mod crash_log;
+mod gpu_guard;
 mod crossfade;
 mod file_migration;
 mod bug_report;
@@ -240,16 +247,32 @@ fn export_default(dir: &std::path::Path) -> Option<PathBuf> {
 }
 
 fn main() -> eframe::Result {
+    // Crashes go to the trace log and, lastingly, to the crash log (on Windows there is no console window to show
+    // them) – first of all, so a panic in any later step of the start leaves a trace
+    crash_log::install();
+    crash_log::start_note(&format!("start: {}", std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_default()));
+    // Windows: an update cut off in the middle leaves the program folder half exchanged – repaired before anything
+    // uses it
+    #[cfg(windows)]
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| Some((e.parent()?.to_path_buf(), e.file_name()?.to_string_lossy().to_string()))) {
+        for line in library::update::windows_repair(&dir.0, &dir.1) {
+            crash_log::start_note(&format!("repair: {line}"));
+        }
+    }
+    // lensfun data: unpack and parse on a low-priority thread right away, never on the UI thread
+    raw::lensfun::set_loader_setup(library::platform::background_priority);
+    raw::lensfun::start_loading();
     // files written under German names by earlier versions get their English names (before anything reads or logs)
     file_migration::run();
-    // Crashes go to the trace log and, lastingly, to the crash log (on Windows there is no console window to show them)
-    crash_log::install();
     threads::init();
     // neural denoising for Sigma bases (only acts when a photo's settings ask for it, see ai_denoise_ui.rs)
     rawdev::ai_denoise::install_sigma();
-    // started again by "Sicherung ansehen" or "Zurück zur Bibliothek": the previous process ends first
+    // started again by "Sicherung ansehen" or "Zurück zur Bibliothek" or after an update: the previous process ends first
     library::backup_view::wait_for_parent();
     single_instance_or_exit();
+    crash_log::start_note("library lock held, opening the window");
+    // the computer went down while graineo computed on the graphics card (blue screen): this run on the processor
+    gpu_guard::at_start();
     let viewing = library::backup_view::active().is_some();
     if !viewing {
         // a restore from a backup chosen in the settings: before anything opens the library (shown in the library)
@@ -300,7 +323,17 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     photo_display::prefer_float_surface();
-    eframe::run_native("graineo", options, Box::new(move |cc| Ok(start_migration::Start::new(cc, migration))))
+    let result = eframe::run_native("graineo", options, Box::new(move |cc| Ok(start_migration::Start::new(cc, migration))));
+    match &result {
+        Ok(()) => crash_log::start_note("ended normally"),
+        // no window (graphics driver, no OpenGL/Direct3D/Vulkan): without a console the error would vanish unseen
+        Err(e) => {
+            crash_log::start_note(&format!("window could not be created: {e}"));
+            log(&format!("window could not be created: {e}"));
+            crash_log::start_message(&crate::trf!("graineo konnte kein Fenster öffnen.\n\n{e}\n\nBitte die Datei start.log aus dem Protokollordner an die Entwickler schicken.", e = e.to_string()));
+        }
+    }
+    result
 }
 
 /// The library is the main store: sidecars not read yet come in once in the background, the optional sidecars next
@@ -326,10 +359,12 @@ fn single_instance_or_exit() {
         Ok(library::instance_lock::Outcome::Busy(pid)) => {
             // not `log`: that would rotate the trace log of the instance already running
             eprintln!("second instance: library {} is in use by process {pid:?}, exiting", db.display());
+            crash_log::start_note(&format!("second instance: library {} is in use by process {pid:?} (waited {patience} s), exiting", db.display()));
             // started with a folder or photo (Explorer menu "Mit graineo ansehen", "Open with"): the running graineo
             // shows it (open_requests), no message
             if let Some(p) = std::env::args().nth(1).map(PathBuf::from).filter(|p| p.exists()) {
                 if library::instance_lock::hand_over(&db, &p).is_ok() {
+                    crash_log::start_note(&format!("second instance: {} handed over to the running graineo", p.display()));
                     std::process::exit(0);
                 }
             }
@@ -340,10 +375,19 @@ fn single_instance_or_exit() {
                 std::process::exit(1);
             }
             let folder = db.parent().map(|p| p.display().to_string()).unwrap_or_default();
-            let text = crate::trf!(
+            let mut text = crate::trf!(
                 "graineo läuft bereits mit dieser Bibliothek.\n\nZwei Fenster auf dieselbe Bibliothek könnten sich gegenseitig Änderungen überschreiben. Bitte das bereits geöffnete graineo verwenden.\n\nBibliothek: {folder}",
                 folder = folder
             );
+            // a graineo without a window (hung while quitting) is otherwise invisible: name the process to end
+            if let Some(pid) = pid {
+                let hint = if cfg!(windows) {
+                    crate::trf!("Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: im Task-Manager den Prozess graineo.exe (PID {pid}) beenden und graineo neu starten.", pid = pid)
+                } else {
+                    crate::trf!("Ist kein graineo-Fenster zu sehen, hängt ein früherer Start: in der Aktivitätsanzeige den Prozess graineo (PID {pid}) beenden und graineo neu starten.", pid = pid)
+                };
+                text = format!("{text}\n\n{hint}");
+            }
             second_instance_note(&text, SECOND_INSTANCE_NOTE_S);
             std::process::exit(1);
         }
@@ -389,7 +433,9 @@ fn second_instance_note(text: &str, seconds: f64) {
     let text = text.to_string();
     let (done, wait) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let _ = rfd::MessageDialog::new().set_level(rfd::MessageLevel::Warning).set_title("graineo").set_description(text).set_buttons(rfd::MessageButtons::Ok).show();
+        // in front of other windows (Windows: without owner the box could open behind them and the start looked like
+        // "nothing happens")
+        crash_log::start_message(&text);
         let _ = done.send(());
     });
     let _ = wait.recv_timeout(std::time::Duration::from_secs_f64(seconds));
@@ -757,6 +803,8 @@ struct App {
     screen_mode: u8,
     /// Fullscreen preview (F): only the image on black; remembered state to return to
     preview_full: Option<(bool, bool, bool, bool, bool)>,
+    /// Side panels as last written to the settings (`panel_memory.rs`); `None` = not remembered (tests)
+    panels_saved: Option<(bool, bool)>,
     /// Image area in the loupe (for "Lights out")
     image_rect: Option<egui::Rect>,
     /// Preset preview in the navigator: requested settings and finished image
@@ -990,17 +1038,16 @@ impl App {
         if !cfg!(test) {
             dock_open::setup(ctx);
         }
-        // Warm up the GPU for SPP noise reduction (compile shaders) so that even the
-        // first image is refined quickly
-        std::thread::spawn(|| {
-            let r = develop::spp::gpu_adapter();
-            log(&format!("SPP-GPU: {r:?}"));
-        });
         lr::apply_theme(ctx);
         prefs::apply_scale(ctx);
         theme::load(ctx);
         binning_ui::init();
         prefs::apply_gpu_setting(); // "Grafikkarte verwenden"
+        // Warm up the GPU paths (SPP noise reduction, other RAW formats: devices and shaders) so that even the first
+        // image is refined quickly – after the setting is applied, one after another, a few seconds after the start
+        if !cfg!(test) {
+            gpu_guard::warm_up_later();
+        }
         highlight_ui::apply_setting();
         let worker = Worker::new(ctx.clone());
         let mut app = Self {
@@ -1125,6 +1172,7 @@ impl App {
             lights: 0,
             screen_mode: 0,
             preview_full: None,
+            panels_saved: None,
             image_rect: None,
             tab_pressed: None,
             loupe: false,
@@ -1282,8 +1330,6 @@ impl App {
             let _ = std::thread::Builder::new().name("explorer-menu".into()).spawn(move || library::platform::explorer_menu::renew(&label));
         }
         if !app.entries.is_empty() { app.status.clear(); }
-        // Prepare the GPU for full resolution of non-Sigma RAWs (compile shaders)
-        std::thread::spawn(rawdev::gpu::warm_up);
         // Test hook: GRAINEO_IMAGE=<no. in filmstrip> activates this image
         let test_image = crate::env::var("GRAINEO_IMAGE").ok().and_then(|v| v.parse::<usize>().ok()).filter(|&i| i < app.entries.len());
         if let Some(i) = test_image {
@@ -1303,6 +1349,7 @@ impl App {
                 app.lib.set_selection(app.entries[main].image, &images);
             }
         }
+        app.restore_panels();
         // Test hook: start with the Sensor module or grid (GRAINEO_TAB=sensor|film|grid|crop|about|prefs|zoom|library|develop|darkroom…)
         match crate::env::var("GRAINEO_TAB").as_deref() {
             Ok("sensor") => app.tab = Tab::Sensor,
@@ -4061,6 +4108,9 @@ impl App {
         if shortcuts::pressed(ctx, "focus_frame") {
             self.toggle_focus();
         }
+        if shortcuts::pressed(ctx, assessment::SHORTCUT) {
+            assessment::set_on(!assessment::on());
+        }
 
         // L = lights out: dimmed → off → normal
         if pressed(egui::Key::L) {
@@ -4540,6 +4590,13 @@ impl eframe::App for App {
         zoom_test_frame(true, self.zoom); // Test hook: frame times with GRAINEO_ZOOM_TEST
         remote_access::frame(self, ui.ctx()); // browser access: start by setting, changes made in the browser
         self.open_requests(&ui.ctx().clone()); // a folder or photo handed over by a second start
+        // a GPU device was lost (driver reset, watchdog on a slow card): tell the user once, the processor computes on
+        develop::spp::sync_gpu_lost();
+        if pools::take_gpu_lost_notice() {
+            self.status = crate::tr("Grafikkarte nicht mehr verfügbar – graineo rechnet bis zum Neustart auf dem Prozessor (langsamer)").to_string();
+        }
+        // after a crash of the computer while the graphics card computed: say once that the processor computes now
+        gpu_guard::show_notice(ui.ctx());
         // narrow window: collapse a side panel once when the window falls below the threshold
         if self.preview_full.is_none() {
             let dark = self.darkroom_active();
@@ -4547,11 +4604,18 @@ impl eframe::App for App {
             match self.narrow.step(ui.ctx().content_rect().width(), left, right) {
                 Some(narrow_window::Side::Left) if dark => self.darkroom.left_collapsed = true,
                 Some(narrow_window::Side::Right) if dark => self.darkroom.right_closed = true,
-                Some(narrow_window::Side::Left) => self.show_left = false,
-                Some(narrow_window::Side::Right) => self.show_right = false,
+                Some(narrow_window::Side::Left) => {
+                    self.show_left = false;
+                    self.panels_changed_by_the_app();
+                }
+                Some(narrow_window::Side::Right) => {
+                    self.show_right = false;
+                    self.panels_changed_by_the_app();
+                }
                 None => {}
             }
         }
+        self.remember_panels(ui.ctx());
         // closing while changes are still on their way into the library: wait visibly (quit.rs)
         {
             let pending = !self.lib.writes_finished() || library::store::saving() || library_turn::writing() || self.multi_busy() || subject_ui::storing();
@@ -5032,7 +5096,7 @@ impl eframe::App for App {
             // the comparison instead of the single image (photo_compare_ui.rs)
             egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg).inner_margin(egui::Margin::symmetric(8, 6))).show(ui, |ui| self.compare_center(ui)).response.rect
         } else {
-            egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg)).show(ui, |ui| self.viewer(ui)).response.rect
+            egui::CentralPanel::no_frame().frame(egui::Frame::new().fill(bg)).show(ui, |ui| self.viewer_framed(ui)).response.rect
         };
         // Lights out (L): dim or blacken everything except the image
         if self.lights > 0 {
@@ -5092,6 +5156,11 @@ impl eframe::App for App {
         }
         self.drop_rough_views_once();
         preview_repair::maybe_start(&self.lib);
+        if let Some(e) = raw::lensfun::take_load_error() {
+            crate::log(&format!("lensfun: downloaded database unusable, using the built-in one: {e}"));
+            self.status = crate::tr("Geladene lensfun-Daten fehlerhaft, mitgelieferte in Verwendung").to_string();
+        }
+        lens_matching::maybe_start(&self.lib);
         sigma_refresh::maybe_start(&self.lib);
         sigma_refresh::maybe_start_learned(&self.lib);
         camera_looks_ui::test_hook(|| self.lib.learn_candidates());
@@ -5099,6 +5168,8 @@ impl eframe::App for App {
         camera_looks_ui::show(&ctx);
         stack::test_helper();
         crash_log::test_panic(&ctx);
+        crash_log::test_gpu_failures(&ctx);
+        crash_log::check_device_lost();
         bug_report::frame(&ctx);
         perf_report::frame(&ctx);
         if stack::reload_needed() {
@@ -5140,6 +5211,8 @@ impl eframe::App for App {
     fn on_exit(&mut self) {
         let t = std::time::Instant::now();
         log("quit: start");
+        // an orderly end: the start marker of this session goes (see gpu_guard)
+        gpu_guard::at_quit();
         quit::start_guard();
         quit::test_hang();
         self.save_current();
@@ -6017,6 +6090,23 @@ impl App {
         pan = pan.clamp(-limit, limit);
         self.offline_zoom = (image, zoom, pan);
         egui::Rect::from_center_size(avail.center() + pan, size)
+    }
+
+    /// The single photo, in Develop with the assessment frame when it is on (assessment.rs): grey surround, photo
+    /// smaller, white frame around it. The panels around do not move.
+    fn viewer_framed(&mut self, ui: &mut egui::Ui) {
+        if self.tab != Tab::Develop || !assessment::on() || self.darkroom_active() {
+            return self.viewer(ui);
+        }
+        let view = ui.available_rect_before_wrap();
+        assessment::paint_ground(ui.painter(), view);
+        let (inner, line) = assessment::inner(view, assessment::width());
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(inner));
+        self.viewer(&mut child);
+        ui.allocate_rect(view, egui::Sense::hover());
+        if let Some(r) = self.image_rect {
+            assessment::paint_frame(ui.painter(), r.intersect(inner), line);
+        }
     }
 
     fn viewer(&mut self, ui: &mut egui::Ui) {
@@ -7170,7 +7260,9 @@ impl App {
                 || s.saturation != d.saturation;
             let mut reset_tone = false;
             let reset_basic = lr::section_switch(ui, "Grundeinstellungen", true, basic_changed, &mut bp.basic, |ui| {
-                lr::choice(ui, "Behandlung", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
+                lr::subheading_help(ui, "Behandlung", "", |ui| {
+                    lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
+        });
                 // White balance: one drop-down list (as shot, camera presets) with the picker beside it
                 {
                     let label = |n: &str| -> &'static str { match n {
@@ -7209,7 +7301,9 @@ impl App {
                             Some(n) => wb_names.iter().position(|m| m == n).map(|i| i + 1),
                         }
                     };
-                    let (picked, picker) = lr::icon_select(ui, "wb", "Weißabgleich", &items, selected, (lr::Icon::Picker, "Eigener"), lr::Icon::Picker, wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"));
+                    let (_, (picked, picker)) = lr::subheading_help(ui, "Weißabgleich", "", |ui| {
+                        lr::icon_select(ui, "wb", "", &items, selected, (lr::Icon::Picker, "Eigener"), lr::Icon::Picker, wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"))
+                    });
                     if picker {
                         wb_picker = !wb_picker;
                     }
@@ -7227,19 +7321,15 @@ impl App {
                 if lr::slider_gradient(ui, "Tönung", &mut g, -1.0..=1.0, 0.0, 0.01, "− grüner, + magenta – z. B. gegen den Merrill-Grünstich in Hauttönen", lr::GRADIENT_TINT) {
                     s.wb_tint = g as f32;
                 }
-                ui.add_space(4.0);
                 // Heading on the left, "Auto" to the right of it as in common photo apps (fixed place)
-                ui.horizontal(|ui| {
-                    reset_tone = lr::group_label(ui, "Tonwert");
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // keep clear of the overlaid scroll bar at the right edge
-                        ui.add_space(8.0);
-                        let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
-                        let auto = ui.add(b);
-                        if auto.clicked() {
-                            auto_tone(&auto_src.0, &auto_src.1, s);
-                        }
-                    });
+                (reset_tone, _) = lr::subheading_with(ui, "Tonwert", 110.0, |ui| {
+                    // keep clear of the overlaid scroll bar at the right edge
+                    ui.add_space(8.0);
+                    let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
+                    let auto = ui.add(b);
+                    if auto.clicked() {
+                        auto_tone(&auto_src.0, &auto_src.1, s);
+                    }
                 });
                 lr::slider_gradient(ui, "Belichtung", &mut s.exposure, -3.0..=3.0, 0.0, 0.05, "In Blendenstufen – verschiebt die Tonkurve der Kamera", lr::GRADIENT_EXPOSURE);
                 // With film, the film curve replaces Sigma's tone curve: contrast, highlights, shadows have no effect
@@ -7256,8 +7346,7 @@ impl App {
                 // Sigma brakes the noise only when brightening with Fill Light (develop: brake with fill_light > 0)
                 let lifted = s.fill_light > 0.0;
                 raw_app::noise_brake(ui, &mut s.noise_brake, lifted, "");
-                ui.add_space(4.0);
-                if lr::group_label(ui, "Präsenz") {
+                if lr::subheading(ui, "Präsenz") {
                     s.clarity = d.clarity;
                     s.dehaze = d.dehaze;
                     s.vibrance = d.vibrance;
@@ -7333,9 +7422,36 @@ impl App {
         let curve_changed = !s.tone_curve.is_identity() || s.tone_curve != d.tone_curve;
         let mut ch = self.curve_channel;
         let out_hist = c.out_hist.as_ref();
-        let reset_curve = lr::section_switch(ui, "Gradationskurve", false, curve_changed, &mut bp.curve, |ui| {
+        let curve_acted = !bp.curve;
+        let reset_curve = lr::section_switch(ui, "Gradationskurve", crate::env::var_os("GRAINEO_CURVE_OPEN").is_some(), curve_changed, &mut bp.curve, |ui| {
             lr::choice(ui, "Kanal", &mut ch, &[(0, "RGB"), (1, "Rot"), (2, crate::tr("Grün")), (3, "Blau")], "");
             lr::tone_curve(ui, &mut s.tone_curve, ch, out_hist);
+            // automatic black and white point from the histogram (curve_auto.rs); one click = one ⌘Z
+            ui.horizontal(|ui| {
+                ui.add_enabled_ui(out_hist.is_some(), |ui| {
+                    let a = lr::secondary_button(ui, None, "Auto (Helligkeit)");
+                    lr::hover_tip(ui, &a, crate::tr("Schwarz- und Weißpunkt aus dem Histogramm"));
+                    let b = lr::secondary_button(ui, None, "Auto (RGB)");
+                    lr::hover_tip(ui, &b, crate::tr("Je Kanal, gleicht Farbstiche aus"));
+                    // test aid (own data folder only): GRAINEO_CURVE_AUTO=brightness|rgb clicks the button once
+                    let hook = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_CURVE_AUTO").ok());
+                    static AUTO_HOOK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                    let hook = hook.filter(|_| out_hist.is_some() && !AUTO_HOOK.swap(true, Ordering::Relaxed));
+                    if let Some(h) = out_hist {
+                        if hook.as_deref() == Some("rgb") {
+                            curve_auto::per_channel(&mut s.tone_curve, h, curve_acted);
+                        } else if hook.is_some() {
+                            curve_auto::brightness(&mut s.tone_curve, h, curve_acted);
+                        }
+                        if a.clicked() && curve_auto::brightness(&mut s.tone_curve, h, curve_acted) {
+                            ch = 0;
+                        }
+                        if b.clicked() {
+                            curve_auto::per_channel(&mut s.tone_curve, h, curve_acted);
+                        }
+                    }
+                });
+            });
         });
         self.curve_channel = ch;
         if reset_curve {
@@ -7419,7 +7535,7 @@ impl App {
             skin_ui::section(ui, s, &d);
         } else if foreign.is_some() {
             // Black & white mixer: brightness per colour range when converting to grey
-            if lr::group_label(ui, crate::tr("Schwarzweiß-Mischer")) {
+            if lr::subheading(ui, crate::tr("Schwarzweiß-Mischer")) {
                 s.gray_mix = [0.0; 8];
             }
             let names = ["Rot", "Orange", "Gelb", "Grün", "Aquamarin", "Blau", "Lila", "Magenta"];
@@ -7439,7 +7555,7 @@ impl App {
             let reset_calib = lr::section_reset(ui, "Kalibrierung", false, calib_changed, |ui| {
                 let groups = [("Rot", 0usize, lr::GRADIENT_RED), ("Grün", 2, lr::GRADIENT_GREEN), ("Blau", 4, lr::GRADIENT_BLUE)];
                 for (name, i, grad) in groups {
-                    lr::group_label(ui, name);
+                    lr::subheading(ui, name);
                     let mut h = s.raw.calibration[i] as f64;
                     if lr::slider_gradient(ui, "Farbton", &mut h, -1.0..=1.0, 0.0, 0.01, "Dreht diese Grundfarbe des Profils zur nächsten hin (Rot → Gelb, Grün → Cyan, Blau → Violett); wirkt auf alle Farben, die sie enthalten", grad) {
                         s.raw.calibration[i] = h as f32;
@@ -7449,7 +7565,7 @@ impl App {
                         s.raw.calibration[i + 1] = v as f32;
                     }
                 }
-                lr::group_label(ui, "Schatten");
+                lr::subheading(ui, "Schatten");
                 let mut t = s.raw.calibration[6] as f64;
                 if lr::slider_gradient(ui, "Tönung", &mut t, -1.0..=1.0, 0.0, 0.01, "Farbstich in den Tiefen: links grüner, rechts magenta", lr::GRADIENT_TINT) {
                     s.raw.calibration[6] = t as f32;
@@ -7579,23 +7695,35 @@ impl App {
         // aberration (lens profile or manual red/blue).
         // Applies in the SPP base (recomputation ≈ 3 s), hence fixed rows without jumps.
         let lens_changed = s.ca_mode != d.ca_mode || s.ca_profile != d.ca_profile || s.ca_red != d.ca_red || s.ca_blue != d.ca_blue
-            || s.raw.lens != d.raw.lens || s.raw.lens_distortion != d.raw.lens_distortion || s.raw.lens_vignette != d.raw.lens_vignette || s.raw.lens_ca != d.raw.lens_ca || s.raw.lens_image != d.raw.lens_image || s.raw.lens_profile != d.raw.lens_profile;
+            || s.raw.lens != d.raw.lens || s.raw.lens_distortion != d.raw.lens_distortion || s.raw.lens_vignette != d.raw.lens_vignette || s.raw.lens_ca != d.raw.lens_ca || s.raw.lens_image != d.raw.lens_image || s.raw.lens_profile != d.raw.lens_profile
+            || s.raw.lens_manual_distortion != d.raw.lens_manual_distortion || s.raw.lens_manual_ca_red != d.raw.lens_manual_ca_red || s.raw.lens_manual_ca_blue != d.raw.lens_manual_ca_blue;
         let reset_lens = lr::section_reset(ui, "Objektivkorrekturen", crate::env::var_os("GRAINEO_LENS_OPEN").is_some(), lens_changed || fringe_changed, |ui| {
             if let Some(doc) = &foreign {
-                raw_app::lens(ui, s, doc);
-                if let Some(id) = &lens_ident {
-                    lens_assign::section(ui, s, id);
-                }
+                raw_app::lens(ui, s, doc, lens_ident.as_ref());
             } else {
                 use develop::lens::CaMode;
-                if lr::group_label(ui, "Chromatische Aberration") {
-                    s.ca_mode = d.ca_mode;
-                    s.ca_profile = d.ca_profile;
-                    s.ca_red = d.ca_red;
-                    s.ca_blue = d.ca_blue;
-                }
+                // Sigma: the same layout (lens, profile line, switch, fine adjustment folded)
+                let (line, tip, found) = if !lens_ok {
+                    (crate::tr("Kein Profil gefunden").to_string(), crate::tr("Nur für Merrill-Kameras").to_string(), false)
+                } else if s.monochrome {
+                    (format!("{}: {}", crate::tr("Profil"), crate::tr("aus")), crate::tr("In Monochrom keine Korrektur").to_string(), true)
+                } else {
+                    match &lens_profile {
+                        Some(name) => {
+                            let kind = if s.ca_mode == CaMode::Manual { crate::tr("von Hand") } else { crate::tr("Sigma-Objektivdaten") };
+                            (format!("{}: {kind}", crate::tr("Profil")), name.clone(), true)
+                        }
+                        None => (crate::tr("Kein Profil gefunden").to_string(), crate::tr("Sigma-Objektivdaten nicht gefunden").to_string(), false),
+                    }
+                };
+                let sigma_lens = raw_app::lens_label("SIGMA", &c.loaded.cal.camera, lens_ident.as_ref().and_then(|i| i.lens.as_deref()));
+                raw_app::lens_head(ui, &sigma_lens, &line, &tip, found, lens_ident.is_some());
                 ui.add_enabled_ui(lens_ok && !s.monochrome, |ui| {
                     lr::choice(ui, "Korrektur", &mut s.ca_mode, &[(CaMode::Off, "Aus"), (CaMode::Profile, crate::tr("Profil")), (CaMode::Manual, "Manuell")], "");
+                });
+                let fine_changed = s.ca_profile != d.ca_profile || s.ca_red != d.ca_red || s.ca_blue != d.ca_blue;
+                raw_app::fine_fold(ui, fine_changed, |ui| {
+                    ui.add_enabled_ui(lens_ok && !s.monochrome, |ui| {
                     ui.add_enabled_ui(s.ca_mode == CaMode::Profile, |ui| {
                         let mut v = s.ca_profile as f64;
                         if lr::slider_hint(ui, "Stärke", &mut v, 0.0..=2.0, 1.0, 0.1, "Objektivprofil: Sigmas Korrekturdaten für dieses Objektiv, Stärke 0 … 2 (1 = Standard)") {
@@ -7612,27 +7740,13 @@ impl App {
                             s.ca_blue = ((b * 10.0).round() / 10.0) as f32;
                         }
                     });
+                    });
                 });
-                // Always exactly one hint line
-                let note = if !lens_ok {
-                    crate::tr("Nur für Merrill-Kameras (Sigma-Objektivdaten)").to_string()
-                } else if s.monochrome {
-                    crate::tr("In Monochrom keine Korrektur (Sigma-Objektivdaten)").to_string()
-                } else {
-                    match &lens_profile {
-                        Some(name) => crate::trf!("Profil: {name}", name = name),
-                        None => crate::tr("Kein Objektivprofil (Sigma-Objektivdaten nicht gefunden)").to_string(),
-                    }
-                };
-                ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).truncate());
                 ui.add_space(4.0);
-                if let Some(id) = &lens_ident {
-                    lens_assign::section(ui, s, id);
-                }
             }
             let purple = |v: f32| Color32::from(egui::ecolor::Hsva::new(develop::defringe::purple_hue_deg(v) / 360.0, 0.65, 0.85, 1.0));
             let green = |v: f32| Color32::from(egui::ecolor::Hsva::new(develop::defringe::green_hue_deg(v) / 360.0, 0.65, 0.8, 1.0));
-            if lr::group_label(ui, "Violette Säume") {
+            if lr::subheading(ui, "Violette Säume") {
                 s.defringe_purple_amount = d.defringe_purple_amount;
                 s.defringe_purple_hue = d.defringe_purple_hue;
             }
@@ -7643,8 +7757,7 @@ impl App {
             ui.add_enabled_ui(s.defringe_purple_amount > 0.0, |ui| {
                 lr::hue_range(ui, "Farbton", &mut s.defringe_purple_hue, d.defringe_purple_hue, develop::defringe::MIN_SPAN, purple, "Welche Farbtöne als violetter Saum gelten");
             });
-            ui.add_space(2.0);
-            if lr::group_label(ui, "Grüne Säume") {
+            if lr::subheading(ui, "Grüne Säume") {
                 s.defringe_green_amount = d.defringe_green_amount;
                 s.defringe_green_hue = d.defringe_green_hue;
             }
@@ -7673,13 +7786,16 @@ impl App {
             s.raw.lens_ca = d.raw.lens_ca;
             s.raw.lens_image = d.raw.lens_image;
             s.raw.lens_profile = d.raw.lens_profile.clone();
+            s.raw.lens_manual_distortion = d.raw.lens_manual_distortion;
+            s.raw.lens_manual_ca_red = d.raw.lens_manual_ca_red;
+            s.raw.lens_manual_ca_blue = d.raw.lens_manual_ca_blue;
         }
 
         let nr_changed = s.denoise != d.denoise || s.detail_fine != d.detail_fine || s.detail_structure != d.detail_structure || s.nr_luma != d.nr_luma || s.nr_chroma != d.nr_chroma || s.quattro_detail != d.quattro_detail || s.binning != binning_default || s.sharpen != d.sharpen || s.sigma_sharpness != d.sigma_sharpness
             || s.raw.nr_luma != d.raw.nr_luma || s.raw.nr_luma_detail != d.raw.nr_luma_detail || s.raw.nr_color != d.raw.nr_color || s.raw.nr_color_detail != d.raw.nr_color_detail || s.raw.false_color != d.raw.false_color || s.raw.ai_denoise != d.raw.ai_denoise;
         let raw_nr = foreign.as_ref().map(|doc| doc.preview.profile.is_some());
         let reset_nr = lr::section_reset(ui, "Details", true, nr_changed, |ui| {
-            if lr::group_label(ui, "Schärfen") {
+            if lr::subheading(ui, "Schärfen") {
                 s.sharpen = 0.0;
                 s.sigma_sharpness = 0.0;
             }
@@ -7721,7 +7837,7 @@ impl App {
             } else {
                 // Sigma's "noise reduction" is also Sigma's detail level (base and detail layer,
                 // base sharpness) – switching it off therefore also removes the typical Merrill sharpness
-                lr::group_label(ui, "Rauschen & Foveon-Detail");
+                lr::subheading(ui, "Rauschen & Foveon-Detail");
                 // two band sliders instead of the switch (detail_ui.rs); photos stored with the switch off keep it
                 if !crate::detail_ui::sliders(ui, s) {
                     ui.horizontal(|ui| {
@@ -7774,77 +7890,6 @@ impl App {
             s.raw.ai_denoise = d.raw.ai_denoise;
         }
 
-        ui.add_space(6.0);
-        ui.add_space(4.0);
-        let mut copy = false;
-        let mut paste = false;
-        let has_clip = self.clipboard.is_some();
-        ui.columns(2, |cols| {
-            let k = cols[0].add_sized([cols[0].available_width(), 24.0], egui::Button::new(crate::tr("Kopieren")));
-            lr::hover_tip(&cols[0], &k, &crate::shortcuts::display("copy_settings"));
-            copy = k.clicked();
-            let e = cols[1].add_enabled(has_clip, egui::Button::new(crate::tr("Einfügen")).min_size(egui::vec2(cols[1].available_width(), 24.0)));
-            lr::hover_tip(&cols[1], &e, &crate::shortcuts::display("paste_settings"));
-            paste = e.clicked();
-        });
-        let mut reset = false;
-        let mut reset_camera = false;
-        let camera = self.current.as_ref().and_then(|c| crate::camera_defaults::camera_of(&c.loaded));
-        let has_default = camera.as_deref().and_then(crate::camera_defaults::find).is_some();
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = 2.0;
-            let reset_button = ui.add_sized([ui.available_width() - 26.0, 24.0], egui::Button::new(crate::tr("Alle Einstellungen zurücksetzen")));
-            lr::hover_tip(ui, &reset_button, &crate::shortcuts::display("reset_all"));
-            reset = reset_button.clicked();
-            // "Zurücksetzen ▾": camera default entries (camera_defaults.rs)
-            let more = ui.add_sized([24.0, 24.0], egui::Button::new("▾"));
-            lr::hover_tip(ui, &more, crate::tr("Weitere Möglichkeiten zum Zurücksetzen"));
-            // test hooks for screenshots (own data folder only): GRAINEO_DIALOG=reset-menu shows the menu open,
-            // GRAINEO_DIALOG=camera-default opens "Set as default for …" once
-            let hook = if crate::env::var_os("GRAINEO_DATA_DIR").is_some() { crate::env::var("GRAINEO_DIALOG").ok() } else { None };
-            let mut popup = egui::Popup::menu(&more);
-            if hook.as_deref() == Some("reset-menu") {
-                popup = popup.open(true);
-            }
-            if hook.as_deref() == Some("camera-default") {
-                static HOOK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-                if let Some(c) = camera.as_deref().filter(|_| !HOOK.swap(true, Ordering::Relaxed)) {
-                    if let Some(cur) = self.current.as_ref() { crate::camera_defaults::open_set(c, &self.entries[index].settings, &cur.loaded); }
-                }
-            }
-            popup.show(|ui| {
-                ui.set_min_width(260.0);
-                if ui.add_enabled(has_default, egui::Button::new(crate::tr("Auf Kamera-Standard zurücksetzen"))).clicked() {
-                    reset_camera = true;
-                }
-                ui.separator();
-                let set_text = match &camera {
-                    Some(c) => crate::trf!("Als Standard für {c} festlegen …", c = c),
-                    None => crate::tr("Als Kamera-Standard festlegen …").to_string(),
-                };
-                if ui.add_enabled(camera.is_some(), egui::Button::new(set_text)).clicked() {
-                    if let Some(c) = &camera {
-                        if let Some(cur) = self.current.as_ref() { crate::camera_defaults::open_set(c, &self.entries[index].settings, &cur.loaded); }
-                    }
-                }
-                if ui.button(crate::tr("Kamera-Standards verwalten …")).clicked() {
-                    crate::prefs::open_section("Kamera-Standards");
-                }
-            });
-        });
-        if reset_camera {
-            self.reset_to_camera_default();
-        }
-        if copy {
-            self.copy_dialog = true;
-        }
-        if paste {
-            self.pending_paste = true;
-        }
-        if reset {
-            // one undoable command (⌘Z also in the grid), see settings_group.rs
-            crate::settings_group::request_reset();
-        }
         self.wb_picker = wb_picker;
     }
 
@@ -8088,8 +8133,10 @@ impl App {
                     let t_clip = lr::with_shortcut("Clipping-Warnung", "clipping");
                     let t_hdr = if has_hdr { "HDR-Anzeige" } else { "" };
                     let t_focus = lr::with_shortcut("Fokusfeld der Kamera zeigen", "focus_frame");
+                    let t_assess = lr::with_shortcut("Beurteilungsrahmen", assessment::SHORTCUT);
                     let cells = [
                         (Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), self.show_faces, "Gesichter anzeigen"),
+                        (Cell::Symbol(lr::Icon::ImageSquare, lr::TEXT()), assessment::on(), t_assess.as_str()),
                         (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), self.show_focus, t_focus.as_str()),
                         (Cell::Symbol(lr::Icon::Warning, lr::TEXT()), self.show_clipping, t_clip.as_str()),
                         (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { crate::lr::gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
@@ -8099,10 +8146,11 @@ impl App {
                     widths.push((Group::Overlays.key(), r.width()));
                     match c {
                         Some(0) => self.show_faces = !self.show_faces,
-                        Some(1) => self.toggle_focus(),
-                        Some(2) => self.show_clipping = !self.show_clipping,
-                        Some(3) if has_hdr => self.display.hdr_on = !self.display.hdr_on,
-                        Some(4) => self.info_next(),
+                        Some(1) => assessment::set_on(!assessment::on()),
+                        Some(2) => self.toggle_focus(),
+                        Some(3) => self.show_clipping = !self.show_clipping,
+                        Some(4) if has_hdr => self.display.hdr_on = !self.display.hdr_on,
+                        Some(5) => self.info_next(),
                         _ => {}
                     }
                 }
@@ -8195,6 +8243,9 @@ impl App {
                     Group::Overlays => {
                         if item(ui, Some(lr::Icon::Smiley), None, crate::tr("Gesichter anzeigen"), self.show_faces) {
                             self.show_faces = !self.show_faces;
+                        }
+                        if item(ui, Some(lr::Icon::ImageSquare), None, crate::tr("Beurteilungsrahmen"), assessment::on()) {
+                            assessment::set_on(!assessment::on());
                         }
                         if item(ui, Some(lr::Icon::Crosshair), None, crate::tr("Fokusfeld der Kamera zeigen"), self.show_focus) {
                             self.toggle_focus();
@@ -8694,7 +8745,6 @@ impl App {
         let mut pv = s.perspective_v as f64;
         let mut ph = s.perspective_h as f64;
         let mut persp_changed = false;
-        let mut persp_reset = false;
         let mut upright: Option<develop::upright::Mode> = None;
         let straighten = self.straighten;
         let mut straighten_click = false;
@@ -8723,6 +8773,7 @@ impl App {
             }
             ui.add_space(4.0);
             if !active {
+                ui.data_mut(|d| d.remove::<GeoTool>(egui::Id::new("geo-tool-shown")));
                 if changed {
                     let f = Frame::from_settings(s, fw, fh, cam);
                     let persp = if f.has_perspective() { crate::tr(" · Perspektive") } else { "" };
@@ -8730,6 +8781,7 @@ impl App {
                 }
                 return;
             }
+            let settings_top = ui.cursor().top();
             match tool {
                 GeoTool::Crop => {
                     // Aspect ratios as a grid (given in landscape), orientation via landscape/portrait
@@ -8777,8 +8829,7 @@ impl App {
                     if let Some(i) = lr::aspect_grid(ui, &presets, selected, landscape) {
                         aspect = Some(presets[i].0.map(|r| if landscape || r == 1.0 { r } else { 1.0 / r }));
                     }
-                    ui.add_space(2.0);
-                    lr::group_label(ui, "Raster");
+                    lr::subheading(ui, "Raster");
                     lr::segmented_pad(ui, &mut raster, &align::Raster::ALL, 8.0);
                     ui.add_space(4.0);
                     // Rotating and straightening belong to cropping: angle, draw line, 90° rotation
@@ -8806,6 +8857,11 @@ impl App {
                         (lr::Icon::ArrowsH, crate::tr("Waagerecht"), crate::tr("Nur den Winkel: Horizont und waagerechte Kanten gerade richten")),
                         (lr::Icon::ArrowsV, crate::tr("Senkrecht"), crate::tr("Winkel und stürzende Linien: senkrechte Kanten parallel stellen")),
                     ];
+                    // Test hook: GRAINEO_UPRIGHT=auto|level|vertical runs that upright mode once (as its button would)
+                    static UPRIGHT_TEST: std::sync::Once = std::sync::Once::new();
+                    if let Ok(m) = crate::env::var("GRAINEO_UPRIGHT") {
+                        UPRIGHT_TEST.call_once(|| upright = Some(match m.as_str() { "level" => Mode::Level, "vertical" => Mode::Vertical, _ => Mode::Auto }));
+                    }
                     match lr::icon_grid(ui, "upright", &items, straighten.then_some(0), 4) {
                         Some(0) => straighten_click = true,
                         Some(1) => upright = Some(Mode::Auto),
@@ -8831,7 +8887,8 @@ impl App {
                     }
                 }
                 GeoTool::Perspective => {
-                    persp_reset = lr::group_label(ui, "Perspektive");
+                    // no subheading "Perspektive": the selected tool button above already names it, and in a short panel
+                    // (large UI scale, small window) the heading pushed the second slider out of view
                     let hint_v = crate::tr("Perspektive senkrecht: stürzende Linien – negativ verbreitert oben (Blick nach oben)");
                     let hint_h = "Perspektive waagerecht: negativ verbreitert links, positiv rechts";
                     persp_changed |= lr::slider_hint(ui, "Senkrecht", &mut pv, -1.0..=1.0, 0.0, 0.01, hint_v);
@@ -8845,6 +8902,14 @@ impl App {
                 cancel = ui.button(format!("{}  Esc", crate::tr("Abbrechen"))).clicked();
                 toggle = ui.button(format!("{}  ↩", crate::tr("Fertig"))).clicked();
             });
+            // A short panel (large UI scale, small window) scrolls: when a tool is opened, bring its settings into
+            // view, otherwise its lower sliders (e.g. the second perspective slider) stay hidden below the edge
+            let shown_id = egui::Id::new("geo-tool-shown");
+            if ui.data(|d| d.get_temp::<GeoTool>(shown_id)) != Some(tool) {
+                ui.data_mut(|d| d.insert_temp(shown_id, tool));
+                let r = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), settings_top..=ui.cursor().top());
+                ui.scroll_to_rect(r, Some(egui::Align::BOTTOM));
+            }
         });
         if reset || reset_hit {
             let d = Settings::default();
@@ -8853,11 +8918,6 @@ impl App {
             s.crop_angle = 0.0;
             s.perspective_v = 0.0;
             s.perspective_h = 0.0;
-        }
-        if persp_reset && !(reset || reset_hit) {
-            let s = &mut self.entries[index].settings;
-            let a = s.crop_angle;
-            geometry::set_transform(s, a, 0.0, 0.0, fw, fh, cam);
         }
         if persp_changed {
             let s = &mut self.entries[index].settings;

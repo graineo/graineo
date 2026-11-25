@@ -101,7 +101,15 @@ pub fn rules() -> Arc<Vec<Rule>> {
             return c.rules.clone();
         }
     }
-    let rules: Vec<Rule> = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<File>(&t).ok()).map(|f| f.rules).unwrap_or_default();
+    let mut rules: Vec<Rule> = std::fs::read_to_string(&p).ok().and_then(|t| serde_json::from_str::<File>(&t).ok()).map(|f| f.rules).unwrap_or_default();
+    // rules written up to 1.5.4 name a fixed lens with the old suffix (see `legacy_names::lens`)
+    for r in rules.iter_mut() {
+        if let Rule::LensName { lens, .. } = r {
+            if let std::borrow::Cow::Owned(n) = legacy_names::lens::fixed_lens_name(lens) {
+                *lens = n;
+            }
+        }
+    }
     let rules = Arc::new(rules);
     if let Ok(mut c) = CACHE.lock() {
         *c = Some(Cache { path: p, mtime, generation, rules: rules.clone() });

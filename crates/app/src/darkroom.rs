@@ -469,8 +469,7 @@ fn foveon_section(ui: &mut egui::Ui, s: &mut develop::Settings, cal: Option<&dev
     let changed = s.film.layer_exposure != d.layer_exposure || s.film.grain_balance != d.grain_balance;
     let weights = cal.and_then(|c| develop::analog::weights(c, s));
     if lr::section_reset(ui, "Foveon", true, changed, |ui| {
-        ui.horizontal(|ui| {
-            lr::group_label(ui, "Sigma-Analog");
+        lr::subheading_with(ui, "Sigma-Analog", 24.0, |ui| {
             crate::help::info(ui, "film-foveon", "Sigma-Analog", &crate::help::FILM_FOVEON);
         });
         let row = |ui: &mut egui::Ui, on: &mut bool, label: &str, tip: &str, reason: Option<&str>| {
@@ -703,8 +702,7 @@ impl App {
                     if films.is_empty() {
                         continue;
                     }
-                    ui.add_space(4.0);
-                    lr::group_label(ui, title);
+                    lr::subheading(ui, title);
                     for f in films {
                         let sub = subs.get(&f.id).cloned().unwrap_or_default();
                         let (click, q, visible_, hovered) = shelf_row(ui, Some(f), &f.id, thumbs.get(&f.id), !failed.contains(&f.id), &short_name(&f.name), &sub, current_id.as_deref() == Some(f.id.as_str()));
@@ -779,7 +777,7 @@ impl App {
         let develop_changed = f.film_dev != d.film_dev || f.push != d.push || f.film_gamma != d.film_gamma || f.exposure != d.exposure;
         if lr::section_reset(ui, "Entwicklung", true, develop_changed, |ui| {
             if let Some(si) = info.as_ref().filter(|i| i.family.len() > 1) {
-                lr::group_label(ui, "Entwicklungszeit (min)");
+                lr::subheading(ui, "Entwicklungszeit (min)");
                 let l: Vec<(f32, String)> = std::iter::once((0.0, "Std".to_string())).chain(si.family.iter().map(|&t| (t, format!("{t}")))).collect();
                 let o: Vec<(f32, &str)> = l.iter().map(|(t, n)| (*t, n.as_str())).collect();
                 lr::segmented(ui, &mut f.film_dev, &o);
@@ -798,7 +796,7 @@ impl App {
         }
         let grain_changed = f.grain != d.grain || f.grain_size != d.grain_size || f.grain_model != d.grain_model || f.halation != d.halation || f.format_mm != d.format_mm;
         if lr::section_reset(ui, "Korn & Lichthof", true, grain_changed, |ui| {
-            lr::group_label(ui, "Format");
+            lr::subheading(ui, "Format");
             lr::segmented(ui, &mut f.format_mm, &[(35.0, "35 mm"), (60.0, "6×6"), (120.0, "4×5")]);
             slider(ui, "Korn", &mut f.grain, 0.0..=2.0, 1.0, 0.01);
             slider(ui, "Korngröße", &mut f.grain_size, 0.5..=3.0, 1.0, 0.01);
@@ -820,8 +818,7 @@ impl App {
         }
         let tint_changed = f.green_tune != d.green_tune || f.blue_tune != d.blue_tune;
         if lr::section_reset(ui, "Farbton", true, tint_changed, |ui| {
-            ui.horizontal(|ui| {
-                lr::group_label(ui, "Grün und Blau");
+            lr::subheading_with(ui, "Grün und Blau", 24.0, |ui| {
                 crate::help::info(ui, "film-farbton", "Farbton", &crate::help::FILM_HUE);
             });
             slider(ui, "Grün", &mut f.green_tune, -1.0..=1.0, 0.0, 0.05);
@@ -883,7 +880,7 @@ impl App {
                 for p in papers {
                     if fi.monochrome && !p.monochrome && !color_group {
                         color_group = true;
-                        lr::group_label(ui, "Farbpapier (getönt)");
+                        lr::subheading(ui, "Farbpapier (getönt)");
                     }
                     let map = self.darkroom.fetch_card(&p.id);
                     let active = effective.as_deref() == Some(p.id.as_str());
@@ -943,7 +940,7 @@ impl App {
         if lr::section_reset(ui, "Grad und Papierton", true, changed, |ui| {
             if let Some(pi) = paper.as_ref().filter(|p| p.family.len() > 1) {
                 {
-                    lr::group_label(ui, "Grad");
+                    lr::subheading(ui, "Grad");
                     let multigrade = pi.id.starts_with("ilford_multigrade");
                     let l: Vec<(f32, String)> = std::iter::once((-1.0, "Std".to_string()))
                         .chain(pi.family.iter().map(|&t| (t, if multigrade && t == 0.0 { "00".to_string() } else if multigrade && t == 0.5 { "0".to_string() } else { format!("{t}") })))
@@ -964,9 +961,10 @@ impl App {
                     slider(ui, "Papierton", &mut f.paper_tone, -1.0..=1.0, 0.0, 0.01);
                 });
                 // Black & white film on color paper: tone via the enlarger's yellow/magenta filters
+                // the subheading sits in its own child ui: give it the gap here
+                ui.add_space((lr::SUBHEAD_GAP - ui.spacing().item_spacing.y).max(0.0));
                 ui.add_enabled_ui(color_paper, |ui| {
-                    ui.horizontal(|ui| {
-                        lr::group_label(ui, "Abzugsfarbe");
+                    lr::subheading_with(ui, "Abzugsfarbe", 24.0, |ui| {
                         crate::help::info(ui, "film-abzugsfarbe", "Abzugsfarbe", &crate::help::FILM_PRINT_COLOR);
                     });
                     slider(ui, "Warm ↔ Kühl", &mut f.print_warmth, -2.0..=2.0, 0.0, 0.01);

@@ -625,6 +625,40 @@ fn backup_before_migration(conn: &Connection, path: &Path, from: i32) -> Result<
     Ok(())
 }
 
+/// Libraries whose fixed-lens suffix was checked in this run of the app ([`fix_fixed_lens_suffix`]).
+static FIXED_LENS_CHECKED: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// The stored suffix of fixed lenses (`exif::fixed_lens`) up to 1.5.4 was German, and older versions keep writing it
+/// into a library they share with this one. So no "done" marker: on the first open per run of the app, a read-only
+/// check looks for German suffixes in file lens names and smart collection rules, and only if there are any, an
+/// idempotent update switches them to the English one ([`legacy_names::lens`]). The update never makes the open fail
+/// or wait: it does not wait for the write lock, and on any error it is tried again at the next open.
+fn fix_fixed_lens_suffix(conn: &Connection, path: &Path) {
+    let mut checked = FIXED_LENS_CHECKED.lock().unwrap_or_else(|e| e.into_inner());
+    if checked.iter().any(|p| p == path) {
+        return;
+    }
+    let needed = conn.query_row(legacy_names::lens::NEEDS_FIX_SQL, [], |r| r.get::<_, bool>(0));
+    let r = match needed {
+        Ok(false) => Ok(()),
+        Ok(true) => {
+            // do not wait for another writer: try again at the next open
+            let _ = conn.busy_timeout(std::time::Duration::ZERO);
+            let r = conn.execute_batch(&format!("BEGIN IMMEDIATE; {} COMMIT;", legacy_names::lens::FIX_LIBRARY_SQL));
+            if r.is_err() && !conn.is_autocommit() {
+                let _ = conn.execute_batch("ROLLBACK");
+            }
+            let _ = conn.busy_timeout(std::time::Duration::from_secs(if main_thread() { 3 } else { 120 }));
+            r
+        }
+        Err(e) => Err(e),
+    };
+    match r {
+        Ok(()) => checked.push(path.to_path_buf()),
+        Err(e) => eprintln!("fixed lens suffix not switched yet ({}): {e}", path.display()),
+    }
+}
+
 #[cfg(test)]
 static FAIL_MIGRATION: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -702,6 +736,7 @@ fn migrate_from_legacy(conn: Connection, path: &Path, from: i32) -> Result<Db> {
             }
             counts.push((name.to_string(), *a));
         }
+        conn.execute_batch(legacy_names::lens::FIX_LIBRARY_SQL)?;
         tx.commit()?;
         Ok(counts)
     })();
@@ -813,6 +848,7 @@ impl Db {
             conn.execute("INSERT INTO info(name, value) VALUES('schema_compatible', ?1) ON CONFLICT(name) DO UPDATE SET value=excluded.value", [SCHEMA_COMPATIBLE.to_string()])?;
         }
         migration.commit()?;
+        fix_fixed_lens_suffix(&conn, path);
         // later transactions of this connection: write lock right away (see above)
         let mut conn = conn;
         conn.set_transaction_behavior(rusqlite::TransactionBehavior::Immediate);
@@ -1534,7 +1570,51 @@ mod migration_guard_tests {
         assert_eq!(new, vec![(3, 1), (2, 1), (4, 0), (1, 2)]);
     }
 
-    /// Opening a library with the current schema writes nothing: it works while another connection holds the write
+    /// A library written up to 1.5.4 (German suffix of fixed lenses) gets the English suffix when opened; other lens
+    /// names stay. An older version writing the German suffix again is switched at the next start (no marker).
+    #[test]
+    fn fixed_lens_suffix_becomes_english() {
+        let p = std::env::temp_dir().join(format!("graineo-fixed-lens-{}-{}.sqlite", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let db = Db::open(&p).unwrap();
+        db.conn
+            .execute_batch(&format!(
+                "PRAGMA foreign_keys = OFF;
+                 INSERT INTO file(id, folder, name, format, lens) VALUES (1, 1, 'a.x3f', 'X3F', 'SIGMA 30mm f/2.8{old}'), (2, 1, 'b.raf', 'RAF', 'XF23mmF2 R WR');",
+                old = legacy_names::lens::FIXED_SUFFIX.0
+            ))
+            .unwrap();
+        drop(db);
+        // as a new start of the app
+        FIXED_LENS_CHECKED.lock().unwrap().clear();
+        let db = Db::open(&p).unwrap();
+        let lenses = |db: &Db| -> Vec<String> { db.conn.prepare("SELECT lens FROM file ORDER BY id").unwrap().query_map([], |r| r.get(0)).unwrap().map(|x| x.unwrap()).collect() };
+        assert_eq!(lenses(&db), vec!["SIGMA 30mm f/2.8 (fixed)".to_string(), "XF23mmF2 R WR".to_string()]);
+        // an older version writes the German suffix again; the next start switches it again
+        db.conn.execute("UPDATE file SET lens = 'SIGMA 30mm f/2.8 (fest)' WHERE id = 1", []).unwrap();
+        drop(db);
+        FIXED_LENS_CHECKED.lock().unwrap().clear();
+        let db = Db::open(&p).unwrap();
+        assert_eq!(lenses(&db)[0], "SIGMA 30mm f/2.8 (fixed)");
+        // while another connection holds the write lock, opening neither fails nor waits; the next open does it
+        db.conn.execute("UPDATE file SET lens = 'SIGMA 30mm f/2.8 (fest)' WHERE id = 1", []).unwrap();
+        FIXED_LENS_CHECKED.lock().unwrap().clear();
+        db.conn.execute_batch("BEGIN IMMEDIATE;").unwrap();
+        let t = std::time::Instant::now();
+        let other = Db::open(&p).unwrap();
+        assert!(t.elapsed() < std::time::Duration::from_secs(2));
+        db.conn.execute_batch("COMMIT;").unwrap();
+        drop(other);
+        assert_eq!(lenses(&Db::open(&p).unwrap())[0], "SIGMA 30mm f/2.8 (fixed)");
+        assert_eq!(crate::exif::fixed_lens("SIGMA DP2 Merrill"), Some("SIGMA 30mm f/2.8 (fixed)"));
+        assert_eq!(crate::exif::fixed_lens_of("SONY", "dsc-rx100m3"), Some("ZEISS Vario-Sonnar T* 8.8-25.7mm f/1.8-2.8 (fixed)"));
+        drop(db);
+        for x in ["", "-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{}{x}", p.display()));
+        }
+    }
+
+    /// Opening a library with the current schema writes nothing (the fixed-lens suffix check only reads unless it
+    /// finds a German suffix): it works while another connection holds the write
     /// lock, and the WAL does not grow.
     #[test]
     fn open_with_current_schema_does_not_write() {

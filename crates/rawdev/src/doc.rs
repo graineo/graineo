@@ -184,6 +184,8 @@ pub struct DetailKey {
     pub(crate) ai: u32,
     /// capture sharpening at full resolution (off for the linear rendering)
     sharpen: bool,
+    /// manual lens sliders (distortion, red, blue; [`Settings`] `lens_manual_*`), rounded
+    manual: [i32; 3],
 }
 
 /// Registry that turns the assignment text (`"id@version"`, `""`) into a number for the `Copy` key and back.
@@ -216,9 +218,18 @@ fn pin_text(h: u64) -> Option<String> {
 impl DetailKey {
     pub fn from_settings(s: &Settings) -> Self {
         let r = &s.raw;
+        let manual = [r.lens_manual_distortion, r.lens_manual_ca_red, r.lens_manual_ca_blue].map(|v| v.round().clamp(-100.0, 100.0) as i32);
         Self {
             nr: [r.nr_luma, r.nr_luma_detail, r.nr_color, r.nr_color_detail].map(|v| v.round().clamp(0.0, 100.0) as u32),
-            lens: r.lens.then(|| ((r.lens_distortion * 100.0).round() as u32, (r.lens_vignette * 100.0).round() as u32, r.lens_ca)),
+            // the manual sliders act without a profile too: profile parts 0, the key still asks for a correction
+            lens: if r.lens {
+                Some(((r.lens_distortion * 100.0).round() as u32, (r.lens_vignette * 100.0).round() as u32, r.lens_ca))
+            } else if manual != [0; 3] {
+                Some((0, 0, false))
+            } else {
+                None
+            },
+            manual,
             pin: pin_hash(r.lens_profile.as_deref()),
             apple: 0,
             ai: crate::ai_denoise::percent(s),
@@ -625,7 +636,7 @@ impl RawDoc {
         let as_shot = crate::wb::temp_from_neutral(&info, n_shot).unwrap_or((5500.0, 0.0));
         let cam_xyz_shot = f.color_dng(wb).map(|c| c.camera_to_xyz_d50).unwrap_or(color::diag([1.0; 3]));
         let auto_neutral = auto_neutral(&b.px, wb).unwrap_or(n_shot);
-        let mut base_ev = raw::development::BASE_EV + raw::development::camera_ev(&info.maker, &info.model) + info.baseline_exposure;
+        let mut base_ev = raw::development::BASE_EV + raw::development::camera_ev_for(&info.maker, &info.model, info.baseline_exposure) + info.baseline_exposure;
         base_ev += raw::development::fuji_compensation(&info.maker, &info.model, info.exif.iso, info.fuji_dr);
         let lr_offset = raw::development::fuji_lightroom_offset(&info.maker, &info.model, info.exif.iso, info.fuji_dr);
         let std_look = raw::development::camera_look(&info.maker, &info.model).map(|l| Arc::new(raw::development::LookLut::new(&l)));
@@ -1182,12 +1193,12 @@ impl RawDoc {
     pub fn correction(&self, key: DetailKey) -> (Option<Arc<Correction>>, Option<&'static str>) {
         let mut g = self.correction.lock().unwrap();
         if let Some((k, corr, q)) = g.as_ref() {
-            if k.lens == key.lens && k.pin == key.pin {
+            if k.lens == key.lens && k.pin == key.pin && k.manual == key.manual {
                 return (corr.clone(), *q);
             }
         }
         let res = key.lens.and_then(|(d, v, ca)| {
-            let o = LensOptions { distortion: d as f32 / 100.0, vignette: v as f32 / 100.0, lateral_ca: ca, backup_enabled: false, pinned: pin_text(key.pin), ..Default::default() };
+            let o = LensOptions { distortion: d as f32 / 100.0, vignette: v as f32 / 100.0, lateral_ca: ca, backup_enabled: false, pinned: pin_text(key.pin), manual: key.manual.map(|v| v as f32), ..Default::default() };
             // (a merged photo whose reference file is gone: the lens data of the file is not there, lensfun stands in)
             if self.finished || self.apple.is_some() || self.merged.as_ref().is_some_and(|m| m.offline) {
                 let i = &self.info;
@@ -1205,7 +1216,8 @@ impl RawDoc {
     /// Effective assignment of an own lens profile: the photo's own before the rules (`""` = none, `None` = automatic).
     pub fn lens_pin(&self, s: &Settings) -> Option<String> {
         if self.finished {
-            return None;
+            // finished images: only a manually chosen lensfun lens counts (own and Adobe profiles are for RAWs)
+            return s.raw.lens_profile.clone().filter(|p| p.starts_with(raw::lens::PIN_LENSFUN));
         }
         let i = &self.info;
         lensprof::assign::effective(&i.maker, &i.model, i.exif.lens.as_deref(), s.raw.lens_profile.as_deref())
@@ -1230,8 +1242,8 @@ impl RawDoc {
         if self.finished {
             let on = s.raw.lens_image.unwrap_or_else(|| self.lens_status().default_on);
             if !on {
-                k.lens = None;
-            } else if k.lens.is_none() {
+                k.lens = (k.manual != [0; 3]).then_some((0, 0, false));
+            } else if k.lens.is_none() || k.lens == Some((0, 0, false)) {
                 let r = &s.raw;
                 k.lens = Some(((r.lens_distortion * 100.0).round() as u32, (r.lens_vignette * 100.0).round() as u32, r.lens_ca));
             }
@@ -1276,6 +1288,13 @@ impl RawDoc {
     pub fn lens_source_known(&self) -> Option<Option<&'static str>> {
         let g = self.correction.try_lock().ok()?;
         g.as_ref().map(|(_, _, q)| *q)
+    }
+
+    /// Names of the sources of the lens correction per part (geometry incl. lateral colour, vignetting), if already
+    /// determined: `None` = not known yet.
+    pub fn lens_parts_known(&self) -> Option<(Option<String>, Option<String>)> {
+        let g = self.correction.try_lock().ok()?;
+        g.as_ref().map(|(_, c, _)| (c.as_ref().and_then(|c| c.geometry.as_ref().map(|p| p.source.clone())), c.as_ref().and_then(|c| c.vignette.as_ref().map(|p| p.source.clone()))))
     }
 
     fn file_or_reopen(&self) -> Option<std::sync::MutexGuard<'_, Option<raw::RawFile>>> {

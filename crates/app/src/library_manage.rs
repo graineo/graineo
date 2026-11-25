@@ -310,10 +310,19 @@ impl LibraryView {
             if !sets.is_empty() {
                 ui.separator();
             }
-            for (s, path) in &sets {
-                if lr::menu_item(ui, path, "", c.parent != Some(*s)) {
-                    self.move_collection(id, Some(*s));
+            let picked = lr::list_menu(ui, ("move-collection", id), sets.len(), |ui, f| {
+                let mut picked = None;
+                for (s, path) in sets.iter().filter(|(_, p)| f.shows(p)) {
+                    let enabled = c.parent != Some(*s);
+                    if lr::menu_item(ui, path, "", enabled) || (enabled && f.take_enter()) {
+                        picked = Some(*s);
+                    }
                 }
+                picked
+            });
+            if let Some(s) = picked {
+                ui.close();
+                self.move_collection(id, Some(s));
             }
         }));
         if !free {

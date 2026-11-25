@@ -112,6 +112,8 @@ pub const ALL: &[Shortcut] = &[
     // ⌘R turns the photo and F5 is the top bar: ⌥⌘R (Ctrl+Alt+R on Windows) reads a viewed folder again
     t("refresh_folder", U, CA, Key::R, "angesehenen Ordner neu einlesen"),
     t("settings", U, C, Key::Comma, "Einstellungen"),
+    // only while the settings are open (modal window); takes ⌘F before the library's search field
+    t("prefs_search", U, C, Key::F, "Einstellungen durchsuchen"),
     t("overview", U, C, Key::Slash, "diese Übersicht"),
     // photo zoom in Develop and in the comparison (main.rs `zoom_shortcuts`); in the darkroom ⌘+ / ⌘− stay with the grain loupe
     t("image_zoom_in", U, C, Key::Plus, "Foto vergrößern (in der Dunkelkammer: Körnungs-Lupe)"),
@@ -259,6 +261,7 @@ pub const ALL: &[Shortcut] = &[
     g("eyedropper_shift", E, "⇧-Klick mit der Pipette", "weitere Probe: Weißabgleich aus dem Mittel aller Proben, Pipette bleibt an"),
     t("loupe", E, N, Key::O, "Lupe am Mauszeiger (Scrollen: 100/200/400 %)"),
     t("sensor_field", E, N, Key::M, "Messfeld (Foveon: Rauschen/SNR je Schicht)"),
+    t("assessment_frame", E, S, Key::B, "Beurteilungsrahmen: Foto auf Mittelgrau mit weißem Rand ein/aus"),
     t("lights_out", E, N, Key::L, "Licht aus: gedimmt → aus → normal"),
     t("full_screen", U, N, Key::F, "Vollbild (ganze App) ein/aus"),
     t("soft_proof", U, C, Key::Y, "Farbproof: Voller Umfang ↔ zuletzt gewählter Farbraum"),
@@ -457,9 +460,10 @@ mod tests {
         }
     }
 
-    /// Deliberate overlaps: in the darkroom ⌘+ / ⌘− zoom the grain loupe instead of the photo (main.rs `zoom_shortcuts`);
+    /// Deliberate overlaps: ⌘F searches the settings while they are open (modal), the library otherwise;
+    /// in the darkroom ⌘+ / ⌘− zoom the grain loupe instead of the photo (main.rs `zoom_shortcuts`);
     /// German ⇧⌘0 arrives as ⇧⌘= with the physical key 0 (prefs::scale_shortcuts checks the reset first).
-    const SHADOWED: &[(&str, &str)] = &[("image_zoom_in", "dk_zoom_plus"), ("image_zoom_in_us", "dk_zoom_equals"), ("image_zoom_out", "dk_zoom_minus")];
+    const SHADOWED: &[(&str, &str)] = &[("prefs_search", "search"), ("image_zoom_in", "dk_zoom_plus"), ("image_zoom_in_us", "dk_zoom_equals"), ("image_zoom_out", "dk_zoom_minus")];
 
     #[test]
     fn no_duplicate_bindings() {

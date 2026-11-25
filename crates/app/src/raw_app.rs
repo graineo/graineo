@@ -628,13 +628,17 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
     let mut bp = s.bypass;
     let mut reset_tone = false;
     let reset = lr::section_switch(ui, "Grundeinstellungen", true, changed, &mut bp.basic, |ui| {
-        lr::choice(ui, "Behandlung", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
+        lr::subheading_help(ui, "Behandlung", "", |ui| {
+            lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
+        });
         // White balance: one drop-down list of the presets with the picker beside it; temperature/tint absolute.
         // Finished images: only "As Shot" and "Auto" (illuminant presets make no sense there)
         let wb: Vec<&(&str, lr::Icon, &str)> = WB.iter().filter(|w| !doc.finished || matches!(w.0, "as_shot" | "auto")).collect();
         let items: Vec<(lr::Icon, &str)> = wb.iter().map(|(_, i, n)| (*i, *n)).collect();
         let selected = wb.iter().position(|(v, ..)| *v == s.raw.wb_mode);
-        let (picked, picker) = lr::icon_select(ui, "wb-raw", "Weißabgleich", &items, selected, (lr::Icon::Custom, "Eigener"), lr::Icon::Picker, *wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"));
+        let (_, (picked, picker)) = lr::subheading_help(ui, "Weißabgleich", "", |ui| {
+            lr::icon_select(ui, "wb-raw", "", &items, selected, (lr::Icon::Custom, "Eigener"), lr::Icon::Picker, *wb_picker, &lr::with_shortcut("Pipette: neutrale Bildstelle anklicken", "eyedropper"))
+        });
         if picker {
             *wb_picker = !*wb_picker;
         }
@@ -676,17 +680,13 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
                 s.raw.tint = gv as f32;
             }
         }
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            reset_tone = lr::group_label(ui, "Tonwert");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                // keep clear of the overlaid scroll bar at the right edge
-                ui.add_space(8.0);
-                let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
-                if ui.add(b).clicked() {
-                    doc.auto_tone(s);
-                }
-            });
+        (reset_tone, _) = lr::subheading_with(ui, "Tonwert", 110.0, |ui| {
+            // keep clear of the overlaid scroll bar at the right edge
+            ui.add_space(8.0);
+            let b = egui::Button::new(egui::RichText::new(crate::tr("Automatisch")).small()).min_size(egui::vec2(0.0, 18.0));
+            if ui.add(b).clicked() {
+                doc.auto_tone(s);
+            }
         });
         lr::slider_gradient(ui, "Belichtung", &mut s.exposure, -5.0..=5.0, 0.0, 0.01, "In Blendenstufen, linear vor der Tonkurve", lr::GRADIENT_EXPOSURE);
         let film_on = s.film.is_active();
@@ -701,8 +701,7 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         noise_brake(ui, &mut s.noise_brake, lifted, "Wie stark Rauschen beim Aufhellen mitwächst.");
         slider100_f32(ui, "Weiß", &mut s.raw.whites, "Weißpunkt: hellste Töne heller (+) oder zurückgenommen (−)", None);
         slider100_f32(ui, "Schwarz", &mut s.raw.blacks, "Schwarzpunkt: tiefste Töne heller (+) oder satter (−)", None);
-        ui.add_space(4.0);
-        if lr::group_label(ui, "Präsenz") {
+        if lr::subheading(ui, "Präsenz") {
             s.raw.texture = 0.0;
             s.clarity = 0.0;
             s.dehaze = d.dehaze;
@@ -753,24 +752,47 @@ pub fn noise_brake(ui: &mut egui::Ui, value: &mut develop::NoiseBrake, lifted: b
     });
 }
 
-/// Lens correction (profile) – part of the "Lens corrections" section. The source of the
-/// profile is fixed as soon as the preview has been rendered once (no waiting here).
-pub fn lens(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc) {
+/// Lens correction of non-Sigma photos – part of the "Lens corrections" section, laid out like the lens tools of other
+/// raw converters: the lens on top, one line with the profile in use and "Ändern …", the on/off switch with lateral
+/// colour, everything else folded under "Feineinstellung". Fixed heights, nothing jumps.
+pub fn lens(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, ident: Option<&crate::lens_assign::Identity>) {
     let known = if doc.finished { Some(None) } else { doc.lens_source_known() };
     if known.is_none() {
         ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
     }
     let source = known.unwrap_or(Some("…"));
-    let dr = develop::settings::RawAdjust::default();
-    if lr::group_label(ui, "Profilkorrektur") {
-        s.raw.lens = dr.lens;
-        s.raw.lens_image = dr.lens_image;
-        s.raw.lens_distortion = dr.lens_distortion;
-        s.raw.lens_vignette = dr.lens_vignette;
-        s.raw.lens_ca = dr.lens_ca;
-    }
+    let i = &doc.info;
     // finished images: lensfun, automatically off (camera/phone have usually corrected already)
     let status = doc.finished.then(|| doc.lens_status());
+    let hand = ident.map(|id| lensprof::assign::source(&id.maker, &id.model, id.lens.as_deref(), s.raw.lens_profile.as_deref()));
+    let hand = match hand {
+        Some(lensprof::assign::Source::Photo(p)) if !p.is_empty() => Some(crate::tr("von Hand")),
+        Some(lensprof::assign::Source::Rule(p)) if !p.is_empty() => Some(crate::tr("Vorgabe")),
+        _ => None,
+    };
+    // 1. + 2.: lens and profile line
+    let (line, tip, found) = match &status {
+        Some(b) => match &b.profile {
+            Some(p) => (format!("{}: lensfun", crate::tr("Profil")), p.clone(), true),
+            None => (crate::tr("Kein Profil gefunden").to_string(), crate::tr(b.reason).to_string(), false),
+        },
+        None => match doc.lens_parts_known() {
+            None => (format!("{}: …", crate::tr("Profil")), String::new(), true),
+            Some((None, None)) => {
+                let why = raw::lens::no_profile_reason(&i.maker, &i.model, i.exif.lens.as_deref());
+                (crate::tr("Kein Profil gefunden").to_string(), crate::tr(why).to_string(), false)
+            }
+            Some((g, v)) => {
+                let mut short = parts_short(g.as_deref(), v.as_deref());
+                if let Some(h) = hand {
+                    short = format!("{short} · {h}");
+                }
+                (format!("{}: {short}", crate::tr("Profil")), parts_tip(g.as_deref(), v.as_deref()), true)
+            }
+        },
+    };
+    lens_head(ui, &lens_label(&i.maker, &i.model, i.exif.lens.as_deref()), &line, &tip, found, ident.is_some());
+    // 3.: switch and lateral colour
     let on = match &status {
         Some(b) => {
             let mut on = s.raw.lens_image.unwrap_or(b.default_on);
@@ -787,37 +809,200 @@ pub fn lens(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc) {
         }
     };
     ui.add_enabled_ui(on, |ui| {
-        let mut v = (s.raw.lens_distortion * 100.0).round() as f64;
-        if lr::slider_hint(ui, "Verzeichnung", &mut v, 0.0..=200.0, 100.0, 1.0, "Stärke der Verzeichnungskorrektur in Prozent des Profils") {
-            s.raw.lens_distortion = v as f32 / 100.0;
-        }
-        let mut g = (s.raw.lens_vignette * 100.0).round() as f64;
-        if lr::slider_hint(ui, "Vignettierung", &mut g, 0.0..=200.0, 100.0, 1.0, "Stärke der Aufhellung der Bildecken in Prozent des Profils") {
-            s.raw.lens_vignette = g as f32 / 100.0;
-        }
         ui.checkbox(&mut s.raw.lens_ca, crate::tr("Farbquerfehler entfernen"));
     });
-    let note = match (&status, source) {
-        (Some(b), _) => match (&b.profile, on) {
-            (Some(p), true) => crate::trf!("Profil: {p}", p = p),
-            (Some(p), false) => format!("{p} · {}", b.reason),
-            (None, _) => b.reason.to_string(),
-        },
-        (None, Some(q)) => crate::trf!("Profil: {q}", q = q),
-        (None, None) => crate::tr("Kein Profil für dieses Objektiv").to_string(),
-    };
-    // two fixed rows (profile, reason) – no jumping
-    ui.allocate_ui(egui::vec2(ui.available_width(), 30.0), |ui| {
-        ui.add(egui::Label::new(egui::RichText::new(note).small().color(lr::TEXT_DIM())).wrap());
+    // 4.: fine adjustment, folded
+    let d = develop::settings::RawAdjust::default();
+    let changed = s.raw.lens_distortion != d.lens_distortion || s.raw.lens_vignette != d.lens_vignette || has_manual(s);
+    fine_fold(ui, changed, |ui| {
+        ui.add_enabled_ui(on, |ui| {
+            let mut v = (s.raw.lens_distortion * 100.0).round() as f64;
+            if lr::slider_hint(ui, "Verzeichnung", &mut v, 0.0..=200.0, 100.0, 1.0, "Stärke der Verzeichnungskorrektur in Prozent des Profils") {
+                s.raw.lens_distortion = v as f32 / 100.0;
+            }
+            let mut g = (s.raw.lens_vignette * 100.0).round() as f64;
+            if lr::slider_hint(ui, "Vignettierung", &mut g, 0.0..=200.0, 100.0, 1.0, "Stärke der Aufhellung der Bildecken in Prozent des Profils") {
+                s.raw.lens_vignette = g as f32 / 100.0;
+            }
+        });
+        manual(ui, s);
     });
     ui.add_space(4.0);
+}
+
+/// Lines 1 and 2 of the lens tools (Sigma and other cameras): the lens name, below it dimmed and left-aligned the
+/// profile in use (`tip`: breakdown per part as a tooltip) and at the end of that row a small pencil that opens the
+/// manual choice with search.
+pub fn lens_head(ui: &mut egui::Ui, lens: &str, line: &str, tip: &str, _found: bool, can_choose: bool) {
+    let w = ui.available_width();
+    let max = ((w / 6.9).floor() as usize).max(12);
+    let shown = mid_ellipsis(lens, max);
+    let r = ui.add(egui::Label::new(egui::RichText::new(&shown).color(lr::TEXT())).sense(egui::Sense::hover()).truncate());
+    if shown != lens {
+        lr::hover_tip(ui, &r, lens);
+    }
+    let icon = 22.0;
+    ui.allocate_ui_with_layout(egui::vec2(w, icon), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        let room = ((w - icon - 6.0) / 6.4).floor() as usize;
+        let shown = mid_ellipsis(line, room.max(10));
+        let r = ui
+            .allocate_ui_with_layout(egui::vec2(w - icon - 4.0, icon), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.set_min_width(w - icon - 4.0);
+                ui.add(egui::Label::new(egui::RichText::new(&shown).small().color(lr::TEXT_DIM())).sense(egui::Sense::hover()).truncate())
+            })
+            .inner;
+        let t = if tip.is_empty() && shown != line { line } else { tip };
+        lr::hover_tip(ui, &r, t);
+        if can_choose && lr::icon_button_sized(ui, lr::Icon::Pencil, false, "Profil wählen", egui::vec2(icon, icon), 13.0) {
+            crate::lens_assign::request(crate::lens_assign::Request::Assign);
+        }
+    });
+}
+
+const FINE_KEY: &str = "lensFineOpen";
+/// "Feineinstellung" open: read from the settings once, then kept in memory (the file is not read per frame).
+static FINE_OPEN: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
+/// Latest value waiting to be written; the writer holds the lock while writing, so the last change wins.
+static FINE_PENDING: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
+
+fn fine_open() -> bool {
+    // tests share one settings file: the memory stays off there (as panel_memory.rs)
+    *FINE_OPEN.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(|| !cfg!(test) && library::settings::value(FINE_KEY).as_bool().unwrap_or(false))
+}
+
+/// Keep the new state in memory and write it on a helper thread (the UI never waits for the file).
+fn set_fine_open(open: bool) {
+    *FINE_OPEN.lock().unwrap_or_else(|e| e.into_inner()) = Some(open);
+    if cfg!(test) {
+        return;
+    }
+    *FINE_PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(open);
+    std::thread::spawn(|| {
+        let mut p = FINE_PENDING.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = p.take() {
+            library::settings::set(FINE_KEY, serde_json::json!(v));
+        }
+    });
+}
+
+/// Folded subheading "Feineinstellung" (state kept in the settings, `lensFineOpen`); a dot after the title while
+/// something inside differs from the standard.
+pub fn fine_fold(ui: &mut egui::Ui, changed: bool, add: impl FnOnce(&mut egui::Ui)) {
+    let mut open = fine_open();
+    ui.add_space(4.0);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), lr::SUBHEAD_HEIGHT), egui::Sense::click());
+    let p = ui.painter();
+    let c = if resp.hovered() { lr::TEXT() } else { lr::SUBHEAD_LABEL() };
+    // triangle (as the section heads), then the title
+    let t = egui::pos2(rect.left() + 5.0, rect.center().y);
+    let tri = if open {
+        vec![t + egui::vec2(-4.0, -2.5), t + egui::vec2(4.0, -2.5), t + egui::vec2(0.0, 3.0)]
+    } else {
+        vec![t + egui::vec2(-2.5, -4.0), t + egui::vec2(3.0, 0.0), t + egui::vec2(-2.5, 4.0)]
+    };
+    p.add(egui::Shape::convex_polygon(tri, c, egui::Stroke::NONE));
+    let text_rect = rect.with_min_x(rect.left() + 16.0);
+    lr::subheading_paint(p, text_rect, "Feineinstellung", c);
+    if changed {
+        // at the right end of the hairline: something inside differs from the standard
+        p.circle_filled(egui::pos2(rect.right() - 4.0, rect.center().y), 3.0, lr::ACCENT());
+    }
+    lr::hover_tip(ui, &resp, if open { "Einklappen" } else { "Aufklappen" });
+    if resp.clicked() {
+        open = !open;
+        set_fine_open(open);
+    }
+    if open {
+        add(ui);
+    }
+}
+
+fn has_manual(s: &Settings) -> bool {
+    s.raw.lens_manual_distortion != 0.0 || s.raw.lens_manual_ca_red != 0.0 || s.raw.lens_manual_ca_blue != 0.0
+}
+
+/// Name of the lens for the lens tools: the lens name of the file, for a fixed lens the camera's lens, otherwise
+/// "Objektiv unbekannt".
+pub fn lens_label(maker: &str, model: &str, lens: Option<&str>) -> String {
+    match lens.map(str::trim).filter(|l| !l.is_empty()) {
+        Some(l) => crate::cell_info::lens_label(l),
+        None => match library::exif::fixed_lens_of(maker, model) {
+            Some(f) => f.to_string(),
+            None => crate::tr("Objektiv unbekannt").to_string(),
+        },
+    }
+}
+
+/// Short profile text: one kind ("lensfun", "Kamera", "Adobe LCP" …) or two joined ("Kamera + lensfun").
+fn parts_short(g: Option<&str>, v: Option<&str>) -> String {
+    let mut kinds: Vec<&str> = Vec::new();
+    for x in [g, v].into_iter().flatten() {
+        let k = source_kind(x).0;
+        if !kinds.contains(&k) {
+            kinds.push(k);
+        }
+    }
+    kinds.iter().map(|k| crate::tr(k).to_string()).collect::<Vec<_>>().join(" + ")
+}
+
+/// Full breakdown for the tooltip: which part from which source, with the full profile name.
+fn parts_tip(g: Option<&str>, v: Option<&str>) -> String {
+    let part = |label: &str, x: &str| match source_kind(x) {
+        (k, Some(n)) => format!("{}: {} – {n}", crate::tr(label), crate::tr(k)),
+        (k, None) => format!("{}: {}", crate::tr(label), crate::tr(k)),
+    };
+    [g.map(|x| part("Verzeichnung", x)), v.map(|x| part("Vignettierung", x))].into_iter().flatten().collect::<Vec<_>>().join("\n")
+}
+
+/// Kind and name of a correction source text ("lensfun: X" → ("lensfun", X), "Olympus (eingebettet)" → ("Kamera", –)).
+fn source_kind(t: &str) -> (&str, Option<&str>) {
+    if let Some(n) = t.strip_prefix("lensfun: ") {
+        return ("lensfun", Some(n));
+    }
+    if t.ends_with("(eingebettet)") || t.starts_with("DNG") {
+        return ("Kamera", None);
+    }
+    match t.split_once(": ") {
+        Some((k, n)) => (k, Some(n)),
+        None => (t, None),
+    }
+}
+
+/// Shorten in the middle to at most `max` characters ("Olympus M.Zuiko … 17mm f/1.2 Pro").
+pub fn mid_ellipsis(t: &str, max: usize) -> String {
+    let n = t.chars().count();
+    if n <= max || max < 5 {
+        return t.to_string();
+    }
+    let head = (max - 1) / 2;
+    let tail = max - 1 - head;
+    let a: String = t.chars().take(head).collect();
+    let b: String = t.chars().skip(n - tail).collect();
+    format!("{}…{}", a.trim_end(), b.trim_start())
+}
+
+/// Manual distortion and lateral color (inside "Feineinstellung"): act with or without a profile, on top of it.
+fn manual(ui: &mut egui::Ui, s: &mut Settings) {
+    use egui::Color32;
+    let mut v = s.raw.lens_manual_distortion.round() as f64;
+    if lr::slider_hint(ui, "Verzeichnung manuell", &mut v, -100.0..=100.0, 0.0, 1.0, "Plus entfernt tonnenförmige, Minus kissenförmige Verzeichnung; wirkt zusätzlich zum Profil") {
+        s.raw.lens_manual_distortion = v as f32;
+    }
+    let mut r = s.raw.lens_manual_ca_red.round() as f64;
+    if lr::slider_gradient(ui, "Farbsaum Rot", &mut r, -100.0..=100.0, 0.0, 1.0, "Zieht den Rotkanal zur Bildmitte (+) oder zum Rand (−), gegen rote oder cyanfarbene Säume an den Bildrändern", [Color32::from_rgb(0x30, 0x90, 0x90), Color32::from_rgb(0xc0, 0x40, 0x40)]) {
+        s.raw.lens_manual_ca_red = r as f32;
+    }
+    let mut b = s.raw.lens_manual_ca_blue.round() as f64;
+    if lr::slider_gradient(ui, "Farbsaum Blau", &mut b, -100.0..=100.0, 0.0, 1.0, "Zieht den Blaukanal zur Bildmitte (+) oder zum Rand (−), gegen blaue oder gelbe Säume an den Bildrändern", [Color32::from_rgb(0xb0, 0xa0, 0x30), Color32::from_rgb(0x40, 0x60, 0xd0)]) {
+        s.raw.lens_manual_ca_blue = b as f32;
+    }
 }
 
 /// Noise reduction (`crs:` sliders) – part of the "Detail" section; first the optional neural denoising
 /// ([`crate::ai_denoise_ui`]), then the classic sliders (they act on what it leaves).
 pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool, doc: Option<&rawdev::RawDoc>) {
     let dr = develop::settings::RawAdjust::default();
-    if lr::group_label(ui, "Rauschminderung") {
+    if lr::subheading(ui, "Rauschminderung") {
         s.raw.nr_luma = dr.nr_luma;
         s.raw.nr_luma_detail = dr.nr_luma_detail;
         s.raw.nr_color = dr.nr_color;
@@ -850,5 +1035,17 @@ pub fn noise(ui: &mut egui::Ui, s: &mut Settings, possible: bool, xtrans: bool, 
     });
     if !possible {
         ui.label(egui::RichText::new(crate::tr("Für dieses Format nicht verfügbar (bereits entwickelte Daten)")).small().color(lr::TEXT_DIM()));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn fine_fold_state_stays_in_memory() {
+        // tests never touch settings.json; the state lives in memory
+        super::set_fine_open(true);
+        assert!(super::fine_open());
+        super::set_fine_open(false);
+        assert!(!super::fine_open());
     }
 }

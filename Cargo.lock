@@ -1296,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "develop"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "bytemuck",
  "crc32fast",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "faces"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "fuzzkit",
  "image",
@@ -2053,7 +2053,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzkit"
-version = "1.5.4"
+version = "1.5.5"
 
 [[package]]
 name = "gdk"
@@ -2443,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "graineo"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -2482,12 +2482,13 @@ dependencies = [
  "sysdirs",
  "trash",
  "unic-langid",
+ "windows-sys 0.61.2",
  "x3f",
 ]
 
 [[package]]
 name = "graineo-color"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "moxcms",
  "rayon",
@@ -2496,7 +2497,7 @@ dependencies = [
 
 [[package]]
 name = "graineo-dev"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "anyhow",
  "develop",
@@ -2648,7 +2649,7 @@ dependencies = [
 
 [[package]]
 name = "hdr"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "flate2",
  "half",
@@ -3264,7 +3265,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "legacy_names"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "rusqlite",
  "serde",
@@ -3273,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "lensprof"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "legacy_names",
  "serde",
@@ -3329,7 +3330,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "library"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "base64",
  "block2 0.6.2",
@@ -3468,7 +3469,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "masks"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "bytemuck",
  "image",
@@ -4627,7 +4628,7 @@ dependencies = [
 
 [[package]]
 name = "pools"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "libc",
  "rayon",
@@ -4700,7 +4701,7 @@ dependencies = [
 
 [[package]]
 name = "print"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "ab_glyph",
  "flate2",
@@ -4950,7 +4951,7 @@ dependencies = [
 
 [[package]]
 name = "raw"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "faces",
  "flate2",
@@ -4968,6 +4969,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sysdirs",
+ "tar",
 ]
 
 [[package]]
@@ -4990,7 +4992,7 @@ dependencies = [
 
 [[package]]
 name = "rawdev"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "bytemuck",
  "develop",
@@ -5166,7 +5168,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "remote"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "develop",
  "getrandom 0.3.4",
@@ -5194,7 +5196,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "retouch"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "image",
  "rayon",
@@ -5433,7 +5435,7 @@ dependencies = [
 
 [[package]]
 name = "segment"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "image",
  "masks",
@@ -5462,7 +5464,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "sensor_view"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "ab_glyph",
  "image",
@@ -5925,7 +5927,7 @@ dependencies = [
 
 [[package]]
 name = "sysdirs"
-version = "1.5.4"
+version = "1.5.5"
 
 [[package]]
 name = "system-deps"
@@ -7788,7 +7790,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x3f"
-version = "1.5.4"
+version = "1.5.5"
 dependencies = [
  "fuzzkit",
  "rayon",
