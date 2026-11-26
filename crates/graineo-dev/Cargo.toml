@@ -20,6 +20,9 @@ sysdirs = { path = "../sysdirs" }
 pools = { path = "../pools" }
 tiff = "0.9"
 anyhow = "1"
+# HDR gain map check (`graineo-dev gainmap`)
+gainmap = { path = "../gainmap" }
+jpeg-decoder = "0.3"
 # processor time of measurements (`graineo-dev sync`)
 libc = "0.2"
 develop = { path = "../develop", features = ["spp-gpu"] }

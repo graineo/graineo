@@ -4880,6 +4880,7 @@ Bausteine	Componentes
 Film: spektrafilm, A. Volpato (GPL-3.0)	Película: spektrafilm, A. Volpato (GPL-3.0)
 Filmdaten: CC BY-SA 4.0	Datos de película: CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	Decodificación RAW: rawler (LGPL-2.1)
+HEIC-Dekodierung: heifer (MIT/Apache-2.0)	Decodificación HEIC: heifer (MIT/Apache-2.0)
 Objektivdaten: lensfun (CC BY-SA 3.0)	Datos de objetivos: lensfun (CC BY-SA 3.0)
 Gesichter finden: YuNet, Shiqi Yu (MIT)	Detección de rostros: YuNet, Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	Ideas de herramientas: lupa de grano, preexposición, difusión y puntos de luz según spektrafilm
@@ -7246,3 +7247,43 @@ Markierungen sichtbar	Marcas visibles
 Markierungen ausgeblendet	Marcas ocultas
 Die Grafikkarte wurde zurückgesetzt (Grafikwechsel oder Energiesparen). graineo wird beendet und kann sofort neu gestartet werden; Bearbeitungen sind gespeichert.	La tarjeta gráfica se ha reiniciado (cambio de gráfica o suspensión). graineo se cerrará y puede volver a abrirse de inmediato; tus ediciones están guardadas.
 Markierungen ein/aus	Mostrar/ocultar marcas
+HDR (Gain-Map)	HDR (mapa de ganancia)
+Nur JPEG, sRGB oder Display P3	Solo JPEG, sRGB o Display P3
+Ohne HDR-Bildschirm sehen Betrachter das normale Bild.	Sin pantalla HDR se ve la imagen normal.
+aus bei Film-Look	desactivado con look de película
+Wie weit helle Stellen auf HDR-Bildschirmen über Weiß leuchten dürfen.	Cuánto pueden brillar las zonas claras por encima del blanco en pantallas HDR.
+ · HDR: nichts heller als Weiß	 · HDR: nada más claro que el blanco
+ · HDR nur bei sRGB oder Display P3 ohne Rand	 · HDR solo en sRGB o Display P3 sin borde
+HDR: leuchtende Bereiche zeigen (mit HDR-Bildschirm: normal ↔ leuchtend)	HDR: mostrar zonas luminosas (con pantalla HDR: normal ↔ luminoso)
+Leuchtende Bereiche zeigen	Mostrar zonas luminosas
+Leuchtende Bereiche	Zonas luminosas
+Lichter über Weiß auf HDR-Bildschirmen, in Blenden	Luces por encima del blanco en pantallas HDR, en pasos
+Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz, HDR	Exposición, contraste, luces, sombras, blancos, negros, HDR
+Ein HDR-Bildschirm kann heller als Weiß zeigen; dieser Spielraum heißt **Kopfraum** und wird in Blenden gemessen (+1 = doppelt so hell wie Weiß, +2 = viermal, +3 = achtmal).\n\nDas normale Bild bleibt genau, wie es ist. Der Export legt als JPEG eine **Gain-Map** dazu: eine kleine Karte, die sagt, wo und wie viel heller es auf einem HDR-Bildschirm werden darf. Nur Lichter, die im Bild wirklich heller sind als Weiß (Himmel, Sonne, Glanzlichter), bekommen davon etwas; Mitteltöne und Schatten bleiben.\n• **0** – kein Leuchten\n• **+2** – Standard, deutlich, ohne grell zu wirken\n• **+3** – Maximum; viele Bildschirme schaffen weniger und zeigen dann ihr Höchstes\n\n### Ohne HDR-Bildschirm\nDer Sonnen-Knopf zeigt **Leuchtende Bereiche**: gelb ab +0,5, orange ab +1, rosa ab +2 Blenden. Betrachter ohne HDR-Bildschirm sehen das normale Bild.\n\n### An und aus\nAn bei HDR-Zusammenfügungen und Fotos, die schon HDR mitbringen (iPhone); sonst aus. Bei Film-Looks aus, weil Film und Papier die Lichter selbst begrenzen; von Hand einschaltbar.	Una pantalla HDR puede mostrar más claro que el blanco; ese margen se llama **margen dinámico** y se mide en pasos (+1 = el doble de claro que el blanco, +2 = cuatro veces, +3 = ocho veces).\n\nLa imagen normal queda exactamente igual. En JPEG, la exportación añade un **mapa de ganancia**: un mapa pequeño que indica dónde y cuánto más clara puede ser la imagen en una pantalla HDR. Solo las luces que de verdad son más claras que el blanco (cielo, sol, reflejos) se benefician; los medios tonos y las sombras quedan igual.\n• **0** – sin brillo\n• **+2** – estándar, visible sin resultar estridente\n• **+3** – máximo; muchas pantallas alcanzan menos y muestran entonces su máximo\n\n### Sin pantalla HDR\nEl botón del sol muestra las **zonas luminosas**: amarillo desde +0,5, naranja desde +1, rosa desde +2 pasos. Sin pantalla HDR se ve la imagen normal.\n\n### Activado y desactivado\nActivado en fusiones HDR y fotos que ya traen HDR (iPhone); si no, desactivado. Desactivado con looks de película, porque la película y el papel limitan ellos mismos las luces; se puede activar a mano.
+Gain-Map	Mapa de ganancia
+Leuchtkraft	Margen HDR
+Bezieht sich auf den freigestellten Ausschnitt. Dezent eingesetzt lenkt sie den Blick zur Bildmitte.\n\n• **Mittelpunkt** – Klein: Die Abdunklung beginnt nah an der Mitte und läuft breit aus. Groß: Nur die äußersten Ecken werden erfasst.	Se aplica al recorte. Usada con discreción, dirige la mirada hacia el centro de la imagen.\n\n• **Punto medio** – Pequeño: el oscurecimiento empieza cerca del centro y se difumina en una zona amplia. Grande: solo afecta a las esquinas.
+Unscharfe Maskierung auf der Helligkeit, nach allen Foveon-Schritten – etwa für den Druck oder starke Verkleinerung. Radius klein halten, sonst entstehen Lichthöfe.\n\n• **Radius** – Größere Werte erzeugen an kontrastreichen Kanten schneller helle oder dunkle Lichthöfe.\n• **Maskieren** – Bei 0 wird überall geschärft. Höhere Werte beschränken die Schärfung auf deutliche Helligkeitskanten – Rauschen in glatten Flächen bleibt unangetastet.	Máscara de enfoque sobre el brillo, tras todos los pasos de Foveon, p. ej. para impresión o reducciones fuertes. Mantén el radio pequeño; si no, aparecen halos.\n\n• **Radio** – Los valores altos generan antes halos claros u oscuros en los bordes de alto contraste.\n• **Enmascarar** – En 0 se enfoca todo. Los valores altos limitan el enfoque a bordes de brillo marcados; el ruido de las superficies lisas no se toca.
+Ein ortsfestes Muster, das in den Mitteltönen am stärksten ist und in Tiefschwarz und Weiß kaum. Es sitzt in Vorschau, 100 % und Export an derselben Stelle.\n\n• **Korngröße** – Die Größe bezieht sich auf die Bildbreite – das Korn wirkt bei jeder Ausgabegröße gleich grob.\n• **Rauigkeit** – Mischt eine zweite, halb so große Kornlage hinzu: Das Korn wirkt unregelmäßiger, eher wie Film als wie Rauschen.	Un patrón fijo, más intenso en los medios tonos y casi inexistente en el negro profundo y el blanco. Se mantiene en el mismo sitio en la vista previa, al 100 % y en la exportación.\n\n• **Tamaño del grano** – El tamaño es relativo al ancho de la imagen: el grano se ve igual de grueso con cualquier tamaño de salida.\n• **Rugosidad** – Mezcla una segunda capa de grano de la mitad de tamaño: el grano resulta más irregular, más parecido a película que a ruido.
+Die Filmbelichtung bestimmt, wo das Bild auf der Filmkurve liegt; der Abzug gleicht die Helligkeit aus. Abzugshelligkeit, Wärme und Tönung entsprechen Belichtungszeit und Farbfiltern im Vergrößerer.\n\n• **Abzugshelligkeit** – Belichtungszeit im Vergrößerer in Blenden: + dunklerer, − hellerer Abzug.\n• **Abzug wärmer** – Gelbfilter im Vergrößerer (±1 ≈ ±15 CC): + wärmer, − kühler. Wirkt nur beim Abzug auf Papier.\n• **Abzug Tönung** – Purpurfilter im Vergrößerer: − grüner, + magenta. Wirkt nur beim Abzug auf Papier.	La exposición de la película determina en qué punto de su curva queda la imagen; la copia compensa el brillo. El brillo, la calidez y el matiz de la copia equivalen al tiempo de exposición y a los filtros de color de la ampliadora.\n\n• **Brillo de la copia** – Tiempo de exposición en la ampliadora en pasos: + copia más oscura, − más clara.\n• **Copia más cálida** – Filtro amarillo en la ampliadora (±1 ≈ ±15 CC): + más cálido, − más frío. Solo afecta a la copia en papel.\n• **Matiz de la copia** – Filtro magenta en la ampliadora: − más verde, + magenta. Solo afecta a la copia en papel.
+Mit **Schwarzweiß** in den Grundeinstellungen mischt graineo bei Sigma-Fotos die Sensorschichten direkt. Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte	Con **Blanco y negro** en los ajustes básicos, graineo mezcla directamente las capas del sensor de las fotos Sigma. El Foveon mide tres capas en cada píxel: arriba sobre todo azul, en medio verde, abajo rojo. Para blanco y negro se suman directamente con ponderación, a resolución completa y siempre sumando 100 %.\n• **Mucho “Inferior”** – como un filtro rojo: el cielo azul se oscurece\n• **Triángulo** – vértice = solo esa capa, centro de un lado = dos a partes iguales, centro = todas por igual\n\n### Teclas\n⌥ al arrastrar: sin imán · doble clic: centro
+− kühler, + wärmer	− más frío, + más cálido
+Hebt dunkle Bildteile lokal an, Lichter bleiben	Aclara localmente las zonas oscuras, las altas luces se mantienen
+Dunst herausrechnen, negativ: hinzufügen	Elimina la neblina, negativo: la añade
+Hebt blasse Farben stärker an als kräftige	Realza más los colores apagados que los intensos
+Dreht diese Grundfarbe zur nächsten hin	Gira este primario hacia el siguiente
+0 = Grundschärfung, −2 = ungeschärft, +2 = kräftig	0 = enfoque básico, −2 = sin enfocar, +2 = intenso
+Zusätzlich zur Foveon-Schärfung	Además del enfoque Foveon
+Entfärbt violette Säume an harten Kanten	Elimina franjas violetas en bordes duros
+Entfärbt grüne Säume an harten Kanten	Elimina franjas verdes en bordes duros
+Manuell: zieht den Rotkanal zur Mitte (+) oder zum Rand (−)	Manual: lleva el canal rojo al centro (+) o al borde (−)
+Manuell: zieht den Blaukanal zur Mitte (+) oder zum Rand (−)	Manual: lleva el canal azul al centro (+) o al borde (−)
++ gegen Tonne, − gegen Kissen; zusätzlich zum Profil	+ contra barril, − contra cojín; además del perfil
+Rotkanal zur Mitte (+) oder zum Rand (−)	Canal rojo al centro (+) o al borde (−)
+Blaukanal zur Mitte (+) oder zum Rand (−)	Canal azul al centro (+) o al borde (−)
+Zeit (min)	Tiempo (min)
+HDR aus bei Film-Look – klicken zum Einschalten	HDR desactivado con look de película – clic para activar
+HDR ausschalten	Desactivar HDR
+HDR einschalten	Activar HDR
+HDR-Leuchtkraft	Margen HDR
+Schatten-Tönung	Matiz de sombras

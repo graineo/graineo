@@ -400,7 +400,7 @@ impl LibraryView {
                 }
             });
             ui.add_space(8.0);
-            let r = lr::toggle(ui, &mut self.dupes.consequences, crate::tr("Nur mit Folgen"));
+            let r = lr::switch_label(ui, &mut self.dupes.consequences, "Nur mit Folgen");
             lr::hover_tip(ui, &r, crate::tr("Nur Gruppen, in denen mehr als ein Foto Bewertung, Stichwörter oder eine Entwicklung hat"));
             ui.add_space(8.0);
             lr::segmented(ui, &mut self.dupes.sort, &[(Sort::Space, "Nach Speicher"), (Sort::Date, "Nach Datum"), (Sort::Folder, "Nach Ordner")]);

@@ -391,13 +391,15 @@ pub fn hdr_rgba(rgb: &[u8], w: usize, h: usize, map: &rawdev::doc::HdrMap, k: f3
 /// HDR crop: `region` of the sensor image at full resolution (8 bit sRGB) × gain map → RGBA f16, extended
 /// sRGB-encoded. The map (at preview size) is laid bilinearly over the pixels of the crop; `full` = size of the
 /// whole sensor image.
-pub fn hdr_detail_rgba(rgb: &[u8], w: usize, h: usize, region: [usize; 4], map: &rawdev::doc::HdrMap, k: f32, full: [usize; 2]) -> Vec<f16> {
+/// Returns the pixels and the largest gain (linear factor over SDR white) laid over the crop.
+pub fn hdr_detail_rgba(rgb: &[u8], w: usize, h: usize, region: [usize; 4], map: &rawdev::doc::HdrMap, k: f32, full: [usize; 2]) -> (Vec<f16>, f32) {
     use rayon::prelude::*;
     let lin: Vec<f32> = (0..256).map(|i| srgb_linear(i as f32 / 255.0)).collect();
     let mut rgba = vec![f16::ONE; w * h * 4];
     let (sx, sy) = (region[2] as f32 / w.max(1) as f32, region[3] as f32 / h.max(1) as f32);
     let (kw, kh) = (map.w as f32 / full[0].max(1) as f32, map.h as f32 / full[1].max(1) as f32);
-    rgba.par_chunks_mut(w * 4).enumerate().for_each(|(y, row)| {
+    let peak = rgba.par_chunks_mut(w * 4).enumerate().map(|(y, row)| {
+        let mut peak = 1.0f32;
         let py = ((region[1] as f32 + (y as f32 + 0.5) * sy) * kh - 0.5).clamp(0.0, (map.h - 1) as f32);
         let (y0, ty) = (py.floor() as usize, py.fract());
         let y1 = (y0 + 1).min(map.h - 1);
@@ -409,13 +411,15 @@ pub fn hdr_detail_rgba(rgb: &[u8], w: usize, h: usize, region: [usize; 4], map: 
             let a = v(x0, y0) + tx * (v(x1, y0) - v(x0, y0));
             let b = v(x0, y1) + tx * (v(x1, y1) - v(x0, y1));
             let g = ((a + ty * (b - a)) * k).exp2();
+            peak = peak.max(g);
             let i = (y * w + x) * 3;
             for c in 0..3 {
                 row[x * 4 + c] = f16::from_f32(encode(lin[rgb[i + c] as usize] * g));
             }
         }
-    });
-    rgba
+        peak
+    }).reduce(|| 1.0, f32::max);
+    (rgba, peak)
 }
 
 /// Photo textures of one image: per tile its texture and its pixel rectangle (x, y, w, h) in the image.
@@ -596,6 +600,8 @@ pub struct HdrDetail {
     pub region: [usize; 4],
     pub size: [usize; 2],
     pub tiles: Tiles,
+    /// largest gain over SDR white in this crop (log and tests: > 1 means the crop glows in EDR)
+    pub peak: f32,
 }
 
 enum Ready {
@@ -667,9 +673,9 @@ impl State {
         }
         let (tx, generation, ctx, k) = (self.tx.clone(), self.generation, ctx.clone(), self.weight);
         std::thread::spawn(move || {
-            let rgba = hdr_detail_rgba(&rgb, w, h, region, &map, k, full);
+            let (rgba, peak) = hdr_detail_rgba(&rgb, w, h, region, &map, k, full);
             if let Some(tiles) = tiles(w, h, &rgba, max_texture_side(), true, true) {
-                let _ = tx.send(Ready::Detail { generation, detail: HdrDetail { index, settings, region, size: [w, h], tiles } });
+                let _ = tx.send(Ready::Detail { generation, detail: HdrDetail { index, settings, region, size: [w, h], tiles, peak } });
                 ctx.request_repaint();
             }
         });
@@ -699,5 +705,34 @@ impl State {
         let (i, s, tex, hdr) = self.preview.as_ref()?;
         let on = if *hdr { self.hdr_shown() } else { wide_active() };
         (*i == index && rendered == Some(s) && on).then(|| (tex.id(), *hdr))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Map with a bright band in its right half (+2 stops), like glowing clouds.
+    fn map() -> rawdev::doc::HdrMap {
+        let (w, h) = (16, 8);
+        let log2 = (0..w * h).map(|i| if i % w >= w / 2 { 2.0 } else { 0.0 }).collect();
+        rawdev::doc::HdrMap { w, h, log2, headroom: 4.0, iso: true, base_headroom: 0.0, alt_headroom: 2.0 }
+    }
+
+    /// A zoomed crop (and the whole image) gets the gain of the map laid over its region: EDR > 1 where the map
+    /// glows, exactly 1 where it does not. The map stays at preview size; the crop only cuts and scales it.
+    #[test]
+    fn zoomed_crop_keeps_gain() {
+        let (m, full) = (map(), [1600, 800]);
+        let rgb = vec![200u8; 100 * 50 * 3];
+        let (_, peak) = hdr_detail_rgba(&rgb, 100, 50, [1200, 300, 100, 50], &m, 1.0, full);
+        assert!((peak - 4.0).abs() < 1e-3, "peak {peak}");
+        let (_, peak) = hdr_detail_rgba(&rgb, 100, 50, [100, 300, 100, 50], &m, 1.0, full);
+        assert!((peak - 1.0).abs() < 1e-3, "peak {peak}");
+        // whole image at full resolution (the zoomed view below 100 %): glows
+        let rgb = vec![200u8; 1600 * 800 * 3];
+        let (rgba, peak) = hdr_detail_rgba(&rgb, 1600, 800, [0, 0, 1600, 800], &m, 0.5, full);
+        assert!((peak - 2.0).abs() < 1e-3, "peak {peak}");
+        assert!(rgba[(400 * 1600 + 1500) * 4].to_f32() > 1.0);
     }
 }

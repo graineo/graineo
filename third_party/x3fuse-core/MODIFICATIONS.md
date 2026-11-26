@@ -503,3 +503,17 @@ leaves the step out):
 - 2026-11-25 (graineo): `process.rs`: `GPU_DEVICE_LOST` and `gpu_device_lost()` (re-exported by `x3f-sys` and
   `x3f-core`), set by the device-lost callbacks in `denoise/gpu.rs` and `spp_denoise/gpu.rs` (not for a deliberately
   destroyed device), so the application can switch its other GPU paths off and tell the user.
+
+## Header white balance without calibration (November 2026)
+
+- 2026-11-26 (graineo): `meta.rs`, `x3f_get_wb`: a pre-Quattro header white balance with no gain in CAMF (e.g.
+  "Monochrome", written into the header by a converter) made `prepare_scene_linear` fail with "missing white-balance
+  calibration". The header name is kept when it resolves; otherwise PROP `WB_DESC`, then "Auto", each only if it
+  resolves (before CAMF is loaded the header string is returned as before).
+
+## Merrill dark shield at reduced resolution (November 2026)
+
+- 2026-11-26 (graineo): `process.rs`, `merrill_dark_shield`: DP Merrill (CAMERAID 78) files at MED or LOW resolution
+  with FPNSuppression other than 1 take the black level from a fixed top dark-shield rectangle (columns 64–4766 for
+  MED, 64–2374 for LOW, rows 1608–1626) instead of CAMF `DarkShieldTop`, as the maker's software does. Used by the
+  float front, the colour-mode sensor range and the Merrill render. HI files and other cameras are unchanged.

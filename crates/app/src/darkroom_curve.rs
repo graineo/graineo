@@ -26,7 +26,7 @@ impl App {
                 key: key.clone(),
             });
         }
-        crate::darkroom_extended::subgroup(ui, "Film → Papier → Abzug", false, |ui| crate::help::info(
+        crate::darkroom_extended::subgroup(ui, "Film → Papier → Abzug", |ui| crate::help::info(
                 ui,
                 "tone-curves",
                 "Kurvendiagramm",

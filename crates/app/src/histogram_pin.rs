@@ -364,7 +364,9 @@ impl App {
         let double = match sel {
             0 => match &c.out_hist {
                 Some(hist) => {
-                    let r = lr::histogram_h(ui, hist, self.show_clipping, h);
+                    // HDR on: the histogram of the HDR rendition goes on above SDR white
+                    let hdr = if self.toolbar_has_hdr() { self.hdr_out.histogram(c.index) } else { None };
+                    let r = lr::histogram_h(ui, hist, self.show_clipping, h, hdr);
                     if r.toggle_clipping {
                         self.show_clipping = !self.show_clipping;
                     }

@@ -21,7 +21,7 @@ if [ "${1:-}" = "--uninstall" ]; then
   if [ -L "$BIN/graineo" ] && [ "$(readlink "$BIN/graineo")" = "$APP/graineo" ]; then rm -f "$BIN/graineo"; fi
   rm -f "$DESKTOP" "$ICON"
   for f in graineo graineo-dev graineo.png LICENSE README-linux.txt install.sh; do rm -f "$APP/$f"; done
-  rm -rf "$APP/spektrafilm" "$APP/licenses"
+  rm -rf "$APP/spektrafilm" "$APP/licenses" "$APP/lib"
   rmdir "$APP" 2> /dev/null || true
   refresh
   echo "graineo removed (your library and settings in $DATA/graineo were kept)."
@@ -33,7 +33,8 @@ mkdir -p "$APP" "$BIN" "$(dirname "$DESKTOP")" "$(dirname "$ICON")"
 for f in graineo graineo-dev graineo.png LICENSE README-linux.txt install.sh; do
   [ -e "$HERE/$f" ] && cp -f "$HERE/$f" "$APP/$f"
 done
-rm -rf "$APP/spektrafilm" "$APP/licenses"
+# lib/: shared libraries of earlier test builds (HEIC decoding is built in now), removed
+rm -rf "$APP/spektrafilm" "$APP/licenses" "$APP/lib"
 cp -R "$HERE/spektrafilm" "$HERE/licenses" "$APP/"
 ln -sfn "$APP/graineo" "$BIN/graineo"
 cp -f "$HERE/graineo.png" "$ICON"

@@ -948,7 +948,7 @@ fn engine_switch(ui: &mut egui::Ui, current: EngineSel, options: &[(EngineSel, &
         if !tip.is_empty() {
             crate::lr::hover_tip(ui, &resp, tip);
         }
-        let color = if active { crate::lr::TEXT_STRONG() } else if !enabled { TEXT_DIM().gamma_multiply(0.5) } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
+        let color = if active { crate::lr::TEXT_STRONG() } else if !enabled { crate::lr::dimmed(TEXT_DIM()) } else if resp.hovered() { TEXT() } else { TEXT_DIM() };
         let galley = painter.layout_no_wrap(crate::tr(label).to_string(), font.clone(), color);
         painter.galley(seg.center() - galley.size() / 2.0, galley, color);
     }

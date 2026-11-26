@@ -624,13 +624,13 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         || s.vibrance != d.vibrance
         || s.saturation != d.saturation
         || s.dehaze != d.dehaze
-        || s.noise_brake != d.noise_brake;
+        || s.noise_brake != d.noise_brake
+        || s.hdr != d.hdr;
     let mut bp = s.bypass;
     let mut reset_tone = false;
     let reset = lr::section_switch(ui, "Grundeinstellungen", true, changed, &mut bp.basic, |ui| {
-        lr::subheading_help(ui, "Behandlung", "", |ui| {
-            lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
-        });
+        // a single choice: no subheading of its own (reset via the section header)
+        lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
         // White balance: one drop-down list of the presets with the picker beside it; temperature/tint absolute.
         // Finished images: only "As Shot" and "Auto" (illuminant presets make no sense there)
         let wb: Vec<&(&str, lr::Icon, &str)> = WB.iter().filter(|w| !doc.finished || matches!(w.0, "as_shot" | "auto")).collect();
@@ -701,6 +701,7 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         noise_brake(ui, &mut s.noise_brake, lifted, "Wie stark Rauschen beim Aufhellen mitwächst.");
         slider100_f32(ui, "Weiß", &mut s.raw.whites, "Weißpunkt: hellste Töne heller (+) oder zurückgenommen (−)", None);
         slider100_f32(ui, "Schwarz", &mut s.raw.blacks, "Schwarzpunkt: tiefste Töne heller (+) oder satter (−)", None);
+        crate::hdr_output_ui::section(ui, s, rawdev::export::hdr_auto(doc));
         if lr::subheading(ui, "Präsenz") {
             s.raw.texture = 0.0;
             s.clarity = 0.0;
@@ -710,9 +711,9 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         }
         slider100_f32(ui, "Struktur", &mut s.raw.texture, "Feine Details betonen (+) oder glätten (−)", None);
         slider100_f32(ui, "Klarheit", &mut s.clarity, "Lokaler Kontrast in den Mitteltönen", None);
-        slider100_f32(ui, "Dunst entfernen", &mut s.dehaze, "Dunst und Schleier herausrechnen (Dark Channel), negativ: Dunst hinzufügen", None);
+        slider100_f32(ui, "Dunst entfernen", &mut s.dehaze, "Dunst herausrechnen, negativ: hinzufügen", None);
         ui.add_enabled_ui(!s.monochrome, |ui| {
-            slider100_f32(ui, "Dynamik", &mut s.vibrance, "Hebt blasse Farben stärker an als bereits kräftige – schont Hauttöne und Himmel", Some(lr::GRADIENT_SAT));
+            slider100_f32(ui, "Dynamik", &mut s.vibrance, "Hebt blasse Farben stärker an als kräftige", Some(lr::GRADIENT_SAT));
             slider100_f32(ui, "Sättigung", &mut s.saturation, "Alle Farben gleichmäßig kräftiger oder blasser", Some(lr::GRADIENT_SAT));
         });
     });
@@ -725,6 +726,8 @@ pub fn defaults(ui: &mut egui::Ui, s: &mut Settings, doc: &RawDoc, wb_picker: &m
         s.dehaze = d.dehaze;
         s.vibrance = 0.0;
         s.saturation = 0.0;
+        // the HDR row has no group heading of its own: the section header resets it
+        s.hdr = d.hdr;
         reset_tone = true;
     }
     if reset_tone {
@@ -746,7 +749,7 @@ pub fn noise_brake(ui: &mut egui::Ui, value: &mut develop::NoiseBrake, lifted: b
     use develop::NoiseBrake as B;
     ui.scope(|ui| {
         if !lifted {
-            ui.multiply_opacity(0.45);
+            ui.multiply_opacity(crate::lr::DIM_OPACITY());
         }
         lr::steps(ui, "Rauschbremse", value, &[(B::Off, "Aus"), (B::Color, "Farbe"), (B::ColorGrain, "Farbe + Korn")], B::Off, hint);
     });
@@ -985,15 +988,15 @@ pub fn mid_ellipsis(t: &str, max: usize) -> String {
 fn manual(ui: &mut egui::Ui, s: &mut Settings) {
     use egui::Color32;
     let mut v = s.raw.lens_manual_distortion.round() as f64;
-    if lr::slider_hint(ui, "Verzeichnung manuell", &mut v, -100.0..=100.0, 0.0, 1.0, "Plus entfernt tonnenförmige, Minus kissenförmige Verzeichnung; wirkt zusätzlich zum Profil") {
+    if lr::slider_hint(ui, "Verzeichnung manuell", &mut v, -100.0..=100.0, 0.0, 1.0, "+ gegen Tonne, − gegen Kissen; zusätzlich zum Profil") {
         s.raw.lens_manual_distortion = v as f32;
     }
     let mut r = s.raw.lens_manual_ca_red.round() as f64;
-    if lr::slider_gradient(ui, "Farbsaum Rot", &mut r, -100.0..=100.0, 0.0, 1.0, "Zieht den Rotkanal zur Bildmitte (+) oder zum Rand (−), gegen rote oder cyanfarbene Säume an den Bildrändern", [Color32::from_rgb(0x30, 0x90, 0x90), Color32::from_rgb(0xc0, 0x40, 0x40)]) {
+    if lr::slider_gradient(ui, "Farbsaum Rot", &mut r, -100.0..=100.0, 0.0, 1.0, "Rotkanal zur Mitte (+) oder zum Rand (−)", [Color32::from_rgb(0x30, 0x90, 0x90), Color32::from_rgb(0xc0, 0x40, 0x40)]) {
         s.raw.lens_manual_ca_red = r as f32;
     }
     let mut b = s.raw.lens_manual_ca_blue.round() as f64;
-    if lr::slider_gradient(ui, "Farbsaum Blau", &mut b, -100.0..=100.0, 0.0, 1.0, "Zieht den Blaukanal zur Bildmitte (+) oder zum Rand (−), gegen blaue oder gelbe Säume an den Bildrändern", [Color32::from_rgb(0xb0, 0xa0, 0x30), Color32::from_rgb(0x40, 0x60, 0xd0)]) {
+    if lr::slider_gradient(ui, "Farbsaum Blau", &mut b, -100.0..=100.0, 0.0, 1.0, "Blaukanal zur Mitte (+) oder zum Rand (−)", [Color32::from_rgb(0xb0, 0xa0, 0x30), Color32::from_rgb(0x40, 0x60, 0xd0)]) {
         s.raw.lens_manual_ca_blue = b as f32;
     }
 }

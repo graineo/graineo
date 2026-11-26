@@ -1,0 +1,10 @@
+[package]
+name = "gainmap"
+description = "HDR gain map JPEG (ISO 21496-1 and Adobe hdrgm XMP in an MPF container): writer, reader and map computation"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+jpeg-encoder = "0.6"
+jpeg-decoder = "0.3"

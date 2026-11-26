@@ -9,7 +9,7 @@ use crate::lr;
 pub const GROUPS: [(&str, &str); N] = [
     ("Profil", "Farbmodus der Kamera bzw. Kamera-Look, Intensität, Kalibrierung"),
     ("Weißabgleich", "Vorgabe, Pipette, Temperatur, Tönung"),
-    ("Tonwert", "Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz"),
+    ("Tonwert", "Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz, HDR"),
     ("Fill Light", "Fill Light, Rauschbremse"),
     ("Präsenz", "Struktur, Klarheit, Dunst entfernen, Dynamik, Sättigung"),
     ("Farbstiche", "Lichter neutral, Lichter-Farbe, Lichter-Detail"),
@@ -119,6 +119,7 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
         s.raw.whites = src.raw.whites;
         s.raw.blacks = src.raw.blacks;
         s.bypass.basic = src.bypass.basic;
+        s.hdr = src.hdr;
     }
     if on("Fill Light") {
         s.fill_light = src.fill_light;

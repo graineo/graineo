@@ -1,8 +1,7 @@
 //! Thumbnails via macOS ImageIO (JPEG, HEIC, TIFF, PNG, PSD …).
 //!
 //! Why ImageIO instead of a shell call (`sips`) or an own HEIC library:
-//! - macOS decodes HEIC/HEIF anyway (hardware decoder); a Rust HEIC library would need
-//!   libheif + libde265 (C, LGPL) – extra code and license maintenance.
+//! - macOS decodes HEIC/HEIF anyway (hardware decoder); elsewhere the pure-Rust heifer does (`heif_lib`).
 //! - `CGImageSourceCreateThumbnailAtIndex` decodes JPEGs downscaled (DCT scaling) and
 //!   applies the EXIF rotation – a 24 MP JPEG thus takes only a few milliseconds.
 //! - Color management: the result is drawn into an sRGB bitmap context; Display P3 images

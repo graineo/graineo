@@ -561,3 +561,16 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 
 
 - Crop & Straighten: at large interface sizes in a small window, the second perspective slider (Horizontal) and the buttons below it could sit out of view. Opening or switching a tool now scrolls its settings into view, and the duplicate "Perspective" subheading is gone.
+
+## 1.5.6 · HDR Photos with Gain Map, HEIC on Windows and Linux, Calmer Panels
+
+- **HDR export with gain map.** A new "HDR Glow" slider with a switch (in Basic) lets highlights shine brighter than white on HDR screens (MacBook Pro, iPhone, recent Android phones, Chrome). JPEG export writes a standard gain map (ISO 21496-1 and the widely used XMP variant); everyone else sees the normal photo, unchanged. HDR merges and photos that already carry a gain map have it switched on automatically.
+- Without an HDR screen, the sun button (⇧J) shows which areas will glow and how strongly. On an HDR screen it switches between normal and glowing, also when zoomed in. The histogram extends past white and shows the real values above it.
+- **HEIC and HEIF on Windows and Linux.** iPhone photos and 10-bit HEIF open, develop and export directly, with a built-in decoder (no store extensions needed).
+- **Calmer panels.** Fewer subheadings and help cards, one small grey switch everywhere, shorter tooltips.
+- Dimmed and disabled areas are easier to read in all themes (for example the library while viewing a folder in the light theme).
+- Lights out (L) dims in the theme's background colour instead of black.
+- Sigma SD9/SD10: photos taken at MED resolution are no longer squeezed; files whose white balance was saved as "Monochrome" open in black and white.
+- Sigma Quattro: the "Color Temperature" white balance and LOW resolution are now handled.
+- DP Merrill at LOW and MED resolution: optimized black level.
+

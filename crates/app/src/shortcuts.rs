@@ -254,6 +254,7 @@ pub const ALL: &[Shortcut] = &[
     t("black_white", E, N, Key::V, "Farbe ↔ Schwarzweiß"),
     t("focus_frame", E, S, Key::F, "Fokusfeld der Kamera ein/aus (Z/Klick: 100 % an dieser Stelle)"),
     t("clipping", E, N, Key::J, "Clipping anzeigen (Sensor-Ansicht: RAW-Clipping)"),
+    t("hdr_glow", E, S, Key::J, "HDR: leuchtende Bereiche zeigen (mit HDR-Bildschirm: normal ↔ leuchtend)"),
     t("eyedropper", E, N, Key::W, "Weißabgleich-Pipette"),
     t("eyedropper_smaller", E, N, Key::Minus, "Weißabgleich-Pipette: kleinere Probe"),
     t("eyedropper_larger", E, N, Key::Plus, "Weißabgleich-Pipette: größere Probe"),

@@ -27,6 +27,10 @@ pub fn scope<R>(ui: &mut egui::Ui, key: &str, add_contents: impl FnOnce(&mut egu
     let id = egui::Id::new(("scroll-hold", key));
     let remembered = ui.ctx().data(|d| d.get_temp::<f32>(id));
     let now = ui.min_rect().bottom() - top;
+    // Test hook (own data folder only): `GRAINEO_PANEL_HEIGHT=1` prints the content height whenever it changes
+    if !transient && crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var_os("GRAINEO_PANEL_HEIGHT").is_some() && remembered.is_none_or(|h| (h - now).abs() > 0.5) {
+        eprintln!("panel-height {key} {now:.0}");
+    }
     let (extra, keep) = pad(remembered, now, transient);
     if extra > 0.0 {
         ui.allocate_space(egui::vec2(0.0, extra));
@@ -38,17 +42,21 @@ pub fn scope<R>(ui: &mut egui::Ui, key: &str, add_contents: impl FnOnce(&mut egu
 }
 
 /// Test hook `GRAINEO_SIDEBAR_SCROLL=<points>`: scroll offset for the first draw of a panel with real content only
-/// (`ready`); afterwards the panel scrolls normally, so a test can show that the position survives later frames.
+/// (`ready`), held for its first 4 s; afterwards the panel scrolls normally, so a test can show that the position survives later frames.
 pub fn first_offset(ui: &egui::Ui, key: &str, ready: bool) -> Option<f32> {
     if !ready {
         return None;
     }
     let px = crate::env::var("GRAINEO_SIDEBAR_SCROLL").ok()?.parse::<f32>().ok()?;
+    // held for the first 4 s after the content is ready: the panel grows while sections finish their layout, and an
+    // offset set on the very first frame was clamped to the shorter content
     let id = egui::Id::new(("scroll-hold-test", key));
-    if ui.ctx().data(|d| d.get_temp::<bool>(id)).is_some() {
+    let now = ui.ctx().input(|i| i.time);
+    let since = ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with::<f64>(id, || now));
+    if now - since > 4.0 {
         return None;
     }
-    ui.ctx().data_mut(|d| d.insert_temp(id, true));
+    ui.ctx().request_repaint();
     Some(px)
 }
 

@@ -142,7 +142,7 @@ pub fn tiles(ui: &mut Ui, salt: &str, path: &Path) -> Option<NewKind> {
             let (fill, stroke) = if resp.hovered() && ok { (crate::lr::gray(0x26), crate::lr::gray(0x50)) } else { (crate::lr::gray(0x1c), crate::lr::gray(0x30)) };
             p.rect_filled(cell, 0.0, fill);
             p.rect_stroke(cell, 0.0, egui::Stroke::new(1.0, stroke), egui::StrokeKind::Inside);
-            let color = if !ok { crate::lr::gray(0x5c) } else if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
+            let color = if !ok { crate::lr::dimmed(crate::lr::DIMMED()) } else if resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
             lr::paint_icon(p, egui::Rect::from_center_size(cell.center_top() + egui::vec2(0.0, 14.0), egui::vec2(17.0, 17.0)), kind.icon(), color);
             let g = p.layout_no_wrap(crate::tr(kind.label()).to_string(), egui::FontId::proportional(10.5), color);
             p.galley(egui::pos2(cell.center().x - g.size().x.min(cell_w - 4.0) / 2.0, cell.bottom() - 4.0 - g.size().y), g, color);

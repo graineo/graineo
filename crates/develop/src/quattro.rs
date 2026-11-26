@@ -53,6 +53,9 @@ pub struct Prepared {
     /// Full chain of the maker's software ([`full_chain_enabled`]): its inputs, the whole development follows in
     /// [`counts`]
     pub full: Option<Arc<crate::quattro_hi::Inputs>>,
+    /// Classic at a reduced resolution with non-square pixels (SD9/SD10 "MED"): the stored size before the
+    /// resampling to the output size ([`classic_output_size`]); `raw`, `cal` and `classic` have the output size
+    pub stored_size: Option<[usize; 2]>,
 }
 
 /// Are the noise sliders (luminance, colour) adjustable for this photo? Quattro only: from capture ISO 400 on the full
@@ -458,7 +461,7 @@ pub fn stage1_applies(path: &Path) -> bool {
             return Some(false);
         }
         let camf = file.camf().ok()?;
-        Some(stage1_enabled(&camf) || mid_luma_applies(&camf))
+        Some((!file.is_quattro_low() && stage1_enabled(&camf)) || mid_luma_applies(&camf))
     })();
     let Some(a) = applies else { return true };
     let mut k = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
@@ -534,7 +537,10 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
     let sd_quattro_h = camf.matrix("CAMERAID").ok().and_then(|m| m.as_f64().first().copied()) == Some(41.0);
     // the first stage below capture ISO 400 on the prepared layers, from there on with the grid from the stored sensor
     // values (see `stage1_enabled`, 400 to 3200 the high-ISO path)
-    let stage1 = !file.is_classic() && stage1_enabled(&camf);
+    // image quality LOW (top layer stored binned to the grid, as the maker's software treats it): no first stage on
+    // the stored values (it needs the top layer at twice the grid size) and no top-layer outlier step
+    let low = file.is_quattro_low();
+    let stage1 = !file.is_classic() && !low && stage1_enabled(&camf);
     let capture_iso0 = crate::calib::quattro_iso_gain(&camf) * camf.matrix("SensorISO").ok().and_then(|m| m.as_f64().first().copied()).unwrap_or(100.0);
     // the high-ISO path on the stored sensor values (see `high_path`); x3fuse-core's preparation then only serves as
     // the reference of the defect repair and needs no noise reduction of its own
@@ -658,7 +664,8 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
         t
     });
     let iso = props.get("ISO").and_then(|v| v.parse::<f64>().ok()).unwrap_or(100.0);
-    let amount = crate::quattro_hi::developer_switch("GRAINEO_QUATTRO_SHARPEN").ok().and_then(|v| v.parse().ok()).unwrap_or_else(|| capture_sharpen_amount(iso));
+    let amount = crate::quattro_hi::developer_switch("GRAINEO_QUATTRO_SHARPEN").ok().and_then(|v| v.parse().ok()).unwrap_or_else(|| capture_sharpen_amount(iso))
+        * if low { LOW_SHARPEN_FACTOR } else { 1.0 };
     // dp Quattro and sd Quattro below ISO 800: half the base sharpening here, the plain colour stage sharpens its
     // counts with the other half (`pending_sharpen`)
     let defer_sharpen = spp_neutralize && lce_applies(iso);
@@ -1096,6 +1103,25 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
         let luma_neutral = hi.then(|| std::array::from_fn(|c| (cal.wb_gain[2] / cal.wb_gain[c]) as f32));
         Arc::new(Stage1Source { raw, params, unit, luma_neutral, sharpen: if hi { amount as f32 } else { 0.0 }, chroma_step: 0 })
     });
+    // reduced resolution with non-square pixels (SD9/SD10 "MED"): everything to the output size the camera data asks
+    // for, so that the picture keeps its proportions
+    let mut stored_size = None;
+    let (w, h, planes) = match classic_output_size(&file, &camf, w, h) {
+        Some([ow, oh]) if cal.is_classic() => {
+            stored_size = Some([w, h]);
+            cal.active = [0, 0, ow - 1, oh - 1];
+            classic = classic.map(|l| Arc::new(resample_linear(&l, ow, oh)));
+            let planes = planes.map(|p| {
+                let f: Vec<f32> = p.iter().map(|&v| v as f32).collect();
+                resample(&f, w, h, 1, ow, oh).into_iter().map(|v| v.round().clamp(0.0, 65535.0) as u16).collect()
+            });
+            if std::env::var_os("GRAINEO_QUATTRO_LOG").is_some() {
+                eprintln!("Classic reduced resolution: {w}×{h} stored, {ow}×{oh} output");
+            }
+            (ow, oh, planes)
+        }
+        _ => (w, h, planes),
+    };
     let raw = RawImage { columns: w, rows: h, planes };
     if std::env::var_os("GRAINEO_QUATTRO_LOG").is_some() {
         eprintln!(
@@ -1110,7 +1136,108 @@ fn prepare(path: &Path, quick: bool) -> Result<Prepared, String> {
     }
     // the sliders need the grid colour of the first stage
     let sliders = sliders.filter(|_| grid_colour.is_some());
-    Ok(Prepared { raw: Arc::new(raw), cal: Arc::new(cal), props, classic, unbinned_noise, grid: grid_colour.map(Arc::new), sliders, full: full_source })
+    Ok(Prepared { raw: Arc::new(raw), cal: Arc::new(cal), props, classic, unbinned_noise, grid: grid_colour.map(Arc::new), sliders, full: full_source, stored_size })
+}
+
+/// Output size of a Classic capture at a reduced resolution whose stored pixels are not square (SD9/SD10 "MED": every
+/// stored pixel spans two sensor columns): the stored size scaled by CAMF `ExpectedOutputRatio` (x, y). `None` at full
+/// resolution or without the ratio.
+pub fn classic_output_size(file: &X3fFile, camf: &x3f::Camf, w: usize, h: usize) -> Option<[usize; 2]> {
+    if !file.is_classic() {
+        return None;
+    }
+    let r = camf.matrix("ExpectedOutputRatio").ok()?.as_f64();
+    output_size_for_ratio(&r, w, h)
+}
+
+fn output_size_for_ratio(r: &[f64], w: usize, h: usize) -> Option<[usize; 2]> {
+    let [rx, ry] = <[f64; 2]>::try_from(r).ok()?;
+    if !(rx.is_finite() && ry.is_finite() && (0.25..=4.0).contains(&rx) && (0.25..=4.0).contains(&ry)) {
+        return None;
+    }
+    // only a change of the pixel shape; a uniform ratio (1, 1) leaves the image alone
+    if (rx / ry - 1.0).abs() < 0.01 {
+        return None;
+    }
+    Some([((w as f64 * rx).round() as usize).max(1), ((h as f64 * ry).round() as usize).max(1)])
+}
+
+/// [`resample`] of a linear image with its detail image (Classic high-pass, one value per pixel).
+pub fn resample_linear(l: &Linear, ow: usize, oh: usize) -> Linear {
+    let detail = l.detail.as_ref().filter(|d| d.l.len() == l.width * l.height).map(|d| {
+        let f: Vec<f32> = d.l.iter().map(|&v| v as f32).collect();
+        let l2 = resample(&f, l.width, l.height, 1, ow, oh).into_iter().map(|v| v.round().clamp(-32768.0, 32767.0) as i16).collect();
+        Arc::new(crate::sharpness::SharpDetail { l: l2, base: d.base, scale: d.scale })
+    });
+    Linear { mono: l.mono, haze: None, toneq: None, width: ow, height: oh, data: resample(&l.data, l.width, l.height, 3, ow, oh), detail }
+}
+
+/// Per-axis kernel of [`resample`] for a scale `s = out / (in − 1)` per axis, as the maker's software sizes an image
+/// whose two axes change differently: the smaller scale is limited to 0.8, the larger to 1.1; per axis a cut-off
+/// `min(0.94 · c, 1) · π` (a plain sinc when enlarging) and a cosine window, its power `min(2 · c_y, 2)` shared by
+/// both axes. Returns `[cut-off, window frequency]` for x and y and the window power.
+fn resample_kernel(sx: f64, sy: f64) -> ([f64; 2], [f64; 2], f64) {
+    // the axis that shrinks more is capped lower
+    const CAP_LOW: f64 = 0.8;
+    const CAP_HIGH: f64 = 1.1;
+    let caps = if sy <= sx { [CAP_HIGH, CAP_LOW] } else { [CAP_LOW, CAP_HIGH] };
+    let [cx, cy] = [sx.min(caps[0]), sy.min(caps[1])];
+    let cutoffs = |c: f64| {
+        let quarter_root = c.sqrt().sqrt();
+        let window = if quarter_root > 0.9 { 0.70685775 } else { quarter_root * std::f64::consts::PI * 0.25 };
+        [std::f64::consts::PI * (0.94 * c).min(1.0), window]
+    };
+    (cutoffs(cx), cutoffs(cy), (2.0 * cy).min(2.0))
+}
+
+/// Separable resampling of an interleaved image with `k` channels to `ow × oh`, functionally as the maker's software
+/// brings a reduced-resolution capture to its output size: 4 × 4 taps of a windowed sinc ([`resample_kernel`]),
+/// output position `o` taken from source position `0.5 + o · (n − 1) / on`. At the border the nearest pixels are
+/// repeated (the maker's software fills the outermost two pixels with a constant instead).
+pub fn resample(src: &[f32], w: usize, h: usize, k: usize, ow: usize, oh: usize) -> Vec<f32> {
+    let sx = ow as f64 / (w.max(2) - 1) as f64;
+    let sy = oh as f64 / (h.max(2) - 1) as f64;
+    let (kx, ky, power) = resample_kernel(sx, sy);
+    // per output position: source indices and weights along one axis
+    let taps = |n: usize, on: usize, [cut, win]: [f64; 2]| -> Vec<Vec<(usize, f32)>> {
+        let step = (n.max(2) - 1) as f64 / on as f64;
+        let weight = |d: f64| {
+            let sinc = if d.abs() < 1e-9 { 1.0 } else { (cut * d).sin() / (cut * d) };
+            sinc * (win * d).cos().max(0.0).powf(power)
+        };
+        (0..on)
+            .map(|o| {
+                let x = 0.5 + o as f64 * step;
+                let base = x.floor() as isize;
+                let mut t: Vec<(usize, f32)> = (base - 1..=base + 2).map(|i| (i.clamp(0, n as isize - 1) as usize, weight(x - i as f64) as f32)).collect();
+                let sum: f32 = t.iter().map(|&(_, wt)| wt).sum();
+                if sum.abs() > 1e-6 {
+                    t.iter_mut().for_each(|(_, wt)| *wt /= sum);
+                } else {
+                    t = vec![((x.round() as usize).min(n - 1), 1.0)];
+                }
+                t
+            })
+            .collect()
+    };
+    let (tx, ty) = (taps(w, ow, kx), taps(h, oh, ky));
+    let mut mid = vec![0f32; ow * h * k];
+    mid.par_chunks_mut(ow * k).enumerate().for_each(|(y, row)| {
+        let s = &src[y * w * k..(y + 1) * w * k];
+        for (x, t) in tx.iter().enumerate() {
+            for c in 0..k {
+                row[x * k + c] = t.iter().map(|&(i, wt)| s[i * k + c] * wt).sum();
+            }
+        }
+    });
+    let mut out = vec![0f32; ow * oh * k];
+    out.par_chunks_mut(ow * k).enumerate().for_each(|(y, row)| {
+        for &(i, wt) in &ty[y] {
+            let m = &mid[i * ow * k..(i + 1) * ow * k];
+            row.iter_mut().zip(m).for_each(|(o, &v)| *o += v * wt);
+        }
+    });
+    out
 }
 
 /// Outlier repair of the stored values on the high-ISO path ([`crate::quattro_speckle`]): top layer, then the
@@ -1234,6 +1361,9 @@ fn binned_top(t: &mut [f32], w: usize, h: usize, n: usize, sharpen: f32) {
 
 /// Share of the base sharpening on the high-ISO path below ISO 800 (see `prepare`).
 const HIGH_SHARPEN_LOW_ISO: f64 = 0.75;
+/// Image quality LOW: sharpening and local contrast amounts × √½, as in the maker's software (MED would be ×2^−¼;
+/// Quattro files carry no MED quality).
+const LOW_SHARPEN_FACTOR: f64 = std::f64::consts::FRAC_1_SQRT_2;
 
 /// Range spread factor and sharpening share of [`binned_top`].
 const BINNED_SCATTER: f32 = 0.7;
@@ -2067,6 +2197,7 @@ pub fn counts_with_sliders_hl(p: &Prepared, mode: Option<&str>, binning: crate::
         grid: Some(Arc::new(GridColour { width: grid.width, height: grid.height, data: colour, limited: grid.limited, highlight: grid.highlight.clone() })),
         sliders: None,
         full: None,
+        stored_size: p.stored_size,
     };
     Some(counts(&q, mode, binning))
 }
@@ -2807,5 +2938,73 @@ mod highlight_slider_tests {
         let mut cg = src.clone();
         highlight_colour(&mut cg, &cw, gw, gh, crate::highlight_rebuild::COLOUR_MAX);
         assert!(chroma(&cg[0..3]) > 1.4 * chroma(&src[0..3]));
+    }
+}
+
+#[cfg(test)]
+mod reduced_resolution_tests {
+    use super::*;
+
+    #[test]
+    fn med_ratio_gives_square_pixels() {
+        // SD10 MED: 1134 × 1512 stored, ratio (1.3333, 0.6667) → the maker's 1512 × 1008
+        assert_eq!(output_size_for_ratio(&[1.3333, 0.6667], 1134, 1512), Some([1512, 1008]));
+        assert_eq!(output_size_for_ratio(&[1.0, 1.0], 2268, 1512), None);
+        assert_eq!(output_size_for_ratio(&[0.5, 0.5], 2268, 1512), None);
+        assert_eq!(output_size_for_ratio(&[1.0], 2268, 1512), None);
+        assert_eq!(output_size_for_ratio(&[f64::NAN, 1.0], 2268, 1512), None);
+    }
+
+    /// Real files (only with `GRAINEO_TEST_SD10_DIR`): SD10 "MED" files develop at 1512 × 1008, a full-resolution file
+    /// whose header names a white balance without calibration ("Monochrome", stored by a converter) develops at all.
+    #[test]
+    fn sd10_files() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_SD10_DIR").map(PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_SD10_DIR not set, skipped");
+            return;
+        };
+        for (name, size) in [("IMG00237.X3F", [1512, 1008]), ("IMG00266.X3F", [1512, 1008]), ("IMG02675.X3F", [2268, 1512])] {
+            let path = dir.join(name);
+            if !path.is_file() {
+                continue;
+            }
+            let p = prepare(&path, false).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!([p.raw.columns, p.raw.rows], size, "{name}");
+            let c = p.classic.as_ref().expect("Classic chain");
+            assert_eq!([c.width, c.height], size, "{name}");
+        }
+    }
+
+    #[test]
+    fn resample_keeps_flat_and_ramps() {
+        let (w, h) = (6, 9);
+        let flat = vec![0.25f32; w * h * 3];
+        let r = resample(&flat, w, h, 3, 8, 6);
+        assert_eq!(r.len(), 8 * 6 * 3);
+        assert!(r.iter().all(|v| (v - 0.25).abs() < 1e-6));
+        // horizontal ramp stays monotonic and within range
+        let ramp: Vec<f32> = (0..h).flat_map(|_| (0..w).map(|x| x as f32)).collect();
+        let r = resample(&ramp, w, h, 1, 8, 6);
+        for row in r.chunks(8) {
+            assert!(row.windows(2).all(|p| p[1] >= p[0]));
+            assert!(row[0] >= -0.05 && row[7] <= (w - 1) as f32 + 0.05, "{row:?}");
+        }
+    }
+
+    #[test]
+    fn resample_follows_the_makers_positions_and_kernel() {
+        // SD10 MED: x enlarged (1.33 → limited to 1.1, plain sinc), y reduced (0.67, cut-off 0.627 π, power 1.33)
+        let (kx, ky, p) = resample_kernel(1512.0 / 1133.0, 1008.0 / 1511.0);
+        assert!((kx[0] - std::f64::consts::PI).abs() < 1e-9 && (kx[1] - 0.70685775).abs() < 1e-9);
+        assert!((ky[0] - 0.94 * (1008.0 / 1511.0) * std::f64::consts::PI).abs() < 1e-9);
+        assert!((p - 2.0 * 1008.0 / 1511.0).abs() < 1e-9);
+        // a ramp in x is sampled at 0.5 + o · (n − 1) / on away from the border
+        let (w, h, ow) = (40, 4, 53);
+        let ramp: Vec<f32> = (0..h).flat_map(|_| (0..w).map(|x| x as f32)).collect();
+        let r = resample(&ramp, w, h, 1, ow, h);
+        for o in 3..ow - 3 {
+            let want = 0.5 + o as f32 * (w - 1) as f32 / ow as f32;
+            assert!((r[o] - want).abs() < 0.03, "{o}: {} vs {want}", r[o]);
+        }
     }
 }

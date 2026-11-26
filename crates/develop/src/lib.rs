@@ -62,6 +62,7 @@ pub mod quattro_grid;
 pub mod quattro_hi;
 pub mod quattro_lce;
 pub mod quattro_speckle;
+pub mod quattro_wb;
 pub mod png16;
 pub mod profile;
 pub mod quattro;
@@ -89,7 +90,7 @@ pub use x3f_core::merrill_new;
 pub use curve::ToneCurve;
 use matrix::Mat3;
 pub use session::Session;
-pub use settings::{Binning, HighlightSliders, NoiseBrake, Settings, SppKey, View, NR_OFF, TEXTURE_NEUTRAL};
+pub use settings::{Binning, HdrOutput, HighlightSliders, NoiseBrake, Settings, SppKey, View, NR_OFF, TEXTURE_NEUTRAL};
 
 /// Linear camera image: three planes, black = 0, sensor saturation = 1.
 #[derive(Clone)]

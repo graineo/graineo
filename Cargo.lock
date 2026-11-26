@@ -258,7 +258,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
  "wl-clipboard-rs",
  "x11rb",
 ]
@@ -386,7 +386,7 @@ dependencies = [
  "futures-lite",
  "parking",
  "polling",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "slab",
  "windows-sys 0.61.2",
 ]
@@ -417,7 +417,7 @@ dependencies = [
  "cfg-if",
  "event-listener",
  "futures-lite",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -443,7 +443,7 @@ dependencies = [
  "cfg-if",
  "futures-core",
  "futures-io",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "signal-hook-registry",
  "slab",
  "windows-sys 0.61.2",
@@ -851,7 +851,7 @@ checksum = "43b32313e937c8721c9d17ee9bf60699a6402b4b7c2cb6ac1bee0ffcaa4b4e5e"
 dependencies = [
  "bitflags 2.13.2",
  "polling",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "tracing",
 ]
 
@@ -874,7 +874,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
 dependencies = [
  "calloop 0.14.5",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wayland-backend",
  "wayland-client",
 ]
@@ -1296,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "develop"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "bytemuck",
  "crc32fast",
@@ -1366,7 +1366,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1718,7 +1718,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "faces"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "fuzzkit",
  "image",
@@ -1969,9 +1969,9 @@ checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -2053,7 +2053,15 @@ dependencies = [
 
 [[package]]
 name = "fuzzkit"
-version = "1.5.5"
+version = "1.5.6"
+
+[[package]]
+name = "gainmap"
+version = "1.5.6"
+dependencies = [
+ "jpeg-decoder",
+ "jpeg-encoder",
+]
 
 [[package]]
 name = "gdk"
@@ -2129,7 +2137,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
 dependencies = [
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "windows-link",
 ]
 
@@ -2443,7 +2451,7 @@ dependencies = [
 
 [[package]]
 name = "graineo"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "block2 0.6.2",
  "bytemuck",
@@ -2453,6 +2461,7 @@ dependencies = [
  "faces",
  "flate2",
  "fluent-bundle",
+ "gainmap",
  "graineo-color",
  "half",
  "hdr",
@@ -2488,7 +2497,7 @@ dependencies = [
 
 [[package]]
 name = "graineo-color"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "moxcms",
  "rayon",
@@ -2497,13 +2506,15 @@ dependencies = [
 
 [[package]]
 name = "graineo-dev"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "anyhow",
  "develop",
+ "gainmap",
  "graineo-color",
  "hdr",
  "image",
+ "jpeg-decoder",
  "lensprof",
  "libc",
  "library",
@@ -2649,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "hdr"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "flate2",
  "half",
@@ -2670,6 +2681,35 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
+
+[[package]]
+name = "heifer"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39676a49d27cf38f4fa8686db427e83e110806b50ef3ccfea7903320445442a6"
+dependencies = [
+ "heifer-hevc-dec",
+ "heifer-isobmff",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "heifer-hevc-dec"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd5ce282048345ad4bd3b3a803e82116e1199dfbd7e8ebd10e3ee5c624e038f9"
+dependencies = [
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "heifer-isobmff"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "734709f75671c5c91806a4c1334eed5e6e6d21ec1fab51d068cf7563d7ab08b0"
+dependencies = [
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "hermit-abi"
@@ -3265,7 +3305,7 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "legacy_names"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "rusqlite",
  "serde",
@@ -3274,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "lensprof"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "legacy_names",
  "serde",
@@ -3330,7 +3370,7 @@ checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
 name = "library"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "base64",
  "block2 0.6.2",
@@ -3339,7 +3379,10 @@ dependencies = [
  "faces",
  "flate2",
  "fuzzkit",
+ "gainmap",
+ "graineo-color",
  "half",
+ "heifer",
  "image",
  "jixel",
  "jpeg-decoder",
@@ -3469,7 +3512,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 
 [[package]]
 name = "masks"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "bytemuck",
  "image",
@@ -4329,7 +4372,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4601,7 +4644,7 @@ dependencies = [
  "concurrent-queue",
  "hermit-abi",
  "pin-project-lite",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "windows-sys 0.61.2",
 ]
 
@@ -4628,7 +4671,7 @@ dependencies = [
 
 [[package]]
 name = "pools"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "libc",
  "rayon",
@@ -4701,7 +4744,7 @@ dependencies = [
 
 [[package]]
 name = "print"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "ab_glyph",
  "flate2",
@@ -4951,7 +4994,7 @@ dependencies = [
 
 [[package]]
 name = "raw"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "faces",
  "flate2",
@@ -4992,11 +5035,12 @@ dependencies = [
 
 [[package]]
 name = "rawdev"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "bytemuck",
  "develop",
  "fuzzkit",
+ "gainmap",
  "graineo-color",
  "hdr",
  "image",
@@ -5168,7 +5212,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "remote"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "develop",
  "getrandom 0.3.4",
@@ -5196,7 +5240,7 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "retouch"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "image",
  "rayon",
@@ -5347,15 +5391,15 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "1.1.5"
+version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+checksum = "e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa"
 dependencies = [
  "bitflags 2.13.2",
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -5435,7 +5479,7 @@ dependencies = [
 
 [[package]]
 name = "segment"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "image",
  "masks",
@@ -5464,7 +5508,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "sensor_view"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "ab_glyph",
  "image",
@@ -5686,7 +5730,7 @@ dependencies = [
  "libc",
  "log",
  "memmap2",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "thiserror 2.0.21",
  "wayland-backend",
  "wayland-client",
@@ -5927,7 +5971,7 @@ dependencies = [
 
 [[package]]
 name = "sysdirs"
-version = "1.5.5"
+version = "1.5.6"
 
 [[package]]
 name = "system-deps"
@@ -5974,8 +6018,8 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.3",
  "once_cell",
- "rustix 1.1.5",
- "windows-sys 0.61.2",
+ "rustix 1.1.6",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -6509,7 +6553,7 @@ checksum = "f2f6fb2847f6742cd76af783a2a2c49e9375d0a111c7bef6f71cd9e738c72d6e"
 dependencies = [
  "memoffset",
  "tempfile",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6611,9 +6655,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",
@@ -6787,7 +6831,7 @@ checksum = "38a91b4eaddff87b1cd1074985e3713da4af2c49742d1b356b2c01670a67a078"
 dependencies = [
  "cc",
  "downcast-rs 1.2.1",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "scoped-tls",
  "smallvec",
  "wayland-sys",
@@ -6800,7 +6844,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3c36a0f861ad76d0901f2800b46321410d9f73f2ea88aac0650d86c32688073"
 dependencies = [
  "bitflags 2.13.2",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wayland-backend",
  "wayland-scanner",
 ]
@@ -6822,7 +6866,7 @@ version = "0.31.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a52d18780be9b1314328a3de5f930b73d2200112e3849ca6cb11822793fb34d"
 dependencies = [
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "wayland-client",
  "xcursor",
 ]
@@ -7298,7 +7342,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7731,7 +7775,7 @@ dependencies = [
  "libc",
  "log",
  "os_pipe",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "thiserror 2.0.21",
  "tree_magic_mini",
  "wayland-backend",
@@ -7778,7 +7822,7 @@ dependencies = [
  "libc",
  "libloading",
  "once_cell",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "x11rb-protocol",
 ]
 
@@ -7790,7 +7834,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "x3f"
-version = "1.5.5"
+version = "1.5.6"
 dependencies = [
  "fuzzkit",
  "rayon",
@@ -7846,7 +7890,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
- "rustix 1.1.5",
+ "rustix 1.1.6",
 ]
 
 [[package]]
@@ -7946,7 +7990,7 @@ dependencies = [
  "hex",
  "libc",
  "ordered-stream",
- "rustix 1.1.5",
+ "rustix 1.1.6",
  "serde",
  "serde_repr",
  "tracing",

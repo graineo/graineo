@@ -288,6 +288,19 @@ pub fn HIST_CHANNELS() -> [Color32; 3] {
     }
 }
 
+/// "Glowing areas" overlay on the photo (where the HDR rendition lies above SDR white): from +0.5, +1 and +2 stops.
+/// Drawn on the photo, so the same in every theme; warm tones, apart from the red/blue of the clipping warning.
+#[allow(non_snake_case)]
+pub fn GLOW_LEVELS() -> [Color32; 3] {
+    [Color32::from_rgb(0xff, 0xe4, 0x70), Color32::from_rgb(0xff, 0xa0, 0x28), Color32::from_rgb(0xff, 0x4c, 0xc8)]
+}
+
+/// Fine vertical line at SDR white in the histogram of a photo with HDR on (muted, ≥ 3:1 against [`SCOPE_BG`]).
+#[allow(non_snake_case)]
+pub fn HIST_SDR_WHITE() -> Color32 {
+    scope_gray(0x70)
+}
+
 /// Opacity of the black info box of the dark theme (was 150: only 3.9:1 for its text over a white photo).
 const INFO_BOX_DARK_ALPHA: u8 = 190;
 
@@ -371,6 +384,49 @@ pub fn SLIDER_LABEL() -> Color32 {
 #[inline]
 pub fn SUBHEAD_LABEL() -> Color32 {
     gray(if high_contrast() { 0xd0 } else { 0xb0 })
+}
+/// Dimmed text: rows and notes that are present but not in use (folders only on disk, offline volumes,
+/// the hint of "Ordner ansehen"). Dimmer than TEXT_DIM, still ≥ 3:1 on every ground (contrast_tests).
+#[allow(non_snake_case)]
+#[inline]
+pub fn DIMMED() -> Color32 {
+    gray(if high_contrast() { 0xc0 } else { 0x8c })
+}
+/// Veil over a panel area that is out of use (library sections while a folder is viewed): PANEL with the
+/// strongest opacity that keeps [`DIMMED`] text below it at ≥ 3:1, so every text under the veil stays
+/// readable in every theme and the dimming is still visible (contrast_tests).
+#[allow(non_snake_case)]
+pub fn DIM_VEIL() -> Color32 {
+    let bg = PANEL();
+    let text = DIMMED();
+    let lum = |c: Color32| {
+        let ch = |v: u8| {
+            let c = v as f64 / 255.0;
+            if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * ch(c.r()) + 0.7152 * ch(c.g()) + 0.0722 * ch(c.b())
+    };
+    let ratio = |a: Color32| {
+        let (x, y) = (lum(a), lum(bg));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    };
+    let over = |a: u8| {
+        let m = |t: u8, b: u8| ((t as u32 * (255 - a as u32) + b as u32 * a as u32 + 127) / 255) as u8;
+        Color32::from_rgb(m(text.r(), bg.r()), m(text.g(), bg.g()), m(text.b(), bg.b()))
+    };
+    // 3.1 leaves a little room for rounding in the blend; at most the former fixed veil (160)
+    let a = (0..=160u8).rev().find(|&a| ratio(over(a)) >= 3.1).unwrap_or(0);
+    Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), a)
+}
+/// Opacity for disabled or switched-off controls (`ui.multiply_opacity`): the same strength as [`DIM_VEIL`],
+/// so primary text stays clearly dimmer and [`DIMMED`] text still keeps ≥ 3:1 (contrast_tests).
+#[allow(non_snake_case)]
+pub fn DIM_OPACITY() -> f32 {
+    1.0 - DIM_VEIL().a() as f32 / 255.0
+}
+/// A color dimmed by [`DIM_OPACITY`] (disabled text and symbols drawn directly with the painter).
+pub fn dimmed(c: Color32) -> Color32 {
+    c.gamma_multiply(DIM_OPACITY())
 }
 /// Hairlines (category and subheading rules).
 #[allow(non_snake_case)]
@@ -585,8 +641,9 @@ pub fn apply_theme(ctx: &egui::Context) {
         // high contrast: buttons get a visible frame, disabled controls stay legible
         v.widgets.inactive.bg_stroke = Stroke::new(1.0, gray(0x5a));
         v.widgets.hovered.bg_stroke = Stroke::new(1.0, gray(0x8a));
-        v.disabled_alpha = 0.75;
     }
+    // disabled widgets fade by the same strength as switched-off sections: their text (DIMMED) stays ≥ 3:1
+    v.disabled_alpha = DIM_OPACITY();
     // input fields darker than the surroundings with a fine frame
     v.text_edit_bg_color = Some(FIELD_FILL());
     // Mac convention: arrow cursor on controls (hand only on the web); brightening shows clickability
@@ -775,7 +832,7 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
     let painter = ui.painter();
     let changed = *value != default;
     let name_color = if !enabled {
-        gray(0x5c)
+        DIMMED()
     } else if hot {
         TEXT_STRONG()
     } else if changed {
@@ -898,7 +955,7 @@ fn slider_full(
 
     // Name: double-click resets; changed sliders slightly brighter
     let name_color = if !enabled {
-        gray(0x5c)
+        DIMMED()
     } else if hot {
         TEXT_STRONG()
     } else if changed {
@@ -1532,17 +1589,59 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
     response
 }
 
-/// Animated on/off switch shared by dialogs and settings.
+/// Size of the on/off switch: square-cornered rocker, about as high as the slider text.
+pub const SWITCH_SIZE: egui::Vec2 = egui::vec2(22.0, 11.0);
+
+/// Colors of the on/off switch, greys only: (track off, knob off, track on, knob on).
+#[allow(non_snake_case)]
+pub fn SWITCH_COLORS() -> (Color32, Color32, Color32, Color32) {
+    (gray(0x28), gray(0x88), gray(0x58), gray(0xf4))
+}
+
+/// Paint the on/off switch into `rect` (see [`SWITCH_SIZE`]): off = dark track, knob left; on = light track, light
+/// knob right. `t` = position 0..1 (animated), `hot` = hovered.
+pub fn switch_paint(painter: &egui::Painter, rect: egui::Rect, t: f32, hot: bool, enabled: bool) {
+    let (track_off, knob_off, track_on, knob_on) = SWITCH_COLORS();
+    let mut track = track_off.lerp_to_gamma(track_on, t);
+    let mut knob = knob_off.lerp_to_gamma(knob_on, t);
+    if hot && enabled {
+        knob = knob.lerp_to_gamma(TEXT_STRONG(), 0.5);
+    }
+    if !enabled {
+        track = track.gamma_multiply(0.5);
+        knob = knob.gamma_multiply(0.5);
+    }
+    painter.rect_filled(rect, 1.0, track);
+    painter.rect_stroke(rect, 1.0, egui::Stroke::new(1.0, knob_off.gamma_multiply(if enabled { 0.6 } else { 0.3 })), egui::StrokeKind::Inside);
+    let k = rect.height() - 4.0;
+    let x = egui::lerp(rect.left() + 2.0..=rect.right() - 2.0 - k, t);
+    painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, rect.top() + 2.0), egui::vec2(k, k)), 0.0, knob);
+}
+
+/// On/off switch shared by the sidebars, dialogs and settings. Returns: toggled?
 pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(36.0, 20.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(SWITCH_SIZE + egui::vec2(0.0, 5.0), egui::Sense::click());
     if response.clicked() { *on = !*on; }
     let t = ui.ctx().animate_bool(response.id, *on);
-    let bg = gray(0x5c).lerp_to_gamma(BLUE(), t);
-    let bg = if ui.is_enabled() { bg } else { bg.gamma_multiply(0.5) };
-    ui.painter().rect_filled(rect, 10.0, bg);
-    let x = egui::lerp(rect.left() + 10.0..=rect.right() - 10.0, t);
-    ui.painter().circle_filled(egui::pos2(x, rect.center().y), 8.0, if ui.is_enabled() { TEXT_STRONG() } else { gray(0x90) });
+    let r = egui::Rect::from_center_size(rect.center(), SWITCH_SIZE);
+    switch_paint(ui.painter(), r, t, response.hovered(), ui.is_enabled());
     response.clicked()
+}
+
+/// [`switch`] followed by a label in capitals like the slider names (the label is clickable as well), for a real
+/// on/off setting in a sidebar. Returns the response of switch and label; `clicked()` = toggled.
+pub fn switch_label(ui: &mut egui::Ui, on: &mut bool, label: &str) -> egui::Response {
+    let font = egui::FontId::proportional(UI_SIZE);
+    let w = caps_spaced(ui.painter(), label, font, TEXT(), 0.5).size().x;
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(SWITCH_SIZE.x + 8.0 + w, 20.0), egui::Sense::click());
+    if resp.clicked() { *on = !*on; }
+    let t = ui.ctx().animate_bool(resp.id, *on);
+    let en = ui.is_enabled();
+    let sw = egui::Rect::from_min_size(egui::pos2(rect.left(), rect.center().y - SWITCH_SIZE.y / 2.0), SWITCH_SIZE);
+    switch_paint(ui.painter(), sw, t, resp.hovered(), en);
+    let col = if !en { TEXT_DIM() } else if resp.hovered() { TEXT_STRONG() } else { SLIDER_LABEL() };
+    label_caps(ui.painter(), egui::pos2(sw.right() + 8.0, rect.center().y), label, col);
+    resp
 }
 
 /// Label left of a control (same width as the slider names).
@@ -1679,12 +1778,19 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     let reset_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 12.0, rect.center().y), egui::vec2(22.0, 22.0));
     let reset_resp = changed.then(|| ui.interact(reset_rect, id.with("reset"), egui::Sense::click()));
     // Toggle left of the reset icon (only when something is adjusted)
-    let switch_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 40.0, rect.center().y), egui::vec2(24.0, 13.0));
+    let switch_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 40.0, rect.center().y), SWITCH_SIZE);
     let switch_resp = (changed && off.is_some()).then(|| ui.interact(switch_rect.expand(4.0), id.with("switch"), egui::Sense::click()));
     let reset_hovered = reset_resp.as_ref().is_some_and(|r| r.hovered()) || switch_resp.as_ref().is_some_and(|r| r.hovered());
     if let (Some(r), Some(o)) = (&switch_resp, off.as_deref_mut()) {
         if r.clicked() {
             *o = !*o;
+        }
+    }
+    // Test hook (own data folder only): `GRAINEO_SECTIONS_OFF="Effekte,…"` keeps these sections switched off
+    // (screenshots of the dimmed body)
+    if let Some(o) = off.as_deref_mut() {
+        if crate::env::var_os("GRAINEO_DATA_DIR").is_some() && crate::env::var("GRAINEO_SECTIONS_OFF").is_ok_and(|v| v.split(',').any(|t| t.trim() == title)) {
+            *o = true;
         }
     }
     let is_off = off.as_deref().copied().unwrap_or(false);
@@ -1733,17 +1839,14 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     }
     // Help for the section: "?" after the title (and change dot), only while hovering the header
     let edit_section = local.is_none() && crate::paste::for_section(title).is_some();
-    if let Some(card) = local.is_none().then(|| crate::help::for_section(title)).flatten().or(edit_section.then_some(&crate::help::EDIT_SECTION)) {
+    // only sections with a card of their own: a general card about section headers said no more than the tooltips
+    if let Some(card) = local.is_none().then(|| crate::help::for_section(title)).flatten() {
         let q = egui::pos2(title_pos.x + title_w + 22.0, rect.center().y);
         crate::help::question_mark(ui, q, id.with("hilfe"), ui.rect_contains_pointer(rect), title, "", card, if edit_section { SECTION_CONTROLS } else { "" });
     }
     if let Some(r) = &switch_resp {
-        // small toggle: light = active, grey = disabled
-        let on = !is_off;
-        let track = if on { ACCENT().gamma_multiply(0.8) } else { gray(0x62) };
-        painter.rect_filled(switch_rect, 6.5, track);
-        let knob_x = if on { switch_rect.right() - 6.5 } else { switch_rect.left() + 6.5 };
-        painter.circle_filled(egui::pos2(knob_x, switch_rect.center().y), 5.0, gray(if r.hovered() { 0xff } else { 0xe8 }));
+        // the same switch as everywhere: light = active, dark = disabled
+        switch_paint(painter, switch_rect, if is_off { 0.0 } else { 1.0 }, r.hovered(), true);
     }
     if changed {
         // subtle dot: something in this section is adjusted (grey when disabled)
@@ -1770,7 +1873,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
             ui.spacing_mut().indent = 6.0;
             if is_off {
                 // disabled: sliders stay usable but look visibly dimmed
-                ui.multiply_opacity(0.45);
+                ui.multiply_opacity(DIM_OPACITY());
             }
             bounded(ui, |ui| { add(ui); });
         });
@@ -1834,34 +1937,86 @@ pub struct HistResponse {
 pub const HISTOGRAM_H: f32 = 110.0;
 
 pub fn histogram(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool) -> HistResponse {
-    histogram_h(ui, h, show_clipping, HISTOGRAM_H)
+    histogram_h(ui, h, show_clipping, HISTOGRAM_H, None)
 }
 
-/// [`histogram`] with its own height (the pinned histogram gets smaller in low windows).
-pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32) -> HistResponse {
-    histogram_h_inner(ui, h, show_clipping, height)
+/// Histogram of a photo with HDR on: the SDR part (pixels of the HDR rendition up to SDR white, 256 bins as usual)
+/// and the part above white, in stops up to the headroom.
+pub struct HdrHistogram {
+    pub sdr: [Vec<u32>; 3],
+    /// [`HDR_BINS_PER_EV`] bins per stop above SDR white; the last one also holds everything at the headroom limit
+    pub above: [Vec<u32>; 3],
+    /// headroom in stops (the slider "HDR-Leuchtkraft")
+    pub headroom: f32,
 }
 
-fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32) -> HistResponse {
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, SCOPE_BG());
+/// Bins per stop above SDR white: with [`HDR_WIDTH_PER_EV`] a bin is as wide as one of the 256 SDR bins.
+pub const HDR_BINS_PER_EV: usize = 32;
+/// Width of one stop above SDR white as a fraction of the SDR part: +2 EV take a fifth of the whole width. The sRGB
+/// scale gives the last stop below white about a quarter of the SDR part; half of that keeps the part above white
+/// compact (at most 3 EV = 27 %) and still readable.
+pub const HDR_WIDTH_PER_EV: f32 = 0.125;
+
+/// [`histogram`] with its own height (the pinned histogram gets smaller in low windows). `hdr`: photo with HDR on –
+/// the histogram goes on to the right above SDR white (then `h` is not used).
+pub fn histogram_h(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32, hdr: Option<&HdrHistogram>) -> HistResponse {
+    histogram_h_inner(ui, h, show_clipping, height, hdr)
+}
+
+fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, height: f32, hdr: Option<&HdrHistogram>) -> HistResponse {
+    let (full, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), height), egui::Sense::click_and_drag());
+    let painter = ui.painter_at(full);
+    painter.rect_filled(full, 0.0, SCOPE_BG());
+    let h = hdr.map_or(h, |d| &d.sdr);
+    // HDR on: the SDR part gets narrower, the stops above white follow on the right
+    let above: Option<(&[Vec<u32>; 3], f32)> = hdr.filter(|d| d.above[0].len() > 0).map(|d| (&d.above, d.headroom.max(0.1)));
+    let rect = match above {
+        Some((_, ev)) => {
+            let w = full.width() / (1.0 + HDR_WIDTH_PER_EV * ev);
+            egui::Rect::from_min_max(full.min, egui::pos2(full.left() + w, full.bottom()))
+        }
+        None => full,
+    };
+    if above.is_some() {
+        painter.vline(rect.right(), full.y_range(), Stroke::new(1.0, HIST_SDR_WHITE()));
+    }
     let n = h[0].len();
-    let max = h.iter().flat_map(|v| v[1..n - 1].iter()).copied().max().unwrap_or(1).max(1) as f32;
+    // scale: without the end bins that collect the clipped values (black, white or the headroom limit)
+    let max = match above {
+        Some((a, _)) => {
+            let k = a[0].len();
+            h.iter().flat_map(|v| v[1..].iter()).chain(a.iter().flat_map(|v| v[..k - 1].iter())).copied().max()
+        }
+        None => h.iter().flat_map(|v| v[1..n - 1].iter()).copied().max(),
+    }
+    .unwrap_or(1)
+    .max(1) as f32;
     let colors = HIST_CHANNELS();
     for (c, bins) in h.iter().enumerate() {
+        let y = |v: u32| rect.bottom() - rect.height() * (v as f32 / max).min(1.0);
         let mut pts = vec![rect.left_bottom()];
         for (i, &v) in bins.iter().enumerate() {
             let x = rect.left() + rect.width() * i as f32 / (n - 1) as f32;
-            pts.push(egui::pos2(x, rect.bottom() - rect.height() * (v as f32 / max).min(1.0)));
+            pts.push(egui::pos2(x, y(v)));
         }
-        pts.push(rect.right_bottom());
+        if let Some((a, _)) = above {
+            let k = a[c].len();
+            for (j, &v) in a[c].iter().enumerate() {
+                pts.push(egui::pos2(rect.right() + (full.right() - rect.right()) * (j + 1) as f32 / k as f32, y(v)));
+            }
+        }
+        pts.push(full.right_bottom());
         painter.add(egui::Shape::line(pts, Stroke::new(1.2, colors[c])));
     }
-    // Clipping triangles: bright when clipped; outlined when the display is active
-    let total = h[1].iter().sum::<u32>().max(1) as f32;
+    // Clipping triangles: bright when clipped; outlined when the display is active. HDR on: the right one lights
+    // when values reach the headroom limit.
+    let total = (h[1].iter().sum::<u32>() + above.map_or(0, |(a, _)| a[1].iter().sum::<u32>())).max(1) as f32;
     let lo = h.iter().map(|v| v[0]).max().unwrap_or(0) as f32 / total;
-    let hi = h.iter().map(|v| v[n - 1]).max().unwrap_or(0) as f32 / total;
+    let hi = match above {
+        Some((a, _)) => a.iter().map(|v| v.last().copied().unwrap_or(0)).max().unwrap_or(0),
+        None => h.iter().map(|v| v[n - 1]).max().unwrap_or(0),
+    } as f32
+        / total;
     let tri = |at: egui::Pos2, right: bool, lit: bool| {
         let s = 7.0;
         let pts = if right {
@@ -1874,7 +2029,7 @@ fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, 
         painter.add(egui::Shape::convex_polygon(pts, fill, stroke));
     };
     tri(rect.left_top() + egui::vec2(3.0, 3.0), false, lo > 0.001);
-    tri(rect.right_top() + egui::vec2(-3.0, 3.0), true, hi > 0.001);
+    tri(full.right_top() + egui::vec2(-3.0, 3.0), true, hi > 0.001);
 
     // Highlight the area under the mouse pointer; while dragging, the start area stays active
     let mut out = HistResponse::default();
@@ -1893,7 +2048,7 @@ fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, 
     } else {
         resp.hover_pos().filter(|p| p.y > rect.top() + 14.0).map(at)
     };
-    let corner = |p: egui::Pos2| p.y < rect.top() + 14.0 && (p.x < rect.left() + 14.0 || p.x > rect.right() - 14.0);
+    let corner = |p: egui::Pos2| p.y < rect.top() + 14.0 && (p.x < rect.left() + 14.0 || p.x > full.right() - 14.0);
     if let Some(r) = region {
         let (a, b) = r.span();
         let band = egui::Rect::from_x_y_ranges(rect.left() + rect.width() * a..=rect.left() + rect.width() * b, rect.y_range());
@@ -1906,7 +2061,7 @@ fn histogram_h_inner(ui: &mut egui::Ui, h: &[Vec<u32>; 3], show_clipping: bool, 
     }
     let clicked = resp.clicked() && resp.interact_pointer_pos().is_some_and(corner);
     let hovered = resp.hovered();
-    crate::help::question_mark(ui, rect.right_bottom() + egui::vec2(-10.0, -10.0), resp.id.with("hilfe"), hovered, "Histogramm", "", &crate::help::HISTOGRAM, "");
+    crate::help::question_mark(ui, full.right_bottom() + egui::vec2(-10.0, -10.0), resp.id.with("hilfe"), hovered, "Histogramm", "", &crate::help::HISTOGRAM, "");
     out.toggle_clipping = clicked;
     out.double_clicked = resp.double_clicked() && !resp.interact_pointer_pos().is_some_and(corner);
     out
@@ -2929,7 +3084,7 @@ pub fn icon_toggle(ui: &mut egui::Ui, icon: Icon, label: &str, on: bool, width: 
     } else if resp.hovered() && enabled {
         (gray(0x2a), gray(0xe0))
     } else {
-        (gray(0x1e), if enabled { TEXT() } else { gray(0x5c) })
+        (gray(0x1e), if enabled { TEXT() } else { DIMMED() })
     };
     painter.rect_filled(rect, 0.0, fill);
     // the brighter fill already shows "on" clearly; only focus gets a frame
@@ -2995,7 +3150,7 @@ pub fn icon_button_sized(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str, siz
     } else if resp.hovered() && enabled {
         (gray(0x2a), gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT() } else { gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { DIMMED() })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
@@ -3357,7 +3512,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
 
     // Name and chosen step, coloured as with the sliders
     let name_color = if !enabled {
-        gray(0x5c)
+        DIMMED()
     } else if hot {
         TEXT_STRONG()
     } else if changed {
@@ -3367,7 +3522,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     if let Some(i) = sel {
-        let c = if !enabled { gray(0x5c) } else if changed { TEXT_STRONG() } else { TEXT_DIM() };
+        let c = if !enabled { DIMMED() } else if changed { TEXT_STRONG() } else { TEXT_DIM() };
         painter.text(value_rect.right_center() - egui::vec2(13.0, 0.0), egui::Align2::RIGHT_CENTER, crate::tr(options[i].1), egui::FontId::proportional(UI_SIZE), c);
     }
 
@@ -3395,7 +3550,7 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
             painter.circle_stroke(c, 3.5, Stroke::new(1.0, ring));
         }
         // Step names: small and dimmed; the outer ones aligned to the edges so they stay inside the panel
-        let tc = if on && enabled { gray(0xc4) } else { gray(0x86).gamma_multiply(dim) };
+        let tc = if on && enabled { gray(0xc4) } else if enabled { DIMMED() } else { dimmed(DIMMED()) };
         let (align, x) = if n > 1 && i == 0 {
             (egui::Align2::LEFT_TOP, row.left() + 2.0)
         } else if n > 1 && i == n - 1 {
@@ -3417,7 +3572,7 @@ fn label_above(ui: &mut egui::Ui, label: &str) -> (egui::Rect, egui::Rect, egui:
         return (at, at, ui.scope_id().with(("lr-choice", label)));
     }
     let (row, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 17.0), egui::Sense::hover());
-    let color = if ui.is_enabled() { gray(0xa4) } else { gray(0x5c) };
+    let color = if ui.is_enabled() { gray(0xa4) } else { DIMMED() };
     let text = label_caps(ui.painter(), row.left_center(), label, color);
     (row, text, ui.scope_id().with(("lr-choice", label)))
 }
@@ -3616,11 +3771,11 @@ mod tests {
         icon
     }
 
-    /// "Treatment" and "White balance" are subheadings over their control; the help "?" appears behind the heading
+    /// "White balance" is a subheading over its control; the help "?" appears behind the heading
     /// while the pointer is over the control below it, and not when the pointer is elsewhere.
     #[test]
     fn subheading_over_a_block_shows_its_help_mark() {
-        for title in ["Behandlung", "Weißabgleich"] {
+        for title in ["Weißabgleich"] {
             assert!(crate::help::for_slider(title, "").is_some(), "{title}: no help card");
             let marks = |pointer: egui::Pos2| {
                 let ctx = egui::Context::default();
@@ -4009,7 +4164,7 @@ pub fn drawn_icon_button_at(ui: &mut egui::Ui, rect: egui::Rect, salt: &str, ico
     } else if resp.hovered() && enabled {
         (gray(0x2a), gray(0xe8))
     } else {
-        (Color32::TRANSPARENT, if enabled { TEXT() } else { gray(0x5c) })
+        (Color32::TRANSPARENT, if enabled { TEXT() } else { DIMMED() })
     };
     painter.rect_filled(rect, 0.0, fill);
     if on || resp.has_focus() {
@@ -4301,7 +4456,7 @@ mod contrast_tests {
                 HIGH_CONTRAST.store(hc, std::sync::atomic::Ordering::Relaxed);
                 let grounds = [("PANEL", PANEL()), ("PANEL_DARK", PANEL_DARK()), ("GROUP_FILL", GROUP_FILL()), ("BUTTON_FILL", BUTTON_FILL()), ("WINDOW", ui_rgb(0x1e, 0x1f, 0x22)), ("IMAGE_BG", IMAGE_BG())];
                 let mut checks: Vec<(String, f64, f64)> = Vec::new();
-                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0), ("SUBHEAD_LABEL", SUBHEAD_LABEL(), 3.0)] {
+                for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0), ("SUBHEAD_LABEL", SUBHEAD_LABEL(), 3.0), ("DIMMED", DIMMED(), 3.0)] {
                     let (gn, w) = grounds.iter().map(|(gn, g)| (*gn, ratio(c, *g))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
                     checks.push((format!("{n} / {gn}"), w, min));
                 }
@@ -4311,6 +4466,34 @@ mod contrast_tests {
                 for (n, c) in [("FIELD_STROKE", FIELD_STROKE()), ("ACCENT", ACCENT()), ("ACTIVE_MARK", ACTIVE_MARK()), ("GOLD", GOLD()), ("BLUE", BLUE())] {
                     let w = ratio(c, PANEL()).min(ratio(c, PANEL_DARK()));
                     checks.push((format!("{n} / PANEL"), w, 3.0));
+                }
+                {
+                    // texts under the veil of an unused panel area (DIM_VEIL over PANEL)
+                    // DIM_VEIL is PANEL with an opacity (its r/g/b read back premultiplied, so blend PANEL itself)
+                    let (a, v) = (DIM_VEIL().a() as f64 / 255.0, PANEL());
+                    let under = |c: Color32| {
+                        let m = |t: u8, b: u8| (t as f64 * (1.0 - a) + b as f64 * a).round() as u8;
+                        Color32::from_rgb(m(c.r(), v.r()), m(c.g(), v.g()), m(c.b(), v.b()))
+                    };
+                    for (n, c) in [("TEXT", TEXT()), ("SUBHEAD_LABEL", SUBHEAD_LABEL()), ("TEXT_DIM", TEXT_DIM()), ("DIMMED", DIMMED())] {
+                        checks.push((format!("{n}+DIM_VEIL / PANEL"), ratio(under(c), PANEL()), 3.0));
+                    }
+                    // disabled controls (DIM_OPACITY / dimmed()) on PANEL: the same blend as the veil
+                    checks.push(("dimmed(TEXT_DIM) / PANEL".into(), ratio(under(TEXT_DIM()), PANEL()), 3.0));
+                    checks.push(("dimmed(DIMMED) / PANEL".into(), ratio(under(DIMMED()), PANEL()), 3.0));
+                    assert!((DIM_OPACITY() - (1.0 - a as f32)).abs() < 1e-6);
+                    // the dimming stays visible: primary text loses at least 30 % of its contrast
+                    checks.push(("TEXT / TEXT+DIM_VEIL".into(), ratio(TEXT(), PANEL()) / ratio(under(TEXT()), PANEL()), 1.4));
+                }
+                {
+                    // on/off switch: knob against its track in both states and against the panel; the two tracks apart
+                    // from each other (on = lighter), like the steps of the glow levels
+                    let (track_off, knob_off, track_on, knob_on) = SWITCH_COLORS();
+                    checks.push(("SWITCH_KNOB_OFF / SWITCH_TRACK_OFF".into(), ratio(knob_off, track_off), 3.0));
+                    checks.push(("SWITCH_KNOB_ON / SWITCH_TRACK_ON".into(), ratio(knob_on, track_on), 3.0));
+                    checks.push(("SWITCH_TRACK_ON / SWITCH_TRACK_OFF".into(), ratio(track_on, track_off), 1.3));
+                    checks.push(("SWITCH_KNOB_ON / PANEL".into(), ratio(knob_on, PANEL()).min(ratio(knob_on, PANEL_DARK())), 3.0));
+                    checks.push(("SWITCH_KNOB_OFF / PANEL".into(), ratio(knob_off, PANEL()).min(ratio(knob_off, PANEL_DARK())), 3.0));
                 }
                 checks.push(("BLUE_TEXT / PANEL".into(), ratio(BLUE_TEXT(), PANEL()), 4.5));
                 checks.push(("ON_GOLD / GOLD".into(), ratio(ON_GOLD(), GOLD()), 4.5));
@@ -4334,6 +4517,14 @@ mod contrast_tests {
                     checks.push((format!("HIST_{} / SCOPE_BG", ["R", "G", "B"][k]), ratio(c, SCOPE_BG()), 3.0));
                 }
                 checks.push(("CLIP_LIT / SCOPE_BG".into(), ratio(clip_triangle(true), SCOPE_BG()), 3.0));
+                checks.push(("HIST_SDR_WHITE / SCOPE_BG".into(), ratio(HIST_SDR_WHITE(), SCOPE_BG()), 3.0));
+                // glowing areas on the photo: visible over a dark photo, and the three steps apart from each other
+                let glow = GLOW_LEVELS();
+                for (k, c) in glow.iter().enumerate() {
+                    checks.push((format!("GLOW_{k} / photo-black"), ratio(*c, Color32::BLACK), 3.0));
+                }
+                checks.push(("GLOW_0 / GLOW_1".into(), ratio(glow[0], glow[1]), 1.3));
+                checks.push(("GLOW_1 / GLOW_2".into(), ratio(glow[1], glow[2]), 1.3));
                 checks.push(("SCOPE_LABEL / SCOPE_BG".into(), ratio(scope_gray(0xc4), SCOPE_BG()), 4.5));
                 checks.push(("SCOPE_RIM / SCOPE_BG".into(), ratio(scope_gray(0x70), SCOPE_BG()), 3.0));
                 if t == 2 {

@@ -26,6 +26,7 @@ graineo is released under the GPL-3.0-only (see `LICENSE`). It builds on the ope
 | Library | Use | License |
 |---|---|---|
 | [rawler](https://github.com/dnglab/dnglab) (dnglab) 0.8.0 by Daniel Vogelbacher and contributors | Decoding RAW files of Fujifilm, Canon, Sony, Nikon, Panasonic and others; used unchanged from crates.io, so it can be replaced by a modified version by rebuilding from this source | LGPL-2.1 (`LICENSES/LGPL-2.1-rawler.txt`) |
+| [heifer](https://crates.io/crates/heifer) 0.7.3 | Decoding HEIC/HEIF photos on Windows and Linux (pure Rust, built into the program; on macOS the system decodes HEIC). HEVC is covered by patents in some countries | MIT or Apache-2.0 |
 | [egui / eframe](https://github.com/emilk/egui) | User interface | MIT or Apache-2.0 |
 | [wgpu](https://wgpu.rs/) | GPU rendering | MIT or Apache-2.0 |
 | [image](https://github.com/image-rs/image), [tiff](https://github.com/image-rs/image-tiff), [jpeg-decoder](https://github.com/image-rs/jpeg-decoder), [jpeg-encoder](https://github.com/vstroebel/jpeg-encoder), [moxcms](https://github.com/awxkee/moxcms) | Image formats and colour management | MIT / Apache-2.0 / BSD (see each crate) |
@@ -94,5 +95,7 @@ The macOS app bundle contains these texts in `graineo.app/Contents/Resources/lic
 ## Trademarks
 
 This product includes DNG technology under license by Adobe Systems Incorporated. (graineo writes DNG files from the public DNG specification and its patent licence; no code of Adobe's DNG SDK is used.)
+
+This product includes Gain Map technology under license by Adobe. (graineo writes and reads HDR gain map JPEGs – ISO 21496-1 and the Adobe gain map XMP – with its own code, `crates/gainmap`; no Adobe code is used.)
 
 Sigma, Foveon, Fujifilm, X-Trans, Canon, Sony, Nikon, Panasonic, Kodak, Ilford, Agfa, Adobe, Lightroom and other names are trademarks of their respective owners. They are used only to describe the file formats the app reads, the films it simulates and the catalogs it can import. graineo is not affiliated with or endorsed by any of them.

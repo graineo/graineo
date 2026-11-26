@@ -103,6 +103,7 @@ mod camf_view;
 mod multi_edit;
 mod multi_apply;
 mod tone_eq_ui;
+mod hdr_output_ui;
 mod menu;
 mod paste;
 mod settings_group;
@@ -947,6 +948,8 @@ struct App {
     sensor_raw: sensor_raw::SensorRaw,
     /// Wide-gamut and HDR versions of the photo on screen (photo textures, see `photo_display.rs`)
     display: photo_display::State,
+    /// HDR rendition of the open photo: preview gain map and overlay "Leuchtende Bereiche"
+    hdr_out: hdr_output_ui::Preview,
     /// Videos in single view (own layer)
     video: video_ui::Player,
     video_view: Option<video_ui::View>,
@@ -1251,6 +1254,7 @@ impl App {
             camf: camf_view::CamfInspector::default(),
             sensor_raw: sensor_raw::SensorRaw::default(),
             display: photo_display::State::default(),
+            hdr_out: hdr_output_ui::Preview::default(),
             video: video_ui::Player::default(),
             video_view: None,
             full_job: None,
@@ -1615,6 +1619,7 @@ impl App {
                         // Image is no longer in the list: settings stay saved
                         self.rendered_for = None;
                         self.display.clear();
+                        self.hdr_out.clear();
                     }
                 }
             }
@@ -1904,6 +1909,7 @@ impl App {
         }
         // the wide-gamut/HDR layer still holds the previous photo: it must never lie over this one
         self.display.clear();
+        self.hdr_out.clear();
         // damaged Sigma file, partly rescued: a condition of the photo (yellow line in the image info, mark in the
         // toolbar), not a message
         note_damage(&loaded);
@@ -2118,10 +2124,13 @@ impl App {
             // the first render of a photo opened again takes the place of the picture kept for it
             self.kept_view = None;
             self.hold_jpeg = None;
-            // HDR gain map: developed image × map as photo texture (in the background)
-            match c.loaded.previews.foreign.as_ref().and_then(|d| d.hdr.clone()) {
-                Some(k) => self.display.new_hdr_preview(ctx, index, settings.clone(), width, height, rgb.clone(), k),
+            // HDR rendition (photo with HDR on): its gain map computed from this preview in the background, then shown
+            // as photo texture on an HDR display or as "Leuchtende Bereiche" (hdr_output_ui.rs)
+            let hdr_doc = c.loaded.previews.foreign.as_ref().filter(|d| settings.hdr.effective(rawdev::export::hdr_auto(d), settings.film.is_active()).is_some());
+            match hdr_doc {
+                Some(d) => self.hdr_out.request(ctx, index, &settings, d, width, height, &rgb),
                 None => {
+                    self.hdr_out.clear();
                     // preserved gamut for displays with a wider colour space (Develop, without film; other formats and
                     // Sigma alike, once per settings state from the preview – zoom and pan compute nothing)
                     if photo_display::wide_active() && !settings.film.is_active() {
@@ -2307,6 +2316,11 @@ impl App {
                 tex.bytes as f64 / 1e6,
                 t.elapsed()
             ));
+            // HDR version of the whole image (gain map): the zoomed view must glow like the fitted one
+            let src = hdr_output_ui::DetailSrc { index, settings: settings.clone(), region: [0, 0, width, height], w: width, h: height, rgb, full: c.loaded.full_size };
+            if let Some((d, k)) = self.hdr_out.detail(src) {
+                self.display.new_hdr_detail(ctx, d.index, d.settings, d.region, d.w, d.h, d.rgb, k, d.full);
+            }
             c.detail = Some((tex, [0, 0, width, height], settings));
             c.detail_prev = None;
         }
@@ -2331,10 +2345,19 @@ impl App {
         self.poll_export_probe();
         self.take_thumbs(ctx);
         // HDR crops converted in the background: next to the 8-bit crop of the same region and settings
+        if let Some(r) = self.hdr_out.poll(ctx) {
+            self.display.new_hdr_preview(ctx, r.index, r.settings, r.w, r.h, r.rgb, r.map.clone());
+            // a crop or whole image that came before its map: now its HDR version (zoomed view glows too)
+            if let Some(d) = r.detail {
+                log(&format!("hdr detail {}: region {:?} waited for its map", d.index, d.region));
+                self.display.new_hdr_detail(ctx, d.index, d.settings, d.region, d.w, d.h, d.rgb, r.map, d.full);
+            }
+        }
         for d in self.display.poll() {
             if let Some(c) = self.current.as_mut().filter(|c| c.index == d.index) {
                 if let Some((t, r, s)) = c.detail.as_mut() {
                     if *r == d.region && *s == d.settings {
+                        log(&format!("hdr detail {}: region {:?} {}×{} attached, peak gain {:.2}", d.index, d.region, d.size[0], d.size[1], d.peak));
                         t.hdr = Some(Box::new(DetailTex::from_photo(d.tiles, d.size, d.region, None)));
                     }
                 }
@@ -2640,8 +2663,11 @@ impl App {
                             tex = tex.with_coarse(ctx, hw, hh, &half, region, max_side);
                         }
                         // HDR version of the crop (gain map) as photo textures, if the image has one
-                        if let Some(k) = c.loaded.previews.foreign.as_ref().filter(|_| factor == 1).and_then(|d| d.hdr.clone()) {
-                            self.display.new_hdr_detail(ctx, index, settings.clone(), region, width, height, rgb, k, c.loaded.full_size);
+                        if factor == 1 {
+                            let src = hdr_output_ui::DetailSrc { index, settings: settings.clone(), region, w: width, h: height, rgb, full: c.loaded.full_size };
+                            if let Some((d, k)) = self.hdr_out.detail(src) {
+                                self.display.new_hdr_detail(ctx, d.index, d.settings, d.region, d.w, d.h, d.rgb, k, d.full);
+                            }
                         }
                         if factor > 1 {
                             // grain loupe in its own slot: the whole image stays in place
@@ -4102,7 +4128,11 @@ impl App {
                 s.monochrome = !s.monochrome;
             }
         }
-        if pressed(egui::Key::J) {
+        if shortcuts::pressed(ctx, hdr_output_ui::SHORTCUT) {
+            if self.toolbar_has_hdr() {
+                self.toggle_hdr_view();
+            }
+        } else if pressed(egui::Key::J) {
             self.show_clipping = !self.show_clipping;
         }
         if shortcuts::pressed(ctx, "focus_frame") {
@@ -5103,7 +5133,8 @@ impl eframe::App for App {
             let keep = self.image_rect.map_or(central, |r| r.intersect(central));
             let screen = ctx.content_rect();
             let alpha = if self.lights == 1 { 205 } else { 255 };
-            let shade = Color32::from_black_alpha(alpha);
+            // the theme's image background (dark, medium or light), not always black
+            let shade = Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), alpha);
             let layer = egui::LayerId::new(egui::Order::Foreground, egui::Id::unique("lights-out"));
             let p = ctx.layer_painter(layer);
             for r in [
@@ -6818,6 +6849,14 @@ impl App {
                 paint_src_quad(&clipped, clip.id(), full_src, &frame, rect, Color32::WHITE);
             }
         }
+        // "Leuchtende Bereiche": where the HDR rendition goes above SDR white (switched on without an HDR display,
+        // and by itself while the slider "HDR-Leuchtkraft" is dragged)
+        let glow_on = (self.hdr_out.show_glow && !self.hdr_edr()) || hdr_output_ui::dragging(ui.ctx());
+        if glow_on && !self.show_camera_jpeg && !self.show_before && self.tab != Tab::Sensor {
+            if let Some(id) = self.hdr_out.glow_texture(c.index) {
+                paint_src_quad(&clipped, id, full_src, &frame, rect, Color32::WHITE);
+            }
+        }
         // Sensor view (Bayer/X-Trans): overlays, mosaic, demosaic crop, values at the pointer
         if self.tab == Tab::Sensor && c.loaded.previews.foreign.is_some() && self.sensor_raw.ready() && !self.show_camera_jpeg && !self.show_before {
             let vis = rect.intersect(avail);
@@ -7257,12 +7296,12 @@ impl App {
                 || s.noise_brake != d.noise_brake
                 || s.vibrance != d.vibrance
                 || s.clarity != d.clarity
-                || s.saturation != d.saturation;
+                || s.saturation != d.saturation
+                || s.hdr != d.hdr;
             let mut reset_tone = false;
             let reset_basic = lr::section_switch(ui, "Grundeinstellungen", true, basic_changed, &mut bp.basic, |ui| {
-                lr::subheading_help(ui, "Behandlung", "", |ui| {
-                    lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
-        });
+                // a single choice: no subheading of its own (reset via the section header)
+                lr::choice(ui, "", &mut s.monochrome, &[(false, crate::tr("Farbe")), (true, crate::tr("Schwarzweiß"))], "");
                 // White balance: one drop-down list (as shot, camera presets) with the picker beside it
                 {
                     let label = |n: &str| -> &'static str { match n {
@@ -7314,7 +7353,7 @@ impl App {
                     }
                 }
                 let mut t = s.wb_temp as f64;
-                if lr::slider_gradient(ui, "Temperatur", &mut t, -1.0..=1.0, 0.0, 0.01, "Feinabstimmung relativ zur Vorgabe: − kühler (blau), + wärmer (gelb)", lr::GRADIENT_TEMP) {
+                if lr::slider_gradient(ui, "Temperatur", &mut t, -1.0..=1.0, 0.0, 0.01, "− kühler, + wärmer", lr::GRADIENT_TEMP) {
                     s.wb_temp = t as f32;
                 }
                 let mut g = s.wb_tint as f64;
@@ -7340,12 +7379,14 @@ impl App {
                     lr::slider(ui, "Tiefen", &mut s.shadow, -2.0..=2.0, 0.0, 0.05);
                 });
                 let mut fill = s.fill_light as f64;
-                if lr::slider_hint(ui, "Fill Light (Retinex)", &mut fill, -2.0..=2.0, 0.0, 0.05, "Aufhellung (Retinex): hebt dunkle Bildteile lokal an, ohne die Lichter zu verändern.") {
+                if lr::slider_hint(ui, "Fill Light (Retinex)", &mut fill, -2.0..=2.0, 0.0, 0.05, "Hebt dunkle Bildteile lokal an, Lichter bleiben") {
                     s.fill_light = fill as f32;
                 }
                 // Sigma brakes the noise only when brightening with Fill Light (develop: brake with fill_light > 0)
                 let lifted = s.fill_light > 0.0;
                 raw_app::noise_brake(ui, &mut s.noise_brake, lifted, "");
+                // HDR rendition: gain map on export (the Foveon preview stays SDR)
+                hdr_output_ui::section(ui, s, false);
                 if lr::subheading(ui, "Präsenz") {
                     s.clarity = d.clarity;
                     s.dehaze = d.dehaze;
@@ -7353,16 +7394,16 @@ impl App {
                     s.saturation = d.saturation;
                 }
                 let mut cl = s.clarity as f64;
-                if lr::slider_hint(ui, "Klarheit", &mut cl, -1.0..=1.0, 0.0, 0.01, "Lokaler Kontrast in den Mitteltönen – betont den Foveon-Mikrokontrast und den „3D“-Eindruck") {
+                if lr::slider_hint(ui, "Klarheit", &mut cl, -1.0..=1.0, 0.0, 0.01, "Lokaler Kontrast in den Mitteltönen") {
                     s.clarity = cl as f32;
                 }
                 let mut dh = s.dehaze as f64;
-                if lr::slider_hint(ui, "Dunst entfernen", &mut dh, -1.0..=1.0, 0.0, 0.01, "Dunst und Schleier herausrechnen (Dark Channel), negativ: Dunst hinzufügen") {
+                if lr::slider_hint(ui, "Dunst entfernen", &mut dh, -1.0..=1.0, 0.0, 0.01, "Dunst herausrechnen, negativ: hinzufügen") {
                     s.dehaze = dh as f32;
                 }
                 ui.add_enabled_ui(!s.monochrome, |ui| {
                     let mut v = s.vibrance as f64;
-                    if lr::slider_gradient(ui, "Dynamik", &mut v, -1.0..=1.0, 0.0, 0.01, "Hebt blasse Farben stärker an als bereits kräftige – schont Hauttöne und Himmel", lr::GRADIENT_SAT) {
+                    if lr::slider_gradient(ui, "Dynamik", &mut v, -1.0..=1.0, 0.0, 0.01, "Hebt blasse Farben stärker an als kräftige", lr::GRADIENT_SAT) {
                         s.vibrance = v as f32;
                     }
                     let mut sat = s.saturation as f64;
@@ -7385,6 +7426,8 @@ impl App {
                 s.vibrance = d.vibrance;
                 s.saturation = d.saturation;
                 s.clarity = d.clarity;
+                // the HDR row has no group heading of its own: the section header resets it
+                s.hdr = d.hdr;
             }
             if reset_tone {
                 s.exposure = d.exposure;
@@ -7557,7 +7600,7 @@ impl App {
                 for (name, i, grad) in groups {
                     lr::subheading(ui, name);
                     let mut h = s.raw.calibration[i] as f64;
-                    if lr::slider_gradient(ui, "Farbton", &mut h, -1.0..=1.0, 0.0, 0.01, "Dreht diese Grundfarbe des Profils zur nächsten hin (Rot → Gelb, Grün → Cyan, Blau → Violett); wirkt auf alle Farben, die sie enthalten", grad) {
+                    if lr::slider_gradient(ui, "Farbton", &mut h, -1.0..=1.0, 0.0, 0.01, "Dreht diese Grundfarbe zur nächsten hin", grad) {
                         s.raw.calibration[i] = h as f32;
                     }
                     let mut v = s.raw.calibration[i + 1] as f64;
@@ -7565,9 +7608,9 @@ impl App {
                         s.raw.calibration[i + 1] = v as f32;
                     }
                 }
-                lr::subheading(ui, "Schatten");
+                ui.add_space((lr::SUBHEAD_GAP - ui.spacing().item_spacing.y).max(0.0));
                 let mut t = s.raw.calibration[6] as f64;
-                if lr::slider_gradient(ui, "Tönung", &mut t, -1.0..=1.0, 0.0, 0.01, "Farbstich in den Tiefen: links grüner, rechts magenta", lr::GRADIENT_TINT) {
+                if lr::slider_gradient(ui, "Schatten-Tönung", &mut t, -1.0..=1.0, 0.0, 0.01, "Farbstich in den Tiefen: links grüner, rechts magenta", lr::GRADIENT_TINT) {
                     s.raw.calibration[6] = t as f32;
                 }
             });
@@ -7732,11 +7775,11 @@ impl App {
                     });
                     ui.add_enabled_ui(s.ca_mode == CaMode::Manual, |ui| {
                         let mut r = s.ca_red as f64;
-                        if lr::slider_gradient(ui, "Rot", &mut r, -2.0..=2.0, 0.0, 0.1, "Manuell: zieht den Rotkanal zur Bildmitte (+) oder zum Rand (−), gegen Farbsäume an den Bildrändern", [Color32::from_rgb(0x30, 0x90, 0x90), Color32::from_rgb(0xc0, 0x40, 0x40)]) {
+                        if lr::slider_gradient(ui, "Rot", &mut r, -2.0..=2.0, 0.0, 0.1, "Manuell: zieht den Rotkanal zur Mitte (+) oder zum Rand (−)", [Color32::from_rgb(0x30, 0x90, 0x90), Color32::from_rgb(0xc0, 0x40, 0x40)]) {
                             s.ca_red = ((r * 10.0).round() / 10.0) as f32;
                         }
                         let mut b = s.ca_blue as f64;
-                        if lr::slider_gradient(ui, "Blau", &mut b, -2.0..=2.0, 0.0, 0.1, "Manuell: zieht den Blaukanal zur Bildmitte (+) oder zum Rand (−), gegen Farbsäume an den Bildrändern", [Color32::from_rgb(0xb0, 0xa0, 0x30), Color32::from_rgb(0x40, 0x60, 0xd0)]) {
+                        if lr::slider_gradient(ui, "Blau", &mut b, -2.0..=2.0, 0.0, 0.1, "Manuell: zieht den Blaukanal zur Mitte (+) oder zum Rand (−)", [Color32::from_rgb(0xb0, 0xa0, 0x30), Color32::from_rgb(0x40, 0x60, 0xd0)]) {
                             s.ca_blue = ((b * 10.0).round() / 10.0) as f32;
                         }
                     });
@@ -7751,7 +7794,7 @@ impl App {
                 s.defringe_purple_hue = d.defringe_purple_hue;
             }
             let mut a = s.defringe_purple_amount as f64 * 20.0;
-            if lr::slider_hint(ui, "Betrag", &mut a, 0.0..=20.0, 0.0, 1.0, "Entfärbt violette und magentafarbene Säume an harten Kontrastkanten (Äste gegen Himmel, Gegenlicht) – am besten in 100 % beurteilen") {
+            if lr::slider_hint(ui, "Betrag", &mut a, 0.0..=20.0, 0.0, 1.0, "Entfärbt violette Säume an harten Kanten") {
                 s.defringe_purple_amount = (a / 20.0) as f32;
             }
             ui.add_enabled_ui(s.defringe_purple_amount > 0.0, |ui| {
@@ -7763,7 +7806,7 @@ impl App {
             }
             ui.push_id("defringe-green", |ui| {
                 let mut g = s.defringe_green_amount as f64 * 20.0;
-                if lr::slider_hint(ui, "Betrag", &mut g, 0.0..=20.0, 0.0, 1.0, "Entfärbt grüne Säume an harten Kontrastkanten – Blätter und andere grüne Flächen bleiben erhalten") {
+                if lr::slider_hint(ui, "Betrag", &mut g, 0.0..=20.0, 0.0, 1.0, "Entfärbt grüne Säume an harten Kanten") {
                     s.defringe_green_amount = (g / 20.0) as f32;
                 }
                 ui.add_enabled_ui(s.defringe_green_amount > 0.0, |ui| {
@@ -7804,7 +7847,7 @@ impl App {
                     return;
                 }
                 let mut v = s.sigma_sharpness as f64;
-                if lr::slider_hint(ui, "Foveon-Schärfe", &mut v, -2.0..=2.0, 0.0, 0.1, "Foveon-Schärfung: 0 = Grundschärfung, −2 = ungeschärft, +2 = kräftig. Exakt in 100 %, die eingepasste Ansicht zeigt eine Näherung") {
+                if lr::slider_hint(ui, "Foveon-Schärfe", &mut v, -2.0..=2.0, 0.0, 0.1, "0 = Grundschärfung, −2 = ungeschärft, +2 = kräftig") {
                     s.sigma_sharpness = v as f32;
                 }
             });
@@ -7818,7 +7861,7 @@ impl App {
                 ui.label(egui::RichText::new(crate::tr("Zusätzlich schärfen")).small().color(lr::TEXT_DIM()));
             }
             let mut sh = s.sharpen as f64;
-            if lr::slider_hint(ui, "Betrag", &mut sh, 0.0..=2.0, 0.0, 0.01, "Zusätzlich zur Foveon-Schärfung – am besten in 100 % beurteilen (in der eingepassten Ansicht kaum sichtbar)") {
+            if lr::slider_hint(ui, "Betrag", &mut sh, 0.0..=2.0, 0.0, 0.01, "Zusätzlich zur Foveon-Schärfung") {
                 s.sharpen = sh as f32;
             }
             ui.add_enabled_ui(s.sharpen > 0.0, |ui| {
@@ -7841,7 +7884,7 @@ impl App {
                 // two band sliders instead of the switch (detail_ui.rs); photos stored with the switch off keep it
                 if !crate::detail_ui::sliders(ui, s) {
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut s.denoise, crate::tr("Foveon-Detail"));
+                        lr::switch_label(ui, &mut s.denoise, "Foveon-Detail");
                         help::info(ui, "sigma-detail", "Foveon-Detail", &help::SIGMA_DETAIL);
                     });
                 }
@@ -8006,7 +8049,7 @@ impl App {
             let view_click = if has(Group::View) {
                 let r = ui.add_enabled_ui(loaded, |ui| {
                     if !loaded {
-                        ui.multiply_opacity(0.35);
+                        ui.multiply_opacity(lr::DIM_OPACITY());
                     }
                     lr::cell_group(ui, "ansicht", &cells, 30.0)
                 });
@@ -8092,7 +8135,7 @@ impl App {
                 let zoom = ui.add_enabled_ui(loaded, |ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     if !loaded {
-                        ui.multiply_opacity(0.35);
+                        ui.multiply_opacity(lr::DIM_OPACITY());
                     }
                     self.zoom_menu(ui);
                 });
@@ -8111,7 +8154,7 @@ impl App {
                     let cells = [(Cell::Symbol(lr::Icon::RotCcw, lr::TEXT()), false, t_l.as_str()), (Cell::Symbol(lr::Icon::RotCw, lr::TEXT()), false, t_r.as_str())];
                     let r = ui.add_enabled_ui(loaded, |ui| {
                         if !loaded {
-                            ui.multiply_opacity(0.35);
+                            ui.multiply_opacity(lr::DIM_OPACITY());
                         }
                         lr::cell_group(ui, "drehen", &cells, 30.0)
                     });
@@ -8131,7 +8174,14 @@ impl App {
                     let has_hdr = self.toolbar_has_hdr();
                     let t_info = lr::with_shortcut("Bildinfos im Bild: kurz → ausführlich → aus", "info_overlay");
                     let t_clip = lr::with_shortcut("Clipping-Warnung", "clipping");
-                    let t_hdr = if has_hdr { "HDR-Anzeige" } else { "" };
+                    // HDR display: normal ↔ glowing; without one: the overlay "Leuchtende Bereiche"
+                    let edr = self.hdr_edr();
+                    let t_hdr = match (has_hdr, edr) {
+                        (false, _) => String::new(),
+                        (true, true) => lr::with_shortcut("HDR-Anzeige", hdr_output_ui::SHORTCUT),
+                        (true, false) => lr::with_shortcut("Leuchtende Bereiche zeigen", hdr_output_ui::SHORTCUT),
+                    };
+                    let hdr_active = has_hdr && if edr { self.display.hdr_on } else { self.hdr_out.show_glow };
                     let t_focus = lr::with_shortcut("Fokusfeld der Kamera zeigen", "focus_frame");
                     let t_assess = lr::with_shortcut("Beurteilungsrahmen", assessment::SHORTCUT);
                     let cells = [
@@ -8139,7 +8189,7 @@ impl App {
                         (Cell::Symbol(lr::Icon::ImageSquare, lr::TEXT()), assessment::on(), t_assess.as_str()),
                         (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), self.show_focus, t_focus.as_str()),
                         (Cell::Symbol(lr::Icon::Warning, lr::TEXT()), self.show_clipping, t_clip.as_str()),
-                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { crate::lr::gray(0x50) }), has_hdr && self.display.hdr_on, t_hdr),
+                        (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { crate::lr::gray(0x50) }), hdr_active, t_hdr.as_str()),
                         (Cell::Symbol(lr::Icon::Info, lr::TEXT()), self.info_level > 0, t_info.as_str()),
                     ];
                     let (c, r) = lr::cell_group_rect(ui, "anzeigen", &cells, 30.0);
@@ -8149,7 +8199,7 @@ impl App {
                         Some(1) => assessment::set_on(!assessment::on()),
                         Some(2) => self.toggle_focus(),
                         Some(3) => self.show_clipping = !self.show_clipping,
-                        Some(4) if has_hdr => self.display.hdr_on = !self.display.hdr_on,
+                        Some(4) if has_hdr => self.toggle_hdr_view(),
                         Some(5) => self.info_next(),
                         _ => {}
                     }
@@ -8172,8 +8222,27 @@ impl App {
         });
     }
 
+    /// The open photo has HDR on (its preview has an HDR rendition; Sigma photos only on export).
     fn toolbar_has_hdr(&self) -> bool {
-        self.current.as_ref().is_some_and(|c| c.loaded.previews.foreign.as_ref().is_some_and(|d| d.hdr.is_some())) && self.display.hdr_possible != Some(false)
+        self.current.as_ref().is_some_and(|c| {
+            let s = &self.entries[c.index].settings;
+            c.loaded.previews.foreign.as_ref().is_some_and(|d| s.hdr.effective(rawdev::export::hdr_auto(d), s.film.is_active()).is_some())
+        })
+    }
+
+    /// The window can show HDR (EDR display and float surface).
+    fn hdr_edr(&self) -> bool {
+        // GRAINEO_EDR=0: behave as without an HDR display (screenshots of the overlay)
+        self.display.hdr_possible == Some(true) && photo_display::float_surface() && crate::env::var("GRAINEO_EDR").as_deref() != Ok("0")
+    }
+
+    /// Sun button / shortcut: on an HDR display normal ↔ glowing, otherwise the overlay "Leuchtende Bereiche".
+    fn toggle_hdr_view(&mut self) {
+        if self.hdr_edr() {
+            self.display.hdr_on = !self.display.hdr_on;
+        } else {
+            self.hdr_out.show_glow = !self.hdr_out.show_glow;
+        }
     }
 
     fn toolbar_flag(&mut self, flag: sidecar::Flag, wanted: sidecar::Flag) {
@@ -8253,8 +8322,9 @@ impl App {
                         if item(ui, Some(lr::Icon::Warning), None, crate::tr("Clipping-Warnung"), self.show_clipping) {
                             self.show_clipping = !self.show_clipping;
                         }
-                        if self.toolbar_has_hdr() && item(ui, Some(lr::Icon::Sun), None, crate::tr("HDR-Anzeige"), self.display.hdr_on) {
-                            self.display.hdr_on = !self.display.hdr_on;
+                        let (label, on) = if self.hdr_edr() { ("HDR-Anzeige", self.display.hdr_on) } else { ("Leuchtende Bereiche", self.hdr_out.show_glow) };
+                        if self.toolbar_has_hdr() && item(ui, Some(lr::Icon::Sun), None, crate::tr(label), on) {
+                            self.toggle_hdr_view();
                         }
                         if item(ui, Some(lr::Icon::Info), None, crate::tr("Bildinfos im Bild"), self.info_level > 0) {
                             self.info_next();
@@ -8829,11 +8899,13 @@ impl App {
                     if let Some(i) = lr::aspect_grid(ui, &presets, selected, landscape) {
                         aspect = Some(presets[i].0.map(|r| if landscape || r == 1.0 { r } else { 1.0 / r }));
                     }
-                    lr::subheading(ui, "Raster");
-                    lr::segmented_pad(ui, &mut raster, &align::Raster::ALL, 8.0);
+                    ui.horizontal(|ui| {
+                        lr::field_label(ui, crate::tr("Raster"));
+                        lr::segmented_pad(ui, &mut raster, &align::Raster::ALL, 4.0);
+                    });
                     ui.add_space(4.0);
                     // Rotating and straightening belong to cropping: angle, draw line, 90° rotation
-                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Ausrichten in Grad – ⌥ beim Ziehen für Feinarbeit; auch außerhalb des Rahmens ziehen dreht das Bild");
+                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Ausrichten in Grad – ⌥ beim Ziehen für Feinarbeit");
                     ui.horizontal(|ui| {
                         lr::field_label(ui, crate::tr("Drehen"));
                         if lr::icon_button(ui, lr::Icon::RotCcw, false) {
@@ -9067,7 +9139,7 @@ impl App {
             if damaged {
                 ui.add_space(4.0);
                 ui.add_enabled_ui(s.view != View::Developed && !s.view.is_stage(), |ui| {
-                    lr::toggle(ui, &mut s.view_rescue, crate::tr("Gerettete Bereiche zeigen"));
+                    lr::switch_label(ui, &mut s.view_rescue, "Gerettete Bereiche zeigen");
                     if s.view_rescue {
                         ui.horizontal(|ui| {
                             for (color, text) in [(Color32::from_rgb(0xe0, 0xc0, 0x40), crate::tr("geschätzt")), (crate::lr::gray(0x9a), crate::tr("grau gefüllt"))] {
@@ -9490,7 +9562,10 @@ const WIDE_FULL_MAX_PIXELS: usize = 45_000_000;
 fn detail_job(c: &Current, settings: &Settings, region: Option<[usize; 4]>, factor: usize, generation: usize, current: Arc<AtomicUsize>, edit: jobs::EditStamp) -> Job {
     let [fw, fh] = c.loaded.full_size;
     let (index, session, foreign, settings) = (c.index, c.loaded.session.clone(), c.loaded.previews.foreign.clone(), settings.clone());
-    let wide = photo_display::wide_active() && factor == 1 && jobs::wide_detail_possible(&c.loaded, &settings) && (region.is_some() || fw * fh <= WIDE_FULL_MAX_PIXELS);
+    // HDR on: the 8-bit jobs, whose results get their HDR version from the preview's gain map (`hdr_output_ui::DetailSrc`);
+    // the preserved-gamut tiles have none and the zoomed view would lose EDR (the preview does the same, see `wide_job`)
+    let hdr = foreign.as_ref().is_some_and(|d| settings.hdr.effective(rawdev::export::hdr_auto(d), settings.film.is_active()).is_some());
+    let wide = !hdr && photo_display::wide_active() && factor == 1 && jobs::wide_detail_possible(&c.loaded, &settings) && (region.is_some() || fw * fh <= WIDE_FULL_MAX_PIXELS);
     match region {
         _ if wide => Job::RenderDetailWide { index, session, foreign, settings, region, generation, current, edit },
         Some(region) => Job::RenderRegion { index, session, foreign, settings, region, factor, generation, current, edit },

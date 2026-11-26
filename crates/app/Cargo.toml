@@ -10,7 +10,7 @@ name = "graineo"
 path = "src/main.rs"
 
 [dependencies]
-sysdirs = { path = "../sysdirs" }
+sysdirs ={ path = "../sysdirs" }
 # old (German) names of stored files and values: translated once at the first start
 legacy_names = { path = "../legacy_names" }
 # RGB color spaces and profiles for export (Display P3, Adobe RGB, ProPhoto)
@@ -27,6 +27,7 @@ library = { path = "../library" }
 # Develop non-Sigma RAWs (CR2/CR3/RAF/DNG/ARW)
 raw = { path = "../raw" }
 rawdev = { path = "../rawdev" }
+gainmap = { path = "../gainmap" }
 hdr = { path = "../hdr" }
 # own lens profiles: storage, assignment rules, exchange
 lensprof = { path = "../lensprof" }

@@ -397,7 +397,18 @@ impl App {
                 match name.as_str() {
                     "delete" => self.confirm_delete = true,
                     "delete-selection" => self.request_delete(),
-                    "export" => self.show_export = true,
+                    "export" => {
+                        // GRAINEO_EXPORT_FORMAT=jpg|tif|png|jxl preselects the format (screenshots of the format rows)
+                        if let Ok(f) = crate::env::var("GRAINEO_EXPORT_FORMAT") {
+                            self.export_format = match f.as_str() {
+                                "tif" => develop::export::Format::Tiff16,
+                                "png" => develop::export::Format::Png16,
+                                "jxl" => develop::export::Format::JXL_DEFAULT,
+                                _ => develop::export::Format::Jpeg { quality: 92 },
+                            };
+                        }
+                        self.show_export = true
+                    }
                     // all photos of the shown grid (at most nine) in the HDR dialog
                     "hdr" => crate::hdr_ui::ask(self.lib.hdr_test_candidates()),
                     // every bracket of the library in the dialog "Alle Reihen zusammenfügen"
@@ -461,6 +472,24 @@ impl App {
                     STEP.store(n + 1, std::sync::atomic::Ordering::Relaxed);
                 }
                 ctx.request_repaint_after(std::time::Duration::from_millis(20));
+            }
+        }
+        // Test hook: GRAINEO_SET_HDR=<stops> switches HDR on with this "Leuchtkraft" 2 s after opening (zoom tests of
+        // the EDR display without merging a bracket first; only with GRAINEO_DATA_DIR)
+        static HDR_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if let Some(stops) = crate::env::var("GRAINEO_SET_HDR").ok().and_then(|v| v.parse::<f32>().ok()).filter(|_| crate::env::var_os("GRAINEO_DATA_DIR").is_some()) {
+            if !HDR_DONE.load(std::sync::atomic::Ordering::Relaxed) && self.loading.is_none() {
+                if let Some(i) = self.current.as_ref().map(|c| c.index) {
+                    if ctx.input(|i| i.time) - self.shown_at > 2.0 {
+                        let s = &mut self.entries[i].settings;
+                        s.hdr.on = Some(true);
+                        s.hdr.headroom = stops;
+                        HDR_DONE.store(true, std::sync::atomic::Ordering::Relaxed);
+                        crate::log(&format!("test: HDR on, headroom {stops}"));
+                    } else {
+                        ctx.request_repaint_after(std::time::Duration::from_millis(200));
+                    }
+                }
             }
         }
         static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

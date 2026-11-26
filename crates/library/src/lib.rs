@@ -44,6 +44,7 @@ pub mod apple_groups;
 #[cfg_attr(not(target_os = "macos"), path = "imageio_fallback.rs")]
 pub mod imageio;
 pub mod imageio_common;
+pub mod heif_lib;
 pub mod export_meta;
 pub mod card_import;
 pub mod card_watch;

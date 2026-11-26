@@ -118,3 +118,109 @@ pub fn map_gain_map(data: &[u8], bpr: usize, w: usize, h: usize, map_px: &Mappin
     }
     (out, nw, nh)
 }
+
+
+/// Colour and geometry properties of a HEIF file's `meta` box (ICC/nclx for colour management, irot/imir).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HeifColour {
+    /// embedded ICC profile (`colr` of type `prof`)
+    pub icc: Option<Vec<u8>>,
+    /// colour primaries of a `colr` of type `nclx` (ITU-T H.273: 1 = BT.709/sRGB, 12 = Display P3)
+    pub nclx_primaries: Option<u16>,
+    /// the file has an `irot` or `imir` property: the HEIF decoder applies them and returns upright pixels
+    pub transformed: bool,
+    /// bits per channel of the first `pixi` property (8, 10 …)
+    pub bit_depth: Option<u8>,
+}
+
+/// Read [`HeifColour`] from the `meta` box at the start of a HEIF file (the first `colr` counts: it belongs to the
+/// primary image in files from phones and cameras).
+pub fn heif_colour(data: &[u8]) -> HeifColour {
+    let mut out = HeifColour::default();
+    let be32 = |o: usize| data.get(o..o + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize);
+    // top-level boxes up to `meta`
+    let mut o = 0usize;
+    let meta = loop {
+        let (Some(size), Some(kind)) = (be32(o), data.get(o + 4..o + 8)) else { return out };
+        let (head, size) = match size {
+            1 => (16, data.get(o + 8..o + 16).map(|b| u64::from_be_bytes(b.try_into().unwrap()) as usize).unwrap_or(0)),
+            0 => (8, data.len() - o),
+            s => (8, s),
+        };
+        if size < head {
+            return out;
+        }
+        // sizes come from the file: a forged 64-bit size must not wrap the offset back (endless loop)
+        let Some(end) = o.checked_add(size) else { return out };
+        if kind == b"meta" {
+            break (o + head + 4, end.min(data.len()));
+        }
+        o = end;
+    };
+    // walk the box tree inside meta; only container boxes on the way to ipco are entered
+    fn walk(data: &[u8], start: usize, end: usize, out: &mut HeifColour, depth: u8) {
+        let mut o = start;
+        while o + 8 <= end && depth < 6 {
+            let size = u32::from_be_bytes(data[o..o + 4].try_into().unwrap()) as usize;
+            if size < 8 || o + size > end {
+                return;
+            }
+            let kind = &data[o + 4..o + 8];
+            match kind {
+                b"iprp" | b"ipco" => walk(data, o + 8, o + size, out, depth + 1),
+                b"irot" | b"imir" => out.transformed = true,
+                b"pixi" if size >= 14 && out.bit_depth.is_none() => out.bit_depth = Some(data[o + 13]),
+                b"colr" if size >= 12 && out.icc.is_none() && out.nclx_primaries.is_none() => match &data[o + 8..o + 12] {
+                    b"prof" | b"rICC" => out.icc = Some(data[o + 12..o + size].to_vec()),
+                    b"nclx" if size >= 14 => out.nclx_primaries = Some(u16::from_be_bytes([data[o + 12], data[o + 13]])),
+                    _ => {}
+                },
+                _ => {}
+            }
+            o += size;
+        }
+    }
+    walk(data, meta.0, meta.1, &mut out, 0);
+    out
+}
+
+#[cfg(test)]
+mod heif_colour_tests {
+    fn bx(kind: &[u8], body: &[u8]) -> Vec<u8> {
+        let mut v = ((body.len() + 8) as u32).to_be_bytes().to_vec();
+        v.extend_from_slice(kind);
+        v.extend_from_slice(body);
+        v
+    }
+
+    #[test]
+    fn heif_colour_reads_profile_nclx_and_rotation() {
+        let ftyp = bx(b"ftyp", b"heic\0\0\0\0mif1heic");
+        let icc = b"ICCDATA".to_vec();
+        let colr = bx(b"colr", &[&b"prof"[..], &icc].concat());
+        let ipco = bx(b"ipco", &[bx(b"ispe", &[0u8; 12]), colr, bx(b"irot", &[1]), bx(b"pixi", &[0, 0, 0, 0, 3, 10, 10, 10])].concat());
+        let meta = bx(b"meta", &[&[0u8; 4][..], &bx(b"hdlr", &[0u8; 24]), &bx(b"iprp", &ipco)].concat());
+        let file = [ftyp.clone(), meta, bx(b"mdat", b"irotcolrprof")].concat();
+        let c = super::heif_colour(&file);
+        assert_eq!(c.icc, Some(icc));
+        assert!(c.transformed);
+        assert_eq!(c.bit_depth, Some(10));
+        let nclx = bx(b"colr", &[&b"nclx"[..], &12u16.to_be_bytes(), &13u16.to_be_bytes(), &[0, 0, 0x80]].concat());
+        let meta = bx(b"meta", &[&[0u8; 4][..], &bx(b"iprp", &bx(b"ipco", &nclx))].concat());
+        let c = super::heif_colour(&[ftyp, meta].concat());
+        assert_eq!((c.icc, c.nclx_primaries, c.transformed), (None, Some(12), false));
+        assert_eq!(super::heif_colour(b"garbage"), super::HeifColour::default());
+    }
+
+    /// A forged 64-bit box size that wraps the offset back to 0 ended in an endless loop (1.5.6).
+    #[test]
+    fn heif_colour_forged_largesize_terminates() {
+        // box at 0: size 16; box at 16: largesize 2^64 − 16 (o + size wraps to 0 without the check)
+        let mut f = bx(b"ftyp", b"heicmif1");
+        f.extend_from_slice(&1u32.to_be_bytes());
+        f.extend_from_slice(b"free");
+        f.extend_from_slice(&(u64::MAX - 15).to_be_bytes());
+        f.extend_from_slice(&[0; 16]);
+        assert_eq!(super::heif_colour(&f), super::HeifColour::default());
+    }
+}

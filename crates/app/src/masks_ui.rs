@@ -213,7 +213,7 @@ fn part_settings(ui: &mut Ui, s: &mut State, part: &mut Mask, path: &std::path::
         // auto mask: a switch and its tolerance (always shown, locked while off: no jump in the tray)
         ui.horizontal(|ui| {
             ui.add_space(lr::TEXT_INSET);
-            let r = lr::toggle(ui, &mut s.auto, "Auto-Maske");
+            let r = lr::switch_label(ui, &mut s.auto, "Auto-Maske");
             lr::hover_tip(ui, &r, crate::tr("Wirkt nur auf ähnliche Farben wie am Strichanfang"));
         });
         let mut tolerance = s.auto_tolerance.unwrap_or(AUTO_TOLERANCE) / COLOR_SCALE * 100.0;

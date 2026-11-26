@@ -549,7 +549,7 @@ fn show_window(ctx:&egui::Context,open:&mut bool,area:&mut usize) {
                     } else if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, crate::lr::gray(0x26));
                     }
-                    let c = if on { crate::lr::TEXT_STRONG() } else if searching && hits[i] == 0 { crate::lr::gray(0x5c) } else { crate::lr::gray(0xb0) };
+                    let c = if on { crate::lr::TEXT_STRONG() } else if searching && hits[i] == 0 { crate::lr::dimmed(crate::lr::DIMMED()) } else { crate::lr::gray(0xb0) };
                     if searching && hits[i] > 0 {
                         ui.painter().text(egui::pos2(r.right() - 10.0, r.center().y), egui::Align2::RIGHT_CENTER, hits[i].to_string(), egui::FontId::proportional(NAV_FONT - 1.0), lr::TEXT_DIM());
                     }

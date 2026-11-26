@@ -4882,6 +4882,7 @@ Bausteine	Components
 Film: spektrafilm, A. Volpato (GPL-3.0)	Film: spektrafilm, A. Volpato (GPL-3.0)
 Filmdaten: CC BY-SA 4.0	Film data: CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	RAW decoding: rawler (LGPL-2.1)
+HEIC-Dekodierung: heifer (MIT/Apache-2.0)	HEIC decoding: heifer (MIT/Apache-2.0)
 Objektivdaten: lensfun (CC BY-SA 3.0)	Lens data: lensfun (CC BY-SA 3.0)
 Gesichter finden: YuNet, Shiqi Yu (MIT)	Face detection: YuNet, Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	Tool ideas: grain loupe, pre-flash, diffusion and light points, inspired by spektrafilm
@@ -7248,3 +7249,43 @@ Markierungen ein/aus	Marks on/off
 Markierungen sichtbar	Marks visible
 Markierungen ausgeblendet	Marks hidden
 Die Grafikkarte wurde zurückgesetzt (Grafikwechsel oder Energiesparen). graineo wird beendet und kann sofort neu gestartet werden; Bearbeitungen sind gespeichert.	The graphics card was reset (graphics switch or sleep). graineo will quit and can be started again right away; your edits are saved.
+HDR (Gain-Map)	HDR (gain map)
+Nur JPEG, sRGB oder Display P3	JPEG only, sRGB or Display P3
+Ohne HDR-Bildschirm sehen Betrachter das normale Bild.	Without an HDR display, viewers see the normal image.
+aus bei Film-Look	off with film look
+Wie weit helle Stellen auf HDR-Bildschirmen über Weiß leuchten dürfen.	How far bright areas may glow above white on HDR displays.
+ · HDR: nichts heller als Weiß	 · HDR: nothing brighter than white
+ · HDR nur bei sRGB oder Display P3 ohne Rand	 · HDR only in sRGB or Display P3 without border
+HDR: leuchtende Bereiche zeigen (mit HDR-Bildschirm: normal ↔ leuchtend)	HDR: show glowing areas (with an HDR display: normal ↔ glowing)
+Leuchtende Bereiche zeigen	Show glowing areas
+Leuchtende Bereiche	Glowing areas
+Lichter über Weiß auf HDR-Bildschirmen, in Blenden	Highlights above white on HDR displays, in stops
+Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz, HDR	Exposure, contrast, highlights, shadows, whites, blacks, HDR
+Ein HDR-Bildschirm kann heller als Weiß zeigen; dieser Spielraum heißt **Kopfraum** und wird in Blenden gemessen (+1 = doppelt so hell wie Weiß, +2 = viermal, +3 = achtmal).\n\nDas normale Bild bleibt genau, wie es ist. Der Export legt als JPEG eine **Gain-Map** dazu: eine kleine Karte, die sagt, wo und wie viel heller es auf einem HDR-Bildschirm werden darf. Nur Lichter, die im Bild wirklich heller sind als Weiß (Himmel, Sonne, Glanzlichter), bekommen davon etwas; Mitteltöne und Schatten bleiben.\n• **0** – kein Leuchten\n• **+2** – Standard, deutlich, ohne grell zu wirken\n• **+3** – Maximum; viele Bildschirme schaffen weniger und zeigen dann ihr Höchstes\n\n### Ohne HDR-Bildschirm\nDer Sonnen-Knopf zeigt **Leuchtende Bereiche**: gelb ab +0,5, orange ab +1, rosa ab +2 Blenden. Betrachter ohne HDR-Bildschirm sehen das normale Bild.\n\n### An und aus\nAn bei HDR-Zusammenfügungen und Fotos, die schon HDR mitbringen (iPhone); sonst aus. Bei Film-Looks aus, weil Film und Papier die Lichter selbst begrenzen; von Hand einschaltbar.	An HDR display can show brighter than white; this room is called **headroom** and is measured in stops (+1 = twice as bright as white, +2 = four times, +3 = eight times).\n\nThe normal image stays exactly as it is. As JPEG, the export adds a **gain map**: a small map that says where and how much brighter the image may get on an HDR display. Only highlights that really are brighter than white in the picture (sky, sun, specular highlights) get any of it; midtones and shadows stay.\n• **0** – no glow\n• **+2** – default, clearly visible without looking garish\n• **+3** – maximum; many displays manage less and then show their best\n\n### Without an HDR display\nThe sun button shows **Glowing areas**: yellow from +0.5, orange from +1, pink from +2 stops. Viewers without an HDR display see the normal image.\n\n### On and off\nOn for HDR merges and photos that already bring HDR (iPhone); otherwise off. Off with film looks, because film and paper limit the highlights themselves; can be switched on by hand.
+Gain-Map	Gain map
+Leuchtkraft	Headroom
+Bezieht sich auf den freigestellten Ausschnitt. Dezent eingesetzt lenkt sie den Blick zur Bildmitte.\n\n• **Mittelpunkt** – Klein: Die Abdunklung beginnt nah an der Mitte und läuft breit aus. Groß: Nur die äußersten Ecken werden erfasst.	Applies to the cropped area. Used subtly, it draws the eye toward the center of the image.\n\n• **Midpoint** – Small: the darkening starts close to the center and fades out gradually. Large: only the outer corners are affected.
+Unscharfe Maskierung auf der Helligkeit, nach allen Foveon-Schritten – etwa für den Druck oder starke Verkleinerung. Radius klein halten, sonst entstehen Lichthöfe.\n\n• **Radius** – Größere Werte erzeugen an kontrastreichen Kanten schneller helle oder dunkle Lichthöfe.\n• **Maskieren** – Bei 0 wird überall geschärft. Höhere Werte beschränken die Schärfung auf deutliche Helligkeitskanten – Rauschen in glatten Flächen bleibt unangetastet.	Unsharp mask on brightness, after all Foveon steps – for example for print or heavy downsizing. Keep the radius small, or halos appear.\n\n• **Radius** – Higher values create bright or dark halos at high-contrast edges more quickly.\n• **Masking** – At 0, everything is sharpened. Higher values restrict sharpening to clear brightness edges – noise in smooth areas is left alone.
+Ein ortsfestes Muster, das in den Mitteltönen am stärksten ist und in Tiefschwarz und Weiß kaum. Es sitzt in Vorschau, 100 % und Export an derselben Stelle.\n\n• **Korngröße** – Die Größe bezieht sich auf die Bildbreite – das Korn wirkt bei jeder Ausgabegröße gleich grob.\n• **Rauigkeit** – Mischt eine zweite, halb so große Kornlage hinzu: Das Korn wirkt unregelmäßiger, eher wie Film als wie Rauschen.	A fixed pattern, strongest in the midtones and barely visible in deep black and white. It stays in the same place in the preview, at 100 %, and in the export.\n\n• **Grain Size** – The size is relative to the image width – the grain looks equally coarse at any output size.\n• **Roughness** – Mixes in a second grain layer at half the size: the grain looks more irregular, more like film than noise.
+Die Filmbelichtung bestimmt, wo das Bild auf der Filmkurve liegt; der Abzug gleicht die Helligkeit aus. Abzugshelligkeit, Wärme und Tönung entsprechen Belichtungszeit und Farbfiltern im Vergrößerer.\n\n• **Abzugshelligkeit** – Belichtungszeit im Vergrößerer in Blenden: + dunklerer, − hellerer Abzug.\n• **Abzug wärmer** – Gelbfilter im Vergrößerer (±1 ≈ ±15 CC): + wärmer, − kühler. Wirkt nur beim Abzug auf Papier.\n• **Abzug Tönung** – Purpurfilter im Vergrößerer: − grüner, + magenta. Wirkt nur beim Abzug auf Papier.	The film exposure determines where the image sits on the film curve; the print compensates for the brightness. Print brightness, warmth, and tint correspond to the exposure time and color filters in the enlarger.\n\n• **Print Brightness** – Enlarger exposure time in stops: + darker, − lighter print.\n• **Print Warmth** – Yellow filter in the enlarger (±1 ≈ ±15 CC): + warmer, − cooler. Only affects the print on paper.\n• **Print Tint** – Magenta filter in the enlarger: − greener, + magenta. Only affects the print on paper.
+Mit **Schwarzweiß** in den Grundeinstellungen mischt graineo bei Sigma-Fotos die Sensorschichten direkt. Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte	With **Black & white** in Basic Settings, graineo mixes the sensor layers of Sigma photos directly. The Foveon measures three layers at each pixel: mostly blue on top, green in the middle, red at the bottom. For black & white they are mixed directly by weight – at full resolution, always adding up to 100 %.\n• **More “Bottom”** – like a red filter: blue skies turn dark\n• **Triangle** – corner = that layer only, middle of an edge = half each of two layers, center = all equal\n\n### Keys\n⌥ while dragging: no snapping · double-click: center
+− kühler, + wärmer	− cooler, + warmer
+Hebt dunkle Bildteile lokal an, Lichter bleiben	Lifts dark areas locally, highlights stay
+Dunst herausrechnen, negativ: hinzufügen	Removes haze, negative: adds it
+Hebt blasse Farben stärker an als kräftige	Boosts muted colors more than strong ones
+Dreht diese Grundfarbe zur nächsten hin	Turns this primary toward the next one
+0 = Grundschärfung, −2 = ungeschärft, +2 = kräftig	0 = base sharpening, −2 = unsharpened, +2 = strong
+Zusätzlich zur Foveon-Schärfung	In addition to the Foveon sharpening
+Entfärbt violette Säume an harten Kanten	Removes purple fringes at hard edges
+Entfärbt grüne Säume an harten Kanten	Removes green fringes at hard edges
+Manuell: zieht den Rotkanal zur Mitte (+) oder zum Rand (−)	Manual: pulls the red channel to the center (+) or edge (−)
+Manuell: zieht den Blaukanal zur Mitte (+) oder zum Rand (−)	Manual: pulls the blue channel to the center (+) or edge (−)
++ gegen Tonne, − gegen Kissen; zusätzlich zum Profil	+ against barrel, − against pincushion; on top of the profile
+Rotkanal zur Mitte (+) oder zum Rand (−)	Red channel to the center (+) or edge (−)
+Blaukanal zur Mitte (+) oder zum Rand (−)	Blue channel to the center (+) or edge (−)
+Zeit (min)	Time (min)
+HDR aus bei Film-Look – klicken zum Einschalten	HDR off with film look – click to turn on
+HDR ausschalten	Turn HDR off
+HDR einschalten	Turn HDR on
+HDR-Leuchtkraft	HDR headroom
+Schatten-Tönung	Shadow tint

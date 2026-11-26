@@ -2220,6 +2220,46 @@ pub(crate) unsafe fn merrill_gain_parts(
     })
 }
 
+/// graineo: Merrill top dark shield for the black level. DP Merrill (CAMERAID 78) at MED or LOW resolution with
+/// FPNSuppression other than 1 takes a fixed rectangle instead of the CAMF one, as the maker's software does.
+unsafe fn merrill_dark_shield(
+    x3f: *mut x3f_t,
+    raw: &mut x3f_area16_t,
+    shield: &mut x3f_area16_t,
+) -> libc::c_int {
+    if let Some(mut rect) = unsafe { merrill_fixed_dark_shield(x3f) } {
+        return unsafe { crate::image::x3f_crop_area(rect.as_mut_ptr(), raw, shield) };
+    }
+    unsafe { x3f_crop_area_camf(x3f, c"DarkShieldTop".as_ptr() as *mut _, raw, 1, shield) }
+}
+
+/// Inclusive fixed dark-shield rectangle of [`merrill_dark_shield`], or `None` when the CAMF one applies.
+unsafe fn merrill_fixed_dark_shield(x3f: *mut x3f_t) -> Option<[u32; 4]> {
+    let mut camera = 0u32;
+    let mut fpn = 0u32;
+    if unsafe { x3f_get_camf_unsigned(x3f, c"CAMERAID".as_ptr() as *mut _, &mut camera) } == 0 {
+        return None;
+    }
+    if unsafe { x3f_get_camf_unsigned(x3f, c"FPNSuppression".as_ptr() as *mut _, &mut fpn) } == 0 {
+        fpn = 0;
+    }
+    merrill_fixed_dark_shield_for(camera, fpn, &unsafe { merrill_resolution_string(x3f) })
+}
+
+/// DP Merrill, MED/LOW, FPNSuppression != 1: columns 64 up to 4766 (MED) or 2374 (LOW), rows 1608–1626 (inclusive).
+pub(crate) fn merrill_fixed_dark_shield_for(camera: u32, fpn: u32, resolution: &str) -> Option<[u32; 4]> {
+    if camera != 78 || fpn == 1 {
+        return None;
+    }
+    if resolution.contains("MED") {
+        Some([64, 1608, 4766, 1626])
+    } else if resolution.contains("LOW") {
+        Some([64, 1608, 2374, 1626])
+    } else {
+        None
+    }
+}
+
 pub(crate) unsafe fn merrill_float_gain_front(
     x3f: *mut x3f_t,
     wb: *mut libc::c_char,
@@ -2230,13 +2270,7 @@ pub(crate) unsafe fn merrill_float_gain_front(
     let mut shield: x3f_area16_t = unsafe { std::mem::zeroed() };
     if unsafe {
         x3f_image_area(x3f, &mut raw) == 0
-            || x3f_crop_area_camf(
-                x3f,
-                c"DarkShieldTop".as_ptr() as *mut _,
-                &mut raw,
-                1,
-                &mut shield,
-            ) == 0
+            || merrill_dark_shield(x3f, &mut raw, &mut shield) == 0
     } {
         return Err(crate::Error::InvalidData(
             "missing Merrill float black calibration",
@@ -3523,13 +3557,7 @@ pub unsafe fn color_mode_calibration(
     let (count_scale, native_black) = if sensor == crate::ColorModeSensor::Merrill {
         let mut shield = x3f_area16_t::default();
         if unsafe {
-            x3f_crop_area_camf(
-                x3f,
-                c"DarkShieldTop".as_ptr().cast_mut(),
-                &mut raw,
-                1,
-                &mut shield,
-            )
+            merrill_dark_shield(x3f, &mut raw, &mut shield)
         } == 0
         {
             return Err(crate::Error::InvalidData(
@@ -4036,13 +4064,7 @@ unsafe fn make_merrill_render(
     // crop_area_camf already treats those CAMF coordinates as inclusive.
     if unsafe {
         x3f_image_area(x3f, &mut raw) == 0
-            || x3f_crop_area_camf(
-                x3f,
-                c"DarkShieldTop".as_ptr() as *mut _,
-                &mut raw,
-                1,
-                &mut shield,
-            ) == 0
+            || merrill_dark_shield(x3f, &mut raw, &mut shield) == 0
             || x3f_get_max_raw(x3f, max_raw.as_mut_ptr()) == 0
     } {
         return Err(crate::Error::InvalidData(
@@ -6071,6 +6093,20 @@ fn crop_reliability_view(
         );
     }
     Some(cropped)
+}
+
+#[cfg(test)]
+mod merrill_dark_shield_tests {
+    use super::merrill_fixed_dark_shield_for;
+
+    #[test]
+    fn dp_merrill_reduced_resolution_takes_the_fixed_rectangle() {
+        assert_eq!(merrill_fixed_dark_shield_for(78, 0, "LOW"), Some([64, 1608, 2374, 1626]));
+        assert_eq!(merrill_fixed_dark_shield_for(78, 7, "MED"), Some([64, 1608, 4766, 1626]));
+        assert_eq!(merrill_fixed_dark_shield_for(78, 1, "MED"), None);
+        assert_eq!(merrill_fixed_dark_shield_for(78, 0, "HI"), None);
+        assert_eq!(merrill_fixed_dark_shield_for(80, 0, "LOW"), None);
+    }
 }
 
 #[cfg(test)]

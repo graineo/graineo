@@ -47,6 +47,7 @@ mod hlclip_cmd;
 mod auto_look_cmd;
 mod scene_cmd;
 mod export_scene_cmd;
+mod gainmap_cmd;
 mod learn_look_cmd;
 mod samples_look;
 mod film_shelf;
@@ -338,6 +339,12 @@ fn main() -> Result<()> {
     }
     if cmd == "export-scene" {
         return export_scene_cmd::run(&args[1..]);
+    }
+    if cmd == "gainmap" {
+        return gainmap_cmd::run(&args[1..]);
+    }
+    if cmd == "gainmap-read" {
+        return gainmap_cmd::read(&args[1..]);
     }
     if cmd == "hdr-library" {
         return hdr_cmd::library(&args[1..]);

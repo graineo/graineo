@@ -120,6 +120,14 @@ jobs:
           ls -l dist
           cat dist/SHA256SUMS
 
+      - name: HEIC test (built-in decoder, test charts)
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/graineo-heic-test"
+          mkdir -p "$work"
+          GRAINEO_DATA_DIR="$work/data" GRAINEO_NO_XMP=1 \
+            cargo run --release --locked -p library --example heic_probe -- crates/library/tests/heic/*.heic
+
       - name: Upload package
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

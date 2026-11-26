@@ -249,7 +249,12 @@ fn quattro_working_nr_base(path: &Path, key: &crate::SppKey, cancel: &std::sync:
     }
     // Classic: the chain again with the sliders (they act in its range-based reconstruction)
     if q.classic.is_some() {
-        let lin = crate::classic_new::sliders::linear(path, &q.cal, q.raw.columns, q.raw.rows, key.nr).ok_or("Classic-Kette mit Reglern nicht verfügbar")?;
+        let [sw, sh] = q.stored_size.unwrap_or([q.raw.columns, q.raw.rows]);
+        let mut lin = crate::classic_new::sliders::linear(path, &q.cal, sw, sh, key.nr).ok_or("Classic-Kette mit Reglern nicht verfügbar")?;
+        // reduced resolution with non-square pixels: to the output size like the prepared image
+        if q.stored_size.is_some() {
+            lin = crate::quattro::resample_linear(&lin, q.raw.columns, q.raw.rows);
+        }
         if cancel.load(std::sync::atomic::Ordering::SeqCst) {
             return Err("abgebrochen".into());
         }

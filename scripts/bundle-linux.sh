@@ -63,7 +63,7 @@ Comment=RAW & Film, with Foveon support (experimental Linux build)
 Exec=graineo %F
 Icon=graineo
 Categories=Graphics;Photography;
-MimeType=image/jpeg;image/png;image/tiff;image/x-sigma-x3f;image/x-canon-cr2;image/x-canon-cr3;image/x-fuji-raf;image/x-adobe-dng;image/x-sony-arw;
+MimeType=image/jpeg;image/png;image/tiff;image/heic;image/heif;image/x-sigma-x3f;image/x-canon-cr2;image/x-canon-cr3;image/x-fuji-raf;image/x-adobe-dng;image/x-sony-arw;
 Terminal=false
 DESK
 cat > "$D/README-linux.txt" <<README

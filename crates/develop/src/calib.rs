@@ -24,6 +24,27 @@ fn scalar(camf: &Camf, name: &str) -> Option<f64> {
     camf.matrix(name).ok()?.as_f64().first().copied()
 }
 
+/// DP Merrill (CAMERAID 78) at MED or LOW resolution with FPNSuppression other than 1: the black level comes from a
+/// fixed rectangle of the top dark shield instead of the CAMF one, as the maker's software does (inclusive).
+fn merrill_fixed_dark_shield(camf: &Camf, resolution: &str) -> Option<[usize; 4]> {
+    let camera = scalar(camf, "CAMERAID")?;
+    let fpn = scalar(camf, "FPNSuppression").unwrap_or(0.0);
+    fixed_dark_shield_for(camera as u32, fpn as u32, resolution)
+}
+
+fn fixed_dark_shield_for(camera: u32, fpn: u32, resolution: &str) -> Option<[usize; 4]> {
+    if camera != 78 || fpn == 1 {
+        return None;
+    }
+    if resolution.contains("MED") {
+        Some([64, 1608, 4766, 1626])
+    } else if resolution.contains("LOW") {
+        Some([64, 1608, 2374, 1626])
+    } else {
+        None
+    }
+}
+
 /// Trimmed mean per plane (1 % discarded at top and bottom) over an inclusive rectangle.
 fn black_level(raw: &RawImage, r: [usize; 4]) -> [f64; 3] {
     let mut out = [0.0; 3];
@@ -522,6 +543,25 @@ pub struct WbPreset {
     pub ccm: Mat3,
 }
 
+/// sd Quattro (H) at image quality LOW: per-layer ratio `SensorAdjustmentGainFact_LOW / _HI` (1 for HI files, for
+/// dp Quattro, and when either entry is missing or implausible).
+pub fn sd_low_adjustment(file: &X3fFile, camf: &Camf) -> [f64; 3] {
+    if !file.is_quattro_low() {
+        return [1.0; 3];
+    }
+    match (vec3(camf, "SensorAdjustmentGainFact_LOW"), vec3(camf, "SensorAdjustmentGainFact_HI")) {
+        (Some(l), Some(h)) => {
+            let r: [f64; 3] = std::array::from_fn(|c| l[c] / h[c]);
+            if r.iter().all(|v| v.is_finite() && (0.5..=2.0).contains(v)) {
+                r
+            } else {
+                [1.0; 3]
+            }
+        }
+        _ => [1.0; 3],
+    }
+}
+
 /// White balance presets in the order of the camera menu.
 /// White balance name of a Quattro file's `WB_DESC` as in the CAMF tables (`Auto(Natural)` = `AutoLSP`, the
 /// light-source-priority auto white balance).
@@ -696,7 +736,10 @@ impl Calibration {
             .unwrap_or("Standard")
             .to_string();
 
-        let black = rect(&camf, "DarkShieldTop").map(|r| black_level(raw, r)).unwrap_or([0.0; 3]);
+        let black = merrill_fixed_dark_shield(&camf, props.get("RESOLUTION").unwrap_or("HI"))
+            .or_else(|| rect(&camf, "DarkShieldTop"))
+            .map(|r| black_level(raw, r))
+            .unwrap_or([0.0; 3]);
         let active = rect(&camf, "ActiveImageArea").unwrap_or([0, 0, raw.columns - 1, raw.rows - 1]);
         let saturation = pixel_saturation - black.iter().cloned().fold(0.0, f64::max);
 
@@ -800,8 +843,19 @@ impl Calibration {
         if camf.property("WhiteBalanceGains", &wb).is_none() {
             wb = "Auto".into();
         }
-        let raw_gain = |name: &str| vec3(camf, camf.property("WhiteBalanceGains", name)?);
-        let ccm = |name: &str| camf.property("WhiteBalanceColorCorrections", name).and_then(|n| mat3(camf, n));
+        // "ColorTemp" (code 11) has no table entry: gains and matrix from the colour temperature tables
+        // (`quattro_wb`), at the shot's kelvin or, for "ColorTemp <K>K", at that value (SPP-saved setting).
+        let color_temp = crate::quattro_wb::ColorTempTables::read(camf);
+        let shot_kelvin = crate::quattro_wb::shot_kelvin(camf);
+        let from_temp = |name: &str| -> Option<([f64; 3], Mat3)> {
+            let k = if name == "ColorTemp" { shot_kelvin } else { crate::quattro_wb::kelvin_of(name)? };
+            crate::quattro_wb::gains_and_matrix(color_temp.as_ref()?, k)
+        };
+        let raw_gain = |name: &str| vec3(camf, camf.property("WhiteBalanceGains", name)?).or_else(|| from_temp(name).map(|t| t.0));
+        let ccm = |name: &str| camf.property("WhiteBalanceColorCorrections", name).and_then(|n| mat3(camf, n)).or_else(|| from_temp(name).map(|t| t.1));
+        if shot_name.starts_with("ColorTemp") && from_temp(&shot_name).is_none() {
+            eprintln!("Quattro: white balance ColorTemp without usable CAMF tables, using Auto");
+        }
         let shot_raw = raw_gain(&wb).ok_or("Weißabgleich fehlt in der CAMF")?;
         let shot_ccm = ccm(&wb).ok_or("Farbkorrekturmatrix fehlt in der CAMF")?;
         let norm = |g: [f64; 3]| {
@@ -831,7 +885,10 @@ impl Calibration {
                 }
                 // Brightness reference as for dp Quattro: n2c = 2^14 − 1 − RawOffset
                 let n2c = pixel_saturation - scalar(camf, "RawOffset").unwrap_or(2048.0).min(4096.0);
-                std::array::from_fn(|i| d.0[i * 4] * n2c * QUATTRO_SD_EXPOSURE / iso_gain)
+                // image quality LOW: the maker's software takes the sensor adjustment for binned top layers
+                // (`SensorAdjustmentGainFact_LOW` instead of `_HI`); our matrix is calibrated at HI → their ratio
+                let low = sd_low_adjustment(file, camf);
+                std::array::from_fn(|i| d.0[i * 4] * n2c * QUATTRO_SD_EXPOSURE / iso_gain * low[i])
             }
         };
         let wb_gain: [f64; 3] = counts_gain.map(|g| g / ENC_SCALE);
@@ -873,6 +930,12 @@ impl Calibration {
         };
         let (wb, wb_gain, shot_ccm) = (shot.name.clone(), shot.gain, shot.ccm);
         let mut wb_presets: Vec<WbPreset> = WB_PRESETS.iter().filter_map(|n| preset(n)).collect();
+        // colour temperature saved by SIGMA Photo Pro: own preset at that kelvin (`develop::sppa` selects it)
+        if let Some(k) = x3f::sppa::read(file).filter(|a| a.white_balance.as_deref() == Some("ColorTemp")).and_then(|a| a.wb_temperature) {
+            if let Some(p) = preset(&crate::quattro_wb::preset_name(k)) {
+                wb_presets.push(p);
+            }
+        }
         for p in [&decoded, &shot] {
             if !wb_presets.iter().any(|q| q.name == p.name) {
                 wb_presets.push(p.clone());
@@ -907,7 +970,6 @@ impl Calibration {
             .unwrap_or("Standard")
             .to_string();
         let [w, h] = size;
-        let _ = file;
         Ok(Self {
             camera,
             model,
@@ -1186,3 +1248,17 @@ trait Pipe: Sized {
     }
 }
 impl Pipe for Mat3 {}
+
+#[cfg(test)]
+mod dark_shield_tests {
+    use super::fixed_dark_shield_for;
+
+    #[test]
+    fn dp_merrill_reduced_resolution_takes_the_fixed_rectangle() {
+        assert_eq!(fixed_dark_shield_for(78, 0, "LOW"), Some([64, 1608, 2374, 1626]));
+        assert_eq!(fixed_dark_shield_for(78, 2, "MED"), Some([64, 1608, 4766, 1626]));
+        assert_eq!(fixed_dark_shield_for(78, 1, "LOW"), None);
+        assert_eq!(fixed_dark_shield_for(78, 0, "HI"), None);
+        assert_eq!(fixed_dark_shield_for(77, 0, "LOW"), None);
+    }
+}

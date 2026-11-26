@@ -475,7 +475,7 @@ impl LibraryView {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
-                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.")).small().color(crate::lr::gray(0x8c))).wrap());
+                ui.add(egui::Label::new(egui::RichText::new(crate::tr("Hier gehen Ansehen, Entwickeln, Exportieren und Drucken. Alles andere erst in der Bibliothek.")).small().color(crate::lr::TEXT_DIM())).wrap());
             });
             if option_link(ui, crate::tr("Ordner schließen")) {
                 close = true;

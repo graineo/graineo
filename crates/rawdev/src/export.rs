@@ -44,6 +44,119 @@ pub fn append_gain_map(f: &Frame, original: &Path, dest: &Path, quality: u8) -> 
     library::imageio::append_gain_map(dest, original, map_px.as_ref(), quality as f32 / 100.0)
 }
 
+/// Is HDR on for this photo when the settings leave it automatic: merged HDR photos and photos with an HDR gain map.
+pub fn hdr_auto(doc: &RawDoc) -> bool {
+    doc.merged.is_some() || doc.hdr.is_some()
+}
+
+/// Scene luminance of the exported image for the HDR gain map: the development up to the scene-linear stage (exposure,
+/// shadows/highlights, dehaze, tone equalizer; before tone curve, look and film), the original's own gain map applied
+/// (iPhone & co.: their highlights are brighter than the SDR file), crop and rotation as in the export. Linear Rec.709
+/// luminance, `w × h` of the crop at full resolution.
+pub fn hdr_scene(doc: &RawDoc, s: &Settings) -> Result<(Vec<f32>, usize, usize), String> {
+    let eff = doc.effective_settings(s);
+    let s = &*eff;
+    let st = doc.full_stage(s)?;
+    // the map has half the output resolution at most: the scene at half resolution is enough and costs a quarter
+    let half;
+    let st = if st.w * st.h > 4_000_000 && std::env::var_os("GRAINEO_GAINMAP_FULL_SCENE").is_none() {
+        let (hw, hh) = (st.w.div_ceil(2), st.h.div_ceil(2));
+        half = crate::doc::Stage::new(raw::development::downscale(&st.px, st.w, st.h, hw, hh), hw, hh, None);
+        &half
+    } else {
+        &*st
+    };
+    let scene = stage_scene(doc, s, st);
+    let scene = develop::geometry::apply_f32(scene, s, doc.orientation);
+    Ok((luminance(&scene.data), scene.width, scene.height))
+}
+
+/// Scene-linear sRGB of a stage (full or preview, sensor orientation) with the original's own gain map applied.
+fn stage_scene(doc: &RawDoc, s: &Settings, st: &crate::doc::Stage) -> develop::Linear {
+    use rayon::prelude::*;
+    let (w, h) = (st.w, st.h);
+    let params = crate::render::Params::new(doc, s);
+    let mask = st.mask(doc.lum());
+    let prepared = crate::render::prepare(doc, &st.px, w, h, mask, s, doc.haze_for(s, w, h, [0, 0, w, h]).as_ref(), doc.toneq_for(s, w, h, [0, 0, w, h]).as_ref(), crate::render::brake_active(s).then(|| st.brake_base().to_vec()));
+    let px: &[[f32; 3]] = prepared.as_deref().unwrap_or(&st.px);
+    let mut scene = crate::render::scene_linear(&params, px, w, h, mask);
+    drop(prepared);
+    if let Some(m) = doc.hdr.as_ref().filter(|m| m.w > 0 && m.h > 0) {
+        // the original's map (preview size, same orientation as the stage), bilinear to full size
+        scene.data.par_chunks_mut(w * 3).enumerate().for_each(|(y, row)| {
+            let fy = ((y as f32 + 0.5) * m.h as f32 / h as f32 - 0.5).clamp(0.0, (m.h - 1) as f32);
+            let (y0, ty) = (fy.floor() as usize, fy.fract());
+            let y1 = (y0 + 1).min(m.h - 1);
+            for x in 0..w {
+                let fx = ((x as f32 + 0.5) * m.w as f32 / w as f32 - 0.5).clamp(0.0, (m.w - 1) as f32);
+                let (x0, tx) = (fx.floor() as usize, fx.fract());
+                let x1 = (x0 + 1).min(m.w - 1);
+                let v = |xx: usize, yy: usize| m.log2[yy * m.w + xx];
+                let a = v(x0, y0) + tx * (v(x1, y0) - v(x0, y0));
+                let b = v(x0, y1) + tx * (v(x1, y1) - v(x0, y1));
+                let g = (a + ty * (b - a)).exp2();
+                row[x * 3..x * 3 + 3].iter_mut().for_each(|c| *c *= g);
+            }
+        });
+    }
+    scene
+}
+
+/// HDR rendition of the preview as a gain map at half the preview size, in the same frame as the rendered preview
+/// `rgb` (`w × h`, 8-bit sRGB, sensor orientation, uncropped): same computation as the export, from the preview stage.
+/// None: HDR off for these settings, nothing above SDR white, or a preview of another framing.
+pub fn hdr_preview_map(doc: &RawDoc, s: &Settings, rgb: &[u8], w: usize, h: usize) -> Option<crate::doc::HdrMap> {
+    let headroom = s.hdr.effective(hdr_auto(doc), s.film.is_active())?;
+    let eff = doc.effective_settings(s);
+    let s = &*eff;
+    let st = doc.preview_stage(s);
+    // same framing only (aspect within 2 %)
+    if rgb.len() != w * h * 3 || ((st.w as f32 / st.h as f32) / (w as f32 / h as f32) - 1.0).abs() > 0.02 {
+        return None;
+    }
+    let scene = stage_scene(doc, s, &st);
+    let lum = luminance(&scene.data);
+    let (sdr, mw, mh) = gainmap::sdr_luminance_half(rgb, w, h);
+    let mut sc = gainmap::resample(&lum, st.w, st.h, mw, mh);
+    let k = gainmap::midtone_scale(&sdr, &sc);
+    sc.iter_mut().for_each(|v| *v *= k);
+    let log2 = gainmap::compute(&sdr, &sc, headroom);
+    let max = log2.iter().copied().fold(0.0f32, f32::max);
+    (max >= 0.05).then(|| crate::doc::HdrMap { w: mw, h: mh, log2, headroom: max.exp2(), iso: true, base_headroom: 0.0, alt_headroom: max })
+}
+
+/// Rec.709 luminance of interleaved linear RGB (non-finite values count as 0).
+pub fn luminance(rgb: &[f32]) -> Vec<f32> {
+    use rayon::prelude::*;
+    rgb.par_chunks(3)
+        .map(|p| {
+            let y = 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
+            if y.is_finite() {
+                y.max(0.0)
+            } else {
+                0.0
+            }
+        })
+        .collect()
+}
+
+/// Add an HDR gain map to the finished JPEG `path` (written and with its metadata): SDR pixels stay byte for byte,
+/// `scene` = scene luminance of the same framing (see [`hdr_scene`]). Ok(None): nothing above SDR white, the file is
+/// unchanged. The file is rewritten in place (it is the export's side file).
+pub fn write_gain_map(path: &Path, scene: &(Vec<f32>, usize, usize), headroom: f32) -> Result<Option<gainmap::Written>, String> {
+    let jpeg = std::fs::read(path).map_err(|e| e.to_string())?;
+    let (lum, sw, sh) = (&scene.0, scene.1, scene.2);
+    if sw == 0 || sh == 0 {
+        return Ok(None);
+    }
+    let sample = |mw: usize, mh: usize| Some(gainmap::resample(lum, sw, sh, mw, mh));
+    let Some((out, info)) = gainmap::add_to_jpeg(&jpeg, &sample, headroom, 90)? else { return Ok(None) };
+    let tmp = path.with_extension("gainmap.tmp");
+    std::fs::write(&tmp, &out).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+    Ok(Some(info))
+}
+
 /// RGB output profile. sRGB remains the original export path; DNG is camera-profiled.
 pub fn export_color(doc:&RawDoc,s:&Settings,format:Format,path:&Path,space:graineo_color::Space)->Result<(),String>{
  export_color_opts(doc,s,format,path,space,&Default::default())

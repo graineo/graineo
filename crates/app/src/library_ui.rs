@@ -3599,7 +3599,7 @@ impl LibraryView {
             let pts = if o { vec![c + egui::vec2(-3.5, -2.0), c + egui::vec2(3.5, -2.0), c + egui::vec2(0.0, 2.5)] } else { vec![c + egui::vec2(-2.0, -3.5), c + egui::vec2(2.5, 0.0), c + egui::vec2(-2.0, 3.5)] };
             painter.add(egui::Shape::convex_polygon(pts, if over_triangle { crate::lr::TEXT_STRONG() } else { crate::lr::gray(0x8a) }, egui::Stroke::NONE));
         }
-        let color = if dimmed { crate::lr::gray(0x8c) } else if active || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
+        let color = if dimmed { crate::lr::DIMMED() } else if active || resp.hovered() { crate::lr::TEXT_STRONG() } else { lr::TEXT() };
         let font = egui::TextStyle::Body.resolve(ui.style());
         let right_free = 52.0;
         // symbol (special rows only) in the marker column of the rows – where the other sections show the triangle of
@@ -3782,9 +3782,8 @@ impl LibraryView {
                 let view = ui.clip_rect();
                 if top < view.bottom() {
                     let rect = egui::Rect::from_min_max(egui::pos2(view.left(), top.max(view.top())), view.right_bottom());
-                    // fade toward the panel color so the veil matches every theme
-                    let bg = lr::PANEL();
-                    ui.painter().rect_filled(rect, 0.0, Color32::from_rgba_unmultiplied(bg.r(), bg.g(), bg.b(), 160));
+                    // fade toward the panel color, as strong as dimmed text below still allows (≥ 3:1, every theme)
+                    ui.painter().rect_filled(rect, 0.0, lr::DIM_VEIL());
                 }
             }
         }));

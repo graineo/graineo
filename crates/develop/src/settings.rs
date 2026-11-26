@@ -262,6 +262,10 @@ pub struct Settings {
     /// Tone equalizer: show its mask instead of the image (display only, never stored; switches film and look stage off)
     #[serde(skip)]
     pub tone_eq_mask: bool,
+    /// HDR rendition (gain map on export, glowing highlights in the preview): switch and headroom. Left out of the
+    /// stored JSON while untouched, so existing photos stay byte-identical. See [`HdrOutput`].
+    #[serde(rename = "hdr", default, skip_serializing_if = "HdrOutput::is_default")]
+    pub hdr: HdrOutput,
     /// Monochrome mix bottom / middle / top layer (SPP default 0.33/0.33/0.34)
     pub mix: [f32; 3],
     /// Layer mixer in colour: `m[R/G/B][bottom/middle/top layer]` instead of Sigma's
@@ -400,6 +404,43 @@ pub struct Settings {
     /// Export only, never saved: output sharpening after scaling ([`crate::output_sharpen`])
     #[serde(skip)]
     pub output_sharpen: crate::output_sharpen::OutputSharpen,
+}
+
+/// HDR rendition of a photo: how far its highlights may shine above SDR white on an HDR display (gain map). The
+/// SDR image never changes; the HDR rendition only adds light above it.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HdrOutput {
+    /// switched on/off by hand; `None` = automatic: on for merged HDR photos and photos that came with an HDR gain
+    /// map, off otherwise and while a film look is active
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+    /// "Glow": headroom in stops above SDR white, 0 … 3
+    pub headroom: f32,
+}
+
+impl Default for HdrOutput {
+    fn default() -> Self {
+        HdrOutput { on: None, headroom: HdrOutput::DEFAULT_HEADROOM }
+    }
+}
+
+impl HdrOutput {
+    pub const DEFAULT_HEADROOM: f32 = 2.0;
+    pub const MAX_HEADROOM: f32 = 3.0;
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+    /// Is HDR on for a photo whose automatic state is `auto_source` (merged HDR, HDR gain map) and with film look
+    /// `film`?
+    pub fn is_on(&self, auto_source: bool, film: bool) -> bool {
+        self.on.unwrap_or(auto_source && !film)
+    }
+    /// Headroom in stops when HDR is on and has an effect.
+    pub fn effective(&self, auto_source: bool, film: bool) -> Option<f32> {
+        let h = self.headroom.clamp(0.0, Self::MAX_HEADROOM);
+        (self.is_on(auto_source, film) && h > 0.0).then_some(h)
+    }
 }
 
 /// Noise brake when brightening with Fill Light.
@@ -613,6 +654,7 @@ impl Default for Settings {
             dehaze: 0.0,
             tone_eq: crate::tone_eq::ToneEq::default(),
             tone_eq_mask: false,
+            hdr: HdrOutput::default(),
             noise_brake: NoiseBrake::Off,
             mix: [0.33, 0.33, 0.34],
             layer_matrix: None,

@@ -1995,11 +1995,16 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                         continue;
                     }
                 };
-                let mut hdr_geo: Option<develop::geometry::Frame> = None;
+                // HDR (gain map): the photo has HDR on (`hdr_on`); for a JPEG in sRGB/Display P3 without border and with
+                // the export option on, the scene luminance of the exported framing is kept for the map (`hdr_scene`)
+                let mut hdr_on = false;
+                let mut hdr_scene: Option<((Vec<f32>, usize, usize), f32)> = None;
                 // shooting data as the RAW decoder reads it (complements the original's metadata, see write_export_metadata)
                 let mut decoder_shot: Option<library::export_meta::Shot> = None;
                 // Output color space only applies to finished images (JPEG/TIFF); sRGB takes the existing, unchanged path
                 let color_space = if format.is_finished_image() { color_space } else { graineo_color::Space::Srgb };
+                let hdr_possible = gain_map && matches!(format, Format::Jpeg { .. }) && matches!(color_space, graineo_color::Space::Srgb | graineo_color::Space::DisplayP3) && develop::film::border_fractions(&s.film).is_none();
+                let t_export = std::time::Instant::now();
                 let result = if crate::image_kind::of(&path) != crate::image_kind::ImageKind::Foveon {
                     // (a merged photo not computed yet is merged first: never its stand-in)
                     rawdev::RawDoc::open_for_output(&path, &s, &|| true)
@@ -2007,18 +2012,36 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                         .and_then(|mut doc| {
                             // oriented as on opening (also rotated by hand in Lightroom): crop and rotation refer to it
                             rawdev::lightroom::apply_orientation(&mut doc);
-                            // The HDR gain map belongs to the sRGB image; in other color spaces it is dropped
-                            if doc.hdr.is_some() && develop::film::border_fractions(&s.film).is_none() && color_space == graineo_color::Space::Srgb {
-                                hdr_geo = Some(rawdev::export::export_frame(&doc, &s));
-                            }
                             decoder_shot = Some(rawdev::export::shot(&doc.info)).filter(|s| !s.is_empty());
-                            rawdev::export::export_color_opts(&doc, &s, format, &out, color_space, &options)
+                            rawdev::export::export_color_opts(&doc, &s, format, &out, color_space, &options)?;
+                            let headroom = s.hdr.effective(rawdev::export::hdr_auto(&doc), s.film.is_active());
+                            hdr_on = headroom.is_some();
+                            if let (Some(h), true) = (headroom, hdr_possible) {
+                                match rawdev::export::hdr_scene(&doc, &s) {
+                                    Ok(sc) => hdr_scene = Some((sc, h)),
+                                    Err(e) => eprintln!("export {}: HDR scene: {e}", out.display()),
+                                }
+                            }
+                            Ok(())
                         })
                         .map(|_| true)
                 } else {
-                    Session::open_for(&path, &s)
-                        .map_err(|e| e.to_string())
-                        .and_then(|mut sess| develop::export::color::export(&mut sess, &s, format, engine, &out, color_space, &options).map_err(|e| e.to_string()))
+                    Session::open_for(&path, &s).map_err(|e| e.to_string()).and_then(|mut sess| {
+                        let spp = develop::export::color::export(&mut sess, &s, format, engine, &out, color_space, &options).map_err(|e| e.to_string())?;
+                        // Foveon: the scene-linear stage of the same development; the Sigma image itself is untouched
+                        let headroom = s.hdr.effective(false, s.film.is_active());
+                        hdr_on = headroom.is_some();
+                        if let (Some(h), true) = (headroom, hdr_possible) {
+                            match sess.render_full_scene(&s, engine == Engine::Spp) {
+                                Ok(scene) => {
+                                    let scene = develop::geometry::apply_f32(scene, &s, sess.cal.orientation);
+                                    hdr_scene = Some(((rawdev::export::luminance(&scene.data), scene.width, scene.height), h));
+                                }
+                                Err(e) => eprintln!("export {}: HDR scene: {e}", out.display()),
+                            }
+                        }
+                        Ok(spp)
+                    })
                 };
                 // Metadata (shooting data of the original, copyright; personal fields as chosen) without recompressing
                 let (meta_report, meta_note) = match (&result, format) {
@@ -2028,15 +2051,25 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 if crate::env::var_os("GRAINEO_LOG").is_some() && !meta_report.is_empty() {
                     eprintln!("export {}: metadata {meta_report}", out.display());
                 }
-                let hdr_note = match (&result, format, hdr_geo) {
-                    (Ok(_), Format::Jpeg { quality }, Some(f)) if gain_map => match rawdev::export::append_gain_map(&f, &path, &out, quality) {
-                        Ok(true) => crate::tr(" · mit HDR-Gain-Map"),
-                        Ok(false) => crate::tr(" · HDR-Gain-Map entfällt (Format der Karte)"),
-                        Err(_) => crate::tr(" · HDR-Gain-Map nicht geschrieben"),
+                // HDR gain map last: it only appends to the finished file, the SDR image stays byte for byte
+                let hdr_note = match (&result, format, hdr_scene.take()) {
+                    (Ok(_), _, Some((scene, headroom))) => match rawdev::export::write_gain_map(&out, &scene, headroom) {
+                        Ok(Some(w)) => {
+                            if crate::env::var_os("GRAINEO_LOG").is_some() {
+                                eprintln!("export {}: gain map {}×{}, max {:.2} EV, {} bytes, total {:.0?}", out.display(), w.w, w.h, w.max, w.bytes, t_export.elapsed());
+                            }
+                            crate::tr(" · mit HDR-Gain-Map")
+                        }
+                        Ok(None) => crate::tr(" · HDR: nichts heller als Weiß"),
+                        Err(e) => {
+                            eprintln!("export {}: gain map: {e}", out.display());
+                            crate::tr(" · HDR-Gain-Map nicht geschrieben")
+                        }
                     },
-                    (Ok(_), Format::Jpeg { .. }, Some(_)) => crate::tr(" · ohne HDR-Gain-Map (Option aus)"),
-                    (Ok(_), Format::Tiff16, Some(_)) => crate::tr(" · TIFF ohne HDR-Gain-Map"),
-                    (Ok(_), Format::Jxl { .. }, Some(_)) => crate::tr(" · JPEG XL ohne HDR-Gain-Map"),
+                    (Ok(_), Format::Jpeg { .. }, None) if hdr_on && !gain_map => crate::tr(" · ohne HDR-Gain-Map (Option aus)"),
+                    (Ok(_), Format::Jpeg { .. }, None) if hdr_on && !hdr_possible => crate::tr(" · HDR nur bei sRGB oder Display P3 ohne Rand"),
+                    (Ok(_), Format::Tiff16, None) if hdr_on => crate::tr(" · TIFF ohne HDR-Gain-Map"),
+                    (Ok(_), Format::Jxl { .. }, None) if hdr_on => crate::tr(" · JPEG XL ohne HDR-Gain-Map"),
                     _ => "",
                 };
                 // Move the finished side file to the destination name. If the name has been taken in the meantime,

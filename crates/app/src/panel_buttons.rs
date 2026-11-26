@@ -67,7 +67,7 @@ fn paint_symbol(painter: &egui::Painter, rect: Rect, symbol: Symbol, color: Colo
 fn switch(ui: &mut egui::Ui, symbol: Symbol, on: bool, enabled: bool, tip: &str) -> (bool, Rect) {
     let (rect, resp) = ui.allocate_exact_size(SIZE, egui::Sense::click());
     let (fill, fg) = if !enabled {
-        (Color32::TRANSPARENT, crate::lr::gray(0x5c))
+        (Color32::TRANSPARENT, crate::lr::dimmed(crate::lr::DIMMED()))
     } else if on {
         (crate::lr::gray(0x38), crate::lr::TEXT_STRONG())
     } else if resp.hovered() {

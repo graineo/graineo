@@ -80,7 +80,6 @@ pub static LENS_DEFAULT: Card = card("", "Die Vorgabe gilt auch für künftige I
 // ── Basic ──
 static TEMPERATURE: Card = card("", "Zuerst Vorgabe oder Pipette wählen, dann hier nach Geschmack nachstellen. Die Helligkeit bleibt gleich, nur das Verhältnis von Rot zu Blau ändert sich.", example_pair!("temperature", "Vorher", "+0,70"));
 static TINT: Card = card("", "Hilft, wenn Neutrales nach der Temperatur noch grünlich oder rosa wirkt – etwa unter Laub oder bei Leuchtstofflicht.", example_pair!("tint", "Vorher", "+0,50"));
-static TREATMENT: Card = card("Farbe oder Schwarzweiß.", "**Schwarzweiß** entwickelt das Foto in Graustufen. Bei Sigma-Fotos mischt graineo dafür die Sensorschichten direkt (Abschnitt „S/W-Mischung“). Zurück auf **Farbe** stellt das farbige Bild wieder her.", None);
 static WHITE_BALANCE: Card = card("Welches Licht im Foto als neutral gilt.", "**Wie Aufnahme** übernimmt die Einstellung der Kamera, **Automatisch** schätzt sie aus dem Bild, die Vorgaben (Tageslicht, Schatten, Bewölkt …) passen zu typischem Licht. Mit der Pipette eine Stelle anklicken, die weiß oder grau sein soll. Temperatur und Tönung darunter stimmen fein nach.", None);
 static EXPOSURE: Card = card("", "Hier wird nicht einfach multipliziert: Die Lichter rollen auf der Kurve weich ab. Was der Sensor schon ausgebrannt hat, holt auch ein negativer Wert nicht zurück.", example_pair!("exposure", "Vorher", "+0,70 EV"));
 static CONTRAST: Card = card("Steilheit der S-förmigen Tonkurve der Kamera.", "+ trennt Hell und Dunkel stärker, Tiefen und Lichter laufen früher zu; − wirkt flacher und offener. Der Kontrastzuschlag des Farbmodus (z. B. Vivid) kommt hinzu.", example_pair!("contrast", "Vorher", "+1,0"));
@@ -153,11 +152,6 @@ fn vectorscope_sketch(ui: &mut egui::Ui) {
     p.text(egui::pos2(x, c.y + 24.0), egui::Align2::LEFT_CENTER, crate::tr("Helligkeit = Anzahl Pixel"), font, lr::TEXT_DIM());
 }
 /// Edit sections without a card of their own: the operation of the header comes from the controls line.
-pub static EDIT_SECTION: Card = card(
-    "Gruppe von Reglern zu einem Thema.",
-    "Der Kopf lässt sich auf- und zuklappen. Sobald im Abschnitt etwas verstellt ist, erscheinen rechts im Kopf der Schalter und der Rücksetzknopf.",
-    None,
-);
 // "Film" section (spektrafilm): sections, sliders and choice rows
 pub static FILM_RENDERING: Card = card(
     "Kamera oder Film.",
@@ -176,13 +170,10 @@ static FILM_PAPER: Card = card(
 );
 static FILM_DARKROOM: Card = card(
     "Belichten und Kopieren wie im Labor.",
-    "Die Filmbelichtung bestimmt, wo das Bild auf der Filmkurve liegt; der Abzug gleicht die Helligkeit aus. Abzugshelligkeit, Wärme und Tönung entsprechen Belichtungszeit und Farbfiltern im Vergrößerer.",
+    "Die Filmbelichtung bestimmt, wo das Bild auf der Filmkurve liegt; der Abzug gleicht die Helligkeit aus. Abzugshelligkeit, Wärme und Tönung entsprechen Belichtungszeit und Farbfiltern im Vergrößerer.\n\n• **Abzugshelligkeit** – Belichtungszeit im Vergrößerer in Blenden: + dunklerer, − hellerer Abzug.\n• **Abzug wärmer** – Gelbfilter im Vergrößerer (±1 ≈ ±15 CC): + wärmer, − kühler. Wirkt nur beim Abzug auf Papier.\n• **Abzug Tönung** – Purpurfilter im Vergrößerer: − grüner, + magenta. Wirkt nur beim Abzug auf Papier.",
     None,
 );
 static FILM_EXPOSURE: Card = card("", "Über- oder Unterbelichten des Negativs in Blenden; der Abzug gleicht die Helligkeit aus.\n• **+** – satte, feinkörnige Bilder\n• **−** – flaue Schatten, gröberes Korn\n\nBei Dia und Negativ-Scan ändert sich die Helligkeit direkt.", None);
-static FILM_PRINT: Card = card("", "Belichtungszeit im Vergrößerer in Blenden: + dunklerer, − hellerer Abzug.", None);
-static FILM_WARMTH: Card = card("", "Gelbfilter im Vergrößerer (±1 ≈ ±15 CC): + wärmer, − kühler. Wirkt nur beim Abzug auf Papier.", None);
-static FILM_TINT: Card = card("", "Purpurfilter im Vergrößerer: − grüner, + magenta. Wirkt nur beim Abzug auf Papier.", None);
 static FILM_CONTRAST: Card = card("", "Steilheit der Filmkurven, wie längere oder kürzere Entwicklung: + härter, − weicher.", None);
 static PAPER_CONTRAST: Card = card("", "Gradation des Papiers: + hart (kräftige Schwärzen, helle Lichter), − weich.", None);
 static FILM_DIR: Card = card("", "DIR-Kuppler hemmen beim Entwickeln die Nachbarschichten. Das trennt Farben deutlicher und betont Kanten – wie bei modernen Farbfilmen. 0 = aus, 1 = wie der Film.", None);
@@ -215,9 +206,7 @@ pub static FILM_OPTICS: Card = card("Kamera, Vergrößerer und Scanner bilden ge
 pub static FILM_PREFLASH: Card = card("Zusätzliche gleichmäßige Belichtung des Fotopapiers.", "Schwärzt helle Papierstellen leicht und bringt dort Zeichnung zurück; der Abzug wird nicht heller. 0 = aus. Bei Farbpapier lässt sich das Vorlicht filtern.\n\n### Tipp\nKleine Werte genügen.", None);
 pub static FILM_LOUPE: Card = card("Korn im gewählten Aufnahmeformat betrachten.", "Normal wird beim Zoomen nichts neu gerechnet, das Korn wirkt dann einfach vergrößert. Mit „Korn prüfen“ wird der Ausschnitt ab 200 % vor der Filmrechnung vergrößert; Korn und Farbstoffwolken entstehen neu in passender Filmgröße, jeder neue Ausschnitt braucht dann kurz. Mit lokalen Korrekturen bleibt die Pixelansicht.\n\n### Tasten\n⌘+ und ⌘− wechseln die Stufe.", None);
 static FILM_GRAIN: Card = card("", "1 = wie der Film, 0 = kein Korn (nur Farben und Tonwerte des Films).\n\n### Tipp\nEingepasst oder im Abzugsformat beurteilen.", None);
-static FILM_GRAIN_SIZE: Card = card("", "Größe der Kornklumpen: kleiner = feiner und ruhiger, größer = gröber.", None);
 static FILM_HALATION: Card = card("", "Halation: Licht wird an der Filmrückseite zurückgeworfen und erzeugt rötliche Säume um helle Stellen (Lampen, Gegenlicht). 0 = aus, 1 = wie der Film.", None);
-static FILM_HALATION_RADIUS: Card = card("", "Wie weit sich die Lichthöfe ausbreiten.", None);
 // ── Library ──
 static LIB_CATALOG: Card = card(
     "Die ganze Bibliothek und feste Auswahlen.",
@@ -477,6 +466,11 @@ pub static NOISE_BRAKE_RAW: Card = card(
     "Belichtung, Tiefen und Weiß heben dunkle Bildteile samt Rauschen an.\n• **Aus** – Rauschen wächst mit\n• **Farbe** – Farbrauschen wächst nicht mit; Schärfe und Korn bleiben\n• **Farbe + Korn** – dämpft zusätzlich das Helligkeitskorn; dort etwas weicher\n\n### Tipp\nDer Export dauert damit etwa doppelt so lange; die Vorschau bleibt schnell.",
     None,
 );
+static HDR_GLOW: Card = card(
+    "Wie weit helle Stellen auf HDR-Bildschirmen über Weiß leuchten dürfen.",
+    "Ein HDR-Bildschirm kann heller als Weiß zeigen; dieser Spielraum heißt **Kopfraum** und wird in Blenden gemessen (+1 = doppelt so hell wie Weiß, +2 = viermal, +3 = achtmal).\n\nDas normale Bild bleibt genau, wie es ist. Der Export legt als JPEG eine **Gain-Map** dazu: eine kleine Karte, die sagt, wo und wie viel heller es auf einem HDR-Bildschirm werden darf. Nur Lichter, die im Bild wirklich heller sind als Weiß (Himmel, Sonne, Glanzlichter), bekommen davon etwas; Mitteltöne und Schatten bleiben.\n• **0** – kein Leuchten\n• **+2** – Standard, deutlich, ohne grell zu wirken\n• **+3** – Maximum; viele Bildschirme schaffen weniger und zeigen dann ihr Höchstes\n\n### Ohne HDR-Bildschirm\nDer Sonnen-Knopf zeigt **Leuchtende Bereiche**: gelb ab +0,5, orange ab +1, rosa ab +2 Blenden. Betrachter ohne HDR-Bildschirm sehen das normale Bild.\n\n### An und aus\nAn bei HDR-Zusammenfügungen und Fotos, die schon HDR mitbringen (iPhone); sonst aus. Bei Film-Looks aus, weil Film und Papier die Lichter selbst begrenzen; von Hand einschaltbar.",
+    None,
+);
 static DEHAZE: Card = card(
     "Nimmt Dunst und Schleier aus dem Bild.",
     "Schätzt Farbe und Dichte des Dunstes je Bildstelle („Dark Channel“). Ferne, dunstige Bereiche gewinnen Kontrast und Farbe, nahe bleiben fast gleich.\n• **+** – entfernt Dunst; das Bild wird etwas dunkler (zur Hälfte ausgeglichen)\n• **−** – legt einen Schleier in der Dunstfarbe darüber\n\n### Tipp\nHohe Werte verstärken Rauschen in dunklen Flächen. Bei Nicht-Sigma-Fotos dauert der Export etwa doppelt so lange.",
@@ -507,7 +501,7 @@ static SATURATION: Card = card("", "Wirkt auf alle Farben gleich stark; −1 erg
 static CURVE: Card = card("Punktkurve auf den fertigen Bildwerten nach der Tonkurve der Kamera.", "Eine sanfte S-Kurve gibt den Mitteltönen Kontrast; mit den Kanälen Rot, Grün und Blau lassen sich Farbstiche formen.\n\n### Tasten\nKlicken setzt einen Punkt · Ziehen verschiebt · Doppelklick entfernt", example_pair!("curve", "Vorher", "S-Kurve"));
 static COLOR_MIXER: Card = card("Farbton, Sättigung und Helligkeit einzelner Farbbereiche.", "Jeder der acht Bereiche erfasst die Töne um seine Mitte und blendet weich in die Nachbarn über; Grautöne bleiben unberührt. Beispiel: Blau-Luminanz senkt den Himmel ab, Wolken und Laub bleiben.", example_pair!("color_mixer", "Vorher", "Blau-Luminanz −0,80"));
 static SKIN_TONES: Card = card("Farbton und Sättigung nur im Bereich der Hauttöne.", "• **Hautton** – links rosiger, rechts gelblicher und goldener\n• **Hautsättigung** – Hauttöne blasser oder kräftiger\n\nDer Bereich ist fest: ein breites Band warmer, mäßig bunter Töne von sehr heller bis sehr dunkler Haut. Er wird nicht aus dem Foto gemessen, und alle Hauttöne werden gleich behandelt. Alle anderen Farben, Grau, Schwarz und Weiß bleiben genau, wie sie sind.\n\n### Gut zu wissen\nDie Regler kennen keine Personen: Holz, Sand, Leder oder warmes Licht im selben Farbbereich ändern sich mit, ebenso Orange.", None);
-static BW_MIX: Card = card("Wie ein Farbfilter vor Schwarzweißfilm.", "Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte", example_pair!("bw_mix", "Summe", "Rotfilter"));
+static BW_MIX: Card = card("Wie ein Farbfilter vor Schwarzweißfilm.", "Mit **Schwarzweiß** in den Grundeinstellungen mischt graineo bei Sigma-Fotos die Sensorschichten direkt. Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte", example_pair!("bw_mix", "Summe", "Rotfilter"));
 static LAYER_MIXER: Card = card("Verteilt die drei Foveon-Schichten frei auf Rot, Grün und Blau – statt der Farbmatrix der Kamera.", "Wie ein Kanalmixer, aber mit den Sensorschichten: Ausgabe Rot, Grün oder Blau wählen und festlegen, wie viel Prozent aus der unteren (≈ Rot/IR), mittleren (≈ Grün) und oberen Schicht (≈ Blau) kommen.\n• **Summe 100 %** – Grau bleibt neutral; mehr macht den Kanal heller\n• **Negative Anteile** – entmischen die überlappenden Schichten\n• **IR NRG** – Falschfarben-Infrarot (Vegetation rot)\n• **R↔B** – klassischer IR-Kanaltausch für blauen Himmel\n\n### Tipp\nFür Infrarot- und Vollspektrum-Umbauten; bei normalen Fotos auf „Sigma“ lassen.", None);
 static GRADING: Card = card("Tönt Schatten, Mitteltöne und Lichter getrennt.", "Jedes Rad legt einen Farbton (Richtung) und dessen Stärke (Abstand zur Mitte) fest; die Helligkeit bleibt gleich. Klassisch: kühle Schatten, warme Lichter – oder Sepia und Selen für Schwarzweiß.\n\n### Bedienung\nRad ziehen: Farbton und Stärke · ⇧ beim Ziehen: nur die Stärke · Doppelklick: neutral", example_pair!("color_grading", "Vorher", "Split-Tone"));
 static CALIBRATION: Card = card("Ändert die drei Grundfarben des Kameraprofils.", "• **Farbton** – dreht eine Grundfarbe zur nächsten (Rot → Gelb, Grün → Cyan, Blau → Violett)\n• **Sättigung** – macht sie bunter oder blasser\n• **Schatten-Tönung** – entfernt einen Grün- oder Magentastich in den Tiefen\n\nWirkt sanfter als der Farbmischer, wie ein anderes Profil. Werte aus Lightroom werden übernommen.\n\n### Tipp\nRot-Farbton etwas nach links für rosigere Haut, Blau-Sättigung höher für kräftigere Farben insgesamt.", None);
@@ -515,11 +509,8 @@ pub static RETOUCH: Card = card("Flecken entfernen und rote Augen korrigieren.",
 static BALANCE: Card = card("", "Verschiebt die Grenze, ab der ein Ton als Schatten oder als Licht gilt. Wirkt nur, wenn mindestens ein Farbrad eine Stärke hat.", example_pair!("color_grading", "Vorher", "Split-Tone"));
 
 // ── Effects ──
-static VIGNETTE: Card = card("", "Bezieht sich auf den freigestellten Ausschnitt. Dezent eingesetzt lenkt sie den Blick zur Bildmitte.", example_pair!("vignette", "Vorher", "−0,60"));
-static MIDPOINT: Card = card("", "Klein: Die Abdunklung beginnt nah an der Mitte und läuft breit aus. Groß: Nur die äußersten Ecken werden erfasst.", None);
-static GRAIN: Card = card("", "Ein ortsfestes Muster, das in den Mitteltönen am stärksten ist und in Tiefschwarz und Weiß kaum. Es sitzt in Vorschau, 100 % und Export an derselben Stelle.", example_pair!("grain", "100 %", "Korn 0,50"));
-static GRAIN_SIZE: Card = card("", "Die Größe bezieht sich auf die Bildbreite – das Korn wirkt bei jeder Ausgabegröße gleich grob.", None);
-static ROUGHNESS: Card = card("", "Mischt eine zweite, halb so große Kornlage hinzu: Das Korn wirkt unregelmäßiger, eher wie Film als wie Rauschen.", None);
+static VIGNETTE: Card = card("", "Bezieht sich auf den freigestellten Ausschnitt. Dezent eingesetzt lenkt sie den Blick zur Bildmitte.\n\n• **Mittelpunkt** – Klein: Die Abdunklung beginnt nah an der Mitte und läuft breit aus. Groß: Nur die äußersten Ecken werden erfasst.", example_pair!("vignette", "Vorher", "−0,60"));
+static GRAIN: Card = card("", "Ein ortsfestes Muster, das in den Mitteltönen am stärksten ist und in Tiefschwarz und Weiß kaum. Es sitzt in Vorschau, 100 % und Export an derselben Stelle.\n\n• **Korngröße** – Die Größe bezieht sich auf die Bildbreite – das Korn wirkt bei jeder Ausgabegröße gleich grob.\n• **Rauigkeit** – Mischt eine zweite, halb so große Kornlage hinzu: Das Korn wirkt unregelmäßiger, eher wie Film als wie Rauschen.", example_pair!("grain", "100 %", "Korn 0,50"));
 static MATTE: Card = card("", "Der dunkelste Ton wird zu einem Grau angehoben, alle anderen rücken anteilig nach. Wirkt nach Kurve und Color Grading – eine steile Kurve drückt ihn nicht wieder zu.", example_pair!("matte_shadows", "Vorher", "0,12"));
 
 // ── Profile ──
@@ -547,9 +538,7 @@ static PERSPECTIVE_H: Card = card("", "Wie senkrecht, nur für eine seitlich ver
 
 // ── Detail ──
 static SHARPNESS_SIGMA: Card = card("", "Schärfung auf einem Detailbild. Sie ändert nur die Helligkeit, nicht die Farbe, und hebt Foveon-Mikrodetails ohne Farbsäume hervor. Negativ nimmt die Grundschärfung zurück, etwa vor eigenem Schärfen.", example_pair!("sigma_sharpness", "200 %", "+2,0"));
-static SHARPENING: Card = card("", "Unscharfe Maskierung auf der Helligkeit, nach allen Foveon-Schritten – etwa für den Druck oder starke Verkleinerung. Radius klein halten, sonst entstehen Lichthöfe.", example_pair!("sharpening", "200 %", "Betrag 1,0"));
-static RADIUS: Card = card("", "Größere Werte erzeugen an kontrastreichen Kanten schneller helle oder dunkle Lichthöfe.", None);
-static MASKING: Card = card("", "Bei 0 wird überall geschärft. Höhere Werte beschränken die Schärfung auf deutliche Helligkeitskanten – Rauschen in glatten Flächen bleibt unangetastet.", None);
+static SHARPENING: Card = card("", "Unscharfe Maskierung auf der Helligkeit, nach allen Foveon-Schritten – etwa für den Druck oder starke Verkleinerung. Radius klein halten, sonst entstehen Lichthöfe.\n\n• **Radius** – Größere Werte erzeugen an kontrastreichen Kanten schneller helle oder dunkle Lichthöfe.\n• **Maskieren** – Bei 0 wird überall geschärft. Höhere Werte beschränken die Schärfung auf deutliche Helligkeitskanten – Rauschen in glatten Flächen bleibt unangetastet.", example_pair!("sharpening", "200 %", "Betrag 1,0"));
 static NR_LUMA: Card = card("Stärke der Helligkeits-Rauschunterdrückung, in fünf Stufen.", "• **Mitte** – Standard\n• **Weniger** – feinste Struktur mit etwas Korn\n• **Mehr** – glättet Flächen bei hoher ISO oder stark angehobenen Tiefen\n• **Ganz links** – kaum noch Glättung; die Grundschärfe bleibt und verstärkt das Korn\n\nJede Stufe rechnet die Foveon-Basis neu (einige Sekunden).", None);
 static NR_COLOR: Card = card("Stärke der Farbrausch-Unterdrückung, in fünf Stufen.", "Farbrauschen zeigt sich beim Foveon als bunte Flecken in dunklen, gleichmäßigen Flächen. Mehr glättet sie, kann aber feine Farbdetails an Kanten verwischen.\n• **Mitte** – Standard\n• **Ganz links** – schwächste sinnvolle Stufe; ohne Farbglättung zeigen sich schon bei ISO 100 bunte Pünktchen\n\nJede Stufe rechnet die Basis neu.", None);
 
@@ -567,6 +556,7 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Lichter" if hint.contains("örtlich") => &RAW_HIGHLIGHTS,
         "Tiefen" if hint.contains("örtlich") => &RAW_SHADOWS,
         "Weiß" => &RAW_WHITES,
+        "HDR-Leuchtkraft" if hint == crate::hdr_output_ui::GLOW_HINT => &HDR_GLOW,
         "Schwarz" => &RAW_BLACK,
         n if hint.contains("Foveon") && n == crate::detail_ui::fine_label() => &DETAIL_FINE,
         n if hint.contains("Foveon") && n == crate::detail_ui::structure_label() => &DETAIL_STRUCTURE,
@@ -576,7 +566,6 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Verzeichnung manuell" | "Farbsaum Rot" | "Farbsaum Blau" => &RAW_LENS_MANUAL,
         "KI-Entrauschen" => &AI_DENOISE,
         "Stärke" if hint == "Anteil des KI-entrauschten Bildes" => &AI_DENOISE,
-        "Behandlung" => &TREATMENT,
         "Weißabgleich" => &WHITE_BALANCE,
         "Temperatur" => &TEMPERATURE,
         "Tönung" => &TINT,
@@ -599,22 +588,14 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Balance" => &BALANCE,
         "aus Unten" | "aus Mitte" | "aus Oben" => &LAYER_MIXER,
         "Vignette" => &VIGNETTE,
-        "Mittelpunkt" if hint.contains("Vignette") => &MIDPOINT,
         "Korn" if hint.contains("Filmkorn") => &FILM_GRAIN,
-        "Korngröße" if hint.contains("Kornklumpen") => &FILM_GRAIN_SIZE,
         "Korngröße je Helligkeit" => &FILM_GRAIN_SECTION,
         "Korn" => &GRAIN,
-        "Korngröße" => &GRAIN_SIZE,
         "Filmbelichtung" => &FILM_EXPOSURE,
-        "Abzugshelligkeit" => &FILM_PRINT,
-        "Abzug wärmer" => &FILM_WARMTH,
-        "Abzug Tönung" => &FILM_TINT,
         "Filmkontrast" => &FILM_CONTRAST,
         "Papierkontrast" => &PAPER_CONTRAST,
         "Farbtrennung (DIR)" => &FILM_DIR,
         "Lichthof" => &FILM_HALATION,
-        "Lichthof-Radius" => &FILM_HALATION_RADIUS,
-        "Rauigkeit" => &ROUGHNESS,
         "Matte Tiefen" => &MATTE,
         "Stärke" if hint.contains("Objektivprofil") => &CA_PROFILE,
         "Rot" | "Blau" if hint.starts_with("Manuell: zieht") => &CA_MANUAL,
@@ -624,8 +605,6 @@ pub fn for_slider(label: &str, hint: &str) -> Option<&'static Card> {
         "Betrag" if hint.starts_with("Zusätzlich") => &SHARPENING,
         "Farbton" if hint.contains("Saum") => &HUE,
         "Foveon-Schärfe" => &SHARPNESS_SIGMA,
-        "Radius" if hint.contains("Kanten") => &RADIUS,
-        "Maskieren" => &MASKING,
         "Senkrecht" if hint.starts_with("Perspektive") => &PERSPECTIVE_V,
         "Waagerecht" if hint.starts_with("Perspektive") => &PERSPECTIVE_H,
         "Luminanz" => &NR_LUMA,
@@ -652,6 +631,8 @@ pub fn for_section(title: &str) -> Option<&'static Card> {
         "Papier & Abzug" => &FILM_PAPER,
         "Belichtung & Dunkelkammer" => &FILM_DARKROOM,
         "Korn & Lichthof" => &FILM_GRAIN_SECTION,
+        "Sigma-Analog" => &FILM_FOVEON,
+        "Farbton" => &FILM_HUE,
         "Bibliothek" => &LIB_CATALOG,
         "Ordner" => &LIB_FOLDERS,
         "Sammlungen" => &LIB_COLLECTIONS,

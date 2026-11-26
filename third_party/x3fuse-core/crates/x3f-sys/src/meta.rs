@@ -397,6 +397,26 @@ pub unsafe extern "C" fn x3f_get_wb(x3f: *mut x3f_t) -> *mut c_char {
     // Fall back to the header's pre-Quattro WB string. This is a fixed-size
     // array inside x3f_t.header, returned as a non-owning *mut c_char.
     let hdr_wb: *mut c_char = unsafe { (*x3f).header.white_balance.as_mut_ptr() };
+    // A converter may have stored a name of its own there (e.g. "Monochrome") that has no
+    // calibration in CAMF. Then use the camera's setting (PROP WB_DESC), else "Auto". Only when
+    // one of those resolves, so a call before CAMF is loaded still returns the header string.
+    let resolves = |name: *mut c_char| {
+        let mut g = [0.0_f64; 3];
+        !name.is_null() && unsafe { crate::process::x3f_get_gain(x3f, name, g.as_mut_ptr()) } != 0
+    };
+    if resolves(hdr_wb) {
+        return hdr_wb;
+    }
+    let mut prop: *mut c_char = ptr::null_mut();
+    if unsafe { x3f_get_prop_entry(x3f, c"WB_DESC".as_ptr() as *mut c_char, &mut prop) } != 0
+        && resolves(prop)
+    {
+        return prop;
+    }
+    let auto = c"Auto".as_ptr() as *mut c_char;
+    if resolves(auto) {
+        return auto;
+    }
     hdr_wb
 }
 

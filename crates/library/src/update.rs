@@ -1073,18 +1073,30 @@ fn install_windows_staged(zip: &Path, exe: &Path, dir: &Path, stage: &Path) -> R
             done.warnings.push("film data not replaced".into());
         }
     }
+    // licence texts (THIRD_PARTY.md and the components' licences come with the package)
+    let new_licenses = root.join("licenses");
+    if new_licenses.is_dir() {
+        let licenses = dir.join("licenses");
+        let _ = std::fs::remove_dir_all(&licenses);
+        if std::fs::rename(&new_licenses, &licenses).is_err() {
+            done.warnings.push("licence texts not replaced".into());
+        }
+    }
     let _ = std::fs::remove_file(zip);
     Ok(done)
 }
 
-/// Leftovers of an update on Windows (`graineo.old.exe`, `spektrafilm.old` next to the exe),
-/// removed at the next start.
+/// HEIC decoder DLLs of earlier test builds (HEIC is decoded by the built-in heifer now), removed as leftovers.
+const OLD_DLLS: [&str; 4] = ["libheif.dll", "libheif.old.dll", "libde265.dll", "libde265.old.dll"];
+
+/// Leftovers of an update on Windows (`graineo.old.exe`, `spektrafilm.old`, DLLs of earlier test builds next to the
+/// exe), removed at the next start.
 pub fn leftovers() -> Vec<PathBuf> {
     if !cfg!(windows) {
         return Vec::new();
     }
     let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) else { return Vec::new() };
-    ["graineo.old.exe", "spektrafilm.old"].iter().map(|n| dir.join(n)).filter(|p| p.exists()).collect()
+    ["graineo.old.exe", "spektrafilm.old"].iter().chain(OLD_DLLS.iter()).map(|n| dir.join(n)).filter(|p| p.exists()).collect()
 }
 
 /// Self-repair of a Windows program folder at start, before anything else uses it: an update that was cut off in the

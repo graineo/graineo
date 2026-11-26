@@ -30,7 +30,7 @@ impl App {
         let section_id = ui.make_persistent_id(("lr-section", "Erweitert"));
         lr::section(ui, "Erweitert", initial, |ui| {
             let f = &mut self.entries[index].settings.film;
-            subgroup(ui, "Objektiv", false, |ui| help::info(ui, "optics", crate::tr("Schärfe-Kette"), &help::FILM_OPTICS));
+            subgroup(ui, "Objektiv", |ui| help::info(ui, "optics", crate::tr("Schärfe-Kette"), &help::FILM_OPTICS));
             egui::ComboBox::from_id_salt("film-optics").width(ui.available_width() - 8.0)
                 .selected_text(match f.optics.as_str() {
                     "sharp" => crate::tr("Scharf"),
@@ -50,7 +50,7 @@ impl App {
                 });
             let mut individual =
                 f.camera_blur_um.is_some() || f.enlarger_blur.is_some() || f.scanner_blur.is_some();
-            if ui.checkbox(&mut individual, crate::tr("Einzelwerte")).changed() {
+            if lr::switch_label(ui, &mut individual, "Einzelwerte").clicked() {
                 f.camera_blur_um = individual.then_some(0.);
                 f.enlarger_blur = individual.then_some(0.);
                 f.scanner_blur = individual.then_some(0.);
@@ -78,7 +78,7 @@ impl App {
                     0.0,
                 );
             }
-            subgroup(ui, "Hof-Typ", true, |ui| help::info(ui, "halo-type", "Hof-Typ", &help::FILM_HALO));
+            subgroup(ui, "Hof-Typ", |ui| help::info(ui, "halo-type", "Hof-Typ", &help::FILM_HALO));
             egui::ComboBox::from_id_salt("film-halo-type").width(ui.available_width() - 8.0)
                 .selected_text(match f.halation_type.as_str() {
                     "none" => crate::tr("Kein"),
@@ -101,7 +101,7 @@ impl App {
             if ui.button(crate::tr("LICHTPUNKTE")).clicked() {
                 self.darkroom.probe_light.an = true;
             }
-            subgroup(ui, "Weichzeichner", true, |ui| help::info(ui, "diffusion", "Weichzeichner", &help::FILM_DIFFUSION));
+            subgroup(ui, "Weichzeichner", |ui| help::info(ui, "diffusion", "Weichzeichner", &help::FILM_DIFFUSION));
             egui::ComboBox::from_id_salt("film-diffusion").width(ui.available_width() - 8.0)
                 .selected_text(match f.diffusion.as_str() {
                     "soft" => crate::tr("Weich"),
@@ -134,22 +134,22 @@ impl App {
                 slider(ui, "Stärke", &mut f.diffusion_amount, 0.0..=1.0, 0.5);
             }
             let paper = !f.negative && !develop::film::stock(&f.stock).is_some_and(|s| s.positive);
-            subgroup(ui, "Vorbelichtung", true, |ui| help::info(ui, "preflash", "Vorbelichtung", &help::FILM_PREFLASH));
+            subgroup(ui, "Vorbelichtung", |ui| help::info(ui, "preflash", "Vorbelichtung", &help::FILM_PREFLASH));
             if !paper {
                 hint(ui, crate::tr("Nur beim Abzug auf Papier."));
             }
             ui.add_enabled_ui(paper, |ui| {
-                slider(ui, "Vorbelichtung", &mut f.preflash, 0.0..=1.0, 0.0);
+                slider(ui, "Stärke", &mut f.preflash, 0.0..=1.0, 0.0);
                 if !develop::film::stock(&f.stock).is_some_and(|s| s.monochrome) {
                     slider(ui, "Wärme", &mut f.preflash_warmth, -1.0..=1.0, 0.0);
                     slider(ui, "Tönung", &mut f.preflash_tint, -1.0..=1.0, 0.0);
                 }
             });
-            subgroup(ui, "Scan-Ausgabe", true, |ui| help::info(ui, "scan-levels", "Scan-Ausgabe", &help::FILM_SCAN));
+            subgroup(ui, "Scan-Ausgabe", |ui| help::info(ui, "scan-levels", "Scan-Ausgabe", &help::FILM_SCAN));
             if paper {
                 hint(ui, crate::tr("Nur ohne Papier (Diafilm oder Negativansicht)."));
             } else {
-                if ui.checkbox(&mut f.scan_auto, crate::tr("Automatisch")).changed() && f.scan_auto {
+                if lr::switch_label(ui, &mut f.scan_auto, "Automatisch").clicked() && f.scan_auto {
                     self.darkroom.scan.ready = None;
                 }
                 if f.scan_auto {
@@ -176,23 +176,10 @@ impl App {
     }
 }
 
-/// Subgroup in "Advanced": label with a thin line to the right edge, as the categories in Develop.
-pub(crate) fn subgroup(ui: &mut egui::Ui, title: &str, gap: bool, extra: impl FnOnce(&mut egui::Ui)) {
-    if gap {
-        ui.add_space(14.0);
-    }
-    ui.horizontal(|ui| {
-        let g = crate::lr::caps(ui.painter(), crate::tr(title), egui::FontId::proportional(10.5), crate::lr::CATEGORY_LABEL());
-        let (r, _) = ui.allocate_exact_size(egui::vec2(g.size().x, 18.0), egui::Sense::hover());
-        ui.painter().galley(egui::pos2(r.left(), r.center().y - g.size().y / 2.0), g, crate::lr::TEXT_STRONG());
-        extra(ui);
-        let rest = ui.available_rect_before_wrap();
-        let y = r.center().y;
-        if rest.width() > 12.0 {
-            ui.painter().line_segment([egui::pos2(rest.left() + 6.0, y), egui::pos2(rest.right(), y)], egui::Stroke::new(1.0, crate::lr::gray(0x3a)));
-        }
-    });
-    ui.add_space(6.0);
+/// Subgroup in "Advanced": the same subheading as everywhere in the sidebars ([`lr::subheading_with`]), `extra` (the
+/// "?" of the group) at its right end; the subheading brings its own gap above.
+pub(crate) fn subgroup(ui: &mut egui::Ui, title: &str, extra: impl FnOnce(&mut egui::Ui)) {
+    lr::subheading_with(ui, title, 24.0, extra);
 }
 
 /// Short line why controls are not there.

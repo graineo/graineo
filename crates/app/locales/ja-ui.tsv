@@ -4880,6 +4880,7 @@ Bausteine	構成要素
 Film: spektrafilm, A. Volpato (GPL-3.0)	フィルム: spektrafilm, A. Volpato (GPL-3.0)
 Filmdaten: CC BY-SA 4.0	フィルムデータ: CC BY-SA 4.0
 RAW-Dekodierung: rawler (LGPL-2.1)	RAW デコード: rawler (LGPL-2.1)
+HEIC-Dekodierung: heifer (MIT/Apache-2.0)	HEIC デコード: heifer (MIT/Apache-2.0)
 Objektivdaten: lensfun (CC BY-SA 3.0)	レンズデータ: lensfun (CC BY-SA 3.0)
 Gesichter finden: YuNet, Shiqi Yu (MIT)	顔検出: YuNet、Shiqi Yu (MIT)
 Werkzeugideen: Körnungs-Lupe, Vorbelichtung, Weichzeichner und Lichtpunkte nach spektrafilm	ツールのアイデア: 粒子ルーペ、プレフラッシュ、ディフュージョン、光点は spektrafilm に基づく
@@ -7246,3 +7247,43 @@ Markierungen sichtbar	マーカー表示中
 Markierungen ausgeblendet	マーカー非表示
 Die Grafikkarte wurde zurückgesetzt (Grafikwechsel oder Energiesparen). graineo wird beendet und kann sofort neu gestartet werden; Bearbeitungen sind gespeichert.	グラフィックカードがリセットされました（グラフィック切り替えまたはスリープ）。graineo は終了します。すぐに再起動できます。編集内容は保存されています。
 Markierungen ein/aus	マーカーの表示/非表示
+HDR (Gain-Map)	HDR（ゲインマップ）
+Nur JPEG, sRGB oder Display P3	JPEG のみ、sRGB または Display P3
+Ohne HDR-Bildschirm sehen Betrachter das normale Bild.	HDR ディスプレイがない場合は通常の画像が表示されます。
+aus bei Film-Look	フィルムルックではオフ
+Wie weit helle Stellen auf HDR-Bildschirmen über Weiß leuchten dürfen.	HDR ディスプレイで明るい部分が白よりどこまで明るく輝けるか。
+ · HDR: nichts heller als Weiß	 · HDR: 白より明るい部分なし
+ · HDR nur bei sRGB oder Display P3 ohne Rand	 · HDR は sRGB または Display P3、枠なしのみ
+HDR: leuchtende Bereiche zeigen (mit HDR-Bildschirm: normal ↔ leuchtend)	HDR: 輝く領域を表示（HDR ディスプレイでは通常 ↔ 輝き）
+Leuchtende Bereiche zeigen	輝く領域を表示
+Leuchtende Bereiche	輝く領域
+Lichter über Weiß auf HDR-Bildschirmen, in Blenden	HDR ディスプレイでの白を超えるハイライト（段）
+Belichtung, Kontrast, Lichter, Tiefen, Weiß, Schwarz, HDR	露出、コントラスト、ハイライト、シャドウ、白レベル、黒レベル、HDR
+Ein HDR-Bildschirm kann heller als Weiß zeigen; dieser Spielraum heißt **Kopfraum** und wird in Blenden gemessen (+1 = doppelt so hell wie Weiß, +2 = viermal, +3 = achtmal).\n\nDas normale Bild bleibt genau, wie es ist. Der Export legt als JPEG eine **Gain-Map** dazu: eine kleine Karte, die sagt, wo und wie viel heller es auf einem HDR-Bildschirm werden darf. Nur Lichter, die im Bild wirklich heller sind als Weiß (Himmel, Sonne, Glanzlichter), bekommen davon etwas; Mitteltöne und Schatten bleiben.\n• **0** – kein Leuchten\n• **+2** – Standard, deutlich, ohne grell zu wirken\n• **+3** – Maximum; viele Bildschirme schaffen weniger und zeigen dann ihr Höchstes\n\n### Ohne HDR-Bildschirm\nDer Sonnen-Knopf zeigt **Leuchtende Bereiche**: gelb ab +0,5, orange ab +1, rosa ab +2 Blenden. Betrachter ohne HDR-Bildschirm sehen das normale Bild.\n\n### An und aus\nAn bei HDR-Zusammenfügungen und Fotos, die schon HDR mitbringen (iPhone); sonst aus. Bei Film-Looks aus, weil Film und Papier die Lichter selbst begrenzen; von Hand einschaltbar.	HDR ディスプレイは白より明るく表示できます。この余裕を**ヘッドルーム**と呼び、段で表します（+1 = 白の2倍、+2 = 4倍、+3 = 8倍）。\n\n通常の画像はそのまま変わりません。JPEG の書き出しでは**ゲインマップ**を添えます。HDR ディスプレイでどこがどれだけ明るくなってよいかを示す小さなマップです。画像の中で本当に白より明るいハイライト（空、太陽、反射光）だけが明るくなり、中間調とシャドウはそのままです。\n• **0** – 輝きなし\n• **+2** – 標準。はっきりしつつ、ぎらつかない\n• **+3** – 最大。多くのディスプレイはそこまで届かず、出せる最大で表示します\n\n### HDR ディスプレイがない場合\n太陽ボタンで**輝く領域**を表示します: +0.5 段から黄、+1 段からオレンジ、+2 段からピンク。HDR ディスプレイのない閲覧者には通常の画像が表示されます。\n\n### オンとオフ\nHDR 合成と、もともと HDR を持つ写真（iPhone）ではオン、それ以外はオフ。フィルムルックではフィルムと印画紙がハイライトを自ら制限するためオフ。手動でオンにできます。
+Gain-Map	ゲインマップ
+Leuchtkraft	ヘッドルーム
+Bezieht sich auf den freigestellten Ausschnitt. Dezent eingesetzt lenkt sie den Blick zur Bildmitte.\n\n• **Mittelpunkt** – Klein: Die Abdunklung beginnt nah an der Mitte und läuft breit aus. Groß: Nur die äußersten Ecken werden erfasst.	切り抜いた範囲が基準です。控えめに使うと、視線が画像の中央へ向かいます。\n\n• **中心点** – 小: 暗くなり始める位置が中心に近く、広くなだらかに広がります。大: 最も外側の隅だけが対象になります。
+Unscharfe Maskierung auf der Helligkeit, nach allen Foveon-Schritten – etwa für den Druck oder starke Verkleinerung. Radius klein halten, sonst entstehen Lichthöfe.\n\n• **Radius** – Größere Werte erzeugen an kontrastreichen Kanten schneller helle oder dunkle Lichthöfe.\n• **Maskieren** – Bei 0 wird überall geschärft. Höhere Werte beschränken die Schärfung auf deutliche Helligkeitskanten – Rauschen in glatten Flächen bleibt unangetastet.	すべてのFoveon処理の後に、明るさに対して適用するアンシャープマスク。プリントや大幅な縮小などに使います。半径は小さくしてください。大きいとハローが出ます。\n\n• **半径** – 値が大きいと、コントラストの高いエッジに明るい/暗いハローが出やすくなります。\n• **マスク** – 0ではすべてにシャープがかかります。値を上げると、明確な明るさのエッジだけに制限され、滑らかな面のノイズには影響しません。
+Ein ortsfestes Muster, das in den Mitteltönen am stärksten ist und in Tiefschwarz und Weiß kaum. Es sitzt in Vorschau, 100 % und Export an derselben Stelle.\n\n• **Korngröße** – Die Größe bezieht sich auf die Bildbreite – das Korn wirkt bei jeder Ausgabegröße gleich grob.\n• **Rauigkeit** – Mischt eine zweite, halb so große Kornlage hinzu: Das Korn wirkt unregelmäßiger, eher wie Film als wie Rauschen.	位置が固定されたパターンで、中間調で最も強く、深い黒や白ではほとんど出ません。プレビュー、100 %、書き出しで同じ位置になります。\n\n• **粒子サイズ** – サイズは画像幅が基準です。どの出力サイズでも粒子の粗さは同じに見えます。\n• **粗さ** – 半分のサイズの粒子レイヤーをもう1枚混ぜます。粒子がより不規則になり、ノイズよりフィルムらしくなります。
+Die Filmbelichtung bestimmt, wo das Bild auf der Filmkurve liegt; der Abzug gleicht die Helligkeit aus. Abzugshelligkeit, Wärme und Tönung entsprechen Belichtungszeit und Farbfiltern im Vergrößerer.\n\n• **Abzugshelligkeit** – Belichtungszeit im Vergrößerer in Blenden: + dunklerer, − hellerer Abzug.\n• **Abzug wärmer** – Gelbfilter im Vergrößerer (±1 ≈ ±15 CC): + wärmer, − kühler. Wirkt nur beim Abzug auf Papier.\n• **Abzug Tönung** – Purpurfilter im Vergrößerer: − grüner, + magenta. Wirkt nur beim Abzug auf Papier.	フィルムの露光で、画像がフィルムカーブ上のどこに来るかが決まり、プリントで明るさを整えます。プリントの明るさ、暖かさ、色調は、引き伸ばし機の露光時間とカラーフィルターに相当します。\n\n• **プリントの明るさ** – 引き伸ばし機の露光時間（絞り換算）: + でプリントが暗く、− で明るくなります。\n• **プリントの暖かさ** – 引き伸ばし機のイエローフィルター（±1 ≈ ±15 CC）: + で暖かく、− で冷たくなります。ペーパーへのプリントにのみ作用します。\n• **プリントの色調** – 引き伸ばし機のマゼンタフィルター: − でグリーン寄り、+ でマゼンタ寄りになります。ペーパーへのプリントにのみ作用します。
+Mit **Schwarzweiß** in den Grundeinstellungen mischt graineo bei Sigma-Fotos die Sensorschichten direkt. Der Foveon misst an jedem Pixel drei Schichten: oben vor allem Blau, Mitte Grün, unten Rot. Für Schwarzweiß werden sie direkt gewichtet addiert – in voller Auflösung, zusammen immer 100 %.\n• **Viel „Unten“** – wie ein Rotfilter: blauer Himmel wird dunkel\n• **Dreieck** – Ecke = nur diese Schicht, Seitenmitte = zwei je zur Hälfte, Mitte = alle gleich\n\n### Tasten\n⌥ beim Ziehen: ohne Einrasten · Doppelklick: Mitte	基本設定で**白黒**を選ぶと、graineo は Sigma の写真のセンサー層を直接混ぜます。Foveon は各ピクセルで 3 つの層を測定します。上は主に青、中は緑、下は赤です。白黒では、これらを重み付けして直接加算します。フル解像度で、合計は常に 100 % です。\n• **「下」が多い** – 赤フィルターのように: 青空が暗くなる\n• **三角形** – 頂点 = その層のみ、辺の中点 = 2 つが半分ずつ、中心 = すべて均等\n\n### キー\nドラッグ中に ⌥: スナップなし · ダブルクリック: 中心
+− kühler, + wärmer	− 寒色、+ 暖色
+Hebt dunkle Bildteile lokal an, Lichter bleiben	暗い部分を局所的に持ち上げ、ハイライトはそのまま
+Dunst herausrechnen, negativ: hinzufügen	かすみを除去、マイナスで追加
+Hebt blasse Farben stärker an als kräftige	くすんだ色を鮮やかな色より強く持ち上げます
+Dreht diese Grundfarbe zur nächsten hin	この原色を隣の色へ回します
+0 = Grundschärfung, −2 = ungeschärft, +2 = kräftig	0 = 基本シャープ、−2 = シャープなし、+2 = 強め
+Zusätzlich zur Foveon-Schärfung	Foveon シャープに加えて
+Entfärbt violette Säume an harten Kanten	強いエッジの紫フリンジを除去
+Entfärbt grüne Säume an harten Kanten	強いエッジの緑フリンジを除去
+Manuell: zieht den Rotkanal zur Mitte (+) oder zum Rand (−)	手動: 赤チャンネルを中心 (+) または端 (−) へ寄せます
+Manuell: zieht den Blaukanal zur Mitte (+) oder zum Rand (−)	手動: 青チャンネルを中心 (+) または端 (−) へ寄せます
++ gegen Tonne, − gegen Kissen; zusätzlich zum Profil	+ で樽型、− で糸巻き型を補正、プロファイルに追加
+Rotkanal zur Mitte (+) oder zum Rand (−)	赤チャンネルを中心 (+) または端 (−) へ
+Blaukanal zur Mitte (+) oder zum Rand (−)	青チャンネルを中心 (+) または端 (−) へ
+Zeit (min)	時間 (分)
+HDR aus bei Film-Look – klicken zum Einschalten	フィルムルックでは HDR オフ – クリックでオン
+HDR ausschalten	HDR をオフ
+HDR einschalten	HDR をオン
+HDR-Leuchtkraft	HDR ヘッドルーム
+Schatten-Tönung	シャドウの色かぶり

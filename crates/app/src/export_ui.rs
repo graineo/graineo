@@ -3,8 +3,8 @@
 //! Wide dialog (content ≥ [`TWO_COLUMNS_MIN`]): two equally wide columns without headings of their own, on the left
 //! the sections "Bilder", "Format", "Größe und Metadaten", on the right "Ziel" and "Dateiname"; the template applies to
 //! everything and sits in the dialog's title row. Below them a collapsed "Advanced" part (remembered) with the rarely used
-//! options, again in two columns. Narrow: the same parts one below the other. The rows of a column have a fixed
-//! count: switching the format only changes their content (rows that do not apply are greyed out), nothing jumps.
+//! options, again in two columns. Narrow: the same parts one below the other. Rows that do not apply
+//! are greyed out; only the format detail rows below "Format" depend on the format and have no empty rows.
 //! The name preview, conflicts, progress and the buttons sit in the dialog's fixed footer ([`crate::dialog::show_scrolling`]).
 
 use eframe::egui;
@@ -246,7 +246,7 @@ impl App {
         true
     }
 
-    /// Left column: photos, format with its two detail rows, colour space, size, metadata (always the same rows).
+    /// Left column: photos, format with its detail rows, colour space, size, metadata.
     fn export_what(&mut self, ui: &mut egui::Ui) -> Scope {
         let mono = self.settings().is_some_and(|s| s.monochrome);
 
@@ -279,7 +279,21 @@ impl App {
         let items: Vec<usize> = items.into_iter().filter(|&i| self.entries[i].state != 2).collect();
         let x3f_only = !items.is_empty() && items.iter().all(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
         let has_x3f = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Foveon);
-        let has_finished = items.iter().any(|&i| image_kind::of(&self.entries[i].path) == image_kind::ImageKind::Done);
+        // HDR on for one of the photos (automatic: merged HDR photos and finished images that may bring a gain map)
+        let has_hdr = items.iter().any(|&i| {
+            let e = &self.entries[i];
+            let auto = library::merge::is_virtual_path(&e.path) || image_kind::of(&e.path) == image_kind::ImageKind::Done;
+            e.settings.hdr.is_on(auto, e.settings.film.is_active())
+        });
+        // the HDR option starts as the photos are: on when one has HDR on (again for every other selection)
+        {
+            let key = egui::Id::unique("export-hdr-preset");
+            let sig = items.iter().fold(items.len() as u64, |h, &i| h.wrapping_mul(31).wrapping_add(i as u64));
+            if ui.data(|d| d.get_temp::<u64>(key)) != Some(sig) {
+                ui.data_mut(|d| d.insert_temp(key, sig));
+                self.export_gain_map = has_hdr;
+            }
+        }
         // scene-linear formats (TIFF 32 bit, OpenEXR, linear DNG) for every developable RAW: Sigma X3F and the
         // other cameras; the camera-profile DNG and the sensor layers stay Sigma only
         let raw_ok = !items.is_empty() && items.iter().all(|&i| matches!(image_kind::of(&self.entries[i].path), image_kind::ImageKind::Foveon | image_kind::ImageKind::Raw));
@@ -359,7 +373,7 @@ impl App {
             // the format stays for the next time; it does not apply to the originals
             Kind::Original => self.export_format,
         };
-        self.export_format_details(ui, kind, x3f_only, raw_ok, has_finished, &items);
+        self.export_format_details(ui, kind, x3f_only, raw_ok, has_hdr, &items);
         if self.export_options != before_options {
             if let Ok(v) = serde_json::to_value(&self.export_options) {
                 library::settings::set("exportOptions", v);
@@ -464,28 +478,17 @@ impl App {
         Scope { items, unreachable, has_x3f, finished }
     }
 
-    /// The two rows below "Format": quality, bit depth, compression, … of the chosen format (empty rows keep their
-    /// place, so switching the format moves nothing).
-    fn export_format_details(&mut self, ui: &mut egui::Ui, kind: Kind, x3f_only: bool, raw_ok: bool, has_finished: bool, items: &[usize]) {
-        let mut rows = 0;
+    /// The rows below "Format": quality, bit depth, compression, … of the chosen format; only the rows the format has,
+    /// without empty rows (the HDR row exists only for formats that can carry a gain map, i.e. JPEG).
+    fn export_format_details(&mut self, ui: &mut egui::Ui, kind: Kind, x3f_only: bool, raw_ok: bool, has_hdr: bool, items: &[usize]) {
         match kind {
             Kind::Jpeg => {
                 if let Format::Jpeg { quality } = self.export_format {
                     let mut v = quality;
                     row(ui, crate::tr("Qualität"), |ui| quality_slider(ui, &mut v));
                     self.export_format = Format::Jpeg { quality: v };
-                    rows += 1;
                 }
-                if has_finished {
-                    let srgb = self.export_color_space == Space::Srgb;
-                    row(ui, crate::tr("HDR"), |ui| {
-                        ui.add_enabled_ui(srgb, |ui| {
-                            let r = ui.checkbox(&mut self.export_gain_map, crate::tr("Gain-Map behalten"));
-                            lr::hover_tip(ui, &r, crate::tr("HDR-Helligkeit von iPhone-Fotos mitnehmen; nur bei sRGB"));
-                        });
-                    });
-                    rows += 1;
-                }
+                self.export_hdr_row(ui, has_hdr);
             }
             Kind::Jxl => {
                 if let Format::Jxl { quality, mut lossless, mut bits16 } = self.export_format {
@@ -501,7 +504,6 @@ impl App {
                         row(ui, crate::tr("Qualität"), |ui| quality_slider(ui, &mut q));
                     }
                     self.export_format = Format::Jxl { quality: q, lossless, bits16 };
-                    rows += 2;
                 }
             }
             Kind::Tiff => {
@@ -535,7 +537,6 @@ impl App {
                     use develop::tiffw::Compression as C;
                     choice(ui, "export-tiff-compression", &mut self.export_options.tiff_compression, &[(C::None, crate::tr("keine")), (C::Deflate, "ZIP"), (C::Lzw, "LZW")], &[]);
                 });
-                rows += 2;
             }
             Kind::Exr => {
                 let mut half = matches!(self.export_format, Format::Exr { half: true });
@@ -543,7 +544,6 @@ impl App {
                     choice(ui, "export-exr-depth", &mut half, &[(true, crate::tr("16 Bit (half)")), (false, crate::tr("32 Bit"))], &[]);
                 });
                 self.export_format = Format::Exr { half };
-                rows += 1;
             }
             Kind::Linear => {
                 row(ui, crate::tr("Bit-Tiefe"), |ui| {
@@ -554,7 +554,6 @@ impl App {
                         ui.checkbox(&mut self.export_options.dng_embed_original, crate::tr("Original-X3F einbetten"));
                     });
                 }
-                rows += if x3f_only { 2 } else { 1 };
             }
             Kind::Original => {
                 // the one hint that explains a decision: the originals are copied as they are
@@ -571,14 +570,17 @@ impl App {
                         lr::hover_tip(ui, &r, crate::tr("Kamera-JPEG der RAW+JPEG-Paare"));
                     }
                 });
-                rows += 2;
             }
             Kind::Png | Kind::Dng => {}
         }
-        // always two rows
-        for _ in rows..2 {
-            ui.allocate_exact_size(egui::vec2(ui.available_width(), ROW_H), egui::Sense::hover());
-        }
+    }
+
+    /// Row "HDR": Aus | Gain-Map, shown only for JPEG; greyed unless sRGB/Display P3 and a photo has HDR on.
+    fn export_hdr_row(&mut self, ui: &mut egui::Ui, has_hdr: bool) {
+        let on = has_hdr && matches!(self.export_color_space, Space::Srgb | Space::DisplayP3);
+        row_if(ui, crate::tr("HDR"), on, |ui| {
+            choice(ui, "export-hdr", &mut self.export_gain_map, &[(false, "Aus"), (true, "Gain-Map")], &["", "Nur JPEG, sRGB oder Display P3"]);
+        });
     }
 
     /// Row "Größe": full resolution or a limit (kind, value, a few common values when there is room).

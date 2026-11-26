@@ -48,7 +48,14 @@
 # 22.11.2026 (claude/quattro-detail2): Quattro detail steps away from the middle, capture ISO 400 to below 800: the
 # local contrast follows the step (measured against the maker's exports of all seven steps). The middle is unchanged,
 # no checksum of this list changes; the disk cache version goes up (bases stored with a detail step differ).
-# compute-path-version: 23 digest: 791417e82e35aca4
+# 26.11.2026 (claude/sd10-x3f): SD9/SD10 at resolution MED developed at the output size of the camera data
+# (1512 × 1008 instead of 1134 × 1512 squeezed). No checksum of this list changes; the disk cache version goes up.
+# 26.11.2026 (claude/sd10-spp): that resampling with the maker's 4 × 4 windowed-sinc kernel and sample positions
+# instead of a triangle filter. No checksum of this list changes; the disk cache version goes up.
+# 26.11.2026 (claude/spp-merrill-classic): DP Merrill at MED/LOW with FPNSuppression other than 1 takes the black
+# level from the maker's fixed dark-shield rectangle. New files: archiv_DP3M_DP3M0089 (LOW, checksums after the
+# change) and archiv_DP2M_DP2M1149 (X3F 3.1, saved again by the maker's software; unchanged). Others unchanged.
+# compute-path-version: 26 digest: 6f8f0cf615bd5638
 
 # Merrill
 spphash DP2M5418.X3F eec84657f928a2db
@@ -82,3 +89,7 @@ color sd10_pixls_RAW_SIGMA_SD10.X3F 386377d6caa8c6b0
 color sd14_pixls_20120818-SDIM4579.X3F f126b70b7af8fb2d
 color sd15_pixls__SDI5651.X3F 464dec303daa0a14
 color sd9_pixls_RAW_SIGMA_SD9_SRGB.X3F 53ade61cbe8222ec
+spphash archiv_DP3M_DP3M0089.X3F e24a756018ed9108
+color archiv_DP3M_DP3M0089.X3F a999c689c8f124db
+spphash archiv_DP2M_DP2M1149.X3F 4e343580d6f4b3d0
+color archiv_DP2M_DP2M1149.X3F 973a20b4f661e3e1

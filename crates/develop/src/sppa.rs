@@ -27,8 +27,28 @@ pub fn baseline(path: impl AsRef<Path>) -> Option<Settings> {
     if let Some(s) = camera_settings(&a) {
         return Some(s);
     }
-    camera_monochrome(&a).then(|| Settings { monochrome: true, ..Settings::default() })
+    camera_monochrome(&a).then(|| gray_wb(&a, Settings { monochrome: true, ..Settings::default() }))
 }
+
+/// White balance "Monochrome" in the header of an X3F 2.x/3.x file (written by older SPP versions for a black and
+/// white conversion; the flag bit of the monochrome mode is not set): SIGMA Photo Pro renders such a file grey in its
+/// colour mode, with the calibration of white balance "Auto" and every output channel the layers mixed 1 : 2 : 1.
+fn header_gray_wb(a: &SppAdjustments) -> bool {
+    a.source == x3f::sppa::Source::Header && !a.monochrome && a.white_balance.as_deref() == Some("Monochrome")
+}
+
+/// [`header_gray_wb`]: our monochrome mode with the layer mix 1 : 2 : 1 (white balance stays "as shot", which falls
+/// back to "Auto" for this name).
+fn gray_wb(a: &SppAdjustments, mut s: Settings) -> Settings {
+    if header_gray_wb(a) {
+        s.monochrome = true;
+        s.mix = GRAY_WB_MIX;
+    }
+    s
+}
+
+/// Layer mix of the white balance "Monochrome" (bottom, middle, top).
+pub const GRAY_WB_MIX: [f32; 3] = [0.25, 0.5, 0.25];
 
 /// Tone values set in the camera (header of the X3F, e.g. contrast −0.2 in the monochrome mode):
 /// SIGMA Photo Pro opens unedited files with them, so they are taken over as initial values like
@@ -50,13 +70,14 @@ fn camera_settings(a: &SppAdjustments) -> Option<Settings> {
     };
     let mut s = to_settings(&cam)?;
     s.monochrome = camera_monochrome(a);
-    let neutral = Settings { monochrome: s.monochrome, ..Settings::default() };
+    let s = gray_wb(a, s);
+    let neutral = gray_wb(a, Settings { monochrome: s.monochrome, ..Settings::default() });
     (s != neutral).then_some(s)
 }
 
 /// Was the camera set to black and white or sepia?
 fn camera_monochrome(a: &SppAdjustments) -> bool {
-    a.monochrome || [&a.color_mode, &a.camera_color_mode].iter().any(|m| matches!(m.as_deref(), Some("Monochrome" | "Sepia")))
+    a.monochrome || header_gray_wb(a) || [&a.color_mode, &a.camera_color_mode].iter().any(|m| matches!(m.as_deref(), Some("Monochrome" | "Sepia")))
 }
 
 /// Mapping to our settings. `None` if the values do not come from SPP.
@@ -97,7 +118,11 @@ pub fn to_settings(a: &SppAdjustments) -> Option<Settings> {
     s.white_balance = a
         .white_balance
         .clone()
-        .filter(|w| WB.contains(&w.as_str()))
+        .and_then(|w| match (w.as_str(), a.wb_temperature) {
+            // colour temperature (Quattro): preset at the saved kelvin (`calib::read_quattro` provides it)
+            ("ColorTemp", Some(k)) if k.is_finite() && k > 0.0 => Some(crate::quattro_wb::preset_name(k)),
+            _ => WB.contains(&w.as_str()).then_some(w),
+        })
         .filter(|w| a.camera_white_balance.as_deref() != Some(w.as_str()));
 
     if !a.monochrome {
@@ -164,7 +189,8 @@ pub fn to_settings(a: &SppAdjustments) -> Option<Settings> {
             }
         }
     }
-    Some(s)
+    // colour sliders of SPP (its colour mode), shown grey
+    Some(gray_wb(a, s))
 }
 
 /// SPP toning (constant Cb/Cr offset on the gamma-encoded grey) →
@@ -249,6 +275,28 @@ mod tests {
         // Blue (preset "Blue") must end up in the blue range
         let (h, _) = toning_to_grade([0.7518, 0.8606, 1.0]).unwrap();
         assert!((190.0..250.0).contains(&h), "Farbton {h}");
+    }
+
+    /// Real files (only with `GRAINEO_TEST_SD10_DIR`): header white balance "Monochrome" opens grey (1 : 2 : 1),
+    /// "Sunlight"/"Auto" in colour.
+    #[test]
+    fn header_monochrome_white_balance_opens_grey() {
+        let Some(dir) = std::env::var_os("GRAINEO_TEST_SD10_DIR").map(std::path::PathBuf::from) else {
+            eprintln!("GRAINEO_TEST_SD10_DIR not set, skipped");
+            return;
+        };
+        let p = dir.join("IMG02675.X3F");
+        if p.is_file() {
+            let s = baseline(&p).expect("initial values");
+            assert!(s.monochrome);
+            assert_eq!(s.mix, GRAY_WB_MIX);
+        }
+        for name in ["IMG00237.X3F", "IMG00266.X3F"] {
+            let p = dir.join(name);
+            if p.is_file() {
+                assert!(baseline(&p).is_none_or(|s| !s.monochrome), "{name}");
+            }
+        }
     }
 
     #[test]

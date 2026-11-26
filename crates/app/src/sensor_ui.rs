@@ -337,7 +337,7 @@ fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &
         painter.rect_filled(rect, 0.0, crate::lr::gray(0x38));
     }
     let fg = if !enabled {
-        crate::lr::gray(0x5c)
+        crate::lr::dimmed(crate::lr::DIMMED())
     } else if on || resp.hovered() {
         crate::lr::TEXT_STRONG()
     } else {

@@ -433,6 +433,10 @@ impl HdrMap {
     fn read(path: &Path, _sdr: &[[f32; 3]], w: usize, h: usize) -> Option<HdrMap> {
         let info = library::imageio::hdr_info(path)?;
         let gm = library::imageio::gain_map(path)?;
+        // the map comes from the file (or the system's reader): no map of size 0 or shorter than its size says
+        if gm.w == 0 || gm.h == 0 || gm.log2.len() < gm.w * gm.h || !gm.alternate_headroom.is_finite() {
+            return None;
+        }
         // to preview size (bilinear; the map is smooth)
         let mut log2 = Vec::with_capacity(w * h);
         for y in 0..h {

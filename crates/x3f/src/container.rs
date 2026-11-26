@@ -649,4 +649,22 @@ pub fn read_raw_header(path: impl AsRef<Path>) -> Option<ImageHeader> {
     pub fn is_quattro(&self) -> bool {
         self.raw_entry().is_ok_and(|(_, h)| h.is_quattro_raw())
     }
+
+    /// Quattro: stored size (columns, rows) of the bottom, middle and top plane (u16 pairs after the image header).
+    pub fn quattro_planes(&self) -> Option<[(u32, u32); 3]> {
+        let (e, h) = self.raw_entry().ok()?;
+        if !h.is_quattro_raw() {
+            return None;
+        }
+        let s = self.section(e);
+        let u16_at = |o: usize| s.get(o..o + 2).map(|b| u16::from_le_bytes([b[0], b[1]]) as u32);
+        let p = |i: usize| Some((u16_at(ImageHeader::SIZE + 4 * i)?, u16_at(ImageHeader::SIZE + 4 * i + 2)?));
+        Some([p(0)?, p(1)?, p(2)?])
+    }
+
+    /// Quattro shot at image quality "LOW": the top plane is stored at the size of the two lower planes (binned in
+    /// the camera) instead of twice their size.
+    pub fn is_quattro_low(&self) -> bool {
+        self.quattro_planes().is_some_and(|[b, _, t]| b.0 > 0 && b.1 > 0 && t == b)
+    }
 }

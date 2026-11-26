@@ -439,7 +439,11 @@ impl Brand {
                             line(ui, &crate::tr("Film: spektrafilm, A. Volpato (GPL-3.0)"));
                             line(ui, &crate::tr("Filmdaten: CC BY-SA 4.0"));
                             line(ui, &crate::tr("RAW-Dekodierung: rawler (LGPL-2.1)"));
+                            // built in on Windows and Linux (macOS decodes HEIC itself)
+                            #[cfg(not(target_os = "macos"))]
+                            line(ui, &crate::tr("HEIC-Dekodierung: heifer (MIT/Apache-2.0)"));
                             line(ui, "This product includes DNG technology under license by Adobe Systems Incorporated.");
+                            line(ui, "This product includes Gain Map technology under license by Adobe.");
                             line(ui, &crate::tr("Objektivdaten: lensfun (CC BY-SA 3.0)"));
                             line(ui, &crate::tr("Ortsnamen: GeoNames (geonames.org), CC BY 4.0 (creativecommons.org/licenses/by/4.0)"));
                             line(ui, &crate::tr("Gesichter finden: YuNet, Shiqi Yu (MIT)"));

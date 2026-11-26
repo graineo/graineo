@@ -365,7 +365,7 @@ impl LibraryView {
         let r = ui.allocate_ui_with_layout(egui::vec2(RESET_W, lr::BAR_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.add_enabled_ui(usable, |ui| {
                 if !usable {
-                    ui.multiply_opacity(0.35);
+                    ui.multiply_opacity(lr::DIM_OPACITY());
                 }
                 lr::cell_group(ui, "bib-meta-reset", &cells, RESET_W)
             })
@@ -858,7 +858,7 @@ impl LibraryView {
             .allocate_ui_with_layout(egui::vec2(ACTION_W, ACTION_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(usable, |ui| {
                     if !outside {
-                        ui.multiply_opacity(0.35);
+                        ui.multiply_opacity(lr::DIM_OPACITY());
                     }
                     lr::cell_group_sized(ui, "bib-zur-auswahl", &cells, ACTION_W, ACTION_H).0
                 })
@@ -875,7 +875,7 @@ impl LibraryView {
             .allocate_ui_with_layout(egui::vec2(2.0 * ACTION_W, ACTION_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                 ui.add_enabled_ui(usable, |ui| {
                     if !usable {
-                        ui.multiply_opacity(0.35);
+                        ui.multiply_opacity(lr::DIM_OPACITY());
                     }
                     lr::cell_group_sized(ui, "bib-drehen", &cells, ACTION_W, ACTION_H).0
                 })

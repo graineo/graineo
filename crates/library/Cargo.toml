@@ -17,6 +17,8 @@ serde = { version = "1", features = ["derive"] }
 rawler = "=0.8.0"
 # decode embedded JPEG previews directly at reduced size (DCT scaling 1/2 … 1/8)
 jpeg-decoder = "0.3"
+# HDR gain map JPEGs without the system (Windows, Linux)
+gainmap = { path = "../gainmap" }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 x3f = { path = "../x3f" }
 faces = { path = "../faces" }
@@ -28,6 +30,11 @@ unicode-normalization = "0.1"
 half = "2"
 unicode-segmentation = "1"
 libc = "0.2"
+# HEIC/HEIF outside macOS in pure Rust (heif_lib.rs; MIT/Apache-2.0, decoder only, no unsafe, no shipped libraries);
+# the HEVC decoder is bit-exact (MD5 SEI verified) incl. 4:2:2/4:4:4 and 10 bit. ICC/nclx colour through the app's
+# colour management
+heifer = { version = "0.7.3", default-features = false }
+graineo-color = { path = "../color" }
 # checksum when moving across drives (copy → verify → delete)
 sha2 = "0.11"
 # XMP packets in the Lightroom catalog are zlib-compressed (titles)

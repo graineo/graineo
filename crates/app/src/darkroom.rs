@@ -468,20 +468,11 @@ fn foveon_section(ui: &mut egui::Ui, s: &mut develop::Settings, cal: Option<&dev
     let d = FilmSettings::default();
     let changed = s.film.layer_exposure != d.layer_exposure || s.film.grain_balance != d.grain_balance;
     let weights = cal.and_then(|c| develop::analog::weights(c, s));
-    if lr::section_reset(ui, "Foveon", true, changed, |ui| {
-        lr::subheading_with(ui, "Sigma-Analog", 24.0, |ui| {
-            crate::help::info(ui, "film-foveon", "Sigma-Analog", &crate::help::FILM_FOVEON);
-        });
+    // the section carries the name and the "?" card (help::for_section), no subheading of its own
+    if lr::section_reset(ui, "Sigma-Analog", true, changed, |ui| {
         let row = |ui: &mut egui::Ui, on: &mut bool, label: &str, tip: &str, reason: Option<&str>| {
-            let r = ui.add_enabled_ui(reason.is_none(), |ui| {
-                ui.horizontal(|ui| {
-                    lr::switch(ui, on);
-                    ui.add_space(6.0);
-                    ui.label(egui::RichText::new(crate::tr(label)).color(if reason.is_none() { lr::TEXT() } else { lr::TEXT_DIM() }));
-                })
-                .response
-            });
-            let hover = ui.interact(r.inner.rect, ui.id().with(("foveon-tip", label)), egui::Sense::hover());
+            let r = ui.add_enabled_ui(reason.is_none(), |ui| lr::switch_label(ui, on, label)).inner;
+            let hover = ui.interact(r.rect, ui.id().with(("foveon-tip", label)), egui::Sense::hover());
             lr::hover_tip(ui, &hover, reason.unwrap_or(tip));
         };
         row(ui, &mut s.film.layer_exposure, "Aus den Sensorschichten belichten", "Der Film sieht direkt die drei Foveon-Schichten: filmgetreue Grautöne", reason);
@@ -650,15 +641,21 @@ impl App {
             column_title(ui, crate::tr("REGLER"));
             ui.add_space(2.0);
             ui.separator();
-            egui::ScrollArea::vertical().id_salt("dk-regler").auto_shrink([false, false]).show(ui, |ui| crate::sticky::scope(ui, |ui| {
-                if !self.entries[index].settings.film.is_active() {
+            let active = self.entries[index].settings.film.is_active();
+            let mut area = egui::ScrollArea::vertical().id_salt("dk-regler").auto_shrink([false, false]);
+            // Test hook: GRAINEO_SIDEBAR_SCROLL=<points> also scrolls the darkroom's slider column (screenshots)
+            if let Some(px) = crate::scroll_hold::first_offset(ui, "darkroom", active) {
+                area = area.vertical_scroll_offset(px);
+            }
+            area.show(ui, |ui| crate::scroll_hold::scope(ui, "darkroom", |ui| (crate::sticky::scope(ui, |ui| {
+                if !active {
                     ui.label(egui::RichText::new(crate::tr("Film wählen")).color(lr::TEXT_DIM()));
                 } else {
                     self.darkroom_film_sliders(ui, index);
                     self.darkroom_extended_panel(ui, index);
                 }
                 ui.add_space(12.0);
-            }));
+            }), false)));
             return;
         }
         // Fixed head: film simulation off, data sheet or tuned; the last film stays remembered
@@ -777,10 +774,12 @@ impl App {
         let develop_changed = f.film_dev != d.film_dev || f.push != d.push || f.film_gamma != d.film_gamma || f.exposure != d.exposure;
         if lr::section_reset(ui, "Entwicklung", true, develop_changed, |ui| {
             if let Some(si) = info.as_ref().filter(|i| i.family.len() > 1) {
-                lr::subheading(ui, "Entwicklungszeit (min)");
                 let l: Vec<(f32, String)> = std::iter::once((0.0, "Std".to_string())).chain(si.family.iter().map(|&t| (t, format!("{t}")))).collect();
                 let o: Vec<(f32, &str)> = l.iter().map(|(t, n)| (*t, n.as_str())).collect();
-                lr::segmented(ui, &mut f.film_dev, &o);
+                ui.horizontal(|ui| {
+                    lr::field_label(ui, crate::tr("Zeit (min)"));
+                    lr::segmented_pad(ui, &mut f.film_dev, &o, 6.0);
+                });
             }
             slider(ui, "Push / Pull", &mut f.push, -2.0..=3.0, 0.0, 0.25);
             if let Some(t) = ei_text.as_deref().filter(|t| !t.is_empty()) {
@@ -796,8 +795,10 @@ impl App {
         }
         let grain_changed = f.grain != d.grain || f.grain_size != d.grain_size || f.grain_model != d.grain_model || f.halation != d.halation || f.format_mm != d.format_mm;
         if lr::section_reset(ui, "Korn & Lichthof", true, grain_changed, |ui| {
-            lr::subheading(ui, "Format");
-            lr::segmented(ui, &mut f.format_mm, &[(35.0, "35 mm"), (60.0, "6×6"), (120.0, "4×5")]);
+            ui.horizontal(|ui| {
+                lr::field_label(ui, crate::tr("Format"));
+                lr::segmented(ui, &mut f.format_mm, &[(35.0, "35 mm"), (60.0, "6×6"), (120.0, "4×5")]);
+            });
             slider(ui, "Korn", &mut f.grain, 0.0..=2.0, 1.0, 0.01);
             slider(ui, "Korngröße", &mut f.grain_size, 0.5..=3.0, 1.0, 0.01);
             // grain model: always visible (no layout jump), greyed out without grain
@@ -817,10 +818,8 @@ impl App {
             f.format_mm = d.format_mm;
         }
         let tint_changed = f.green_tune != d.green_tune || f.blue_tune != d.blue_tune;
+        // the "?" card sits in the section header (help::for_section)
         if lr::section_reset(ui, "Farbton", true, tint_changed, |ui| {
-            lr::subheading_with(ui, "Grün und Blau", 24.0, |ui| {
-                crate::help::info(ui, "film-farbton", "Farbton", &crate::help::FILM_HUE);
-            });
             slider(ui, "Grün", &mut f.green_tune, -1.0..=1.0, 0.0, 0.05);
             slider(ui, "Blau", &mut f.blue_tune, -1.0..=1.0, 0.0, 0.05);
         }) {
@@ -940,13 +939,13 @@ impl App {
         if lr::section_reset(ui, "Grad und Papierton", true, changed, |ui| {
             if let Some(pi) = paper.as_ref().filter(|p| p.family.len() > 1) {
                 {
-                    lr::subheading(ui, "Grad");
                     let multigrade = pi.id.starts_with("ilford_multigrade");
                     let l: Vec<(f32, String)> = std::iter::once((-1.0, "Std".to_string()))
                         .chain(pi.family.iter().map(|&t| (t, if multigrade && t == 0.0 { "00".to_string() } else if multigrade && t == 0.5 { "0".to_string() } else { format!("{t}") })))
                         .collect();
                     // wraps so that long grade lists fit the column
                     ui.horizontal_wrapped(|ui| {
+                        lr::field_label(ui, crate::tr("Grad"));
                         for (value, name) in &l {
                             if ui.selectable_label(f.paper_grade == *value, name.as_str()).clicked() {
                                 f.paper_grade = *value;
