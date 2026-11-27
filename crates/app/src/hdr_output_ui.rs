@@ -1,5 +1,5 @@
 //! HDR rendition of a photo (gain map on export, see `gainmap` and `rawdev::export::hdr_scene`):
-//! - the slider row "HDR-Leuchtkraft" under "Grundeinstellungen" (headroom in stops, switch right of the value);
+//! - the slider row "HDR-Leuchtkraft" under "Grundeinstellungen" (headroom in stops, switch right after the name);
 //! - the map of the preview, computed in the background from the rendered preview like the export does: shown in EDR
 //!   on an HDR display (`photo_display`), otherwise as the overlay "Leuchtende Bereiche" (steps +0.5/+1/+2 EV).
 //!
@@ -29,27 +29,25 @@ pub fn section(ui: &mut egui::Ui, s: &mut Settings, auto_source: bool) {
     let mut on = s.hdr.is_on(auto_source, film);
     // automatic and off because of the film look: the switch is shown greyed, the reason in its tooltip
     let film_off = s.hdr.on.is_none() && auto_source && film;
-    // one slider row "HDR-Leuchtkraft", track across the full width like every slider; the switch sits in the name
-    // line right before the value (lr::slider_full: value field 60 pt at the right end, name line 17 pt high)
+    // one slider row "HDR-Leuchtkraft", track and value field like every slider; the switch has its own cell right
+    // after the name and its "?" (lr::slider_switch_cell), clear of the value field at the right end
     let top = ui.cursor().top();
-    let right = ui.max_rect().left() + ui.available_width();
+    let left = ui.cursor().left();
+    let cell = lr::slider_switch_cell(ui.painter(), left, top, "HDR-Leuchtkraft", true);
     ui.add_enabled_ui(on, |ui| {
         let mut v = s.hdr.headroom as f64;
-        if lr::slider_hint(ui, "HDR-Leuchtkraft", &mut v, 0.0..=HdrOutput::MAX_HEADROOM as f64, HdrOutput::DEFAULT_HEADROOM as f64, 0.1, GLOW_HINT) {
+        if lr::slider_hint_switch(ui, "HDR-Leuchtkraft", &mut v, 0.0..=HdrOutput::MAX_HEADROOM as f64, HdrOutput::DEFAULT_HEADROOM as f64, 0.1, GLOW_HINT, cell) {
             s.hdr.headroom = v as f32;
             if ui.input(|i| i.pointer.any_down()) {
                 ui.ctx().data_mut(|d| d.insert_temp(drag_id(), true));
             }
         }
     });
-    let rect = egui::Rect::from_min_size(egui::pos2(right - 60.0 + 14.0 - lr::SWITCH_SIZE.x, top + lr::SLIDER_AIR / 2.0 + 8.5 - lr::SWITCH_SIZE.y / 2.0), lr::SWITCH_SIZE);
-    let resp = ui.interact(rect.expand(4.0), ui.scope_id().with("hdr-switch"), egui::Sense::click());
+    let resp = lr::switch_cell(ui, cell, ui.scope_id().with("hdr-switch"), on, !film_off);
     if resp.clicked() {
         on = !on;
         s.hdr.on = Some(on);
     }
-    let t = ui.ctx().animate_bool(resp.id, on);
-    lr::switch_paint(ui.painter(), rect, t, resp.hovered(), !film_off);
     let tip = if film_off { crate::tr("HDR aus bei Film-Look – klicken zum Einschalten") } else if on { crate::tr("HDR ausschalten") } else { crate::tr("HDR einschalten") };
     lr::hover_tip(ui, &resp, tip);
 }

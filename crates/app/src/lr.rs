@@ -611,6 +611,20 @@ fn label_caps(painter: &egui::Painter, at: egui::Pos2, text: &str, color: Color3
     r
 }
 
+/// Width of a slider name as [`slider`] paints it (capitals, spaced).
+pub fn slider_name_width(painter: &egui::Painter, label: &str) -> f32 {
+    caps_spaced(painter, label, egui::FontId::proportional(UI_SIZE), TEXT(), 0.5).size().x
+}
+
+/// Cell of a switch in the name line of a slider that starts at `row_top` (left edge `left`): right after the name
+/// and the place of its "?" (kept free also while the "?" is hidden, so nothing moves on hover), clear of the value
+/// field at the right end; as high as the name line (17 pt below [`SLIDER_AIR`] / 2).
+pub fn slider_switch_cell(painter: &egui::Painter, left: f32, row_top: f32, label: &str, help: bool) -> egui::Rect {
+    let x = left + slider_name_width(painter, label) + if help { 10.0 + 7.0 + 4.0 } else { 4.0 };
+    // as high as the name line (17 pt), so the cell never reaches into the track below
+    egui::Rect::from_min_size(egui::pos2(x, row_top + SLIDER_AIR / 2.0), egui::vec2(SWITCH_CELL.x, 17.0))
+}
+
 pub fn apply_theme(ctx: &egui::Context) {
     load_fonts(ctx);
     let light = ui_theme() == Theme::Light;
@@ -722,6 +736,20 @@ pub fn slider_hint(
     hint: &str,
 ) -> bool {
     slider_full(ui, label, value, range, default, step, hint, None, 0.0)
+}
+
+thread_local! {
+    /// Set by [`slider_hint_switch`] for the next slider: right end of its name's click area (the switch cell after it).
+    static NAME_END: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+
+/// [`slider_hint`] whose name line holds a switch cell ([`slider_switch_cell`]) right after the name: the name's click
+/// area (double-click resets) ends before the cell, so the two never share a point.
+pub fn slider_hint_switch(ui: &mut egui::Ui, label: &str, value: &mut f64, range: std::ops::RangeInclusive<f64>, default: f64, step: f64, hint: &str, cell: egui::Rect) -> bool {
+    NAME_END.with(|c| c.set(Some(cell.left())));
+    let r = slider_full(ui, label, value, range, default, step, hint, None, 0.0);
+    NAME_END.with(|c| c.set(None));
+    r
 }
 
 /// Marker for [`slider_plain`]: no help card, no tooltip on the name.
@@ -907,7 +935,10 @@ fn slider_full(
     let row = egui::Rect::from_min_size(outer.min + egui::vec2(0.0, SLIDER_AIR / 2.0), egui::vec2(outer.width(), 31.0));
     let pad = 7.0;
     // the name may start right of the row (`inset`, text edge of a tool tray); track and value keep their place
-    let label_rect = egui::Rect::from_min_size(row.min + egui::vec2(inset, 0.0), egui::vec2(row.width() - 64.0 - inset, 17.0));
+    let mut label_rect = egui::Rect::from_min_size(row.min + egui::vec2(inset, 0.0), egui::vec2(row.width() - 64.0 - inset, 17.0));
+    if let Some(end) = NAME_END.with(|c| c.take()) {
+        label_rect.max.x = label_rect.max.x.min(end).max(label_rect.min.x);
+    }
     let value_rect = egui::Rect::from_min_max(egui::pos2(row.right() - 60.0, row.top()), egui::pos2(row.right(), row.top() + 17.0));
     let track_rect = egui::Rect::from_min_max(egui::pos2(row.left() + pad, row.top() + 17.0), egui::pos2(row.right() - pad, row.bottom()));
     let id = ui.scope_id().with(("lr-slider", label));
@@ -1034,6 +1065,10 @@ fn slider_full(
         v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
         v.widgets.inactive.bg_stroke = Stroke::NONE;
     }
+    // exactly the 17 pt of the name line: egui's minimum interact height and button padding let the field (19 pt)
+    // reach into the track, so a click at the top of the track hit the value field
+    child.spacing_mut().interact_size.y = value_rect.height();
+    child.spacing_mut().button_padding.y = 0.0;
     let field = child.add_sized(
         value_rect.size(),
         egui::DragValue::new(value)
@@ -1590,7 +1625,27 @@ pub fn kv_row_tip(ui: &mut egui::Ui, key: &str, value: &str, clickable: bool, ti
 }
 
 /// Size of the on/off switch: square-cornered rocker, about as high as the slider text.
-pub const SWITCH_SIZE: egui::Vec2 = egui::vec2(22.0, 11.0);
+pub const SWITCH_SIZE: egui::Vec2 = egui::vec2(24.0, 12.0);
+/// Operating area of a switch that stands in a row of icon buttons (section header, slider name line): as high as
+/// the reset icon of a section header (22 pt), the drawing centred in it, never overlapping its neighbours.
+pub const SWITCH_CELL: egui::Vec2 = egui::vec2(32.0, 22.0);
+/// Hover fill of the small icon cells in a section header (reset, switch): one look for both.
+#[allow(non_snake_case)]
+pub fn HEAD_CELL_HOVER() -> Color32 {
+    gray(0x44)
+}
+
+/// Switch in its own cell ([`SWITCH_CELL`]) at `cell`: own hit area, hover fill like the reset icon beside it.
+/// `look_enabled` = false shows it greyed (still clickable, e.g. automatic and off). Returns the response.
+pub fn switch_cell(ui: &mut egui::Ui, cell: egui::Rect, id: egui::Id, on: bool, look_enabled: bool) -> egui::Response {
+    let resp = ui.interact(cell, id, egui::Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(cell, 0.0, HEAD_CELL_HOVER());
+    }
+    let t = ui.ctx().animate_bool(id.with("t"), on);
+    switch_paint(ui.painter(), egui::Rect::from_center_size(cell.center(), SWITCH_SIZE), t, resp.hovered(), look_enabled);
+    resp
+}
 
 /// Colors of the on/off switch, greys only: (track off, knob off, track on, knob on).
 #[allow(non_snake_case)]
@@ -1620,7 +1675,7 @@ pub fn switch_paint(painter: &egui::Painter, rect: egui::Rect, t: f32, hot: bool
 
 /// On/off switch shared by the sidebars, dialogs and settings. Returns: toggled?
 pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
-    let (rect, response) = ui.allocate_exact_size(SWITCH_SIZE + egui::vec2(0.0, 5.0), egui::Sense::click());
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(SWITCH_SIZE.x, SWITCH_CELL.y), egui::Sense::click());
     if response.clicked() { *on = !*on; }
     let t = ui.ctx().animate_bool(response.id, *on);
     let r = egui::Rect::from_center_size(rect.center(), SWITCH_SIZE);
@@ -1633,7 +1688,7 @@ pub fn switch(ui: &mut egui::Ui, on: &mut bool) -> bool {
 pub fn switch_label(ui: &mut egui::Ui, on: &mut bool, label: &str) -> egui::Response {
     let font = egui::FontId::proportional(UI_SIZE);
     let w = caps_spaced(ui.painter(), label, font, TEXT(), 0.5).size().x;
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(SWITCH_SIZE.x + 8.0 + w, 20.0), egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(SWITCH_SIZE.x + 8.0 + w, SWITCH_CELL.y), egui::Sense::click());
     if resp.clicked() { *on = !*on; }
     let t = ui.ctx().animate_bool(resp.id, *on);
     let en = ui.is_enabled();
@@ -1749,19 +1804,40 @@ pub fn section_switch<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bo
 
 /// Arrow (rotates when expanding) and title of a section header; returns the title position and width.
 /// Also used by the header that sticks to the top of a scrolling list (`sticky`), so both look alike.
-fn section_head_paint(painter: &egui::Painter, rect: egui::Rect, title: &str, openness: f32, hovered: bool) -> (egui::Pos2, f32) {
+fn section_head_paint(painter: &egui::Painter, rect: egui::Rect, title: &str, openness: f32, hovered: bool, reserve: f32, off: bool) -> (egui::Pos2, f32) {
     let c = egui::pos2(rect.left() + 10.0, rect.center().y);
     let a = openness * std::f32::consts::FRAC_PI_2;
     let rot = |p: egui::Vec2| c + egui::vec2(p.x * a.cos() - p.y * a.sin(), p.x * a.sin() + p.y * a.cos());
     let arrow = vec![rot(egui::vec2(-2.5, -4.0)), rot(egui::vec2(3.5, 0.0)), rot(egui::vec2(-2.5, 4.0))];
     let arrow_color = if hovered { gray(0xe8) } else { gray(0x9a) };
     painter.add(egui::Shape::convex_polygon(arrow, arrow_color, Stroke::NONE));
-    let title_color = if hovered { TEXT_STRONG() } else { gray(0xe2) };
+    // switched off: the title dimmed (see also the mark "AUS" after it, [`section_off_mark`])
+    let title_color = if hovered { TEXT_STRONG() } else if off { DIMMED() } else { gray(0xe2) };
     let galley = caps(painter, title, semibold(UI_SIZE), title_color);
     let title_pos = egui::pos2(rect.left() + 22.0, rect.center().y - galley.size().y / 2.0);
-    let title_w = galley.size().x.min((rect.right() - title_pos.x - 28.0).max(0.0));
-    painter.with_clip_rect(rect.with_max_x((rect.right() - 28.0).max(rect.left()))).galley(title_pos, galley, title_color);
+    // `reserve`: room kept free at the right for the header cells (reset, switch); the title is clipped before it
+    let title_w = galley.size().x.min((rect.right() - title_pos.x - reserve).max(0.0));
+    painter.with_clip_rect(rect.with_max_x((rect.right() - reserve).max(rect.left()))).galley(title_pos, galley, title_color);
     (title_pos, title_w)
+}
+
+/// Does a section header show its on/off switch? Only sections that can be switched off (`off` Some), when something
+/// is adjusted – and always while the section is off, so it can never stay off without a visible way back.
+/// Mark "AUS" after the title of a switched-off section (small spaced capitals like a subheading), left edge at `x`.
+/// `ping` 0..1: brief highlight after a control of the switched-off body was operated. Returns its width.
+fn section_off_mark(painter: &egui::Painter, x: f32, cy: f32, ping: f32) -> f32 {
+    let col = SUBHEAD_LABEL().lerp_to_gamma(TEXT_STRONG(), ping);
+    let g = caps_spaced(painter, "Aus", egui::FontId::proportional(SUBHEAD_SIZE), col, SUBHEAD_SPACING);
+    let r = egui::Rect::from_min_size(egui::pos2(x, cy - g.size().y / 2.0), g.size());
+    if ping > 0.0 {
+        painter.rect_filled(r.expand2(egui::vec2(4.0, 2.0)), 0.0, HEAD_CELL_HOVER().gamma_multiply(ping));
+    }
+    painter.galley(r.min, g, col);
+    r.width()
+}
+
+fn section_switch_shown(changed: bool, off: Option<bool>) -> bool {
+    off.is_some_and(|o| changed || o)
 }
 
 fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mut off: Option<&mut bool>, local: Option<&str>, add: impl FnOnce(&mut egui::Ui) -> R) -> bool {
@@ -1777,10 +1853,15 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 28.0), egui::Sense::click());
     let reset_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 12.0, rect.center().y), egui::vec2(22.0, 22.0));
     let reset_resp = changed.then(|| ui.interact(reset_rect, id.with("reset"), egui::Sense::click()));
-    // Toggle left of the reset icon (only when something is adjusted)
-    let switch_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 40.0, rect.center().y), SWITCH_SIZE);
-    let switch_resp = (changed && off.is_some()).then(|| ui.interact(switch_rect.expand(4.0), id.with("switch"), egui::Sense::click()));
-    let reset_hovered = reset_resp.as_ref().is_some_and(|r| r.hovered()) || switch_resp.as_ref().is_some_and(|r| r.hovered());
+    // Toggle left of the reset icon: its own cell as high as the reset icon, 2 pt apart, so hover and click never
+    // reach the neighbour. A switched-off section always shows its switch, even with nothing adjusted (after
+    // "reset" or with all sliders back at neutral): otherwise it stays off without any visible way back.
+    let switch_cell = egui::Rect::from_min_size(egui::pos2(reset_rect.left() - 2.0 - SWITCH_CELL.x, rect.center().y - SWITCH_CELL.y / 2.0), SWITCH_CELL);
+    let switch_resp = section_switch_shown(changed, off.as_deref().copied()).then(|| ui.interact(switch_cell, id.with("switch"), egui::Sense::click()));
+    let reset_only = reset_resp.as_ref().is_some_and(|r| r.hovered());
+    let switch_hovered = switch_resp.as_ref().is_some_and(|r| r.hovered());
+    // pointer on one of the header cells: the row itself is not hovered then
+    let reset_hovered = reset_only || switch_hovered;
     if let (Some(r), Some(o)) = (&switch_resp, off.as_deref_mut()) {
         if r.clicked() {
             *o = !*o;
@@ -1823,7 +1904,26 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     }
     // Arrow, rotates when expanding
     let openness = state.openness(ui.ctx());
-    let (title_pos, title_w) = section_head_paint(painter, rect, title, openness, resp.hovered());
+    // a control of the switched-off body was just operated: the mark "AUS" lights up briefly (no layout change)
+    let ping_id = id.with("off-ping");
+    let now = ui.input(|i| i.time);
+    let ping = if is_off {
+        let t: f64 = ui.ctx().data(|d| d.get_temp(ping_id)).unwrap_or(f64::NEG_INFINITY);
+        let k = (1.0 - (now - t) / 1.2).clamp(0.0, 1.0) as f32;
+        if k > 0.0 {
+            ui.ctx().request_repaint();
+        }
+        k
+    } else {
+        0.0
+    };
+    let reserve = if off.is_some() { 28.0 + SWITCH_CELL.x + 2.0 } else { 28.0 };
+    let (title_pos, title_w) = section_head_paint(painter, rect, title, openness, resp.hovered() && !reset_hovered, reserve, is_off);
+    // after the title: change dot, then the mark "AUS" when switched off, then (on hover) the "?"
+    let mut after = title_pos.x + title_w + if changed { 16.0 } else { 8.0 };
+    if is_off && after + 30.0 < rect.right() - reserve {
+        after += section_off_mark(painter, after, rect.center().y, ping) + 6.0;
+    }
     {
         // the header sticks to the top of a long list (`sticky`): same look, without reset and switch
         let owned = title.to_string();
@@ -1831,9 +1931,12 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
             if hovered {
                 p.rect_filled(bar, 0.0, gray(0x22));
             }
-            let (pos, w) = section_head_paint(p, bar, &owned, openness, hovered);
+            let (pos, w) = section_head_paint(p, bar, &owned, openness, hovered, 28.0, is_off);
             if changed {
                 p.circle_filled(egui::pos2(pos.x + w + 8.0, bar.center().y), 2.5, if is_off { gray(0x70) } else { ACCENT() });
+            }
+            if is_off {
+                section_off_mark(p, pos.x + w + if changed { 16.0 } else { 8.0 }, bar.center().y, 0.0);
             }
         });
     }
@@ -1841,19 +1944,22 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     let edit_section = local.is_none() && crate::paste::for_section(title).is_some();
     // only sections with a card of their own: a general card about section headers said no more than the tooltips
     if let Some(card) = local.is_none().then(|| crate::help::for_section(title)).flatten() {
-        let q = egui::pos2(title_pos.x + title_w + 22.0, rect.center().y);
+        let q = egui::pos2(if is_off { after + 8.0 } else { title_pos.x + title_w + 22.0 }, rect.center().y);
         crate::help::question_mark(ui, q, id.with("hilfe"), ui.rect_contains_pointer(rect), title, "", card, if edit_section { SECTION_CONTROLS } else { "" });
     }
     if let Some(r) = &switch_resp {
         // the same switch as everywhere: light = active, dark = disabled
-        switch_paint(painter, switch_rect, if is_off { 0.0 } else { 1.0 }, r.hovered(), true);
+        if r.hovered() {
+            painter.rect_filled(switch_cell, 0.0, HEAD_CELL_HOVER());
+        }
+        switch_paint(painter, egui::Rect::from_center_size(switch_cell.center(), SWITCH_SIZE), if is_off { 0.0 } else { 1.0 }, r.hovered(), true);
     }
     if changed {
         // subtle dot: something in this section is adjusted (grey when disabled)
         painter.circle_filled(egui::pos2(title_pos.x + title_w + 8.0, rect.center().y), 2.5, if is_off { gray(0x70) } else { ACCENT() });
-        let hov = reset_hovered;
+        let hov = reset_only;
         if hov {
-            painter.rect_filled(reset_rect, 0.0, gray(0x44));
+            painter.rect_filled(reset_rect, 0.0, HEAD_CELL_HOVER());
         }
         painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { TEXT_STRONG() } else { TEXT_DIM() });
         if let Some(r) = reset_resp {
@@ -1866,7 +1972,7 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     if let Some(r) = &switch_resp {
         hover_tip(ui, r, if is_off { crate::tr("Abschnitt einschalten") } else { crate::tr("Abschnitt vorübergehend ausschalten") });
     }
-    state.show_body_unindented(ui, |ui| {
+    let body = state.show_body_unindented(ui, |ui| {
         ui.add_space(2.0);
         crate::sticky::enter();
         ui.indent(id.with("body"), |ui| {
@@ -1880,7 +1986,21 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
         crate::sticky::leave();
         ui.add_space(6.0);
     });
+    if is_off {
+        if let Some(b) = body {
+            let hit = ui.input(|i| i.pointer.any_pressed() || i.pointer.is_decidedly_dragging() || i.key_pressed(egui::Key::ArrowUp) || i.key_pressed(egui::Key::ArrowDown));
+            if hit && ui.rect_contains_pointer(b.response.rect) {
+                ui.ctx().data_mut(|d| d.insert_temp(ping_id, now));
+            }
+        }
+    }
     state.store(ui.ctx());
+    if reset {
+        // resetting a section also switches it back on
+        if let Some(o) = off.as_deref_mut() {
+            *o = false;
+        }
+    }
     // fine separator line between sections
     let y = ui.cursor().top() + 1.0;
     ui.painter().line_segment([egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)], Stroke::new(1.0, gray(0x27)));
@@ -4553,5 +4673,21 @@ mod contrast_tests {
         HIGH_CONTRAST.store(false, std::sync::atomic::Ordering::Relaxed);
         println!("{table}");
         assert!(failures.is_empty(), "contrast below WCAG: {failures:#?}");
+    }
+}
+
+#[cfg(test)]
+mod section_switch_tests {
+    use super::section_switch_shown;
+
+    /// A switched-off section keeps its switch even with every slider at neutral (after "reset"): before 1.5.7 the
+    /// switch vanished, the section stayed off and no slider changed the photo any more.
+    #[test]
+    fn off_section_always_shows_switch() {
+        assert!(section_switch_shown(false, Some(true)));
+        assert!(section_switch_shown(true, Some(true)));
+        assert!(section_switch_shown(true, Some(false)));
+        assert!(!section_switch_shown(false, Some(false)));
+        assert!(!section_switch_shown(true, None));
     }
 }

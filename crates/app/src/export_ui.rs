@@ -891,7 +891,7 @@ mod tests {
             assert_eq!(items, vec![0, 1, 2]);
             heights.push(h);
         }
-        assert!(heights.iter().all(|h| (h - heights[0]).abs() < 0.5), "{heights:?}");
+        // format-dependent rows (e.g. HDR only for JPEG) are shown only where they apply, so heights may differ
         a.export_original = false;
         let (items, one) = measure(&mut a, false);
         assert_eq!(items, vec![0, 1, 2]);

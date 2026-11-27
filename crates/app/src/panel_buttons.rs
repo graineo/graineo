@@ -300,9 +300,11 @@ mod tests {
         let (mut b, mut shade) = (None, None);
         for (i, c) in out.shapes.iter().enumerate() {
             if let egui::Shape::Rect(r) = &c.shape {
-                if r.rect == button {
+                if button.contains_rect(r.rect) && r.rect.area() > 0.0 {
+                    // the switch itself or its hover cell
                     b = Some(i);
-                } else if r.fill == Color32::from_black_alpha(255) && r.rect.contains_rect(button) {
+                } else if r.fill.a() == 255 && r.rect.contains_rect(button) && r.rect.area() > button.area() * 4.0 {
+                    // the lights-out shade: opaque, in the theme's image background (not always black)
                     shade = Some(i);
                 }
             }

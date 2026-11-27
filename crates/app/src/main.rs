@@ -12,6 +12,7 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod ui_overlap;
 mod edit_footer;
 mod assessment;
 mod curve_auto;
@@ -4703,6 +4704,7 @@ impl eframe::App for App {
         }
         prefs::ui(&ctx); // Preferences (⌘,): disk cache
         self.lens_ui(&ctx); // lens assignment, assistant "Objektiv hinzufügen", window OBJEKTIVE
+        ui_overlap::step(&ctx); // Test hook: GRAINEO_UI_OVERLAP=1
         test_image::step(&ctx); // Test hook: GRAINEO_SCREENSHOT
         test_image::keys(&ctx); // Test hook: GRAINEO_KEYS
         // Test hook: GRAINEO_FULL_PREVIEW=1 switches on the fullscreen preview (F) once after 5 s
@@ -8397,7 +8399,7 @@ impl App {
             None => {}
         }
         if !self.zoom_compact {
-            ui.add_space(-6.0);
+            ui.add_space(-4.0);
         }
         // the comparison: fitted, the focused field's own scale ("–" while it is being computed)
         let label = if comparing && self.zoom <= 1.001 { self.cmp.fit_pct.map_or_else(|| "– %".to_string(), |p| format!("{p:.0} %")) } else { zoom_label(self.zoom <= 1.001, fit_pct, pct) };

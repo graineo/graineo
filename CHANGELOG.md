@@ -574,3 +574,11 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 - Sigma Quattro: the "Color Temperature" white balance and LOW resolution are now handled.
 - DP Merrill at LOW and MED resolution: optimized black level.
 
+
+## 1.5.7 · Switched-off Sections Visible, Tidier Switches and Sliders
+
+- **Fix: sliders seemed to have no effect on some photos.** If a panel section (for example Basic) was switched off for a photo, its switch disappeared once all its sliders were back at neutral, so the section stayed off unnoticed. The switch now stays visible while the section is off, and resetting the section switches it back on.
+- A switched-off section is clear at a glance: dimmed title with an "OFF" mark; moving a slider in it makes the mark light up briefly.
+- Section switches and reset buttons have their own, equally tall click areas; hovering one no longer highlights the other.
+- The HDR Glow switch sits right after its name instead of over the value field.
+- The value field of every slider no longer reaches into the slider track; the zoom menu no longer overlaps the zoom buttons.
