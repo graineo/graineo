@@ -26,7 +26,9 @@ const SEARCH_MIN: f32 = 150.0;
 const FILTER_MIN: f32 = 130.0;
 /// Fixed parts of row 1 besides the two halves: gap, gap, reset button (the "?" sits inside the search field), gap
 /// and the view switch "Raster | Vergleichen" at the right end.
-const ROW1_FIXED: f32 = 8.0 + 4.0 + RESET_W + 8.0 + VIEW_W;
+const ROW1_FIXED: f32 = 8.0 + 4.0 + RESET_W + 8.0 + PLAY_W + 4.0 + VIEW_W;
+/// Width of the slideshow button left of the view switch.
+const PLAY_W: f32 = 26.0;
 /// Width of the view switch (two text cells, see [`LibraryView::view_switch`]).
 pub(crate) const VIEW_W: f32 = VIEW_CELLS[0] + VIEW_CELLS[1];
 pub(crate) const VIEW_CELLS: [f32; 2] = [70.0, 104.0];
@@ -149,6 +151,10 @@ impl LibraryView {
             ui.add_space(4.0);
             self.filter_reset(ui);
             ui.add_space(8.0);
+            if lr::icon_button_hint(ui, lr::Icon::Play, false, &lr::with_shortcut("Diashow", "slideshow")) {
+                crate::slideshow::request();
+            }
+            ui.add_space(4.0);
             if self.view_switch(ui, false) == Some(true) {
                 // one photo of a series: the whole series (as N); a selection: as it is
                 self.request_compare(self.button_series(), None);

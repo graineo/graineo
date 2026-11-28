@@ -323,7 +323,7 @@ impl App {
 /// Row of a switch list in the tray: optional icon, name, shortcut dimmed on the right (or "…" while
 /// it computes); light fill when on, like the views of the X3F sensor tray. Returns: clicked.
 fn toggle_row(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &str, on: bool, busy: bool) -> bool {
-    toggle_row_impl(ui, icon, name, key, on, busy, true, None)
+    toggle_row_impl(ui, icon, name, &crate::shortcuts::platform_text(key), on, busy, true, None)
 }
 
 fn toggle_row_impl(ui: &mut egui::Ui, icon: Option<lr::Icon>, name: &str, key: &str, on: bool, busy: bool, available: bool, tip: Option<&str>) -> bool {

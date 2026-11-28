@@ -392,6 +392,13 @@
     "symbol": "arrow.up.left.and.arrow.down.right"
   },
   {
+    "action": "Slideshow",
+    "text_id": "menu-slideshow",
+    "de": "Diashow",
+    "shortcut": "slideshow",
+    "symbol": "play.rectangle"
+  },
+  {
     "action": "Shortcuts",
     "text_id": "menu-shortcuts",
     "de": "Tastenkürzel",

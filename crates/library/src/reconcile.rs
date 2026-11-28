@@ -522,6 +522,10 @@ pub fn run(db: &Db, stem_only: Option<i64>, o: &Options) -> Result<Report, Strin
             Err(e) => b.conflicts.push(e),
         }
     }
+    // exports entered by this run whose link was noted: into the stack of their original (`crate::export_link`)
+    if let Err(e) = crate::export_link::settle(db) {
+        b.conflicts.push(e);
+    }
     // root folder list as a file (rebuild without database)
     let _ = crate::backup::write_roots(db);
     b.duration_ms = t0.elapsed().as_millis();

@@ -7287,3 +7287,70 @@ HDR ausschalten	Désactiver le HDR
 HDR einschalten	Activer le HDR
 HDR-Leuchtkraft	Réserve HDR
 Schatten-Tönung	Teinte des ombres
+Neben dem Original	À côté de l'original
+Alle Bilder in einen gewählten Ordner	Toutes les images dans un dossier choisi
+Jedes Bild in den Ordner seines Originals (mit Unterordner aus „Erweitert“)	Chaque image dans le dossier de son original (avec le sous-dossier de « Avancé »)
+Eigener Name mit Platzhaltern, z. B. Export/{date:YYYY}	Nom personnalisé avec variables, p. ex. Export/{date:YYYY}
+Platzhalter wie im Dateinamen: {date}, {date:YYYY}, {camera}, {title}, {n}; / trennt Ordner	Variables comme dans le nom de fichier : {date}, {date:YYYY}, {camera}, {title}, {n} ; / sépare les dossiers
+Unterordner „{a}“	Sous-dossier « {a} »
+Ordner der Vorlage {why}: {a} – Ziel bleibt {b}	Dossier du modèle {why} : {a} – la destination reste {b}
+ist kein erlaubtes Ziel	n'est pas une destination autorisée
+nicht erreichbar	inaccessible
+Name, Ziel, Format und Größe als Vorlage sichern	Enregistrer nom, destination, format et taille comme modèle
+Horizont begradigen (A · in Entwickeln auch mit rechter Maustaste ziehen)	Redresser l'horizon (A · dans Développer aussi en glissant avec le bouton droit)
+Gewählte Ordner, alle Dateitypen	Dossiers choisis, tous les types de fichiers
+• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\n• **Belichtung** – verschiebt die Maske gegenüber den Zonen: Plus ordnet das Foto helleren Zonen zu.\n• **Kontrast** – spreizt die Maske um −4 EV: über 1 verteilt ein flaches Foto auf mehr Zonen, unter 1 fasst einen großen Umfang zusammen.\n• **Anpassen** – setzt Belichtung und Kontrast so, dass 5 % bis 95 % der Maskenhelligkeit auf −7,5 bis −0,5 EV liegen.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **Lissage** – taille des zones du masque (pourcentage du grand côté). Plus : plus calme, les détails gardent leur contraste ; moins : agit plutôt comme une courbe.\n• **Contours** – précision avec laquelle le masque suit les bords. Plus haut : moins de halos, mais les structures fines se séparent davantage.\n\n• **Exposition** – décale le masque par rapport aux zones : plus place la photo dans des zones plus claires.\n• **Contraste** – étale le masque autour de −4 EV : au-dessus de 1 une photo plate couvre plus de zones, en dessous de 1 une grande plage est resserrée.\n• **Ajuster** – règle exposition et contraste pour que 5 % à 95 % de la luminosité du masque se situent entre −7,5 et −0,5 EV.\n\nLe masque est calculé une fois par réglage pour toute l'image.
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0; die Nachbarn gehen zur Hälfte mit, ⌘ nur dieser Punkt · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen. **Belichtung** und **Kontrast** der Maske verteilen die Helligkeiten des Fotos auf die neun Zonen; **Anpassen** setzt beide so, dass der Helligkeitsumfang des Fotos die Zonen −8 … 0 EV ausfüllt.	• **Équilibre vers la droite** – éclaircit les ombres et les tons moyens. Les hautes lumières à partir d’un diaph sous le blanc restent garanties inchangées, rien de nouveau n’est brûlé.\n• **Équilibre vers la gauche** – assombrit les hautes lumières et les tons moyens. Les ombres profondes restent garanties inchangées.\n\nUn masque qui lisse les surfaces et s’arrête aux bords fait s’éclaircir ensemble des surfaces entières (un visage à contre-jour) – sans halos sur les bords.\n### Graphique\nNeuf zones de −8 EV (presque noir, à gauche) à 0 EV (blanc, à droite), derrière elles l’histogramme de la photo dans la même luminosité de zone. La ligne dorée montre l’effet total : la forme de base de l’Équilibre (en pointillés) plus les zones. Le graphique ne modifie que les zones ; les voisines ne bougent pas, et entre elles la ligne est aussi douce que le calcul. Les zones réglées peuvent lever la protection de l’Équilibre.\n### Commandes\nSeul un clic choisit un point (doré) ; la molette fait toujours défiler le panneau · Glisser : zone plus claire/plus sombre, avec ⌥ fin, s’arrête à 0 ; les voisins suivent à moitié, ⌘ ce point seul · ↑/↓ ±0,05, avec ⇧ ±0,25, avec ⌥ ±0,01 · ←/→ zone voisine · Double-clic sur le point : 0 · Double-clic sur les valeurs dessous : les saisir · Échap ou clic à l’extérieur : fin de la sélection\n### Masque\n**Lissage** et **Contours** règlent le masque, **Masque** l’affiche dans la photo en niveaux de gris. L'**Exposition** et le **Contraste** du masque répartissent les luminosités de la photo sur les neuf zones ; **Ajuster** règle les deux pour que la plage de luminosité de la photo remplisse les zones −8 … 0 EV.
+Gradationskurve: Auto (Helligkeit)	Courbe des tonalités : Auto (luminosité)
+Gradationskurve: Auto (RGB)	Courbe des tonalités : Auto (RVB)
+Anpassen	Ajuster
+Maskenhelligkeit verschieben	Décaler la luminosité du masque
+Maskenhelligkeit um −4 EV spreizen	Étaler la luminosité du masque autour de −4 EV
+Maske an den Helligkeitsumfang des Fotos anpassen	Ajuster le masque à la plage de luminosité de la photo
+Wartet auf das Histogramm des Fotos	En attente de l'histogramme de la photo
+Perspektive mit Hilfslinien	Perspective par lignes guides
+Linien	Lignes
+Linie am Horizont ziehen	Tracer une ligne sur l’horizon
+Automatisch aufrichten	Redresser automatiquement
+Nur den Winkel	Angle seulement
+Winkel und stürzende Linien	Angle et lignes fuyantes
+Winkel in Grad	Angle en degrés
+Von Linien bestimmt	Défini par les lignes guides
+Perspektive senkrecht: stürzende Linien	Perspective verticale : lignes fuyantes
+Perspektive waagerecht	Perspective horizontale
+Art	Type
+Viereck	Rectangle
+Linien {n}/4	Lignes {n}/4
+Rolle wechseln	Changer de rôle
+Linie entfernen	Supprimer la ligne
+Seitenverhältnis	Proportions
+Ränder zeigen	Afficher les bords
+Größtes Rechteck	Plus grand rectangle
+Ganz	Entier
+Linien löschen	Effacer les lignes
+4 Linien gesetzt	4 lignes placées
+Linien widersprechen sich	Les lignes se contredisent
+Korrektur begrenzt	Correction limitée
+ · Linien	 · Lignes
+• **Freistellen** – Format wählen (Schloss hält das Seitenverhältnis), Rahmen ziehen; außerhalb ziehen dreht\n• **Ausrichten** – zwei Punkte am Horizont anklicken oder Auto, Waagerecht, Senkrecht; in Entwickeln auch mit der rechten Maustaste eine Linie ziehen\n• **Perspektive** – stürzende Linien mit Reglern entzerren\n• **Linien** – bis zu vier Kanten nachziehen, die senkrecht oder waagerecht sein sollen. Die Rolle (V/H) folgt dem Winkel, ein Klick auf die Linie wechselt sie. Eine Linie dreht, zwei gleiche richten eine Achse, zwei und zwei entzerren ganz. **Viereck**: vier Ecken auf ein Rechteck im Motiv legen. **Stärke** unter 100 % lässt Türme leicht zusammenlaufen. **Ränder zeigen** zeigt das ganze entzerrte Bild; Ausschnitt **Ganz** füllt die Ränder grau. Solange Linien gesetzt sind, sind die Perspektive-Regler gesperrt.\n\nAbbrechen stellt alles wie vor dem Öffnen her.\n\n### Tasten\n⇧ beim Ziehen einer Ecke: Seitenverhältnis halten · ⇧ beim Ziehen eines Linienendes: an erkannte Kante einrasten · ⌘ Linie im Freistellen · A Ausrichten · ⌥ beim Ziehen eines Reglers: Feinarbeit · Doppelklick in den Rahmen oder Enter: übernehmen · Esc Linie verwerfen	• **Recadrer** – choisir un format (le cadenas garde les proportions), tirer le cadre ; tirer à l’extérieur fait pivoter\n• **Redresser** – cliquer deux points sur l’horizon, ou Auto, Horizontal, Vertical ; dans Développer aussi tracer une ligne avec le bouton droit\n• **Perspective** – corriger les lignes fuyantes avec des curseurs\n• **Lignes** – tracer jusqu’à quatre bords qui doivent être verticaux ou horizontaux. Le rôle (V/H) suit l’angle ; un clic sur la ligne le change. Une ligne fait pivoter, deux de même rôle redressent un axe, deux et deux corrigent entièrement. **Rectangle** : placer quatre coins sur un rectangle du motif. **Intensité** sous 100 % laisse les tours converger légèrement. **Afficher les bords** montre toute l’image corrigée ; le recadrage **Entier** remplit les bords de gris. Tant que des lignes sont posées, les curseurs de perspective sont verrouillés.\n\nAnnuler rétablit tout comme avant l’ouverture.\n\n### Touches\n⇧ en tirant un coin : garder les proportions · ⇧ en tirant une extrémité de ligne : aimanter à un bord détecté · ⌘ ligne dans Recadrer · A Redresser · ⌥ en tirant un curseur : réglage fin · double-clic dans le cadre ou Entrée : appliquer · Échap annuler la ligne
+Diashow	Diaporama
+Keine Fotos für die Diashow	Aucune photo pour le diaporama
+Weiter abspielen	Reprendre
+Optionen der Diashow	Options du diaporama
+Diashow beenden	Quitter le diaporama
+Übergang	Transition
+Überblenden	Fondu
+Schnitt	Coupe
+Aus dem Foto	Depuis la photo
+Ken-Burns-Effekt	Effet Ken Burns
+Langsamer Zoom auf Gesichter oder die hellste Stelle	Zoom lent vers les visages ou la zone la plus claire
+Hochformate paarweise	Portraits par paires
+Zwei Hochformate nebeneinander auf einem Querformat-Bildschirm	Deux photos en portrait côte à côte sur un écran paysage
+Zufällige Reihenfolge	Ordre aléatoire
+Infozeile	Ligne d'infos
+Diashow: Auswahl, sonst alle Fotos der Ansicht	Diaporama : la sélection, sinon toutes les photos de la vue
+Diashow anhalten / weiter	Mettre en pause / reprendre le diaporama
+voriges Foto	photo précédente
+nächstes Foto	photo suivante
+Infozeile ein/aus	ligne d'infos oui/non
+Nur schwarz	Noir uni

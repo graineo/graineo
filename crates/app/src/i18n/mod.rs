@@ -7,7 +7,7 @@ pub mod format;
 mod keys;
 pub mod locale;
 mod ui;
-pub use ui::{audit_image, de, german_or, search_forms, DeComma, fill, fill_de, fill_names, plural, tr, tr_msg};
+pub use ui::{audit_image, de, german_or, search_forms, DeComma, fill, fill_de, fill_names, plural, spell_modifiers, tr, tr_msg};
 use fluent_bundle::{concurrent::FluentBundle, FluentArgs, FluentResource};
 pub use keys::Text;
 pub use locale::{generation, language, Choice};

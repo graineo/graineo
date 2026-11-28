@@ -1578,9 +1578,9 @@ impl RawDoc {
     /// Histogram of the tone equalizer's zone brightness over the preview (bins of `develop::tone_eq::hist_bin`), for
     /// the graph in Edit. Computed separately from the render (which may run on the GPU) with the same steps that
     /// lead to the equalizer in [`Self::render_stage`]: dehaze and noise brake, then the mask of the preview stage and
-    /// the same exposure offset. `None` for another view than the developed image or while the mask is shown.
+    /// the same exposure offset. `None` for another view than the developed image.
     pub fn zone_histogram(&self, s: &Settings) -> Option<Vec<u32>> {
-        if s.view != develop::View::Developed || s.tone_eq_mask {
+        if s.view != develop::View::Developed {
             return None;
         }
         let st = self.preview_stage(s);

@@ -1531,7 +1531,7 @@ fn develop_section(ui: &mut egui::Ui) {
         row(ui, crate::tr("Lichter neutral"), Some(crate::tr("Startwert des Reglers für neue Fotos (0 = wie bisher). „Zurücksetzen“ stellt weiter neutral.")), |ui| {
             ui.spacing_mut().slider_width = 200.0;
             let mut v = (crate::camera_defaults::highlight_neutral_default() * 100.0).round();
-            let r = ui.add(egui::Slider::new(&mut v, 0.0..=100.0).step_by(1.0).fixed_decimals(0));
+            let r = crate::lr::slider_add(ui, egui::Slider::new(&mut v, 0.0..=100.0).step_by(1.0).fixed_decimals(0));
             if r.drag_stopped() || (r.changed() && !r.dragged()) {
                 crate::camera_defaults::set_highlight_neutral_default(v / 100.0);
             }
@@ -1702,7 +1702,7 @@ fn export(ui: &mut egui::Ui) {
         separator(ui);
         row(ui, crate::tr("JPEG-Qualität"), None, |ui| {
             let mut q = e["quality"].as_u64().unwrap_or(92) as u8;
-            if ui.add(egui::Slider::new(&mut q, 60..=100).clamping(egui::SliderClamping::Edits)).changed() {
+            if crate::lr::slider_add(ui, egui::Slider::new(&mut q, 60..=100).clamping(egui::SliderClamping::Edits)).changed() {
                 e["quality"] = json!(q);
             }
         });

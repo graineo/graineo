@@ -38,6 +38,7 @@ pub mod dng;
 pub mod export;
 pub mod exr;
 pub mod filllight;
+pub mod guides;
 pub mod film;
 pub mod grain_detail;
 pub mod highlight_post;
@@ -378,7 +379,7 @@ fn render_impl(lin: &Linear, cal: &Calibration, s: &Settings, fill_map: Option<&
     // Tone equalizer: exposure per brightness zone, mask of the whole image (attached, else computed for this image);
     // the data are normalised to sensor saturation (white = 1)
     // (also for the zone histogram of the tone equalizer graph when one is collected on this thread: gain stays 1)
-    let hist = tone_eq::collector().filter(|_| s.view == View::Developed && !s.tone_eq_mask);
+    let hist = tone_eq::collector().filter(|_| s.view == View::Developed);
     let teq_mask = tone_eq::wanted(s).then(|| tone_eq::mask_for(lin.toneq.as_ref(), &lin.data, lin.width, lin.height, 1.0, &s.tone_eq));
     let teq = teq_mask.as_ref().map(|m| tone_eq::Apply::new(&s.tone_eq, m, (s.exposure + quattro_exposure_offset(cal, s)) as f32, s.tone_eq_mask));
     out_rows(&mut data, &mut scene_data, lin.width * 3, mode_out, cal).zip(lin.data.par_chunks(lin.width * 3)).enumerate().for_each(|(y, (mut out, src))| {
@@ -624,7 +625,7 @@ fn render_counts_impl(
     // Noise brake for Fill Light: base/detail split of the input (see lift::Brake)
     let brake = s.noise_brake.exponents().filter(|_| s.fill_light > 0.0 && fill.is_some()).map(|(l, c)| lift::Brake::new(src_data, counts.width, counts.height, l, c));
     // Tone equalizer on the counts (white = highest count): mask handed in, attached, or computed for this image
-    let hist = tone_eq::collector().filter(|_| s.view == View::Developed && !s.tone_eq_mask);
+    let hist = tone_eq::collector().filter(|_| s.view == View::Developed);
     let teq_mask = tone_eq::wanted(s).then(|| tone_eq::mask_for(toneq.or(counts.toneq.as_ref()), src_data, counts.width, counts.height, cal.max_count(), &s.tone_eq));
     let teq = teq_mask.as_ref().map(|m| tone_eq::Apply::new(&s.tone_eq, m, (s.exposure + quattro_exposure_offset(cal, s)) as f32, s.tone_eq_mask));
     out_rows(&mut data, &mut scene_data, counts.width * 3, mode_out, cal).zip(src_data.par_chunks(counts.width * 3)).enumerate().for_each(|(y, (mut out, src))| {

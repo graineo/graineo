@@ -25,6 +25,7 @@ pub mod manage;
 pub mod duplicates;
 pub mod series;
 pub mod merge;
+pub mod export_link;
 pub mod series_quality;
 pub mod duplicate_cleanup;
 pub mod trash_batch;

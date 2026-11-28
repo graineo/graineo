@@ -117,7 +117,7 @@ pub(super) fn left(ui: &mut egui::Ui, imp: &mut Import, pick: &mut Picks) {
         // "Hinzufügen" takes whole folders: the file types and the grid switches would do nothing (their place stays)
         let in_place = imp.mode == Mode::InPlace;
         if in_place {
-            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Beim Hinzufügen kommt der ganze Ordner in die Bibliothek.")).small().color(lr::TEXT_DIM())).wrap());
+            ui.add(egui::Label::new(egui::RichText::new(crate::tr("Gewählte Ordner, alle Dateitypen")).small().color(lr::TEXT_DIM())).wrap());
         }
         ui.scope(|ui| {
         if in_place {
@@ -448,7 +448,7 @@ pub(super) fn folders(ui: &mut egui::Ui, imp: &mut Import) {
                 let clip = egui::Rect::from_min_max(egui::pos2(check.right() + 8.0, rect.top()), egui::pos2(right - 10.0, rect.bottom()));
                 painter.with_clip_rect(clip).galley(egui::pos2(clip.left(), rect.center().y - name.size().y / 2.0), name, color);
                 if check_r.clicked() {
-                    imp.folders_on.insert(p.clone(), !on);
+                    imp.set_folder(&p, !on);
                 } else if row.clicked() {
                     imp.folder_focus = Some(p.clone());
                 }

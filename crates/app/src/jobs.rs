@@ -1883,6 +1883,11 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     })),
                     None => (dir.clone(), photo),
                 };
+                // "next to the original" plans absolute names: each folder is checked like the export folder
+                let photo = match photo {
+                    Ok(p) if target_dir.is_absolute() && names.get(i).is_some_and(|r| r.is_absolute()) => library::write_target::check(&target_dir).map(|_| p),
+                    other => other,
+                };
                 if names.collision == crate::export_names::Collision::Skip {
                     if let Ok(p) = &photo {
                         if std::fs::symlink_metadata(target_dir.join(&p.name)).is_ok() {
@@ -1897,7 +1902,10 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 let result = photo.and_then(|p| library::original_export::export(db.as_ref(), &p, pair.as_ref(), &target_dir, sidecars));
                 let stem = path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
                 let (message, failed) = match result {
-                    Ok(w) => (crate::trf!("{a} gespeichert", a = w.first().and_then(|p| p.file_name()).unwrap_or_default().to_string_lossy()), None),
+                    Ok(w) => {
+                        take_in_library(db.as_ref(), w.first(), image);
+                        (crate::trf!("{a} gespeichert", a = w.first().and_then(|p| p.file_name()).unwrap_or_default().to_string_lossy()), None)
+                    }
                     Err(e) => {
                         errors += 1;
                         (crate::trf!("Fehler bei {stem}: {e}", stem = stem, e = crate::menu::i18n::tr_msg(&e)), Some(path.clone()))
@@ -1949,6 +1957,12 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                     }
                     None => dir.join(format!("{stem}{}{ending}", if s.monochrome { "_mono" } else { "" })),
                 };
+                // "next to the original" plans absolute names: each folder is checked like the export folder
+                if let Some(Err(e)) = names.get(i).filter(|r| r.is_absolute()).and_then(|_| out.parent()).map(library::write_target::check) {
+                    errors += 1;
+                    send(JobResult::ExportProgress { done: i + 1, total, message: crate::menu::i18n::tr_msg(&e).into_owned(), failed: Some(source.clone()) });
+                    continue;
+                }
                 if let Some(parent) = out.parent().filter(|p| *p != dir.as_path()) {
                     if let Err(e) = std::fs::create_dir_all(parent) {
                         errors += 1;
@@ -1970,7 +1984,7 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 }
                 // "Overwrite" (asked before the export): the existing file is replaced once the new one is finished –
                 // never the original of this photo itself (JPEG/TIFF exported into its own folder).
-                let replace = taken && !reserved && names.collision == crate::export_names::Collision::Overwrite && !same_file(&out, &path) && !same_file(&out, &source);
+                let replace = taken && !reserved && names.collision == crate::export_names::Collision::Overwrite && !same_file(&out, &path) && !same_file(&out, &source) && library::export_link::may_replace(db.as_ref(), &out, image);
                 // Existing files do not belong to the export job: in particular, for JPEG/TIFF in the original folder
                 // the destination can be the original itself. Instead of overwriting, the new file
                 // gets a free name ("Name-2.jpg").
@@ -2091,6 +2105,9 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 if result.is_err() {
                     let _ = std::fs::remove_file(&out);
                 }
+                if let Ok((_, target)) = &result {
+                    take_in_library(db.as_ref(), Some(target), image);
+                }
                 let (message, failed) = match result {
                     Ok((spp, target)) => (
                         format!(
@@ -2110,6 +2127,18 @@ fn run_inner(mut job: Job, send: &dyn Fn(JobResult)) {
                 send(JobResult::ExportProgress { done, total, message, failed });
             }
         }
+    }
+}
+
+/// An export written into a folder of the library joins it, stacked with its original (`library::export_link`);
+/// outside the library nothing happens. A failure only costs the stacking (the sync still finds the file).
+fn take_in_library(db: Option<&library::db::Db>, written: Option<&PathBuf>, image: i64) {
+    let (Some(db), Some(p)) = (db, written) else { return };
+    if image <= 0 || library::backup_view::active().is_some() {
+        return;
+    }
+    if let Err(e) = library::not_in_catalog::with_retry(|| library::export_link::take_in(db, p, image)) {
+        eprintln!("export {}: not stacked with its original: {e}", p.display());
     }
 }
 

@@ -273,7 +273,7 @@ impl App {
                     ui.horizontal(|ui| {
                         if finished < all { ui.label(crate::trf!("VORSCHAUEN {a}/{b}", a = finished, b = all)); }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add_sized([120.0, 18.0], egui::Slider::new(&mut card_w, crate::darkroom_layout::CARD_RANGE).show_value(false)).changed() {
+                            if crate::lr::slider_add_sized(ui, [120.0, 18.0], egui::Slider::new(&mut card_w, crate::darkroom_layout::CARD_RANGE).show_value(false)).changed() {
                                 st.set_card_w(card_w);
                             }
                             ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM()));

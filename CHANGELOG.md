@@ -582,3 +582,28 @@ SIGMA Photo Pro, Sigma, and Foveon are trademarks of Sigma Corporation. Film nam
 - Section switches and reset buttons have their own, equally tall click areas; hovering one no longer highlights the other.
 - The HDR Glow switch sits right after its name instead of over the value field.
 - The value field of every slider no longer reaches into the slider track; the zoom menu no longer overlaps the zoom buttons.
+
+## 1.6.0 · Guided Perspective, Slideshow, Export Beside the Original
+
+### New
+- **Guided perspective.** A new "Lines" tool in Crop & Straighten: draw up to four lines along edges that should be vertical or horizontal, or lay a four-corner frame on something rectangular, and the photo is corrected precisely. A loupe helps place the ends, ⇧ snaps to detected edges, "Show margins" shows the whole corrected photo, and the crop can be the largest rectangle or the whole image. Lines stay editable.
+- **Slideshow** (⌘↩ or View → Slideshow): sharp at full screen resolution, a calm zoom towards faces or the brightest area, portrait pairs side by side, a background taken from the photo or black, fit or fill the screen. Rate, flag and label while it runs.
+- **Export beside the original**, and a custom subfolder name with placeholders (for example `Export/{date:YYYY}`). Exports into a library folder are added to the library and stacked with their original.
+- **Straighten with the right mouse button:** drag a line along the horizon in Develop; a plain right-click still opens the menu.
+- **Tone equalizer:** "Fit" adjusts the mask to the brightness range of the photo.
+- Shortcuts for the two Auto buttons of the tone curve (⇧A, ⌥⇧A); 15 % option for the assessment frame.
+
+### Improved
+- **Windows and Linux** show shortcuts as Ctrl, Alt and Shift instead of Mac symbols or the Windows key.
+- Export presets remember the destination folder.
+- Import suggests the last source folder.
+- The area around the photo uses the same color as the rest of the interface in every theme.
+- Slider values line up exactly; switches sit next to their names; calmer hover states; visible slider tracks in all themes.
+- The frame and faces buttons swapped places.
+
+### Fixed
+- Import added deselected subfolders anyway.
+- After Auto straightening the crop could not reach the top edge, and moving it near the edge could change its size or format.
+- The "neutral highlights" default did not apply to photos with imported edit history.
+- Overwriting on export never replaces an original photo anymore, only an earlier export of the same photo.
+- Several robustness fixes for unusual or damaged files.

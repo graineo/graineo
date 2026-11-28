@@ -87,6 +87,7 @@ menu-loupe100 = ルーペ
 menu-panels = サイドパネルの表示/非表示
 menu-lights = ライトオフ
 menu-full-preview = 全画面プレビュー
+menu-slideshow = スライドショー
 menu-shortcuts = キーボードショートカット
 menu-show-logs = ログを表示
 menu-report-bug = 問題を報告…

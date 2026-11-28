@@ -60,7 +60,7 @@ impl Player {
             let rest = ui.available_width() - 120.0;
             let mut p = pos;
             ui.spacing_mut().slider_width = rest.max(60.0);
-            let r = ui.add(egui::Slider::new(&mut p, 0.0..=length.max(0.01)).show_value(false));
+            let r = crate::lr::slider_add(&mut ui, egui::Slider::new(&mut p, 0.0..=length.max(0.01)).show_value(false));
             if r.changed() {
                 if let Some(s) = &self.mac {
                     s.jump(p);

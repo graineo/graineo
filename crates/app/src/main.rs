@@ -12,6 +12,7 @@
 //! Neighbouring images are preloaded, visited images are cached.
 
 mod work_step;
+mod guides_ui;
 mod ui_overlap;
 mod edit_footer;
 mod assessment;
@@ -27,6 +28,7 @@ mod skin_ui;
 mod print_job;
 mod print_dialog;
 mod print_room;
+mod slideshow;
 mod camera_looks_ui;
 mod learn_look_ui;
 mod series_job;
@@ -73,6 +75,7 @@ mod file_dialog;
 mod system;
 mod dock_open;
 mod align;
+mod right_straighten;
 mod darkroom;
 mod darkroom_loupe;
 mod darkroom_extended;
@@ -827,8 +830,12 @@ struct App {
     straighten_from: Option<[f32; 2]>,
     /// Line is currently being dragged with the mouse button held (otherwise: first point set by click)
     straighten_drag: bool,
+    /// straighten by dragging with the right mouse button in Develop (right_straighten.rs)
+    right_line: right_straighten::RightLine,
     /// Tool in crop mode (icon row on the right)
     geo_tool: align::GeoTool,
+    /// "Lines" tool: guided perspective (guides_ui.rs)
+    guides_ui: guides_ui::GuidesUi,
     /// Guide lines over the crop
     crop_raster: align::Raster,
     /// Rotation in quarter turns when crop mode was opened (Cancel restores it)
@@ -917,6 +924,8 @@ struct App {
     test_open: Option<&'static str>,
     /// the print room (⌘P, `print_room.rs`)
     print_room: print_room::PrintRoom,
+    /// the slideshow (⌘↩, `slideshow.rs`)
+    slideshow: slideshow::Slideshow,
     /// Loupe magnification (1 = 100 %, 2 = 200 %, 4 = 400 %), scrolling switches
     loupe_scale: f32,
     /// Time of switching on/over (the hint fades out afterwards)
@@ -1199,6 +1208,7 @@ impl App {
             strip_layout: None,
             test_open: None,
             print_room: Default::default(),
+            slideshow: Default::default(),
             loupe_scale: 1.0,
             loupe_hint_at: 0.0,
             loupe_scroll: 0.0,
@@ -1220,7 +1230,9 @@ impl App {
             straighten: false,
             straighten_from: None,
             straighten_drag: false,
+            right_line: Default::default(),
             geo_tool: Default::default(),
+            guides_ui: Default::default(),
             crop_raster: Default::default(),
             crop_rotate_start: None,
             show_toolbar: true,
@@ -1362,6 +1374,7 @@ impl App {
             Ok("crop") => { app.tab = Tab::Develop; app.test_open = Some("crop"); }
             Ok("align") => { app.tab = Tab::Develop; app.test_open = Some("align"); }
             Ok("perspective") => { app.tab = Tab::Develop; app.test_open = Some("perspective"); }
+            Ok("guides") => { app.tab = Tab::Develop; app.test_open = Some("guides"); }
             Ok("about") => app.brand.show_about(),
             Ok("prefs") => app.test_open = Some("prefs"),
             Ok(t) if t.starts_with("prefs:") => prefs::open_section(&t[6..]),
@@ -1939,15 +1952,10 @@ impl App {
         // (camera_defaults.rs; the file is read once, nothing waits here)
         {
             let e = &self.entries[index];
-            if crate::camera_defaults::eligible(&loaded, e.stored, e.loaded, e.copy.is_some(), &e.path) {
-                let camera = crate::camera_defaults::camera_of(&loaded);
-                let foreign_raw = loaded.previews.foreign.as_ref().is_some_and(|d| !d.finished);
-                let new = crate::camera_defaults::start_values(&e.settings, camera.as_deref(), foreign_raw);
-                if new != e.settings {
-                    let e = &mut self.entries[index];
-                    e.settings = new;
-                    e.stored = true;
-                }
+            if let Some(new) = crate::camera_defaults::first_show(&loaded, e.stored, e.loaded, e.copy.is_some(), &e.path, &e.settings) {
+                let e = &mut self.entries[index];
+                e.settings = new;
+                e.stored = true;
             }
         }
         let has_spp = loaded.previews.spp.is_some();
@@ -2939,7 +2947,7 @@ impl App {
                             } else {
                                 failures[0].1.clone()
                             };
-                            let dir = self.export_dir.clone();
+                            let dir = self.export_shown_dir();
                             self.notes.fault(activity::Fault {
                                 title,
                                 cause,
@@ -2949,7 +2957,7 @@ impl App {
                             });
                         }
                         if self.reveal_after_export {
-                            if let Some(d) = &self.export_dir {
+                            if let Some(d) = &self.export_shown_dir() {
                                 crate::system::open(d);
                             }
                         }
@@ -3492,11 +3500,17 @@ impl App {
     }
 
     fn export(&mut self, indices: Vec<usize>) {
-        let Some(dir) = self.export_dir.clone() else { return };
+        // "next to the original": the folder of the first photo is checked for writing; each photo's own folder is
+        // checked again in the job (the planned names are absolute there)
+        let beside = self.export_naming.beside;
+        let dir = if beside { indices.first().and_then(|&i| self.entries.get(i)).and_then(|e| e.path.parent().map(PathBuf::from)) } else { self.export_dir.clone() };
+        let Some(dir) = dir else { return };
         // never into an Apple Photos library or another program's package (checked again right before writing)
         if let Err(e) = library::write_target::check(&dir) {
             self.notes.fault(activity::Fault { title: crate::tr("Export fehlgeschlagen").into(), cause: menu::i18n::tr_msg(&e).into_owned(), subject: dir.display().to_string(), reveal: None, retry: None });
-            self.export_dir = None;
+            if !beside {
+                self.export_dir = None;
+            }
             return;
         }
         // writable? the message comes before the run, not as an error in the middle of it. The write test runs in
@@ -3527,7 +3541,9 @@ impl App {
                 self.exporting = false;
                 self.export_status.clear();
                 self.notes.fault(activity::Fault { title: crate::tr("Export fehlgeschlagen").into(), cause: menu::i18n::tr_msg(&e).into_owned(), subject: sysdirs::display_path(&dir), reveal: None, retry: None });
-                self.export_dir = None;
+                if !self.export_naming.beside {
+                    self.export_dir = None;
+                }
             }
             export_probe::Poll::Ready => {
                 let Some(p) = self.export_probe.take() else { return };
@@ -3540,18 +3556,8 @@ impl App {
 
     fn export_after_probe(&mut self, indices: Vec<usize>, dir: PathBuf) {
         self.save_current();
-        // an export target inside a library folder (e.g. the suggested `<photo folder>/export`): the sync must not take
-        // the exported files in as new photos (in the background, the library may be busy)
-        if library::backup_view::active().is_none() {
-            let target = dir.clone();
-            let _ = std::thread::Builder::new().name("export-exclude".into()).spawn(move || {
-                match library::db::Db::open(&library::db_path()).map_err(|e| e.to_string()).and_then(|db| library::manage::exclude_export_folder(&db, &target)) {
-                    Ok(true) => log(&format!("export: {} kept out of the library sync", target.display())),
-                    Ok(false) => {}
-                    Err(e) => log(&format!("export: could not keep {} out of the sync: {e}", target.display())),
-                }
-            });
-        }
+        // an export target inside a library folder (beside the original or elsewhere): each written file joins the
+        // library, stacked with its original (`library::export_link`, in the export job)
         if self.export_original {
             // the files unchanged: every reachable photo (also finished images and videos), with the stacked camera JPEG
             let written = self.export_written(&indices);
@@ -3755,6 +3761,22 @@ impl App {
         if self.print_room.open && matches!(cmd, TrashSelected | DeleteRejected | RemoveFromCollection) {
             return;
         }
+        // the slideshow: ⌘↩ ends it, rating and undo act on its photo, anything else ends it first
+        if self.slideshow.open {
+            match cmd {
+                Slideshow => {
+                    self.close_slideshow(ctx);
+                    return;
+                }
+                Pick | Reject | Unflag => {
+                    let now = ctx.input(|i| i.time);
+                    self.slideshow_rate(rating::Change::Flag(match cmd { Pick => 1, Reject => -1, _ => 0 }), now);
+                    return;
+                }
+                Undo | Redo | Quit | Shortcuts => {}
+                _ => self.close_slideshow(ctx),
+            }
+        }
         match cmd {
             Settings => {
                 prefs::open();
@@ -3911,6 +3933,7 @@ impl App {
             Panels => self.toggle_panels(false),
             Lights => self.cycle_lights(),
             FullPreview => self.toggle_preview_full(ctx),
+            Slideshow => self.open_slideshow(ctx),
             Loupe100 => {
                 self.loupe = !self.loupe;
                 self.loupe_hint_at = f64::NEG_INFINITY;
@@ -4141,6 +4164,21 @@ impl App {
         }
         if shortcuts::pressed(ctx, assessment::SHORTCUT) {
             assessment::set_on(!assessment::on());
+        }
+        // tone curve auto (curve_auto.rs), same as the buttons in the curve section: one press = one ⌘Z
+        let auto_rgb = shortcuts::pressed(ctx, "curve_auto_rgb");
+        if auto_rgb || shortcuts::pressed(ctx, "curve_auto_brightness") {
+            if let Some(c) = self.current.as_ref() {
+                if let (Some(h), Some(e)) = (c.out_hist.as_ref(), self.entries.get_mut(c.index)) {
+                    let s = &mut e.settings;
+                    let acted = !s.bypass.curve;
+                    if auto_rgb {
+                        curve_auto::per_channel(&mut s.tone_curve, h, acted);
+                    } else if curve_auto::brightness(&mut s.tone_curve, h, acted) {
+                        self.curve_channel = 0;
+                    }
+                }
+            }
         }
 
         // L = lights out: dimmed → off → normal
@@ -4744,7 +4782,7 @@ impl eframe::App for App {
         // open dialog (egui modal): its keys belong to it alone
         // likewise the People view in the library: its keys (↩, ⌫, arrows, N …) belong to it
         // likewise "RAW+JPEG doppelt" (its list and review take arrows and space)
-        let dialog_open = ctx.memory(|m| m.top_modal_layer().is_some()) || camera_looks_ui::is_open() || (self.in_grid() && (people_ui::is_open() || self.lib.pairs_view_open())) || self.print_room.open;
+        let dialog_open = ctx.memory(|m| m.top_modal_layer().is_some()) || camera_looks_ui::is_open() || (self.in_grid() && (people_ui::is_open() || self.lib.pairs_view_open())) || self.print_room.open || self.slideshow.open;
         // Menu shortcuts that reach egui: on Windows always (the menu bar there only shows them), on the Mac when
         // AppKit did not match the key (e.g. punctuation on some keyboard layouts). A key the menu took never
         // reaches egui. Taken (consumed) before every other key handler, so nothing runs twice.
@@ -4802,13 +4840,24 @@ impl eframe::App for App {
         self.relieve_memory(&ctx);
         if self.current.is_some() && self.loading.is_none() {
             match self.test_open.take() {
-                Some(t @ ("crop" | "align" | "perspective")) => {
+                Some(t @ ("crop" | "align" | "perspective" | "guides")) => {
                     self.toggle_crop(true);
                     self.set_geo_tool(match t {
                         "align" => align::GeoTool::Align,
                         "perspective" => align::GeoTool::Perspective,
+                        "guides" => align::GeoTool::Guides,
                         _ => align::GeoTool::Crop,
                     });
+                    // Test hook: GRAINEO_GUIDES="v:x0,y0,x1,y1;h:…" or "quad:…" sets guide lines (guides_ui.rs);
+                    // GRAINEO_GUIDES_VIEW="whole,nomargins" chooses the crop and the margins view
+                    if let Ok(v) = crate::env::var("GRAINEO_GUIDES") {
+                        let view = crate::env::var("GRAINEO_GUIDES_VIEW").unwrap_or_default();
+                        self.guides_ui.whole = view.contains("whole");
+                        self.guides_ui.margins = !view.contains("nomargins");
+                        let g = guides_ui::from_test_env(&v);
+                        self.guides_ui.quad_mode = g.quad.is_some();
+                        self.set_guides(g);
+                    }
                     // Test hook: GRAINEO_PERSP="vertical,horizontal[,angle]" sets the perspective
                     if let (Ok(v), Some(c)) = (crate::env::var("GRAINEO_PERSP"), self.current.as_ref()) {
                         let n: Vec<f32> = v.split(',').filter_map(|t| t.trim().parse().ok()).collect();
@@ -4862,10 +4911,16 @@ impl eframe::App for App {
         }
 
         // Linux: the menu bar in the window (macOS and Windows: system menu bar), not in the fullscreen preview (F)
-        if self.preview_full.is_none() {
+        if self.preview_full.is_none() && !self.slideshow.open {
             if let Some(m) = &self.menu {
                 m.bar(ui);
             }
+        }
+        // the slideshow takes the whole window (Esc ends it)
+        self.slideshow_autostart(&ctx);
+        if self.slideshow.open {
+            self.slideshow_ui(ui);
+            return;
         }
         // the print room takes the whole window (Esc goes back to the view before)
         if self.print_room.open {
@@ -5960,7 +6015,7 @@ impl App {
             ui.label(egui::RichText::new(crate::trf!("Raster · {a} von {b} Bildern", a = vis.len(), b = self.entries.len())).color(lr::TEXT_DIM()));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().slider_width = 120.0;
-                let r = ui.add(egui::Slider::new(&mut self.grid_size, 120.0..=360.0).show_value(false));
+                let r = crate::lr::slider_add(ui, egui::Slider::new(&mut self.grid_size, 120.0..=360.0).show_value(false));
                 lr::hover_tip(ui, &r, crate::tr("Vorschaugröße"));
                 ui.label(egui::RichText::new(crate::tr("Miniaturen")).small().color(lr::TEXT_DIM()));
                 if lr::list_item(ui, crate::tr("Lupe (E)"), false).clicked() {
@@ -6425,7 +6480,7 @@ impl App {
         let [fw_px, fh_px] = c.loaded.full_size;
         let cam = c.loaded.cal.orientation;
         let frame = if self.crop_mode.is_some() {
-            Frame::full_settings(&self.entries[c.index].settings, fw_px, fh_px, cam)
+            self.guides_ui.view_frame(Frame::full_settings(&self.entries[c.index].settings, fw_px, fh_px, cam))
         } else {
             // a hovered preset or history step shows its own crop
             Frame::from_settings(self.hover_shown().map_or(&self.entries[c.index].settings, |(h, _)| h), fw_px, fh_px, cam)
@@ -6528,7 +6583,7 @@ impl App {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
             }
         }
-        if resp.dragged() && click_free && !self.darkroom.compare.dragging {
+        if resp.dragged_by(egui::PointerButton::Primary) && click_free && !self.darkroom.compare.dragging {
             self.pan += resp.drag_delta();
             self.view_changed_at = now;
         }
@@ -7104,7 +7159,26 @@ impl App {
                 }
             }
         }
-        resp.context_menu(|ui| self.image_context_menu(ui));
+        // right drag: straighten line (as in "Crop & straighten"); a right click without moving opens the menu
+        let line_ok = self.image_click_free(ui.ctx())
+            && !self.darkroom_active()
+            && !self.show_camera_jpeg
+            && self.hover_shown().is_none()
+            && !(self.show_right && matches!(self.tool_rail_active(), workspace::ToolTab::Masks | workspace::ToolTab::Retouch | workspace::ToolTab::Merge));
+        let line = self.right_line.update(ui, &resp, &painter, rect, &frame, line_ok);
+        if let Some(angle) = line.angle {
+            let index = c.index;
+            let (fw, fh) = (fw_px, fh_px);
+            let s = &mut self.entries[index].settings;
+            let crop = Frame::from_settings(s, fw, fh, cam);
+            let (c2, a2) = Frame { angle, ..crop }.constrain().to_settings();
+            s.crop = c2;
+            s.crop_angle = a2;
+            self.upright_msg = Some((crate::trf!("Begradigt: {a2}°", a2 = format!("{:+.2}", a2)), ui.input(|i| i.time)));
+        }
+        if !line.suppress_menu {
+            resp.context_menu(|ui| self.image_context_menu(ui));
+        }
         self.measure_overlay(ui, &resp, &painter, rect, &frame);
         if self.crop_mode.is_some() {
             self.crop_overlay(ui, &resp, &painter, rect, tex_id);
@@ -7475,9 +7549,9 @@ impl App {
             ui.horizontal(|ui| {
                 ui.add_enabled_ui(out_hist.is_some(), |ui| {
                     let a = lr::secondary_button(ui, None, "Auto (Helligkeit)");
-                    lr::hover_tip(ui, &a, crate::tr("Schwarz- und Weißpunkt aus dem Histogramm"));
+                    lr::tip_key(ui, &a, crate::tr("Schwarz- und Weißpunkt aus dem Histogramm"), "curve_auto_brightness");
                     let b = lr::secondary_button(ui, None, "Auto (RGB)");
-                    lr::hover_tip(ui, &b, crate::tr("Je Kanal, gleicht Farbstiche aus"));
+                    lr::tip_key(ui, &b, crate::tr("Je Kanal, gleicht Farbstiche aus"), "curve_auto_rgb");
                     // test aid (own data folder only): GRAINEO_CURVE_AUTO=brightness|rgb clicks the button once
                     let hook = crate::env::var_os("GRAINEO_DATA_DIR").and_then(|_| crate::env::var("GRAINEO_CURVE_AUTO").ok());
                     static AUTO_HOOK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -8187,8 +8261,8 @@ impl App {
                     let t_focus = lr::with_shortcut("Fokusfeld der Kamera zeigen", "focus_frame");
                     let t_assess = lr::with_shortcut("Beurteilungsrahmen", assessment::SHORTCUT);
                     let cells = [
-                        (Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), self.show_faces, "Gesichter anzeigen"),
                         (Cell::Symbol(lr::Icon::ImageSquare, lr::TEXT()), assessment::on(), t_assess.as_str()),
+                        (Cell::Symbol(lr::Icon::Smiley, lr::TEXT()), self.show_faces, "Gesichter anzeigen"),
                         (Cell::Symbol(lr::Icon::Crosshair, lr::TEXT()), self.show_focus, t_focus.as_str()),
                         (Cell::Symbol(lr::Icon::Warning, lr::TEXT()), self.show_clipping, t_clip.as_str()),
                         (Cell::Symbol(lr::Icon::Sun, if has_hdr { lr::TEXT() } else { crate::lr::gray(0x50) }), hdr_active, t_hdr.as_str()),
@@ -8197,8 +8271,8 @@ impl App {
                     let (c, r) = lr::cell_group_rect(ui, "anzeigen", &cells, 30.0);
                     widths.push((Group::Overlays.key(), r.width()));
                     match c {
-                        Some(0) => self.show_faces = !self.show_faces,
-                        Some(1) => assessment::set_on(!assessment::on()),
+                        Some(0) => assessment::set_on(!assessment::on()),
+                        Some(1) => self.show_faces = !self.show_faces,
                         Some(2) => self.toggle_focus(),
                         Some(3) => self.show_clipping = !self.show_clipping,
                         Some(4) if has_hdr => self.toggle_hdr_view(),
@@ -8312,11 +8386,11 @@ impl App {
                         }
                     }
                     Group::Overlays => {
-                        if item(ui, Some(lr::Icon::Smiley), None, crate::tr("Gesichter anzeigen"), self.show_faces) {
-                            self.show_faces = !self.show_faces;
-                        }
                         if item(ui, Some(lr::Icon::ImageSquare), None, crate::tr("Beurteilungsrahmen"), assessment::on()) {
                             assessment::set_on(!assessment::on());
+                        }
+                        if item(ui, Some(lr::Icon::Smiley), None, crate::tr("Gesichter anzeigen"), self.show_faces) {
+                            self.show_faces = !self.show_faces;
                         }
                         if item(ui, Some(lr::Icon::Crosshair), None, crate::tr("Fokusfeld der Kamera zeigen"), self.show_focus) {
                             self.toggle_focus();
@@ -8427,13 +8501,19 @@ impl App {
         let s = &self.entries[index].settings;
         let crop = Frame::from_settings(s, fw, fh, c.loaded.cal.orientation);
         let (ow, oh) = crop.oriented();
+        // the view: the whole rectified image (with "show margins" the bounding box of the corrected photo)
+        let full_view = Frame::full_settings(s, fw, fh, c.loaded.cal.orientation);
+        let view_f = self.guides_ui.view_frame(full_view);
         // uprighted image ↔ screen (the whole image is fit, rotated back by the fine angle: the frame stays level)
         let view_rect = ViewTransform::new(rect.center(), crop.angle);
-        let scr0 = |p: [f32; 2]| rect.min + egui::vec2(p[0] / ow, p[1] / oh) * rect.size();
+        let scr0 = |p: [f32; 2]| {
+            let u = view_f.from_ori(p);
+            rect.min + egui::vec2(u[0], u[1]) * rect.size()
+        };
         let scr = |p: [f32; 2]| view_rect.forward(scr0(p));
         let src = |q: egui::Pos2| {
             let u = (view_rect.back(q) - rect.min) / rect.size();
-            [u.x * ow, u.y * oh]
+            view_f.to_ori([u.x, u.y])
         };
         let corners = crop.corners_ori().map(scr);
         // Crop bright over the darkened image (with perspective as a fine grid)
@@ -8455,6 +8535,11 @@ impl App {
             }
         }
         painter.add(egui::Shape::mesh(mesh));
+        let guide_view = guides_ui::View { scr: &scr, src: &src };
+        if self.guides_ui.shows_margins(&full_view) {
+            let area = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]].map(|u| scr(view_f.to_ori(u)));
+            self.guides_ui.paint_margins(painter, &guide_view, &full_view, area);
+        }
         let at = |u: [f32; 2]| scr(crop.to_ori(u));
         let now = ui.input(|i| i.time);
         if now < self.persp_grid_until || self.geo_tool == align::GeoTool::Perspective {
@@ -8515,6 +8600,19 @@ impl App {
             let corner = side[0] != 0.0 && side[1] != 0.0;
             let size = if corner { 9.0 } else { 7.0 };
             painter.rect_filled(egui::Rect::from_center_size(at(*u), egui::vec2(size, size)), 0.0, crate::lr::TEXT_STRONG());
+        }
+
+        // Lines tool: guide lines decide the perspective; the crop frame is only shown
+        if self.geo_tool == align::GeoTool::Guides {
+            let guides = s.perspective_guides.clone();
+            let cam = c.loaded.cal.orientation;
+            let lin = &c.loaded.previews.developed.lin;
+            let seg_base = Frame::full(fw, fh, geometry::quarters(s, cam));
+            let new = self.guides_ui.overlay(ui, resp, painter, rect, &guide_view, &full_view, &guides, tex, [fw, fh], index, || develop::upright::detect(lin, &seg_base));
+            if let Some(g) = new {
+                self.set_guides(g);
+            }
+            return;
         }
 
         // Straighten: place a line along the horizon or an edge → angle. Two clicks
@@ -8636,7 +8734,8 @@ impl App {
             self.persp_grid_until = ui.input(|i| i.time) + 0.4;
         }
         let next = match drag {
-            CropDrag::Move { start, from } => Frame { cx: start.cx + q[0] - from[0], cy: start.cy + q[1] - from[1], ..start },
+            // moving never changes size or format: up to the real edge of the image, then along it
+            CropDrag::Move { start, from } => start.slide_to(start.cx + q[0] - from[0], start.cy + q[1] - from[1]),
             CropDrag::Rotate { start, from, center } => {
                 // on screen around the centre of the frame: dragging clockwise rotates the image clockwise
                 let center = egui::pos2(center[0], center[1]);
@@ -8677,7 +8776,7 @@ impl App {
                 Frame { cx: center[0], cy: center[1], w, h, ..start }
             }
         };
-        let next = next.constrain();
+        let next = if matches!(drag, CropDrag::Move { .. }) && next.inside() { next } else { next.constrain() };
         let (crop, angle) = next.to_settings();
         let s = &mut self.entries[index].settings;
         s.crop = crop;
@@ -8705,6 +8804,9 @@ impl App {
                     s.crop_angle = angle;
                     s.perspective_v = pv;
                     s.perspective_h = ph;
+                    if let Some(g) = self.guides_ui.saved.take() {
+                        s.perspective_guides = g;
+                    }
                     if let Some(r) = self.crop_rotate_start {
                         s.rotate = r;
                     }
@@ -8714,6 +8816,7 @@ impl App {
             None => {
                 let s = &self.entries[i].settings;
                 self.crop_mode = Some((s.crop, s.crop_angle, [s.perspective_v, s.perspective_h]));
+                self.guides_ui.saved = Some(s.perspective_guides.clone());
                 self.crop_rotate_start = Some(s.rotate);
                 self.geo_tool = align::GeoTool::Crop;
                 self.upright_msg = None;
@@ -8728,6 +8831,27 @@ impl App {
     }
 
     /// Select a tool in crop mode; "Straighten" is immediately armed for the horizon line.
+    /// New guide lines from the Lines tool (one step in the history): the crop follows ("largest rectangle" or "whole").
+    fn set_guides(&mut self, g: develop::guides::Guides) {
+        let Some(c) = &self.current else { return };
+        let (i, [fw, fh], cam) = (c.index, c.loaded.full_size, c.loaded.cal.orientation);
+        let (ow, oh) = Frame::full(fw, fh, geometry::quarters(&self.entries[i].settings, cam)).oriented();
+        let msg = if g.is_off() {
+            None
+        } else {
+            match develop::guides::solve(&g, ow, oh) {
+                None => Some(crate::tr("Linien widersprechen sich")),
+                Some(sol) if sol.limited => Some(crate::tr("Korrektur begrenzt")),
+                _ => None,
+            }
+        };
+        let now = self.now();
+        self.guides_ui.msg = msg.map(|m| (m.to_string(), now));
+        let s = &mut self.entries[i].settings;
+        s.perspective_guides = g;
+        geometry::fit_crop(s, fw, fh, cam, self.guides_ui.whole);
+    }
+
     fn set_geo_tool(&mut self, tool: align::GeoTool) {
         self.geo_tool = tool;
         self.straighten = tool == align::GeoTool::Align;
@@ -8807,7 +8931,12 @@ impl App {
         let cam = c.loaded.cal.orientation;
         let active = self.crop_mode.is_some();
         let s = &self.entries[index].settings;
-        let changed = s.crop != Settings::default().crop || s.crop_angle != 0.0 || s.perspective_v != 0.0 || s.perspective_h != 0.0;
+        let changed = s.crop != Settings::default().crop || s.crop_angle != 0.0 || s.perspective_v != 0.0 || s.perspective_h != 0.0 || !s.perspective_guides.is_off();
+        let guides_on = !s.perspective_guides.is_off();
+        let mut guides_new: Option<develop::guides::Guides> = None;
+        let (mut g_margins, mut g_whole, mut g_quad) = (self.guides_ui.margins, self.guides_ui.whole, self.guides_ui.quad_mode);
+        let panel_now = ui.input(|i| i.time);
+        let g_msg = self.guides_ui.msg.clone().filter(|(_, t)| panel_now - t < 6.0).map(|(m, _)| m);
         let mut toggle = false;
         let mut cancel = false;
         let mut aspect: Option<Option<f32>> = None;
@@ -8832,15 +8961,16 @@ impl App {
         let current_aspect = self.crop_aspect;
         let reset_hit = lr::panel(ui, |ui| {
             // Tools as an icon row, like the white balance presets; a click opens it and shows its settings below
-            let tools = [GeoTool::Crop, GeoTool::Align, GeoTool::Perspective];
+            let tools = [GeoTool::Crop, GeoTool::Align, GeoTool::Perspective, GeoTool::Guides];
             let items = [
                 (lr::Icon::Crop, crate::tr("Freistellen"), crate::tr("Ausschnitt und Format (R)")),
                 // "Ausrichten" alone means aligning exposures or fields elsewhere ("Align"); here it is the horizon
                 (lr::Icon::Ruler, crate::menu::i18n::german_or("Ausrichten", crate::tr("Ausrichten (Horizont)")), crate::tr("Horizont begradigen (A)")),
                 (lr::Icon::Perspective, crate::tr("Perspektive"), crate::tr("Stürzende Linien entzerren")),
+                (lr::Icon::Pencil, crate::tr("Linien"), crate::tr("Perspektive mit Hilfslinien")),
             ];
             let selected = active.then(|| tools.iter().position(|t| *t == tool)).flatten();
-            if let Some(i) = lr::icon_grid(ui, "geo-tool", &items, selected, 3) {
+            if let Some(i) = lr::icon_grid(ui, "geo-tool", &items, selected, 4) {
                 open_tool = Some(tools[i]);
             }
             ui.add_space(4.0);
@@ -8848,7 +8978,7 @@ impl App {
                 ui.data_mut(|d| d.remove::<GeoTool>(egui::Id::new("geo-tool-shown")));
                 if changed {
                     let f = Frame::from_settings(s, fw, fh, cam);
-                    let persp = if f.has_perspective() { crate::tr(" · Perspektive") } else { "" };
+                    let persp = if guides_on { crate::tr(" · Linien") } else if f.has_perspective() { crate::tr(" · Perspektive") } else { "" };
                     ui.label(egui::RichText::new(format!("{:.0} × {:.0} px · {:+.1}°{persp}", f.w, f.h, f.angle)).small().color(lr::TEXT_DIM()));
                 }
                 return;
@@ -8907,7 +9037,7 @@ impl App {
                     });
                     ui.add_space(4.0);
                     // Rotating and straightening belong to cropping: angle, draw line, 90° rotation
-                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Ausrichten in Grad – ⌥ beim Ziehen für Feinarbeit");
+                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Winkel in Grad");
                     ui.horizontal(|ui| {
                         lr::field_label(ui, crate::tr("Drehen"));
                         if lr::icon_button(ui, lr::Icon::RotCcw, false) {
@@ -8926,10 +9056,10 @@ impl App {
                     // Draw line: two clicks or drag; next to it automatic upright
                     use develop::upright::Mode;
                     let items = [
-                        (lr::Icon::Ruler, crate::tr("Linie"), crate::tr("Zwei Punkte am Horizont oder an einer Kante anklicken (oder eine Linie ziehen) – daraus wird der Winkel")),
-                        (lr::Icon::Auto, crate::tr("Auto"), crate::tr("Ausgewogen aufrichten: Winkel, stürzende Linien und gemäßigt waagerecht")),
-                        (lr::Icon::ArrowsH, crate::tr("Waagerecht"), crate::tr("Nur den Winkel: Horizont und waagerechte Kanten gerade richten")),
-                        (lr::Icon::ArrowsV, crate::tr("Senkrecht"), crate::tr("Winkel und stürzende Linien: senkrechte Kanten parallel stellen")),
+                        (lr::Icon::Ruler, crate::tr("Linie"), crate::tr("Linie am Horizont ziehen")),
+                        (lr::Icon::Auto, crate::tr("Auto"), crate::tr("Automatisch aufrichten")),
+                        (lr::Icon::ArrowsH, crate::tr("Waagerecht"), crate::tr("Nur den Winkel")),
+                        (lr::Icon::ArrowsV, crate::tr("Senkrecht"), crate::tr("Winkel und stürzende Linien")),
                     ];
                     // Test hook: GRAINEO_UPRIGHT=auto|level|vertical runs that upright mode once (as its button would)
                     static UPRIGHT_TEST: std::sync::Once = std::sync::Once::new();
@@ -8944,7 +9074,7 @@ impl App {
                         _ => {}
                     }
                     ui.add_space(2.0);
-                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Ausrichten in Grad – ⌥ beim Ziehen für Feinarbeit");
+                    angle_changed = lr::slider_hint(ui, "Winkel", &mut angle, -45.0..=45.0, 0.0, 0.05, "Winkel in Grad");
                     ui.horizontal(|ui| {
                         lr::field_label(ui, crate::tr("Drehen"));
                         if lr::icon_button(ui, lr::Icon::RotCcw, false) {
@@ -8963,11 +9093,81 @@ impl App {
                 GeoTool::Perspective => {
                     // no subheading "Perspektive": the selected tool button above already names it, and in a short panel
                     // (large UI scale, small window) the heading pushed the second slider out of view
-                    let hint_v = crate::tr("Perspektive senkrecht: stürzende Linien – negativ verbreitert oben (Blick nach oben)");
-                    let hint_h = "Perspektive waagerecht: negativ verbreitert links, positiv rechts";
-                    persp_changed |= lr::slider_hint(ui, "Senkrecht", &mut pv, -1.0..=1.0, 0.0, 0.01, hint_v);
-                    persp_changed |= lr::slider_hint(ui, "Waagerecht", &mut ph, -1.0..=1.0, 0.0, 0.01, hint_h);
+                    // while guide lines decide the perspective, the sliders are locked (they cannot show a full homography)
+                    let (hint_v, hint_h) = if guides_on { ("Von Linien bestimmt", "Von Linien bestimmt") } else { ("Perspektive senkrecht: stürzende Linien", "Perspektive waagerecht") };
+                    ui.add_enabled_ui(!guides_on, |ui| {
+                        persp_changed |= lr::slider_hint(ui, "Senkrecht", &mut pv, -1.0..=1.0, 0.0, 0.01, hint_v);
+                        persp_changed |= lr::slider_hint(ui, "Waagerecht", &mut ph, -1.0..=1.0, 0.0, 0.01, hint_h);
+                    });
                     ui.add_space(2.0);
+                }
+                GeoTool::Guides => {
+                    let g = &s.perspective_guides;
+                    ui.horizontal(|ui| {
+                        lr::field_label(ui, crate::tr("Art"));
+                        let opts = [(false, crate::tr("Linien")), (true, crate::tr("Viereck"))];
+                        if lr::segmented_pad(ui, &mut g_quad, &opts, 6.0) {
+                            let mut n = g.clone();
+                            if g_quad {
+                                n.lines.clear();
+                                n.quad = Some(guides_ui::default_quad());
+                            } else {
+                                n.quad = None;
+                            }
+                            guides_new = Some(n);
+                        }
+                    });
+                    if !g_quad {
+                        lr::subheading(ui, &crate::trf!("Linien {n}/4", n = g.lines.len()));
+                        for (k, l) in g.lines.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                let role = match l.role {
+                                    develop::guides::Role::Vertical => crate::tr("Senkrecht"),
+                                    develop::guides::Role::Horizontal => crate::tr("Waagerecht"),
+                                };
+                                let r = ui.add(egui::Button::new(format!("{}  {}", k + 1, role)).frame(false));
+                                lr::hover_tip(ui, &r, crate::tr("Rolle wechseln"));
+                                if r.clicked() {
+                                    let mut n = g.clone();
+                                    n.lines[k].role = n.lines[k].role.toggled();
+                                    guides_new = Some(n);
+                                }
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if lr::icon_button_hint(ui, lr::Icon::X, false, crate::tr("Linie entfernen")) {
+                                        let mut n = g.clone();
+                                        n.lines.remove(k);
+                                        guides_new = Some(n);
+                                    }
+                                });
+                            });
+                        }
+                    }
+                    ui.add_space(4.0);
+                    ui.add_enabled_ui(guides_on, |ui| {
+                        let mut amount = g.amount as f64 * 100.0;
+                        if lr::slider_hint(ui, "Stärke", &mut amount, 0.0..=100.0, 100.0, 1.0, "") {
+                            guides_new = Some(develop::guides::Guides { amount: (amount / 100.0) as f32, ..g.clone() });
+                        }
+                        let mut aspect = g.aspect as f64 * 100.0;
+                        if lr::slider_hint(ui, "Seitenverhältnis", &mut aspect, -100.0..=100.0, 0.0, 1.0, "") {
+                            guides_new = Some(develop::guides::Guides { aspect: (aspect / 100.0) as f32, ..g.clone() });
+                        }
+                    });
+                    lr::switch_label(ui, &mut g_margins, crate::tr("Ränder zeigen"));
+                    ui.horizontal(|ui| {
+                        lr::field_label(ui, crate::tr("Ausschnitt"));
+                        let opts = [(false, crate::tr("Größtes Rechteck")), (true, crate::tr("Ganz"))];
+                        if lr::segmented_pad(ui, &mut g_whole, &opts, 6.0) && guides_on {
+                            guides_new = Some(g.clone());
+                        }
+                    });
+                    if guides_on && lr::secondary_button(ui, None, crate::tr("Linien löschen")).clicked() {
+                        guides_new = Some(develop::guides::Guides::default());
+                    }
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 16.0), egui::Sense::hover());
+                    if let Some(m) = &g_msg {
+                        ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, m, egui::TextStyle::Small.resolve(ui.style()), lr::TEXT_DIM());
+                    }
                 }
             }
             ui.horizontal(|ui| {
@@ -8992,7 +9192,11 @@ impl App {
             s.crop_angle = 0.0;
             s.perspective_v = 0.0;
             s.perspective_h = 0.0;
+            s.perspective_guides = Default::default();
         }
+        self.guides_ui.margins = g_margins;
+        self.guides_ui.whole = g_whole;
+        self.guides_ui.quad_mode = g_quad;
         if persp_changed {
             let s = &mut self.entries[index].settings;
             let a = s.crop_angle;
@@ -9022,6 +9226,8 @@ impl App {
             let text = match r {
                 Ok(u) => {
                     let s = &mut self.entries[index].settings;
+                    // the automatic result replaces guide lines (they would otherwise override it)
+                    s.perspective_guides = Default::default();
                     geometry::set_transform(s, u.angle, u.pv, u.ph, fw, fh, cam);
                     self.persp_grid_until = now + 1.2;
                     crate::trf!("{a}° · senkrecht {b} · waagerecht {c} ({d} Linien)", a = format!("{:+.1}", u.angle), b = format!("{:+.2}", u.pv), c = format!("{:+.2}", u.ph), d = u.lines)
@@ -9055,6 +9261,9 @@ impl App {
             } else if t == GeoTool::Align {
                 self.set_geo_tool(t);
             }
+        }
+        if let Some(g) = guides_new {
+            self.set_guides(g);
         }
         if toggle {
             self.toggle_crop(true);
@@ -10254,7 +10463,7 @@ mod view_tests {
 
     #[test]
     fn tilted_frame_is_upright_in_crop_view() {
-        let f = Frame { cx: 300.0, cy: 200.0, w: 400.0, h: 250.0, angle: 12.0, q: 0, sw: 800.0, sh: 500.0, pv: 0.0, ph: 0.0 };
+        let f = Frame { cx: 300.0, cy: 200.0, w: 400.0, h: 250.0, angle: 12.0, q: 0, sw: 800.0, sh: 500.0, pv: 0.0, ph: 0.0, hom: None };
         let view_rect = ViewTransform::new(egui::pos2(400.0, 250.0), f.angle);
         let c = f.corners_ori().map(|p| view_rect.forward(egui::pos2(p[0], p[1])));
         assert!((c[0].y - c[1].y).abs() < 1e-3 && (c[3].y - c[2].y).abs() < 1e-3, "top/bottom horizontal: {c:?}");

@@ -129,13 +129,18 @@ fn encode(img: &image::RgbImage) -> Result<Vec<u8>, String> {
 
 /// Develop a photo for the clipboard (helper thread).
 pub(crate) fn develop_one(path: &std::path::Path, settings: &develop::Settings, stored: bool) -> Result<image::RgbImage, String> {
+    develop_level(path, settings, stored, LEVEL)
+}
+
+/// [`develop_one`] reduced to `level` px on the long edge (the slideshow: the screen's size).
+pub(crate) fn develop_level(path: &std::path::Path, settings: &develop::Settings, stored: bool, level: u32) -> Result<image::RgbImage, String> {
     // a merged photo (no file of its own): its result, merged first when it is not in the cache – a copy is an output,
     // never the reference frame standing in
     if (!path.exists() || library::merge::has_merge_name(path)) && rawdev::merged::lookup(path).is_some() {
         let mut doc = rawdev::RawDoc::open_for_output(path, settings, &|| true)?.ok_or("abgebrochen")?;
         rawdev::lightroom::apply_orientation(&mut doc);
         let s = if stored { settings.clone() } else { rawdev::lightroom::initial_settings(&doc).unwrap_or_default() };
-        return crate::large_preview::render_doc(&doc, &s, LEVEL);
+        return crate::large_preview::render_doc(&doc, &s, level);
     }
     match crate::image_kind::of(path) {
         // an unedited RAW looks as on opening (Lightroom initial values, otherwise the defaults)
@@ -143,9 +148,9 @@ pub(crate) fn develop_one(path: &std::path::Path, settings: &develop::Settings, 
             let mut doc = rawdev::RawDoc::open(path, &|| true)?.ok_or("abgebrochen")?;
             rawdev::lightroom::apply_orientation(&mut doc);
             let s = rawdev::lightroom::initial_settings(&doc).unwrap_or_default();
-            crate::large_preview::render_doc(&doc, &s, LEVEL)
+            crate::large_preview::render_doc(&doc, &s, level)
         }
-        _ => crate::large_preview::render(path, settings, LEVEL),
+        _ => crate::large_preview::render(path, settings, level),
     }
 }
 

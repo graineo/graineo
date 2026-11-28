@@ -38,11 +38,14 @@ pub struct Template {
     /// resampling filter key (`develop::resize::ResizeFilter::key`); `None`: the template leaves the choice as it is
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resize: Option<String>,
+    /// export folder; `None` (also every template of earlier versions): the template keeps the current folder
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
 }
 
 impl Template {
     pub fn new(name: &str, naming: Naming) -> Template {
-        Template { format: FORMAT.into(), version: VERSION, name: name.trim().to_string(), naming, file_format: None, original: false, color_space: None, limit_size: None, size: None, resize: None }
+        Template { format: FORMAT.into(), version: VERSION, name: name.trim().to_string(), naming, file_format: None, original: false, color_space: None, limit_size: None, size: None, resize: None, dir: None }
     }
 
     pub fn from_json(text: &str) -> Result<Template, String> {
@@ -71,6 +74,30 @@ impl Template {
     /// The output size, if the template has one.
     pub fn output_size(&self) -> Option<develop::export::OutputSize> {
         self.size.clone().and_then(|v| develop::export::OutputSize::from_json(v).ok())
+    }
+}
+
+/// Is the stored folder of a template there? Checked on a helper thread with a short wait, so a sleeping network
+/// drive cannot freeze the window. The error is a German phrase for the message ("nicht erreichbar", …).
+pub fn folder_reachable(dir: &Path) -> Result<(), &'static str> {
+    folder_reachable_within(dir, std::time::Duration::from_millis(400))
+}
+
+fn folder_reachable_within(dir: &Path, wait: std::time::Duration) -> Result<(), &'static str> {
+    // a relative folder (hand-edited file) would be taken relative to wherever the app was started
+    if !dir.is_absolute() {
+        return Err("ist kein erlaubtes Ziel");
+    }
+    library::write_target::check(dir).map_err(|_| "ist kein erlaubtes Ziel")?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    let d = dir.to_path_buf();
+    std::thread::Builder::new().name("export-template-folder".into()).spawn(move || {
+        let _ = tx.send(d.is_dir());
+    }).map_err(|_| "nicht erreichbar")?;
+    match rx.recv_timeout(wait) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err("nicht erreichbar"),
+        Err(_) => Err("antwortet nicht"),
     }
 }
 
@@ -130,7 +157,7 @@ mod tests {
     fn save_load_replace_and_broken_files() {
         let d = tmp();
         assert!(load_all(&d).is_empty());
-        let mut t = Template::new("Web klein", Naming { pattern: "{date}_{n:3}".into(), start: 1, subfolder: Subfolder::Date, collision: Collision::Skip });
+        let mut t = Template::new("Web klein", Naming { pattern: "{date}_{n:3}".into(), start: 1, subfolder: Subfolder::Date, collision: Collision::Skip, ..Default::default() });
         t.file_format = Some(develop::export::Format::Jpeg { quality: 80 });
         t.limit_size = Some(true);
         t.size = serde_json::to_value(develop::export::OutputSize::LongEdge(2048)).ok();
@@ -153,6 +180,34 @@ mod tests {
         let all = load_all(&d);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].1.naming, Naming::default());
+        assert_eq!(all[0].1.dir, None, "a template of earlier versions keeps the current folder");
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn folder_target_and_custom_subfolder_round_trip() {
+        let d = tmp();
+        let naming = Naming { subfolder: Subfolder::Custom, subfolder_text: "Export/{date:YYYY}".into(), beside: true, ..Default::default() };
+        let mut t = Template::new("Neben Original", naming);
+        t.dir = Some("/Volumes/NAS/Export".into());
+        let p = save(&d, &t).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        for key in ["\"dir\": \"/Volumes/NAS/Export\"", "\"beside\": true", "\"subfolderText\": \"Export/{date:YYYY}\"", "\"subfolder\": \"custom\""] {
+            assert!(text.contains(key), "{key} in {text}");
+        }
+        assert_eq!(load_all(&d), vec![(p, t)]);
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn template_folder_check() {
+        let d = tmp();
+        assert_eq!(folder_reachable(&d), Ok(()));
+        assert_eq!(folder_reachable(&d.join("fehlt")), Err("nicht erreichbar"));
+        // hand-edited templates: relative folders and folders inside another program's library are refused
+        assert_eq!(folder_reachable(Path::new(".")), Err("ist kein erlaubtes Ziel"));
+        assert_eq!(folder_reachable(Path::new("../Export")), Err("ist kein erlaubtes Ziel"));
+        assert_eq!(folder_reachable(&d.join("Photos Library.photoslibrary/originals")), Err("ist kein erlaubtes Ziel"));
         std::fs::remove_dir_all(d).unwrap();
     }
 }

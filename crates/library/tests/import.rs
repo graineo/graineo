@@ -1032,3 +1032,175 @@ fn reimport_never_creates_a_parent_cycle() {
     assert!(db.images_with_keyword(places).is_ok());
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// A folder with subfolders, some of them left out: only the chosen folders are taken, in every mode. Each folder counts
+/// on its own (a chosen subfolder of a folder left out is taken, the folder's own photos not); moving never disposes of
+/// a photo of a folder left out; a later sync does not take the left-out folders in either.
+#[test]
+fn import_takes_only_the_chosen_subfolders() {
+    use library::card_import::{self as ai, Mode, Options};
+    use std::sync::atomic::AtomicBool;
+    let dir = tmp("unterordner");
+    let db_path = dir.join("library.sqlite");
+    let db = Db::open(&db_path).unwrap();
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(&photos).unwrap();
+    reconcile::add_root(&db, &photos, &|_| {}).unwrap();
+    let never = AtomicBool::new(false);
+    let no_trash = |_: &[PathBuf]| -> Result<(), String> { panic!("must not dispose of anything") };
+    let open = || Db::open(&db_path).map_err(|e| e.to_string());
+    // tree: <q>/P.JPG, <q>/a/A.JPG, <q>/a/x/X.JPG, <q>/b/B.JPG
+    let tree = |q: &Path, seed: &str| {
+        for (sub, name) in [("", "P"), ("a", "A"), ("a/x", "X"), ("b", "B")] {
+            std::fs::create_dir_all(q.join(sub)).unwrap();
+            std::fs::write(q.join(sub).join(format!("{name}_{seed}.JPG")), format!("jpg-{name}-{seed}")).unwrap();
+        }
+    };
+    let in_lib = |n: &str| count_rows(&Db::open(&db_path).unwrap(), &format!("SELECT count(*) FROM file WHERE name='{n}' AND status=0"));
+
+    // 1. in place, a new root folder: parent and "a" left out, "a/x" and "b" chosen
+    let q = dir.join("Extern/Serie");
+    tree(&q, "1");
+    let k = ai::scan(&db, &q);
+    assert_eq!(k.len(), 4);
+    let opt = Options { mode: Mode::InPlace, source: Some(q.clone()), folders: Some(vec![q.join("a/x"), q.join("b")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &no_trash, &never, &|_| {});
+    assert!(e.catalog_error.is_none(), "{e:?}");
+    assert_eq!(e.added, 2, "{e:?}");
+    assert_eq!((in_lib("X_1.JPG"), in_lib("B_1.JPG"), in_lib("A_1.JPG"), in_lib("P_1.JPG")), (1, 1, 0, 0));
+
+    // 2. in place, inside an own root folder (its sync takes in every folder it finds): only "a/x" chosen
+    let q = photos.join("Neu");
+    tree(&q, "2");
+    let k = ai::scan(&db, &q);
+    let opt = Options { mode: Mode::InPlace, source: Some(q.clone()), folders: Some(vec![q.join("a/x")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &no_trash, &never, &|_| {});
+    assert!(e.catalog_error.is_none(), "{e:?}");
+    assert_eq!(e.added, 1, "{e:?}");
+    assert_eq!((in_lib("X_2.JPG"), in_lib("B_2.JPG"), in_lib("A_2.JPG"), in_lib("P_2.JPG")), (1, 0, 0, 0));
+    // a later sync keeps the left-out folders out
+    reconcile::reconcile(&db, None, &|_| {}).unwrap();
+    assert_eq!((in_lib("X_1.JPG"), in_lib("B_1.JPG"), in_lib("A_1.JPG"), in_lib("P_1.JPG")), (1, 1, 0, 0));
+    assert_eq!((in_lib("X_2.JPG"), in_lib("B_2.JPG"), in_lib("A_2.JPG"), in_lib("P_2.JPG")), (1, 0, 0, 0));
+
+    // 3. copy: only "b" chosen (all candidates handed over)
+    let q = dir.join("Karte3");
+    tree(&q, "3");
+    let k = ai::scan(&db, &q);
+    let target = dir.join("Ziel");
+    let opt = Options { mode: Mode::CopyFiles, source: Some(q.clone()), target: Some(target.clone()), by_date: false, folders: Some(vec![q.join("b")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &no_trash, &never, &|_| {});
+    assert_eq!(e.copy_file.copied, 1, "{e:?}");
+    assert!(target.join("B_3.JPG").exists() && !target.join("A_3.JPG").exists() && !target.join("X_3.JPG").exists() && !target.join("P_3.JPG").exists());
+
+    // 4. move: only "a" chosen; nothing of a folder left out goes to the trash (not "a/x" below it either)
+    let q = dir.join("Karte4");
+    tree(&q, "4");
+    let k = ai::scan(&db, &q);
+    let disposed = std::sync::Mutex::new(Vec::<PathBuf>::new());
+    let trash = dir.join("Ersatz-Papierkorb");
+    std::fs::create_dir_all(&trash).unwrap();
+    let dispose = |d: &[PathBuf]| -> Result<(), String> {
+        for p in d {
+            std::fs::rename(p, trash.join(p.file_name().unwrap())).map_err(|e| e.to_string())?;
+            disposed.lock().unwrap().push(p.clone());
+        }
+        Ok(())
+    };
+    let opt = Options { mode: Mode::MoveFiles, source: Some(q.clone()), target: Some(target.clone()), by_date: false, folders: Some(vec![q.join("a")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &dispose, &never, &|_| {});
+    assert_eq!((e.copy_file.copied, e.copy_file.moved), (1, 1), "{e:?}");
+    assert_eq!(*disposed.lock().unwrap(), vec![q.join("a/A_4.JPG")]);
+    assert!(q.join("P_4.JPG").exists() && q.join("a/x/X_4.JPG").exists() && q.join("b/B_4.JPG").exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Edge cases of a partial import: a folder left out whose subfolder already holds photos of the library (they must not
+/// be hidden), folders of the same name in two sources, a symlink to a folder outside the source, and a source that is
+/// gone (unplugged drive) while moving: nothing chosen wrongly, nothing of a folder left out or outside goes to the
+/// trash, and a photo that cannot be copied is never disposed of.
+#[test]
+fn partial_import_edge_cases() {
+    use library::card_import::{self as ai, Mode, Options};
+    use std::sync::atomic::AtomicBool;
+    let dir = tmp("teilimport-grenzen");
+    let db_path = dir.join("library.sqlite");
+    let db = Db::open(&db_path).unwrap();
+    let photos = dir.join("Fotos");
+    std::fs::create_dir_all(photos.join("Neu/a/alt")).unwrap();
+    std::fs::write(photos.join("Neu/a/alt/OLD.JPG"), b"old").unwrap();
+    reconcile::add_root(&db, &photos, &|_| {}).unwrap();
+    let never = AtomicBool::new(false);
+    let open = || Db::open(&db_path).map_err(|e| e.to_string());
+    let status = |n: &str| count_rows(&Db::open(&db_path).unwrap(), &format!("SELECT count(*) FROM file WHERE name='{n}' AND status=0"));
+    assert_eq!(status("OLD.JPG"), 1);
+
+    // 1. own root folder, "a" left out although "a/alt" holds a photo of the library: that photo stays
+    std::fs::write(photos.join("Neu/a/A.JPG"), b"a").unwrap();
+    std::fs::create_dir_all(photos.join("Neu/b")).unwrap();
+    std::fs::write(photos.join("Neu/b/B.JPG"), b"b").unwrap();
+    let q = photos.join("Neu");
+    let k = ai::scan(&db, &q);
+    let opt = Options { mode: Mode::InPlace, source: Some(q.clone()), folders: Some(vec![q.join("b")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &|_: &[PathBuf]| -> Result<(), String> { panic!("no trash") }, &never, &|_| {});
+    assert!(e.catalog_error.is_none(), "{e:?}");
+    reconcile::reconcile(&db, None, &|_| {}).unwrap();
+    assert_eq!((status("B.JPG"), status("A.JPG"), status("OLD.JPG")), (1, 0, 1), "the library photo below a folder left out stays");
+
+    // 2. move from two sources with a folder "a" each, plus a symlink "link" -> a folder outside the source
+    let disposed = std::sync::Mutex::new(Vec::<PathBuf>::new());
+    let trash = dir.join("Ersatz-Papierkorb");
+    std::fs::create_dir_all(&trash).unwrap();
+    let dispose = |d: &[PathBuf]| -> Result<(), String> {
+        for p in d {
+            let n = disposed.lock().unwrap().len();
+            std::fs::rename(p, trash.join(format!("{n}-{}", p.file_name().unwrap().to_string_lossy()))).map_err(|e| e.to_string())?;
+            disposed.lock().unwrap().push(p.clone());
+        }
+        Ok(())
+    };
+    let outside = dir.join("Draussen");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("FREMD.JPG"), b"fremd").unwrap();
+    let (k1, k2) = (dir.join("Karte1"), dir.join("Karte2"));
+    for (q, n) in [(&k1, "1"), (&k2, "2")] {
+        std::fs::create_dir_all(q.join("a")).unwrap();
+        std::fs::write(q.join("a").join(format!("S{n}.JPG")), format!("s{n}")).unwrap();
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, k1.join("link")).unwrap();
+    let target = dir.join("Ziel");
+    let k = ai::scan(&db, &k1);
+    // only "a" of the second card chosen: nothing of the first card (same folder name) is taken or disposed of
+    let opt = Options { mode: Mode::MoveFiles, source: Some(k1.clone()), target: Some(target.clone()), by_date: false, folders: Some(vec![k2.join("a")]), ..Options::default() };
+    let e = ai::run_import(&open, &k, &opt, &dispose, &never, &|_| {});
+    assert_eq!(e.copy_file.moved, 0, "{e:?}");
+    assert!(disposed.lock().unwrap().is_empty());
+    assert!(k1.join("a/S1.JPG").exists() && outside.join("FREMD.JPG").exists());
+    // whatever the scan made of the symlink: with only "a" chosen, the folder behind the link stays untouched
+    let opt = Options { folders: Some(vec![k1.join("a")]), ..opt };
+    let e = ai::run_import(&open, &k, &opt, &dispose, &never, &|_| {});
+    assert_eq!(e.copy_file.moved, 1, "{e:?}");
+    assert_eq!(*disposed.lock().unwrap(), vec![k1.join("a/S1.JPG")]);
+    assert!(outside.join("FREMD.JPG").exists());
+
+    // 3. the source is gone while moving (drive unplugged): it waits, a cancel ends it, nothing copied or disposed of
+    let k = ai::scan(&db, &k2);
+    assert_eq!(k.len(), 1);
+    std::fs::rename(&k2, dir.join("Karte2-weg")).unwrap();
+    disposed.lock().unwrap().clear();
+    let opt = Options { mode: Mode::MoveFiles, source: Some(k2.clone()), target: Some(target.clone()), by_date: false, folders: None, ..Options::default() };
+    // the import waits for the drive to come back; the user cancels after a moment
+    let stop = AtomicBool::new(false);
+    let e = std::thread::scope(|sc| {
+        sc.spawn(|| {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        ai::run_import(&open, &k, &opt, &dispose, &stop, &|_| {})
+    });
+    assert_eq!((e.copy_file.copied, e.copy_file.moved), (0, 0), "{e:?}");
+    assert!(disposed.lock().unwrap().is_empty());
+    assert!(dir.join("Karte2-weg/a/S2.JPG").exists());
+    std::fs::remove_dir_all(&dir).unwrap();
+}

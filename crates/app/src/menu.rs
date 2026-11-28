@@ -91,6 +91,8 @@ pub enum Cmd {
     Panels,
     Lights,
     FullPreview,
+    /// ⌘↩: slideshow of the selection or the view (`slideshow.rs`)
+    Slideshow,
     Loupe100,
     Shortcuts,
     ShowLogs,
@@ -179,7 +181,7 @@ const LINUX_MENU: &[(Text, &[Entry])] = {
             &[
                 A(Grid), A(Develop), A(Sensor), S, A(TabInfo), A(TabEdit), S, A(Compare), A(Before), A(CameraJpeg), S, A(Clipping), A(Info), A(Loupe100), C(Navigator), A(JumpToSelection), S,
                 Entry::Sub(Text::MenuProof, &[C(ProofFull), C(ProofSrgb), C(ProofP3), C(ProofAdobe), C(ProofProPhoto), S, A(ProofToggle), C(GamutWarning)]),
-                S, A(Panels), A(Lights), A(FullPreview), S, A(UiLarger), A(UiSmaller), A(UiReset),
+                S, A(Panels), A(Lights), A(FullPreview), A(Slideshow), S, A(UiLarger), A(UiSmaller), A(UiReset),
             ],
         ),
         (Text::NativeWindow, &[Entry::Minimize, Entry::Maximize]),
@@ -327,6 +329,11 @@ fn from_table(title: &str, id: Option<&str>) -> (String, Option<Accelerator>) {
     let Some(k) = id.and_then(shortcuts::find) else {
         return (title.to_string(), None);
     };
+    // Windows: no accelerator (muda would label ⌘ as the Windows key, and the window gets the keys through
+    // `shortcut_without_menu` anyway); the shortcut stands right-aligned after a tab, spelled as on a PC ("Strg+O")
+    if cfg!(windows) {
+        return (format!("{title}\t{}", shortcuts::display_of(&k.trigger)), None);
+    }
     match k.trigger {
         Trigger::KeyPress(m, key) if m.cmd => {
             let mut mods = Modifiers::SUPER;
@@ -686,6 +693,7 @@ const ACTIONS: &[(Cmd, Text, Option<&str>, Option<&str>)] = &[
         Some("full_screen"),
         Some("arrow.up.left.and.arrow.down.right"),
     ),
+    (Cmd::Slideshow, Text::MenuSlideshow, Some("slideshow"), Some("play.rectangle")),
     (
         Cmd::Shortcuts,
         Text::MenuShortcuts,
@@ -1040,6 +1048,7 @@ impl AppMenu {
                 &item(Cmd::Panels),
                 &item(Cmd::Lights),
                 &item(Cmd::FullPreview),
+                &item(Cmd::Slideshow),
             ],
         )
         .map_err(|e| crate::log(&format!("menu bar: {e}"))).ok()?;

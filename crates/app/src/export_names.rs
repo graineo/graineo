@@ -5,6 +5,7 @@
 //! number (with leading zeros), `{date}` / `{date:YYYYMMDD}` capture date (YYYY YY MM DD hh mm ss), `{camera}`,
 //! `{title}`. A placeholder without a value (no title, no capture date) leaves no doubled separator behind.
 //! The default pattern gives the names of earlier versions: `IMG_0001.jpg`, `IMG_0001_mono.jpg`.
+//! A typed subfolder (`Subfolder::Custom`) takes the same placeholders, "/" separates nested folders.
 
 use std::path::PathBuf;
 
@@ -42,6 +43,8 @@ pub enum Subfolder {
     Date,
     /// name of the folder the original lies in
     Folder,
+    /// typed text ([`Naming::subfolder_text`]) with the placeholders of the pattern, "/" for nested folders
+    Custom,
 }
 
 /// The naming rules of an export (stored as the last used ones and in export templates).
@@ -53,11 +56,29 @@ pub struct Naming {
     pub start: u32,
     pub subfolder: Subfolder,
     pub collision: Collision,
+    /// text of [`Subfolder::Custom`]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub subfolder_text: String,
+    /// target: the folder of each original instead of the chosen export folder
+    #[serde(skip_serializing_if = "is_false")]
+    pub beside: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl Default for Naming {
     fn default() -> Self {
-        Naming { pattern: DEFAULT_PATTERN.into(), start: 1, subfolder: Subfolder::None, collision: Collision::Number }
+        Naming { pattern: DEFAULT_PATTERN.into(), start: 1, subfolder: Subfolder::None, collision: Collision::Number, subfolder_text: String::new(), beside: false }
+    }
+}
+
+impl Naming {
+    /// Do the rules use `{key…}` (pattern or typed subfolder)?
+    pub fn uses(&self, key: &str) -> bool {
+        let token = format!("{{{key}");
+        self.pattern.contains(&token) || (self.subfolder == Subfolder::Custom && self.subfolder_text.contains(&token))
     }
 }
 
@@ -73,6 +94,8 @@ pub struct Info {
     pub title: Option<String>,
     /// name of the folder of the original
     pub folder: Option<String>,
+    /// folder of the original (target of [`Naming::beside`])
+    pub source_dir: Option<PathBuf>,
 }
 
 /// The name of one photo: `base` as the pattern gives it, `unique` with "-2", "-3" … where several photos of the same
@@ -119,6 +142,17 @@ enum Segment {
 
 /// File name stem of `info` with `pattern`; `number` is the value of `{n}`. Safe as a file name on macOS and Windows.
 pub fn render(pattern: &str, info: &Info, number: u32) -> String {
+    let name = sanitize(&fill(pattern, info, number));
+    if name.is_empty() {
+        let fallback = sanitize(&info.stem);
+        if fallback.is_empty() { "image".into() } else { fallback }
+    } else {
+        name
+    }
+}
+
+/// `pattern` with its placeholders filled in, not yet made safe.
+fn fill(pattern: &str, info: &Info, number: u32) -> String {
     let mut out = String::new();
     // trailing separators of `out` that came from typed text (dropped next to an empty placeholder)
     let mut text_tail = 0usize;
@@ -146,13 +180,20 @@ pub fn render(pattern: &str, info: &Info, number: u32) -> String {
     if after_empty {
         out.truncate(out.len() - text_tail.min(out.len()));
     }
-    let name = sanitize(&out);
-    if name.is_empty() {
-        let fallback = sanitize(&info.stem);
-        if fallback.is_empty() { "image".into() } else { fallback }
-    } else {
-        name
+    out
+}
+
+/// A typed subfolder: placeholders filled in, "/" (or "\\") separates nested folders, every part made safe for macOS
+/// and Windows; empty parts, "." and ".." are dropped (the folder never leaves the export folder).
+pub fn render_folder(text: &str, info: &Info, number: u32) -> PathBuf {
+    let mut path = PathBuf::new();
+    for part in text.split(['/', '\\']) {
+        let name = sanitize(&fill(part, info, number));
+        if !name.is_empty() && name.chars().any(|c| c != '.' && c != '_') {
+            path.push(name);
+        }
     }
+    path
 }
 
 fn segments(pattern: &str, info: &Info, number: u32) -> Vec<Segment> {
@@ -257,7 +298,20 @@ pub fn sanitize(name: &str) -> String {
     };
     let device = s.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
     let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL") || (device.len() == 4 && (device.starts_with("COM") || device.starts_with("LPT")) && device.as_bytes()[3].is_ascii_digit() && device.as_bytes()[3] != b'0');
-    if reserved { format!("_{s}") } else { s }
+    if !reserved {
+        return s;
+    }
+    // the prefix must not push a name of full length beyond the limit (and a cut must not end in a dot or space)
+    let mut s = format!("_{s}");
+    if s.len() > MAX_STEM {
+        let mut end = MAX_STEM;
+        while !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        s.truncate(end);
+        s = s.trim_end_matches(['.', ' ']).to_string();
+    }
+    s
 }
 
 /// Subfolder of a photo (relative, empty: directly in the export folder).
@@ -272,6 +326,21 @@ pub fn subfolder(rule: Subfolder, info: &Info) -> PathBuf {
             Some(f) => PathBuf::from(f),
             None => PathBuf::new(),
         },
+        // needs the text and the number: [`folder_of`]
+        Subfolder::Custom => PathBuf::new(),
+    }
+}
+
+/// Folder of photo `info` with the rules of `naming`: relative to the export folder, or – with [`Naming::beside`] – the
+/// original's folder (absolute) plus the subfolder.
+pub fn folder_of(naming: &Naming, info: &Info, number: u32) -> PathBuf {
+    let sub = match naming.subfolder {
+        Subfolder::Custom => render_folder(&naming.subfolder_text, info, number),
+        rule => subfolder(rule, info),
+    };
+    match (naming.beside, &info.source_dir) {
+        (true, Some(dir)) => dir.join(sub),
+        _ => sub,
     }
 }
 
@@ -286,7 +355,7 @@ pub fn plan(naming: &Naming, infos: &[Info], extension: impl Fn(usize) -> String
         .enumerate()
         .map(|(i, info)| {
             let number = naming.start.saturating_add(i as u32);
-            let base = subfolder(naming.subfolder, info).join(render(&naming.pattern, info, number));
+            let base = folder_of(naming, info, number).join(render(&naming.pattern, info, number));
             let ext = extension(i);
             let key = |p: &PathBuf| format!("{}{ext}", p.to_string_lossy()).to_lowercase();
             let mut unique = base.clone();
@@ -347,7 +416,7 @@ mod tests {
     use super::*;
 
     fn info() -> Info {
-        Info { stem: "IMG_0001".into(), mono: false, capture: Some("2026-07-14T09:05:03".into()), camera: Some("Canon EOS RP".into()), title: Some("Strand".into()), folder: Some("Urlaub 2026".into()) }
+        Info { stem: "IMG_0001".into(), mono: false, capture: Some("2026-07-14T09:05:03".into()), camera: Some("Canon EOS RP".into()), title: Some("Strand".into()), folder: Some("Urlaub 2026".into()), source_dir: None }
     }
 
     #[test]
@@ -428,6 +497,73 @@ mod tests {
     }
 
     #[test]
+    fn custom_subfolder_and_beside() {
+        let i = Info { stem: "IMG_1".into(), capture: Some("2026-07-14T10:11:12".into()), camera: Some("DP2 Merrill".into()), source_dir: Some(PathBuf::from("/Fotos/Urlaub")), ..Default::default() };
+        assert_eq!(render_folder("Export/{date:YYYY}/{camera}", &i, 1), PathBuf::from("Export/2026/DP2 Merrill"));
+        assert_eq!(render_folder("{date}", &i, 1), PathBuf::from("2026-07-14"));
+        // forbidden characters, "..", empty parts and placeholders without a value
+        assert_eq!(render_folder("../a:b//c*?/{title}/.", &i, 1), PathBuf::from("a_b/c__"));
+        assert_eq!(render_folder("web\\klein ", &i, 1), PathBuf::from("web/klein"));
+        assert_eq!(render_folder("CON", &i, 1), PathBuf::from("_CON"));
+        assert_eq!(render_folder("", &i, 1), PathBuf::new());
+        let mut n = Naming { subfolder: Subfolder::Custom, subfolder_text: "Export {date:YYYYMMDD}".into(), ..Default::default() };
+        assert!(n.uses("date") && !n.uses("title"));
+        let p = plan(&n, std::slice::from_ref(&i), |_| ".jpg".into());
+        assert_eq!(p.items[0].base, PathBuf::from("Export 20260714/IMG_1"));
+        n.beside = true;
+        let other = Info { source_dir: Some(PathBuf::from("/Fotos/Heim")), ..i.clone() };
+        let p = plan(&n, &[i.clone(), other], |_| ".jpg".into());
+        assert_eq!(p.items[0].base, PathBuf::from("/Fotos/Urlaub/Export 20260714/IMG_1"));
+        assert_eq!(p.items[1].base, PathBuf::from("/Fotos/Heim/Export 20260714/IMG_1"));
+        assert_eq!(p.duplicates, 0, "same name in two folders is no duplicate");
+        // stored only when used: old files and old readers stay as they were
+        let j = serde_json::to_string(&n).unwrap();
+        assert!(j.contains(r#""subfolder":"custom""#) && j.contains(r#""subfolderText":"Export {date:YYYYMMDD}""#) && j.contains(r#""beside":true"#), "{j}");
+        assert_eq!(serde_json::from_str::<Naming>(&j).unwrap(), n);
+    }
+
+    /// Fuzz: typed subfolders and patterns as a hand-edited settings file or template could carry them (traversal,
+    /// absolute paths, drive letters, reserved names, control characters, very long and Unicode text) never leave the
+    /// export folder or the original's folder and give only names that are safe on macOS and Windows.
+    #[test]
+    fn typed_subfolder_fuzz_stays_inside() {
+        use std::path::Component;
+        let long = "x".repeat(300);
+        let pieces: Vec<&str> = vec![
+            "..", ".", "/", "\\", "//", "C:", "C:\\", "\\\\server\\share", "~", "CON", "nul.txt", "LPT1", "com9 ", " ", "\u{0}", "\n", "\u{202e}", "é", "e\u{301}", "日本", "😀", "a",
+            "{date}", "{date:YYYY}", "{camera}", "{title}", "{n:3}", "{", "}", "{{", "..\\..", "/etc/passwd", "...", ". .", "a.", &long,
+        ];
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut rnd = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let base = PathBuf::from("/Fotos/Urlaub");
+        for case in 0..8000u32 {
+            let n = 1 + (rnd() % 8) as usize;
+            let text: String = (0..n).map(|_| pieces[(rnd() % pieces.len() as u64) as usize]).collect();
+            let i = Info { stem: "IMG_1".into(), capture: Some("2026-07-14T10:11:12".into()), camera: Some(text.clone()), title: Some(text.clone()), folder: Some(text.clone()), source_dir: Some(base.clone()), ..Default::default() };
+            let sub = render_folder(&text, &i, case);
+            for c in sub.components() {
+                let Component::Normal(name) = c else { panic!("case {case}: {text:?} → {sub:?} has {c:?}") };
+                let name = name.to_string_lossy();
+                assert!(!name.is_empty() && !name.contains(['/', '\\', ':']) && sanitize(&name) == name, "case {case}: {text:?} → part {name:?}");
+            }
+            let n = Naming { pattern: text.clone(), subfolder: Subfolder::Custom, subfolder_text: text.clone(), beside: case % 2 == 0, ..Default::default() };
+            let p = plan(&n, std::slice::from_ref(&i), |_| ".jpg".into());
+            let out = &p.items[0].base;
+            if n.beside {
+                assert!(out.starts_with(&base) && out != &base, "case {case}: {out:?}");
+                assert!(out.strip_prefix(&base).unwrap().components().all(|c| matches!(c, Component::Normal(_))), "case {case}: {out:?}");
+            } else {
+                assert!(out.is_relative() && out.components().all(|c| matches!(c, Component::Normal(_))), "case {case}: {out:?}");
+            }
+        }
+    }
+
+    #[test]
     fn subfolders() {
         let i = info();
         assert_eq!(subfolder(Subfolder::Date, &i), PathBuf::from("2026/2026-07-14"));
@@ -456,7 +592,7 @@ mod tests {
 
     #[test]
     fn naming_json_keys_are_english_and_broken_values_fall_back() {
-        let n = Naming { pattern: "{n:3}".into(), start: 5, subfolder: Subfolder::Date, collision: Collision::Skip };
+        let n = Naming { pattern: "{n:3}".into(), start: 5, subfolder: Subfolder::Date, collision: Collision::Skip, ..Default::default() };
         let j = serde_json::to_string(&n).unwrap();
         assert_eq!(j, r#"{"pattern":"{n:3}","start":5,"subfolder":"date","collision":"skip"}"#);
         assert_eq!(serde_json::from_str::<Naming>(&j).unwrap(), n);

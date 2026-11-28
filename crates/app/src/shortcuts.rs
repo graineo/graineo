@@ -22,6 +22,8 @@ pub enum Context {
     Compare,
     /// the print room (print_room.rs): it takes the whole window and switches the other shortcuts off
     PrintRoom,
+    /// the slideshow (slideshow.rs): it takes the whole window and all keys
+    Slideshow,
 }
 
 impl Context {
@@ -33,6 +35,7 @@ impl Context {
             Context::Sensor => i18n::text(Text::SensorView),
             Context::Compare => crate::tr("Vergleich"),
             Context::PrintRoom => crate::tr("Druckraum"),
+            Context::Slideshow => crate::tr("Diashow"),
         }
     }
 
@@ -43,6 +46,8 @@ impl Context {
             // while the print room is open no other shortcut acts (main.rs: `dialog_open`)
             (PrintRoom, PrintRoom) => true,
             (PrintRoom, _) | (_, PrintRoom) => false,
+            (Slideshow, Slideshow) => true,
+            (Slideshow, _) | (_, Slideshow) => false,
             (Everywhere, _) | (_, Everywhere) => true,
             (a, b) if a == b => true,
             (SingleImage, Sensor) | (Sensor, SingleImage) => true,
@@ -66,6 +71,7 @@ const CA: Mods = Mods { cmd: true, shift: false, alt: true };
 const CSA: Mods = Mods { cmd: true, shift: true, alt: true };
 const S: Mods = Mods { cmd: false, shift: true, alt: false };
 const A: Mods = Mods { cmd: false, shift: false, alt: true };
+const SA: Mods = Mods { cmd: false, shift: true, alt: true };
 
 /// Trigger: a key (with modifiers) or a mouse gesture (overview only).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,7 +99,7 @@ const fn g(id: &'static str, context: Context, text: &'static str, effect: &'sta
     Shortcut { id, context, trigger: Trigger::Geste(text), effect }
 }
 
-use Context::{SingleImage as E, Raster as R, Sensor as SE, Everywhere as U, Compare as CM, PrintRoom as PR};
+use Context::{SingleImage as E, Raster as R, Sensor as SE, Everywhere as U, Compare as CM, PrintRoom as PR, Slideshow as SL};
 
 /// Opens the "Retouch" tool of the rail.
 pub const RETOUCH: &str = "tool_retouch";
@@ -106,6 +112,8 @@ pub const ALL: &[Shortcut] = &[
     t("tab_edit", U, N, Key::E, "rechte Leiste: Reiter „Bearbeiten“"),
     t("export", U, CS, Key::E, "Exportieren (Dialog)"),
     t("print", U, C, Key::P, "Drucken (Druckraum)"),
+    // the comparison keeps ⌘↩ for itself while it is open (it takes its keys first)
+    t("slideshow", U, C, Key::Enter, "Diashow: Auswahl, sonst alle Fotos der Ansicht"),
     t("merge_hdr", U, CS, Key::H, "HDR zusammenfügen (Dialog)"),
     t("import", U, CS, Key::I, "Importieren (Speicherkarte oder Ordner)"),
     t("open_folder", U, C, Key::O, "Ordner ansehen, ohne zu importieren"),
@@ -269,6 +277,8 @@ pub const ALL: &[Shortcut] = &[
     t("gamut_warning", U, CS, Key::Y, "Farbumfang-Warnung: Pixel außerhalb des Proof-Farbraums markieren"),
     t("crop", E, N, Key::R, "Freistellen & Ausrichten"),
     t("straighten", E, N, Key::A, "Ausrichten: Linie am Horizont ziehen"),
+    t("curve_auto_brightness", E, S, Key::A, "Gradationskurve: Auto (Helligkeit)"),
+    t("curve_auto_rgb", E, SA, Key::A, "Gradationskurve: Auto (RGB)"),
     t("rotate_left", U, C, Key::R, "90° nach links drehen"),
     t("rotate_right", U, CS, Key::R, "90° nach rechts drehen"),
     t("toolbar", E, N, Key::T, "Werkzeugleiste unter dem Bild ein/aus"),
@@ -309,6 +319,12 @@ pub const ALL: &[Shortcut] = &[
     t("print_page_next", PR, N, Key::PageDown, "nächste Seite"),
     t("print_close", PR, N, Key::Escape, "Druckraum schließen"),
     g("print_click", PR, "Klick / ⇧-Klick / ⌘-Klick im Filmstreifen", "Foto wählen / Bereich wählen / einzeln dazu oder weg"),
+    // Slideshow (slideshow.rs): also stars, labels and P/X/U as everywhere
+    t("slideshow_pause", SL, N, Key::Space, "Diashow anhalten / weiter"),
+    t("slideshow_prev", SL, N, Key::ArrowLeft, "voriges Foto"),
+    t("slideshow_next", SL, N, Key::ArrowRight, "nächstes Foto"),
+    t("slideshow_info", SL, N, Key::I, "Infozeile ein/aus"),
+    t("slideshow_end", SL, N, Key::Escape, "Diashow beenden"),
     // Sliders
     g("slider_double", U, "Regler: Doppelklick", "zurücksetzen"),
     g("slider_alt", U, "Regler: ⌥ beim Ziehen", "zehnmal feiner"),
@@ -322,8 +338,12 @@ pub fn find(id: &str) -> Option<&'static Shortcut> {
 }
 
 fn modifier_text(m: Mods) -> String {
-    // Windows: Ctrl instead of ⌘ (egui maps "command" to Ctrl there), modifier keys spelled out
-    if cfg!(not(target_os = "macos")) {
+    modifier_text_for(m, cfg!(target_os = "macos"))
+}
+
+fn modifier_text_for(m: Mods, mac: bool) -> String {
+    // Windows and Linux: Ctrl instead of ⌘ (egui maps "command" to Ctrl there), modifier keys spelled out
+    if !mac {
         let mut s = String::new();
         if m.cmd {
             s += crate::tr("Strg+");
@@ -348,6 +368,22 @@ fn modifier_text(m: Mods) -> String {
         s.push('⌘');
     }
     s
+}
+
+pub use crate::menu::i18n::spell_modifiers;
+
+fn is_modifier_symbol(c: char) -> bool {
+    matches!(c, '⌘' | '⌃' | '⌥' | '⇧')
+}
+
+/// A display text for this platform: on macOS unchanged, on Windows and Linux the modifier symbols spelled out in
+/// the current language ("Strg+Z", "Ctrl+Z"). `tr` applies it, so every translated text follows it.
+pub fn platform_text(text: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_os = "macos") || !text.chars().any(is_modifier_symbol) {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let names = [crate::tr("Strg+"), crate::tr("Alt+"), crate::tr("Umschalt+")].map(|n| n.trim_end_matches('+'));
+    std::borrow::Cow::Owned(spell_modifiers(text, names))
 }
 
 pub fn key_text(k: Key) -> String {
@@ -431,7 +467,7 @@ pub fn window(ctx: &egui::Context, open: &mut bool) {
     let a = crate::dialog::show(ctx, "tasten", &crate::trf!("{a} Tastenkürzel", a = ALL.len()), 520.0, |ui| {
         crate::dialog::text(ui, crate::tr("Einzelne Buchstaben wirken, solange kein Eingabefeld den Fokus hat. Die Liste entsteht aus derselben Tabelle wie das Menü."));
         egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
-            for kx in [Context::Everywhere, Context::Raster, Context::Compare, Context::SingleImage, Context::Sensor, Context::PrintRoom] {
+            for kx in [Context::Everywhere, Context::Raster, Context::Compare, Context::SingleImage, Context::Sensor, Context::PrintRoom, Context::Slideshow] {
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new(kx.title()).strong());
                 egui::Grid::new(("keys", kx.title())).num_columns(2).min_col_width(210.0).spacing([24.0, 3.0]).show(ui, |ui| {
@@ -464,7 +500,7 @@ mod tests {
     /// Deliberate overlaps: ⌘F searches the settings while they are open (modal), the library otherwise;
     /// in the darkroom ⌘+ / ⌘− zoom the grain loupe instead of the photo (main.rs `zoom_shortcuts`);
     /// German ⇧⌘0 arrives as ⇧⌘= with the physical key 0 (prefs::scale_shortcuts checks the reset first).
-    const SHADOWED: &[(&str, &str)] = &[("prefs_search", "search"), ("image_zoom_in", "dk_zoom_plus"), ("image_zoom_in_us", "dk_zoom_equals"), ("image_zoom_out", "dk_zoom_minus")];
+    const SHADOWED: &[(&str, &str)] = &[("prefs_search", "search"), ("image_zoom_in", "dk_zoom_plus"), ("image_zoom_in_us", "dk_zoom_equals"), ("image_zoom_out", "dk_zoom_minus"), ("slideshow", "cmp_finish")];
 
     #[test]
     fn no_duplicate_bindings() {
@@ -482,6 +518,31 @@ mod tests {
             }
         }
         assert!(errors.is_empty(), "Bound twice:\n{}", errors.join("\n"));
+    }
+
+    #[test]
+    fn pc_spelling_of_modifiers() {
+        let n = ["Strg", "Alt", "Umschalt"];
+        assert_eq!(spell_modifiers("⌘Z holt alles zurück.", n), "Strg+Z holt alles zurück.");
+        assert_eq!(spell_modifiers("⇧⌘Y färbt", n), "Strg+Umschalt+Y färbt");
+        assert_eq!(spell_modifiers("⌘-/⇧-Klick", n), "Strg-/Umschalt-Klick");
+        assert_eq!(spell_modifiers("⌥ beim Ziehen: fein", n), "Alt beim Ziehen: fein");
+        assert_eq!(spell_modifiers("auch ⌃⌥I", n), "auch Strg+Alt+I");
+        assert_eq!(spell_modifiers("⌘+ und ⌘−", n), "Strg++ und Strg+−");
+        assert_eq!(spell_modifiers("(⌥-Klick: alle)", n), "(Alt-Klick: alle)");
+        assert_eq!(spell_modifiers("ohne Taste", n), "ohne Taste");
+        assert_eq!(spell_modifiers("⌘Z", ["Ctrl", "Alt", "Shift"]), "Ctrl+Z");
+    }
+
+    #[test]
+    fn modifier_text_per_platform() {
+        let all = Mods { cmd: true, alt: true, shift: true };
+        assert_eq!(modifier_text_for(all, true), "⌥⇧⌘");
+        // German UI in tests: the keys themselves
+        assert_eq!(modifier_text_for(all, false), "Strg+Alt+Umschalt+");
+        assert!(!modifier_text_for(Mods { cmd: true, alt: false, shift: false }, false).contains('⌘'));
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(display("open_folder").chars().filter(|c| "⌘⌥⇧".contains(*c)).count(), 0);
     }
 
     #[test]

@@ -86,6 +86,7 @@ pub fn graineo_settings(current: &Settings, steps: Steps) -> Settings {
     s.rotate = current.rotate;
     s.perspective_v = current.perspective_v;
     s.perspective_h = current.perspective_h;
+    s.perspective_guides = current.perspective_guides.clone();
     if steps == Steps::Neutral {
         s.raw.nr_luma = 0.0;
         s.raw.nr_color = 0.0;

@@ -380,6 +380,20 @@ CREATE TABLE IF NOT EXISTS merge (
     state    TEXT NOT NULL,              -- 'virtual' (no file on disk)
     created  INTEGER NOT NULL
 );
+-- exports written into a library folder that are not stacked with their original yet (`crate::export_link`; added
+-- without a version step: older versions ignore the table). A row goes once the export is stacked.
+CREATE TABLE IF NOT EXISTS export_link (
+    path     TEXT PRIMARY KEY,           -- absolute path of the exported file (NFC)
+    image    INTEGER NOT NULL,           -- the exported photo (original or virtual copy)
+    created  INTEGER NOT NULL
+);
+-- files graineo wrote as exports (`crate::export_link`; added without a version step). Only such a file may be
+-- replaced by a later export ("Overwrite"); every other file of the library is an original and never replaced.
+CREATE TABLE IF NOT EXISTS exported_file (
+    file     INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE,
+    image    INTEGER NOT NULL,           -- the exported photo (original or virtual copy)
+    created  INTEGER NOT NULL
+);
 -- per-file quality hints for reviewing (regenerable cache)
 CREATE TABLE IF NOT EXISTS image_quality (
     file        INTEGER PRIMARY KEY REFERENCES file(id) ON DELETE CASCADE,

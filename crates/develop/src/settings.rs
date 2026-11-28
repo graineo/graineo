@@ -315,6 +315,10 @@ pub struct Settings {
     /// negative widens the top or left, see [`crate::geometry::Frame::persp_to_ori`]
     pub perspective_v: f32,
     pub perspective_h: f32,
+    /// Guided perspective: guide lines or a quadrilateral (see [`crate::guides`]); left out of the stored JSON while
+    /// empty, so older edits stay byte-identical. When set, `perspective_v`/`perspective_h` are ignored.
+    #[serde(default, skip_serializing_if = "crate::guides::Guides::is_default")]
+    pub perspective_guides: crate::guides::Guides,
     /// Additional rotation in 90° steps clockwise (on top of the camera orientation), 0 … 3
     pub rotate: u8,
     /// Film grain: amount 0 … 1, size 0.5 … 3, roughness 0 … 1
@@ -681,6 +685,7 @@ impl Default for Settings {
             crop_angle: 0.0,
             perspective_v: 0.0,
             perspective_h: 0.0,
+            perspective_guides: Default::default(),
             rotate: 0,
             grain_amount: 0.0,
             grain_size: 1.0,

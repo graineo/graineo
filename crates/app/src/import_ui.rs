@@ -257,6 +257,20 @@ fn remember_source(p: &Path) {
     library::settings::set("importRecent", serde_json::json!(v.iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>()));
 }
 
+/// Where the source dialog opens: the last source folder; not reachable (drive not connected, folder gone) -> its
+/// nearest parent that is; none at all (or nothing remembered) -> `None`, the system's default.
+pub(super) fn source_dialog_start(last: Option<&Path>, exists: &dyn Fn(&Path) -> bool) -> Option<PathBuf> {
+    let mut p = last?;
+    loop {
+        // a bare root (the system root, a drive letter) says nothing about the last import
+        p.parent()?;
+        if exists(p) {
+            return Some(p.to_path_buf());
+        }
+        p = p.parent()?;
+    }
+}
+
 impl Import {
     /// Is this member of a cell part of the import (file type filter, "RAW+JPEG: RAW only")?
     fn member_on(&self, cell: &Cell, i: usize) -> bool {
@@ -344,6 +358,25 @@ impl Import {
     /// Positions of the visible cells in display order (day by day).
     fn visible_order(&self) -> Vec<usize> {
         self.days.iter().flat_map(|d| d.cells.iter().copied()).filter(|&ci| self.cell_visible(ci)).collect()
+    }
+
+    /// Check or uncheck a folder of the source; its photos follow in the grid (copy and move take the checked photos,
+    /// so a folder left out stays out whichever way the import goes).
+    pub(super) fn set_folder(&mut self, p: &Path, on: bool) {
+        self.folders_on.insert(p.to_path_buf(), on);
+        for ci in 0..self.cells.len() {
+            let c = &self.cells[ci];
+            if self.cand[c.members[0]].path.parent() == Some(p) {
+                self.cells[ci].on = on && sel::preselected(c.status);
+            }
+        }
+    }
+
+    /// "Alle" / "Keine" in the folder list.
+    pub(super) fn set_all_folders(&mut self, on: bool) {
+        for p in self.folders.iter().map(|(p, _, _)| p.clone()).collect::<Vec<_>>() {
+            self.set_folder(&p, on);
+        }
     }
 
     fn folders_chosen(&self) -> Vec<PathBuf> {
@@ -817,10 +850,10 @@ impl LibraryView {
                             ui.label(egui::RichText::new(t).color(lr::TEXT()));
                             ui.add_space(12.0);
                             if ui.button(crate::tr("Alle")).clicked() {
-                                grid::check_all(imp, true);
+                                if in_place { imp.set_all_folders(true) } else { grid::check_all(imp, true) }
                             }
                             if ui.button(crate::tr("Keine")).clicked() {
-                                grid::check_all(imp, false);
+                                if in_place { imp.set_all_folders(false) } else { grid::check_all(imp, false) }
                             }
                         });
                         // a disabled import button says why, in plain words, next to it
@@ -864,7 +897,15 @@ impl LibraryView {
             None => {}
         }
         if pick.source {
-            crate::file_dialog::folder(ctx, "imp-quelle", |d| d.set_title(crate::tr("Quelle für den Import")));
+            // opens where the last import came from (or its nearest folder still reachable), deep trees without clicking
+            let start = source_dialog_start(recent_sources().first().map(PathBuf::as_path), &crate::path_check::folder_exists);
+            crate::file_dialog::folder(ctx, "imp-quelle", move |d| {
+                let d = d.set_title(crate::tr("Quelle für den Import"));
+                match start {
+                    Some(s) => d.set_directory(s),
+                    None => d,
+                }
+            });
         }
         if pick.target {
             let cur = imp.target.clone();
@@ -1160,7 +1201,8 @@ impl LibraryView {
     }
 
     /// Test hooks for screenshots (only with GRAINEO_DATA_DIR): GRAINEO_IMPORT_VIEW=large opens the large view of the
-    /// first photo, `inplace` switches to "Hinzufügen" (`inplace:<n>`: with the photos of the n-th folder).
+    /// first photo, `inplace` switches to "Hinzufügen" (`inplace:<n>`: with the photos of the n-th folder); `…;off=<n>,…`
+    /// unchecks folders like a click on their check.
     fn import_test_hooks(&mut self, ctx: &egui::Context, imp: &mut Import) {
         if crate::env::var_os("GRAINEO_DATA_DIR").is_none() || imp.scanning || imp.cand.is_empty() {
             return;
@@ -1171,7 +1213,14 @@ impl LibraryView {
             return;
         }
         ctx.data_mut(|d| d.insert_temp(id, true));
-        match v.as_str() {
+        // `…;off=<n>,<m>`: uncheck these folders (from 1) the way a click on their check does
+        let (v, off) = v.split_once(";off=").unwrap_or((v.as_str(), ""));
+        for n in off.split(',').filter_map(|n| n.trim().parse::<usize>().ok()) {
+            if let Some((p, _, _)) = imp.folders.get(n.saturating_sub(1)).cloned() {
+                imp.set_folder(&p, false);
+            }
+        }
+        match v {
             "large" => imp.big = imp.visible_order().first().copied(),
             v if v.starts_with("inplace") => {
                 imp.mode = Mode::InPlace;
@@ -1404,6 +1453,16 @@ fn remaining_time(secs: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The source dialog opens at the last source folder, else at its nearest reachable parent, else the default.
+    #[test]
+    fn source_dialog_starts_at_last_reachable_folder() {
+        let there = |p: &Path| p.starts_with("/Volumes/NAS/Fotos") && !p.starts_with("/Volumes/NAS/Fotos/2026");
+        assert_eq!(source_dialog_start(None, &there), None);
+        assert_eq!(source_dialog_start(Some(Path::new("/Volumes/NAS/Fotos/2025/Reise")), &there), Some(PathBuf::from("/Volumes/NAS/Fotos/2025/Reise")));
+        assert_eq!(source_dialog_start(Some(Path::new("/Volumes/NAS/Fotos/2026/Herbst/Tag 1")), &there), Some(PathBuf::from("/Volumes/NAS/Fotos")), "gone: nearest parent");
+        assert_eq!(source_dialog_start(Some(Path::new("/Volumes/Karte/DCIM")), &there), None, "nothing reachable: system default, no error");
+    }
 
     /// A card is copied (or moved, if chosen last time), a folder is added where it is.
     #[test]

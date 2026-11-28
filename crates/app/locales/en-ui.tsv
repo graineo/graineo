@@ -7289,3 +7289,70 @@ HDR ausschalten	Turn HDR off
 HDR einschalten	Turn HDR on
 HDR-Leuchtkraft	HDR headroom
 Schatten-Tönung	Shadow tint
+Neben dem Original	Next to the original
+Alle Bilder in einen gewählten Ordner	All images into one chosen folder
+Jedes Bild in den Ordner seines Originals (mit Unterordner aus „Erweitert“)	Each image into its original's folder (with the subfolder from “Advanced”)
+Eigener Name mit Platzhaltern, z. B. Export/{date:YYYY}	Custom name with placeholders, e.g. Export/{date:YYYY}
+Platzhalter wie im Dateinamen: {date}, {date:YYYY}, {camera}, {title}, {n}; / trennt Ordner	Placeholders as in the file name: {date}, {date:YYYY}, {camera}, {title}, {n}; / separates folders
+Unterordner „{a}“	Subfolder “{a}”
+Ordner der Vorlage {why}: {a} – Ziel bleibt {b}	Template folder {why}: {a} – target stays {b}
+ist kein erlaubtes Ziel	is not an allowed target
+nicht erreichbar	not reachable
+Name, Ziel, Format und Größe als Vorlage sichern	Save name, target, format and size as a template
+Horizont begradigen (A · in Entwickeln auch mit rechter Maustaste ziehen)	Level the horizon (A · in Develop also by right-dragging)
+Gewählte Ordner, alle Dateitypen	Chosen folders, all file types
+• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\n• **Belichtung** – verschiebt die Maske gegenüber den Zonen: Plus ordnet das Foto helleren Zonen zu.\n• **Kontrast** – spreizt die Maske um −4 EV: über 1 verteilt ein flaches Foto auf mehr Zonen, unter 1 fasst einen großen Umfang zusammen.\n• **Anpassen** – setzt Belichtung und Kontrast so, dass 5 % bis 95 % der Maskenhelligkeit auf −7,5 bis −0,5 EV liegen.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **Smoothing** – how large the mask areas are (percent of the long image edge). More: smoother, details keep their contrast; less: behaves more like a curve.\n• **Edges** – how closely the mask follows edges. Higher: fewer halos at edges, but fine textures get separated more.\n\n• **Exposure** – shifts the mask against the zones: plus moves the photo into brighter zones.\n• **Contrast** – spreads the mask around −4 EV: above 1 a flat photo covers more zones, below 1 a wide range is compressed.\n• **Fit** – sets exposure and contrast so that 5 % to 95 % of the mask brightness lie at −7.5 to −0.5 EV.\n\nThe mask is computed once per setting for the whole image.
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0; die Nachbarn gehen zur Hälfte mit, ⌘ nur dieser Punkt · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen. **Belichtung** und **Kontrast** der Maske verteilen die Helligkeiten des Fotos auf die neun Zonen; **Anpassen** setzt beide so, dass der Helligkeitsumfang des Fotos die Zonen −8 … 0 EV ausfüllt.	• **Balance to the right** – brightens shadows and midtones. Highlights from one stop below white stay guaranteed unchanged, nothing new is blown out.\n• **Balance to the left** – darkens highlights and midtones. The deep shadows stay guaranteed unchanged.\n\nA mask that smooths surfaces and stops at edges makes whole surfaces (a face against the light) brighten together – without halos at the edges.\n### Graph\nNine zones from −8 EV (nearly black, left) to 0 EV (white, right), behind them the histogram of the photo in the same zone brightness. The gold line shows what acts in total: the base shape of Balance (dashed) plus the zones. The graph changes only the zones; neighbours stay put, and between them the line runs as smoothly as it is calculated. Zones you set can override the protection of Balance.\n### Controls\nOnly a click selects a point (gold); the mouse wheel always just scrolls the panel · Drag: zone brighter/darker, with ⌥ fine, catches at 0; the neighbours follow by half, ⌘ only this point · ↑/↓ ±0.05, with ⇧ ±0.25, with ⌥ ±0.01 · ←/→ neighbouring zone · Double-click the point: 0 · Double-click the values below: type it · Esc or click outside: end the selection\n### Mask\n**Smoothing** and **Edges** set the mask, **Mask** shows it in the photo in shades of grey. Mask **Exposure** and **Contrast** spread the photo's brightnesses over the nine zones; **Fit** sets both so that the photo's brightness range fills the zones −8 … 0 EV.
+Gradationskurve: Auto (Helligkeit)	Tone curve: Auto (brightness)
+Gradationskurve: Auto (RGB)	Tone curve: Auto (RGB)
+Anpassen	Fit
+Maskenhelligkeit verschieben	Shift the mask brightness
+Maskenhelligkeit um −4 EV spreizen	Spread the mask brightness around −4 EV
+Maske an den Helligkeitsumfang des Fotos anpassen	Fit the mask to the photo's brightness range
+Wartet auf das Histogramm des Fotos	Waiting for the photo's histogram
+Perspektive mit Hilfslinien	Perspective from guide lines
+Linien	Lines
+Linie am Horizont ziehen	Draw a line along the horizon
+Automatisch aufrichten	Upright automatically
+Nur den Winkel	Angle only
+Winkel und stürzende Linien	Angle and converging lines
+Winkel in Grad	Angle in degrees
+Von Linien bestimmt	Set by guide lines
+Perspektive senkrecht: stürzende Linien	Vertical perspective: converging lines
+Perspektive waagerecht	Horizontal perspective
+Art	Type
+Viereck	Rectangle
+Linien {n}/4	Lines {n}/4
+Rolle wechseln	Switch role
+Linie entfernen	Remove line
+Seitenverhältnis	Aspect
+Ränder zeigen	Show margins
+Größtes Rechteck	Largest rectangle
+Ganz	Whole
+Linien löschen	Clear lines
+4 Linien gesetzt	4 lines set
+Linien widersprechen sich	Lines contradict each other
+Korrektur begrenzt	Correction limited
+ · Linien	 · Lines
+• **Freistellen** – Format wählen (Schloss hält das Seitenverhältnis), Rahmen ziehen; außerhalb ziehen dreht\n• **Ausrichten** – zwei Punkte am Horizont anklicken oder Auto, Waagerecht, Senkrecht; in Entwickeln auch mit der rechten Maustaste eine Linie ziehen\n• **Perspektive** – stürzende Linien mit Reglern entzerren\n• **Linien** – bis zu vier Kanten nachziehen, die senkrecht oder waagerecht sein sollen. Die Rolle (V/H) folgt dem Winkel, ein Klick auf die Linie wechselt sie. Eine Linie dreht, zwei gleiche richten eine Achse, zwei und zwei entzerren ganz. **Viereck**: vier Ecken auf ein Rechteck im Motiv legen. **Stärke** unter 100 % lässt Türme leicht zusammenlaufen. **Ränder zeigen** zeigt das ganze entzerrte Bild; Ausschnitt **Ganz** füllt die Ränder grau. Solange Linien gesetzt sind, sind die Perspektive-Regler gesperrt.\n\nAbbrechen stellt alles wie vor dem Öffnen her.\n\n### Tasten\n⇧ beim Ziehen einer Ecke: Seitenverhältnis halten · ⇧ beim Ziehen eines Linienendes: an erkannte Kante einrasten · ⌘ Linie im Freistellen · A Ausrichten · ⌥ beim Ziehen eines Reglers: Feinarbeit · Doppelklick in den Rahmen oder Enter: übernehmen · Esc Linie verwerfen	• **Crop** – choose a format (the lock keeps the aspect ratio), drag the frame; dragging outside rotates\n• **Straighten** – click two points on the horizon, or Auto, Level, Vertical; in Develop also right-drag a line\n• **Perspective** – correct converging lines with sliders\n• **Lines** – trace up to four edges that should be vertical or horizontal. The role (V/H) follows the angle; a click on the line switches it. One line rotates, two of a kind straighten one axis, two and two rectify fully. **Rectangle**: place four corners on a rectangle in the scene. **Amount** below 100 % lets towers converge slightly. **Show margins** shows the whole rectified image; crop **Whole** fills the margins grey. While lines are set, the perspective sliders are locked.\n\nCancel restores everything as it was before opening.\n\n### Keys\n⇧ while dragging a corner: keep aspect ratio · ⇧ while dragging a line end: snap to a detected edge · ⌘ line in Crop · A Straighten · ⌥ while dragging a slider: fine control · double-click into the frame or Enter: apply · Esc discard line
+Diashow	Slideshow
+Keine Fotos für die Diashow	No photos for the slideshow
+Weiter abspielen	Resume
+Optionen der Diashow	Slideshow options
+Diashow beenden	End slideshow
+Übergang	Transition
+Überblenden	Dissolve
+Schnitt	Cut
+Aus dem Foto	From the photo
+Ken-Burns-Effekt	Ken Burns effect
+Langsamer Zoom auf Gesichter oder die hellste Stelle	Slow zoom towards faces or the brightest area
+Hochformate paarweise	Pair portraits
+Zwei Hochformate nebeneinander auf einem Querformat-Bildschirm	Two portrait photos side by side on a landscape screen
+Zufällige Reihenfolge	Random order
+Infozeile	Info line
+Diashow: Auswahl, sonst alle Fotos der Ansicht	Slideshow: the selection, otherwise all photos of the view
+Diashow anhalten / weiter	Pause / resume slideshow
+voriges Foto	previous photo
+nächstes Foto	next photo
+Infozeile ein/aus	info line on/off
+Nur schwarz	Plain black

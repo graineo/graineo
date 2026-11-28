@@ -226,6 +226,7 @@ pub fn merge(dst: &Settings, src: &Settings, g: &Groups) -> Settings {
         s.crop_angle = src.crop_angle;
         s.perspective_v = src.perspective_v;
         s.perspective_h = src.perspective_h;
+        s.perspective_guides = src.perspective_guides.clone();
         s.rotate = src.rotate;
     }
     s

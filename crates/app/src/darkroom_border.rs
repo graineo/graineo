@@ -67,7 +67,7 @@ impl Sheet {
     /// Surroundings, shadow, paper and film border behind the photo (`rect` = photo area on screen).
     pub fn background(&self, painter: &egui::Painter, area: Rect, rect: Rect) {
         if self.on_paper {
-            painter.rect_filled(area, 0.0, crate::lr::gray(0x04));
+            painter.rect_filled(area, 0.0, crate::lr::IMAGE_BG());
         }
         let Some(a) = self.weights else {
             if self.on_paper {

@@ -1069,7 +1069,7 @@ pub fn panel(ui: &mut egui::Ui, info: &Info) -> Option<i64> {
         ui.add_space(4.0);
         lr::choice(ui, "Werkzeug", &mut s.erase, &[(false, crate::tr("Malen")), (true, crate::tr("Verkleinern"))], "");
         ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM()));
-        let slider = ui.add(egui::Slider::new(&mut s.brush, 4.0..=150.0).logarithmic(true).show_value(false));
+        let slider = crate::lr::slider_add(ui, egui::Slider::new(&mut s.brush, 4.0..=150.0).logarithmic(true).show_value(false));
         lr::tip_key(ui, &slider, crate::tr("Pinselgröße, bleibt beim Zoomen auf dem Bildschirm gleich (größer: ])"), "brush_smaller");
         let nb = ui.add(egui::Button::new(crate::tr("Neuer Bereich")));
         if nb.clicked() {

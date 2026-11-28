@@ -57,11 +57,17 @@ pub struct ToneEq {
     pub smoothing: f32,
     /// Edge sharpness of the mask 0 … 1 (default 0.5): higher keeps the mask closer to edges
     pub edges: f32,
+    /// Mask exposure in EV (−8 … +8, default 0): shifts the mask brightness before it is sorted into the zones
+    #[serde(rename = "maskExposure")]
+    pub mask_exposure: f32,
+    /// Mask contrast (0.25 … 4, default 1): spreads the mask brightness around [`MASK_PIVOT_EV`]
+    #[serde(rename = "maskContrast")]
+    pub mask_contrast: f32,
 }
 
 impl Default for ToneEq {
     fn default() -> Self {
-        Self { amount: 0.0, zones: [0.0; ZONES], smoothing: 5.0, edges: 0.5 }
+        Self { amount: 0.0, zones: [0.0; ZONES], smoothing: 5.0, edges: 0.5, mask_exposure: 0.0, mask_contrast: 1.0 }
     }
 }
 
@@ -78,6 +84,20 @@ impl ToneEq {
 
     pub fn is_default(&self) -> bool {
         *self == Self::default()
+    }
+
+    /// Is the mask compensation neutral (mask exposure 0, contrast 1)? Then the zone brightness is exactly the mask
+    /// brightness plus the exposure, as before the compensation existed.
+    /// Mask exposure and contrast within their ranges; values that are no numbers (broken or manipulated file) count
+    /// as neutral, so they can never turn the image or a fitted value into NaN.
+    pub fn mask_compensation(&self) -> (f32, f32) {
+        let e = if self.mask_exposure.is_finite() { self.mask_exposure.clamp(-MASK_EXPOSURE_RANGE, MASK_EXPOSURE_RANGE) } else { 0.0 };
+        let c = if self.mask_contrast.is_finite() { self.mask_contrast.clamp(MASK_CONTRAST_MIN, MASK_CONTRAST_MAX) } else { 1.0 };
+        (e, c)
+    }
+
+    pub fn mask_neutral(&self) -> bool {
+        self.mask_exposure == 0.0 && self.mask_contrast == 1.0
     }
 
     /// Key of the mask: it only depends on the image, smoothing and edge sharpness.
@@ -412,9 +432,73 @@ pub fn balance_ev(amount: f32, pixel_ev: f32, zone_ev: f32) -> f32 {
     }
 }
 
+/// Pivot of the mask contrast in EV (middle of the nine zones): contrast spreads the mask brightness around it.
+pub const MASK_PIVOT_EV: f32 = -4.0;
+/// Range of the mask exposure in EV.
+pub const MASK_EXPOSURE_RANGE: f32 = 8.0;
+/// Range of the mask contrast.
+pub const MASK_CONTRAST_MIN: f32 = 0.25;
+pub const MASK_CONTRAST_MAX: f32 = 4.0;
+/// "Fit mask": the 5th and 95th percentile of the mask brightness land on these zone brightnesses (EV), so the
+/// photo's brightness range fills the nine zones −8 … 0 EV with half a zone to spare at each end.
+pub const FIT_LOW: (f64, f32) = (0.05, -7.5);
+pub const FIT_HIGH: (f64, f32) = (0.95, -0.5);
+
+/// Zone brightness from the uncompensated one (`ev` = mask EV + exposure) with mask exposure `e` and contrast `c`.
+#[inline]
+pub fn compensate(ev: f32, e: f32, c: f32) -> f32 {
+    (ev + e - MASK_PIVOT_EV) * c + MASK_PIVOT_EV
+}
+
+/// Inverse of [`compensate`].
+#[inline]
+pub fn uncompensate(zone: f32, e: f32, c: f32) -> f32 {
+    (zone - MASK_PIVOT_EV) / c + MASK_PIVOT_EV - e
+}
+
+/// Brightness (EV, centre of the bin) at which the counts of a zone histogram reach fraction `q` of all counts.
+fn hist_percentile(hist: &[u32], q: f64) -> Option<f32> {
+    let total: u64 = hist.iter().map(|&n| n as u64).sum();
+    if total == 0 {
+        return None;
+    }
+    let goal = (q * total as f64).max(1.0);
+    let mut acc = 0u64;
+    for (i, &n) in hist.iter().enumerate() {
+        acc += n as u64;
+        if acc as f64 >= goal {
+            // interpolate inside the bin
+            let before = (acc - n as u64) as f64;
+            let f = if n > 0 { ((goal - before) / n as f64).clamp(0.0, 1.0) } else { 0.5 };
+            return Some(HIST_MIN_EV + (i as f64 + f) as f32 / HIST_PER_EV as f32);
+        }
+    }
+    Some(HIST_MAX_EV)
+}
+
+/// "Fit mask" (after darktable's mask exposure and contrast compensation, own implementation): mask exposure and
+/// contrast for which the 5 % and 95 % percentiles of the zone histogram `hist` (collected with the compensation `t`
+/// in effect) land on [`FIT_LOW`] and [`FIT_HIGH`]. `None` when the histogram is empty.
+pub fn fit_mask(hist: &[u32], t: &ToneEq) -> Option<(f32, f32)> {
+    let lo = hist_percentile(hist, FIT_LOW.0)?;
+    let hi = hist_percentile(hist, FIT_HIGH.0)?;
+    let (e0, c0) = t.mask_compensation();
+    let (r_lo, r_hi) = (uncompensate(lo, e0, c0), uncompensate(hi, e0, c0));
+    let span = (r_hi - r_lo).max(0.05);
+    let c = ((FIT_HIGH.1 - FIT_LOW.1) / span).clamp(MASK_CONTRAST_MIN, MASK_CONTRAST_MAX);
+    // centre the range: the middle of the photo's range on the middle of the targets
+    let mid_raw = 0.5 * (r_lo + r_hi);
+    let mid_goal = 0.5 * (FIT_LOW.1 + FIT_HIGH.1);
+    let e = ((mid_goal - MASK_PIVOT_EV) / c + MASK_PIVOT_EV - mid_raw).clamp(-MASK_EXPOSURE_RANGE, MASK_EXPOSURE_RANGE);
+    // two decimals, as the sliders show them
+    Some(((e * 100.0).round() / 100.0, (c * 100.0).round() / 100.0))
+}
+
 /// Everything one render needs: mask, curve and the exposure offset (zone EV = mask EV + exposure).
 pub struct Apply<'a> {
     mask: &'a Mask,
+    /// Mask compensation (exposure, contrast), `None` when neutral
+    comp: Option<(f32, f32)>,
     /// Fine adjustment (only when a zone is set)
     curve: Option<Curve>,
     amount: f32,
@@ -426,13 +510,18 @@ pub struct Apply<'a> {
 impl<'a> Apply<'a> {
     /// `exposure`: exposure in EV acting after this stage (slider plus base exposure of the pipeline).
     pub fn new(t: &ToneEq, mask: &'a Mask, exposure: f32, show: bool) -> Self {
-        Self { mask, curve: t.zones_active().then(|| Curve::new(&t.zones)), amount: t.amount, offset: exposure, show }
+        let comp = (!t.mask_neutral()).then(|| t.mask_compensation());
+        Self { mask, comp, curve: t.zones_active().then(|| Curve::new(&t.zones)), amount: t.amount, offset: exposure, show }
     }
 
-    /// Zone brightness of pixel (x, y) in EV (0 = white after exposure).
+    /// Zone brightness of pixel (x, y) in EV (0 = white after exposure), with the mask compensation.
     #[inline]
     pub fn zone_ev(&self, x: usize, y: usize, p: [f32; 3]) -> f32 {
-        self.mask.ev(x, y, p) + self.offset
+        let ev = self.mask.ev(x, y, p) + self.offset;
+        match self.comp {
+            Some((e, c)) => compensate(ev, e, c),
+            None => ev,
+        }
     }
 
     /// Linear gain of pixel (x, y) with colour `p`.
@@ -454,10 +543,11 @@ impl<'a> Apply<'a> {
     }
 }
 
-/// Zone histogram: lower end in EV (one zone below the darkest slider, darker pixels count here).
-pub const HIST_MIN_EV: f32 = -9.0;
-/// Zone histogram: upper end in EV (one zone above white, brighter pixels count here).
-pub const HIST_MAX_EV: f32 = 1.0;
+/// Zone histogram: lower end in EV (well below the darkest slider, so that "fit mask" sees dark photos; darker
+/// pixels count here; the graph folds everything outside −8.5 … 0.5 EV onto its outer columns).
+pub const HIST_MIN_EV: f32 = -16.0;
+/// Zone histogram: upper end in EV (brighter pixels count here).
+pub const HIST_MAX_EV: f32 = 4.0;
 /// Zone histogram: bins per EV.
 pub const HIST_PER_EV: usize = 16;
 /// Number of bins of the zone histogram.
@@ -564,7 +654,7 @@ mod tests {
     fn hist_bins_cover_range() {
         assert_eq!(hist_bin(-100.0), 0);
         assert_eq!(hist_bin(HIST_MIN_EV), 0);
-        assert_eq!(hist_bin(-8.0), HIST_PER_EV);
+        assert_eq!(hist_bin(-8.0), (-8.0 - HIST_MIN_EV) as usize * HIST_PER_EV);
         assert_eq!(hist_bin(0.0), (0.0 - HIST_MIN_EV) as usize * HIST_PER_EV);
         assert_eq!(hist_bin(50.0), HIST_BINS - 1);
         let sink = HistSink::new();
@@ -754,5 +844,99 @@ mod tests {
             }
         }
         assert!(worst < 0.35, "scale difference {worst} EV");
+    }
+
+    /// Synthetic image: a horizontal ramp of brightness from `lo` to `hi` EV (relative to white = 1).
+    fn ramp(w: usize, h: usize, lo: f32, hi: f32) -> Vec<f32> {
+        let mut data = vec![0f32; w * h * 3];
+        for y in 0..h {
+            for x in 0..w {
+                let v = (lo + (hi - lo) * x as f32 / (w - 1) as f32).exp2();
+                data[(y * w + x) * 3..(y * w + x) * 3 + 3].copy_from_slice(&[v, v, v]);
+            }
+        }
+        data
+    }
+
+    fn zone_hist(data: &[f32], w: usize, h: usize, t: &ToneEq) -> Vec<u32> {
+        let m = Mask::full(Arc::new(Grid::analyze(data, w, h, 1.0, t)));
+        let a = Apply::new(t, &m, 0.0, false);
+        let sink = HistSink::new();
+        sink.add_image(&a, w, h, |x, y| {
+            let i = (y * w + x) * 3;
+            [data[i], data[i + 1], data[i + 2]]
+        });
+        sink.take().unwrap()
+    }
+
+    /// "Fit mask": dark, bright, high-contrast and flat photos all fill the nine zones afterwards (5 % / 95 % near
+    /// −7.5 / −0.5 EV), in one step; fitting again changes (almost) nothing.
+    #[test]
+    fn fit_mask_fills_the_zones() {
+        let (w, h) = (300usize, 60usize);
+        for (name, lo, hi) in [("dark", -13.0f32, -8.0f32), ("bright", -2.5, 0.0), ("contrasty", -15.0, 2.0), ("flat mid", -5.0, -3.5)] {
+            let data = ramp(w, h, lo, hi);
+            let t0 = ToneEq::default();
+            let (e, c) = fit_mask(&zone_hist(&data, w, h, &t0), &t0).unwrap();
+            let t = ToneEq { mask_exposure: e, mask_contrast: c, ..ToneEq::default() };
+            let hist = zone_hist(&data, w, h, &t);
+            let p5 = hist_percentile(&hist, 0.05).unwrap();
+            let p95 = hist_percentile(&hist, 0.95).unwrap();
+            if c >= MASK_CONTRAST_MAX {
+                // too flat to fill all zones within the contrast limit: spread as far as allowed, centred
+                assert!(((p5 + p95) / 2.0 - MASK_PIVOT_EV).abs() < 0.3 && p95 - p5 > 5.0, "{name}: e {e} c {c} → {p5} … {p95}");
+            } else {
+                assert!((p5 - FIT_LOW.1).abs() < 0.5 && (p95 - FIT_HIGH.1).abs() < 0.5, "{name}: e {e} c {c} → {p5} … {p95}");
+            }
+            let (e2, c2) = fit_mask(&hist, &t).unwrap();
+            assert!((e2 - e).abs() < 0.2 && (c2 - c).abs() < 0.1, "{name}: refit {e2} {c2} vs {e} {c}");
+        }
+    }
+
+    /// Old edits without the new keys read as neutral compensation, and the keys survive a round trip.
+    #[test]
+    fn mask_compensation_serde() {
+        let old: ToneEq = serde_json::from_str(r#"{"amount":0.5,"zones":[0,0,0,0,0,0,0,0,0],"smoothing":5.0,"edges":0.5}"#).unwrap();
+        assert!(old.mask_neutral());
+        let t = ToneEq { mask_exposure: -1.25, mask_contrast: 1.6, ..ToneEq::default() };
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("maskExposure") && json.contains("maskContrast"));
+        let back: ToneEq = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, t);
+        // compensation alone does not switch the equalizer on (image unchanged)
+        assert!(!t.is_default() && !t.active());
+    }
+
+    /// Neutral compensation leaves the zone brightness bit-identical.
+    /// Extreme or broken mask values from a file: the zone brightness and a fit stay finite.
+    #[test]
+    fn broken_mask_values_stay_finite() {
+        let (w, h) = (64usize, 32usize);
+        let data = ramp(w, h, -9.0, 0.0);
+        for (e, c) in [(f32::NAN, 1.0), (0.0, f32::NAN), (f32::INFINITY, f32::NEG_INFINITY), (1e30, 0.0), (-1e30, 1e30), (f32::NAN, f32::NAN)] {
+            let t = ToneEq { amount: 1.0, mask_exposure: e, mask_contrast: c, ..ToneEq::default() };
+            let m = Mask::full(Arc::new(Grid::analyze(&data, w, h, 1.0, &t)));
+            let a = Apply::new(&t, &m, 0.0, false);
+            for x in 0..w {
+                let i = (5 * w + x) * 3;
+                assert!(a.zone_ev(x, 5, [data[i], data[i + 1], data[i + 2]]).is_finite(), "{e} {c}");
+            }
+            let (fe, fc) = fit_mask(&zone_hist(&data, w, h, &ToneEq::default()), &t).unwrap();
+            assert!(fe.is_finite() && fc.is_finite(), "{e} {c} → {fe} {fc}");
+        }
+    }
+
+    #[test]
+    fn neutral_compensation_is_identity() {
+        let (w, h) = (64usize, 32usize);
+        let data = ramp(w, h, -9.0, 0.0);
+        let t = ToneEq { amount: 1.0, ..ToneEq::default() };
+        let m = Mask::full(Arc::new(Grid::analyze(&data, w, h, 1.0, &t)));
+        let a = Apply::new(&t, &m, 0.3, false);
+        for x in 0..w {
+            let i = (5 * w + x) * 3;
+            let p = [data[i], data[i + 1], data[i + 2]];
+            assert_eq!(a.zone_ev(x, 5, p).to_bits(), (m.ev(x, 5, p) + 0.3).to_bits());
+        }
     }
 }

@@ -8,6 +8,8 @@ pub enum GeoTool {
     Crop,
     Align,
     Perspective,
+    /// Guide lines / quadrilateral (guided perspective, guides_ui.rs)
+    Guides,
 }
 
 /// Guide lines inside the crop (display only, nothing of it is saved).

@@ -96,6 +96,7 @@ menu-loupe100 = Lupe
 menu-panels = Seitenleisten ein/aus
 menu-lights = Licht aus
 menu-full-preview = Vollbild-Vorschau
+menu-slideshow = Diashow
 menu-shortcuts = Tastenkürzel
 menu-show-logs = Protokolle anzeigen
 menu-report-bug = Fehler melden …

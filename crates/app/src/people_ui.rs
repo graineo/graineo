@@ -1069,7 +1069,7 @@ fn search_row(ui: &mut egui::Ui, z: &mut State, ctx: &egui::Context) -> Option<C
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().slider_width = 110.0;
-            let r = ui.add(egui::Slider::new(&mut z.size, 100.0..=260.0).show_value(false));
+            let r = crate::lr::slider_add(ui, egui::Slider::new(&mut z.size, 100.0..=260.0).show_value(false));
             lr::hover_tip(ui, &r, crate::tr("Kachelgröße"));
             ui.label(egui::RichText::new(crate::tr("Größe")).small().color(lr::TEXT_DIM()));
             ui.add_space(14.0);

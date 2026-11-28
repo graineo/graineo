@@ -415,7 +415,7 @@ impl crate::App {
         }
         // without a folder the main button chooses one first, then exports
         let can = !self.exporting && self.export_names_ui.pick.is_none();
-        let label = if self.export_dir.is_none() { crate::tr("Ordner wählen und exportieren …") } else { crate::tr("Exportieren") };
+        let label = if self.export_target_dir().is_none() { crate::tr("Ordner wählen und exportieren …") } else { crate::tr("Exportieren") };
         let width = (ctx.content_rect().width() - 2.0 * SCREEN_GAP - 2.0 * MARGIN).clamp(340.0, 940.0);
         let two_columns = width >= crate::export_ui::TWO_COLUMNS_MIN;
         let mut scope = crate::export_ui::Scope::default();

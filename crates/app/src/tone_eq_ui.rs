@@ -39,6 +39,8 @@ pub const BALANCE_HINT: &str = "+ hellt Schatten auf, Lichter bleiben · − dun
 /// Hint of the mask sliders (selects the help card of the mask, see `help.rs`).
 const SMOOTHING_HINT: &str = "Größe der Maskenflächen in % der langen Bildkante";
 const EDGES_HINT: &str = "Wie eng die Maske Kanten folgt – höher: weniger Lichthöfe";
+const MASK_EXPOSURE_HINT: &str = "Maskenhelligkeit verschieben";
+const MASK_CONTRAST_HINT: &str = "Maskenhelligkeit um −4 EV spreizen";
 
 /// The section (the same for Sigma and other cameras).
 pub fn section(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
@@ -56,6 +58,7 @@ pub fn section(ui: &mut egui::Ui, s: &mut Settings, index: usize) {
         graph(ui, s, index);
         ui.add_space(4.0);
         mask_row(ui, s, &d);
+        compensation_row(ui, s, &d, index);
     });
     if reset {
         s.tone_eq = d;
@@ -85,6 +88,39 @@ fn mask_row(ui: &mut egui::Ui, s: &mut Settings, d: &ToneEq) {
     }
     s.tone_eq_mask = on;
     lr::hover_tip(ui, &r, "Maske zeigen: Zonen als Graustufen, Schwarz = −8 EV, Weiß = 0 EV");
+}
+
+/// Second mask row: mask exposure and contrast, and "Anpassen" (fit both to the photo's zone histogram, one ⌘Z).
+fn compensation_row(ui: &mut egui::Ui, s: &mut Settings, d: &ToneEq, index: usize) {
+    let width = ui.available_width();
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let button_w = ui.fonts_mut(|f| f.layout_no_wrap(crate::tr("Anpassen").to_owned(), font, lr::TEXT()).size().x) + 20.0;
+    let gap = 10.0;
+    let slider_w = ((width - button_w - 2.0 * gap) / 2.0).max(40.0);
+    let (row, _) = ui.allocate_exact_size(egui::vec2(width, MASK_ROW_HEIGHT), egui::Sense::hover());
+    let a = egui::Rect::from_min_size(row.min, egui::vec2(slider_w, MASK_ROW_HEIGHT));
+    let b = egui::Rect::from_min_size(egui::pos2(a.right() + gap, row.top()), egui::vec2(slider_w, MASK_ROW_HEIGHT));
+    mini_slider(ui, a, "Belichtung", &mut s.tone_eq.mask_exposure, -6.0..=6.0, d.mask_exposure, 0.05, 2, MASK_EXPOSURE_HINT);
+    mini_slider(ui, b, "Kontrast", &mut s.tone_eq.mask_contrast, develop::tone_eq::MASK_CONTRAST_MIN..=develop::tone_eq::MASK_CONTRAST_MAX, d.mask_contrast, 0.01, 2, MASK_CONTRAST_HINT);
+    let t = egui::Rect::from_min_max(egui::pos2(row.right() - button_w, row.center().y - 12.0), egui::pos2(row.right(), row.center().y + 12.0));
+    let hist = state().hist.as_ref().filter(|(i, _)| *i == index).map(|(_, h)| h.clone());
+    // test aid (own data folder only): GRAINEO_TONE_EQ_FIT=<s> presses the button once after s seconds
+    static HOOK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let hook = crate::env::var_os("GRAINEO_DATA_DIR").is_some()
+        && crate::env::var("GRAINEO_TONE_EQ_FIT").ok().and_then(|v| v.parse::<f64>().ok()).is_some_and(|sec| ui.input(|i| i.time) >= sec)
+        && hist.is_some()
+        && !HOOK.swap(true, Ordering::Relaxed);
+    let r = ui.add_enabled_ui(hist.is_some(), |ui| ui.put(t, |ui: &mut egui::Ui| lr::secondary_button(ui, None, "Anpassen"))).inner;
+    lr::hover_tip(ui, &r, if hist.is_some() { "Maske an den Helligkeitsumfang des Fotos anpassen" } else { "Wartet auf das Histogramm des Fotos" });
+    if r.clicked() || hook {
+        if let Some((e, c)) = hist.as_deref().and_then(|h| develop::tone_eq::fit_mask(h, &s.tone_eq)) {
+            s.tone_eq.mask_exposure = e;
+            s.tone_eq.mask_contrast = c;
+            crate::history::reset_gesture();
+            // the histogram belongs to the old compensation: wait for the next one before fitting again
+            state().hist = None;
+        }
+    }
 }
 
 /// Short slider for the mask row: name above the track (cut with "…" if the column is too narrow), value right of

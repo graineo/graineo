@@ -87,6 +87,7 @@ menu-loupe100 = Lupa
 menu-panels = Mostrar/ocultar barras laterales
 menu-lights = Luces apagadas
 menu-full-preview = Vista previa a pantalla completa
+menu-slideshow = Presentación
 menu-shortcuts = Atajos de teclado
 menu-show-logs = Mostrar registros
 menu-report-bug = Informar de un problema…

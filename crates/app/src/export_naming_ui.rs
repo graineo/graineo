@@ -98,7 +98,8 @@ impl crate::App {
         } else {
             None
         };
-        Info { stem, mono, capture, camera, title, folder }
+        let source_dir = e.path.parent().map(|p| p.to_path_buf());
+        Info { stem, mono, capture, camera, title, folder, source_dir }
     }
 
     /// What follows the stem of photo `i` (".jpg", "_linear.tif", the original's extension).
@@ -113,8 +114,8 @@ impl crate::App {
     /// Names of the photos `items` (already filtered with [`Self::export_written`]).
     pub(crate) fn export_plan(&mut self, items: &[usize]) -> (Plan, Vec<String>) {
         let naming = self.export_naming_effective();
-        let want_title = naming.pattern.contains("{title");
-        let want_header = naming.pattern.contains("{date") || naming.pattern.contains("{camera") || naming.subfolder == Subfolder::Date;
+        let want_title = naming.uses("title");
+        let want_header = naming.uses("date") || naming.uses("camera") || naming.subfolder == Subfolder::Date;
         let infos: Vec<Info> = items.iter().map(|&i| self.export_info(i, want_title, want_header)).collect();
         let endings: Vec<String> = items.iter().map(|&i| self.export_ending(i)).collect();
         (names::plan(&naming, &infos, |k| endings[k].clone()), endings)
@@ -131,7 +132,7 @@ impl crate::App {
         if items.is_empty() || self.exporting {
             return false;
         }
-        if self.export_dir.is_none() {
+        if self.export_target_dir().is_none() {
             crate::file_dialog::target_folder(ctx, "export-ordner-start", |d| d);
             self.export_names_ui.pick = Some(items);
             return false;
@@ -183,9 +184,28 @@ impl crate::App {
         self.export_dir = Some(d);
     }
 
+    /// The folder an export goes to: the chosen one, or – "next to the original" – a marker folder ("/") that the
+    /// absolute planned names replace (`Path::join` with an absolute path). `None`: a folder must be chosen first.
+    pub(crate) fn export_target_dir(&self) -> Option<PathBuf> {
+        if self.export_naming.beside {
+            Some(PathBuf::from(std::path::MAIN_SEPARATOR_STR))
+        } else {
+            self.export_dir.clone()
+        }
+    }
+
+    /// The folder shown after an export (reveal, messages): the chosen folder, or the first original's folder.
+    pub(crate) fn export_shown_dir(&self) -> Option<PathBuf> {
+        if self.export_naming.beside {
+            self.export_items.first().and_then(|p| p.parent()).map(PathBuf::from)
+        } else {
+            self.export_dir.clone()
+        }
+    }
+
     /// Main button label: without a folder it says that the folder choice comes first.
     pub(crate) fn export_button_label(&self, n: usize) -> String {
-        if self.export_dir.is_none() {
+        if self.export_target_dir().is_none() {
             crate::tr("Ordner wählen und exportieren …").to_string()
         } else if n == 1 {
             crate::tr("Exportieren").to_string()
@@ -195,7 +215,7 @@ impl crate::App {
     }
 
     /// Saves changed naming rules; a chosen template no longer applies then.
-    fn export_naming_commit(&mut self, before: &Naming) {
+    pub(crate) fn export_naming_commit(&mut self, before: &Naming) {
         if self.export_naming != *before {
             if let Ok(v) = serde_json::to_value(&self.export_naming) {
                 library::settings::set("exportNaming", v);
@@ -302,9 +322,15 @@ impl crate::App {
                 ui,
                 "export-subfolder",
                 &mut self.export_naming.subfolder,
-                &[(Subfolder::None, crate::tr("Keine")), (Subfolder::Date, crate::tr("Nach Datum")), (Subfolder::Folder, crate::tr("Nach Ordner"))],
-                &["", crate::tr("Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14"), crate::tr("Name des Ordners, in dem das Original liegt")],
+                &[(Subfolder::None, crate::tr("Keine")), (Subfolder::Date, crate::tr("Nach Datum")), (Subfolder::Folder, crate::tr("Nach Ordner")), (Subfolder::Custom, crate::tr("Eigener"))],
+                &["", crate::tr("Jahr/Tag der Aufnahme, z. B. 2026/2026-07-14"), crate::tr("Name des Ordners, in dem das Original liegt"), crate::tr("Eigener Name mit Platzhaltern, z. B. Export/{date:YYYY}")],
             );
+        });
+        // the typed subfolder: same placeholders as the name, "/" for nested folders (greyed out unless "Eigener")
+        let custom = self.export_naming.subfolder == Subfolder::Custom;
+        crate::export_ui::row_if(ui, "", custom, |ui| {
+            let r = lr::edit_field(ui, egui::TextEdit::singleline(&mut self.export_naming.subfolder_text).hint_text("Export/{date:YYYY}").desired_width(ui.available_width()));
+            lr::hover_tip(ui, &r, crate::tr("Platzhalter wie im Dateinamen: {date}, {date:YYYY}, {camera}, {title}, {n}; / trennt Ordner"));
         });
         let digits = names::number_digits(&self.export_naming.pattern);
         crate::export_ui::row_if(ui, crate::tr("Nummer"), digits.is_some(), |ui| {
@@ -343,7 +369,7 @@ impl crate::App {
             self.export_names_ui.key = key;
         }
         let collision = self.export_naming_effective().collision;
-        let dir = self.export_dir.clone();
+        let dir = self.export_target_dir();
         let state = &mut self.export_names_ui;
         let first = shown_name(&state.plan, &state.endings, collision, 0);
         let existing_key = {
@@ -442,7 +468,7 @@ impl crate::App {
                 }
             });
             let r = ui.button(crate::tr("Sichern …"));
-            lr::hover_tip(ui, &r, crate::tr("Name, Ordnerregel, Format und Größe als Vorlage sichern"));
+            lr::hover_tip(ui, &r, crate::tr("Name, Ziel, Format und Größe als Vorlage sichern"));
             if r.clicked() {
                 self.export_names_ui.typing = Some(String::new());
             }
@@ -467,6 +493,7 @@ impl crate::App {
                 t.limit_size = Some(self.export_limit_size);
                 t.size = serde_json::to_value(self.export_size).ok();
                 t.resize = Some(self.export_resize.key().to_string());
+                t.dir = self.export_dir.as_ref().map(|d| d.to_string_lossy().into_owned());
                 match templates::save(&dir, &t) {
                     Ok(_) => {
                         self.export_names_ui.templates = None;
@@ -490,6 +517,18 @@ impl crate::App {
     }
 
     fn export_apply_template(&mut self, t: &Template) {
+        // the template's folder: taken when reachable, otherwise the current target stays and the message says so
+        // (a template without a folder keeps the current one)
+        let mut folder_note = None;
+        if let Some(d) = t.dir.as_deref().filter(|d| !d.is_empty()).map(PathBuf::from) {
+            match templates::folder_reachable(&d) {
+                Ok(()) => self.set_export_dir(d),
+                Err(why) => {
+                    let current = self.export_dir.as_ref().map(|c| sysdirs::display_path(c)).unwrap_or_else(|| crate::tr("– noch kein Ordner –").into());
+                    folder_note = Some(crate::trf!("Ordner der Vorlage {why}: {a} – Ziel bleibt {b}", why = crate::tr(why), a = sysdirs::display_path(&d), b = current));
+                }
+            }
+        }
         self.export_naming = t.naming.clone();
         if let Ok(v) = serde_json::to_value(&self.export_naming) {
             library::settings::set("exportNaming", v);
@@ -519,6 +558,6 @@ impl crate::App {
             library::settings::set("exportResize", serde_json::Value::String(f.key().into()));
         }
         self.export_names_ui.chosen = Some(t.name.clone());
-        self.export_names_ui.message.clear();
+        self.export_names_ui.message = folder_note.unwrap_or_default();
     }
 }

@@ -221,6 +221,7 @@ impl App {
         match self.export_naming.subfolder {
             crate::export_names::Subfolder::Date => set.push(crate::tr("Unterordner nach Datum").to_string()),
             crate::export_names::Subfolder::Folder => set.push(crate::tr("Unterordner nach Ordner").to_string()),
+            crate::export_names::Subfolder::Custom => set.push(crate::trf!("Unterordner „{a}“", a = self.export_naming.subfolder_text.trim())),
             crate::export_names::Subfolder::None => {}
         }
         // a sub-heading with a disclosure triangle; collapsed, the line carries what is set there
@@ -765,7 +766,19 @@ impl App {
     /// Right column: template, folder, name with placeholder chips, existing files, reveal afterwards.
     fn export_where(&mut self, ui: &mut egui::Ui, items: &[usize]) {
         section(ui, crate::tr("Ziel"));
-        row(ui, crate::tr("Ordner"), |ui| {
+        let before = self.export_naming.clone();
+        row(ui, crate::tr("Speichern in"), |ui| {
+            choice(
+                ui,
+                "export-target",
+                &mut self.export_naming.beside,
+                &[(false, crate::tr("Ordner")), (true, crate::tr("Neben dem Original"))],
+                &[crate::tr("Alle Bilder in einen gewählten Ordner"), crate::tr("Jedes Bild in den Ordner seines Originals (mit Unterordner aus „Erweitert“)")],
+            );
+        });
+        self.export_naming_commit(&before);
+        let beside = self.export_naming.beside;
+        row_if(ui, crate::tr("Ordner"), !beside, |ui| {
             let none = self.export_dir.is_none();
             let dir = self.export_dir.as_ref().map(|d| d.display().to_string()).unwrap_or_else(|| crate::tr("– noch kein Ordner –").into());
             let button_w = ui.painter().layout_no_wrap(crate::tr("Ändern …").to_string(), egui::TextStyle::Button.resolve(ui.style()), lr::TEXT()).size().x + 2.0 * ui.spacing().button_padding.x;
@@ -843,7 +856,7 @@ impl App {
 /// Quality slider 60–100 for JPEG and JPEG XL (lossy).
 fn quality_slider(ui: &mut egui::Ui, v: &mut u8) {
     ui.spacing_mut().slider_width = (ui.available_width() - 60.0).clamp(80.0, 220.0);
-    let r = ui.add(egui::Slider::new(v, 60..=100).clamping(egui::SliderClamping::Edits));
+    let r = crate::lr::slider_add(ui, egui::Slider::new(v, 60..=100).clamping(egui::SliderClamping::Edits));
     lr::hover_tip(ui, &r, crate::tr("Verlustbehaftet; 92 ist kaum vom Original zu unterscheiden"));
 }
 

@@ -87,7 +87,7 @@ pub(super) fn show(ui: &mut egui::Ui, imp: &mut Import, height: f32) {
         ui.label(egui::RichText::new(range.to_uppercase()).font(lr::semibold(11.0)).color(crate::lr::gray(0x9a)));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let mut w = imp.cell_w;
-            let r = ui.add_sized([90.0, 18.0], egui::Slider::new(&mut w, 96.0..=220.0).show_value(false));
+            let r = crate::lr::slider_add_sized(ui, [90.0, 18.0], egui::Slider::new(&mut w, 96.0..=220.0).show_value(false));
             lr::hover_tip(ui, &r, "Größe der Miniaturen");
             imp.cell_w = w;
         });

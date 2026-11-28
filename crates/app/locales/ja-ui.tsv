@@ -7287,3 +7287,70 @@ HDR ausschalten	HDR をオフ
 HDR einschalten	HDR をオン
 HDR-Leuchtkraft	HDR ヘッドルーム
 Schatten-Tönung	シャドウの色かぶり
+Neben dem Original	元画像の横
+Alle Bilder in einen gewählten Ordner	すべての画像を選んだフォルダへ
+Jedes Bild in den Ordner seines Originals (mit Unterordner aus „Erweitert“)	各画像を元画像のフォルダへ（「詳細」のサブフォルダ付き）
+Eigener Name mit Platzhaltern, z. B. Export/{date:YYYY}	プレースホルダー付きの独自名（例: Export/{date:YYYY}）
+Platzhalter wie im Dateinamen: {date}, {date:YYYY}, {camera}, {title}, {n}; / trennt Ordner	ファイル名と同じプレースホルダー: {date}, {date:YYYY}, {camera}, {title}, {n}; / でフォルダを区切る
+Unterordner „{a}“	サブフォルダ「{a}」
+Ordner der Vorlage {why}: {a} – Ziel bleibt {b}	テンプレートのフォルダ{why}: {a} – 書き出し先は {b} のまま
+ist kein erlaubtes Ziel	は使用できない書き出し先です
+nicht erreichbar	にアクセスできません
+Name, Ziel, Format und Größe als Vorlage sichern	名前・書き出し先・形式・サイズをテンプレートとして保存
+Horizont begradigen (A · in Entwickeln auch mit rechter Maustaste ziehen)	水平を補正 (A · 現像では右ボタンでドラッグも可)
+Gewählte Ordner, alle Dateitypen	選択したフォルダー、すべてのファイル形式
+• **Glättung** – wie groß die Flächen der Maske sind (Prozent der langen Bildkante). Mehr: ruhiger, Details behalten ihren Kontrast; weniger: wirkt eher wie eine Kurve.\n• **Kanten** – wie eng die Maske Kanten folgt. Höher: weniger Lichthöfe an Kanten, aber feine Strukturen trennen sich stärker.\n\n• **Belichtung** – verschiebt die Maske gegenüber den Zonen: Plus ordnet das Foto helleren Zonen zu.\n• **Kontrast** – spreizt die Maske um −4 EV: über 1 verteilt ein flaches Foto auf mehr Zonen, unter 1 fasst einen großen Umfang zusammen.\n• **Anpassen** – setzt Belichtung und Kontrast so, dass 5 % bis 95 % der Maskenhelligkeit auf −7,5 bis −0,5 EV liegen.\n\nDie Maske wird je Einstellung einmal für das ganze Bild berechnet.	• **スムージング** – マスク領域の大きさ（長辺に対する割合）。大きいほど落ち着き、ディテールのコントラストが保たれる。小さいほどカーブに近い効果。\n• **エッジ** – マスクがエッジにどれだけ沿うか。高いほどエッジのハローが減るが、細かな構造が分かれやすくなる。\n\n• **露出** – ゾーンに対してマスクをずらします。プラスで写真がより明るいゾーンに入ります。\n• **コントラスト** – −4 EV を中心にマスクを広げます。1 より大きいと平坦な写真がより多くのゾーンに広がり、1 未満では広い範囲がまとまります。\n• **合わせる** – マスクの明るさの 5 % ～ 95 % が −7.5 ～ −0.5 EV に来るよう露出とコントラストを設定します。\n\nマスクは設定ごとに画像全体で一度だけ計算されます。
+• **Ausgleich nach rechts** – hellt Schatten und Mitteltöne auf. Lichter ab einer Blende unter Weiß bleiben garantiert unverändert, nichts wird neu ausgefressen.\n• **Ausgleich nach links** – dunkelt Lichter und Mitteltöne ab. Die tiefen Schatten bleiben garantiert unverändert.\n\nEine Maske, die Flächen glättet und an Kanten stehen bleibt, sorgt dafür, dass ganze Flächen (ein Gesicht im Gegenlicht) gemeinsam heller werden – ohne Lichthöfe an den Kanten.\n### Grafik\nNeun Zonen von −8 EV (fast Schwarz, links) bis 0 EV (Weiß, rechts), dahinter das Histogramm des Fotos in derselben Zonenhelligkeit. Die goldene Linie zeigt, was insgesamt wirkt: die Grundform des Ausgleichs (gestrichelt) plus die Zonen. Die Grafik ändert nur die Zonen; Nachbarn bleiben stehen, dazwischen verläuft die Linie so weich, wie gerechnet wird. Gesetzte Zonen können den Schutz des Ausgleichs aufheben.\n### Bedienung\nErst ein Klick wählt einen Punkt (gold); das Mausrad scrollt immer nur die Leiste · Ziehen: Zone heller/dunkler, mit ⌥ fein, rastet bei 0; die Nachbarn gehen zur Hälfte mit, ⌘ nur dieser Punkt · ↑/↓ ±0,05, mit ⇧ ±0,25, mit ⌥ ±0,01 · ←/→ Nachbarzone · Doppelklick auf den Punkt: 0 · Doppelklick auf die Werte darunter: eintippen · Esc oder Klick außerhalb: Auswahl beenden\n### Maske\n**Glättung** und **Kanten** stellen die Maske ein, **Maske** zeigt sie im Foto als Graustufen. **Belichtung** und **Kontrast** der Maske verteilen die Helligkeiten des Fotos auf die neun Zonen; **Anpassen** setzt beide so, dass der Helligkeitsumfang des Fotos die Zonen −8 … 0 EV ausfüllt.	• **バランスを右へ** – シャドウと中間調を明るくします。白から1段下より明るいハイライトは必ずそのまま残り、新たな白飛びは生じません。\n• **バランスを左へ** – ハイライトと中間調を暗くします。深いシャドウは必ずそのまま残ります。\n\n面を滑らかにしエッジで止まるマスクにより、面全体（逆光の顔など）がまとまって明るくなり、エッジにハロは出ません。\n### グラフ\n−8 EV（ほぼ黒、左）から 0 EV（白、右）までの9つのゾーン。背景には同じゾーン明るさでの写真のヒストグラム。金色の線は実際に効く合計（破線のバランスの基本形＋ゾーン）を示します。グラフで変わるのはゾーンだけで、隣のゾーンは動かず、間の線は計算どおりに滑らかにつながります。設定したゾーンはバランスの保護を上書きすることがあります。\n### 操作\nクリックして初めて点を選択（金色）。マウスホイールは常にパネルをスクロールするだけ · ドラッグ：ゾーンを明るく/暗く、⌥ で微調整、0 で止まる。隣の点は半分だけ動き、⌘ でこの点のみ · ↑/↓ ±0.05、⇧ で ±0.25、⌥ で ±0.01 · ←/→ 隣のゾーン · 点をダブルクリック：0 · 下の値をダブルクリック：数値入力 · Esc または外側をクリック：選択を終了\n### マスク\n**スムージング** と **エッジ** でマスクを調整し、**マスク** で写真にグレースケールで表示します。 マスクの**露出**と**コントラスト**は写真の明るさを 9 つのゾーンに配分します。**合わせる**は写真の明るさの範囲が −8 … 0 EV のゾーンを満たすよう両方を設定します。
+Gradationskurve: Auto (Helligkeit)	トーンカーブ：自動（明るさ）
+Gradationskurve: Auto (RGB)	トーンカーブ：自動（RGB）
+Anpassen	合わせる
+Maskenhelligkeit verschieben	マスクの明るさをずらす
+Maskenhelligkeit um −4 EV spreizen	マスクの明るさを −4 EV を中心に広げる
+Maske an den Helligkeitsumfang des Fotos anpassen	マスクを写真の明るさの範囲に合わせる
+Wartet auf das Histogramm des Fotos	写真のヒストグラムを待っています
+Perspektive mit Hilfslinien	ガイド線で遠近補正
+Linien	ライン
+Linie am Horizont ziehen	水平線に沿って線を引く
+Automatisch aufrichten	自動で垂直補正
+Nur den Winkel	角度のみ
+Winkel und stürzende Linien	角度と収束する線
+Winkel in Grad	角度（度）
+Von Linien bestimmt	ガイド線で決定
+Perspektive senkrecht: stürzende Linien	垂直方向の遠近：収束する線
+Perspektive waagerecht	水平方向の遠近
+Art	種類
+Viereck	四角形
+Linien {n}/4	ライン {n}/4
+Rolle wechseln	役割を切り替え
+Linie entfernen	ラインを削除
+Seitenverhältnis	縦横比
+Ränder zeigen	余白を表示
+Größtes Rechteck	最大の長方形
+Ganz	全体
+Linien löschen	ラインを消去
+4 Linien gesetzt	4本設定済み
+Linien widersprechen sich	ラインが矛盾しています
+Korrektur begrenzt	補正を制限しました
+ · Linien	 · ライン
+• **Freistellen** – Format wählen (Schloss hält das Seitenverhältnis), Rahmen ziehen; außerhalb ziehen dreht\n• **Ausrichten** – zwei Punkte am Horizont anklicken oder Auto, Waagerecht, Senkrecht; in Entwickeln auch mit der rechten Maustaste eine Linie ziehen\n• **Perspektive** – stürzende Linien mit Reglern entzerren\n• **Linien** – bis zu vier Kanten nachziehen, die senkrecht oder waagerecht sein sollen. Die Rolle (V/H) folgt dem Winkel, ein Klick auf die Linie wechselt sie. Eine Linie dreht, zwei gleiche richten eine Achse, zwei und zwei entzerren ganz. **Viereck**: vier Ecken auf ein Rechteck im Motiv legen. **Stärke** unter 100 % lässt Türme leicht zusammenlaufen. **Ränder zeigen** zeigt das ganze entzerrte Bild; Ausschnitt **Ganz** füllt die Ränder grau. Solange Linien gesetzt sind, sind die Perspektive-Regler gesperrt.\n\nAbbrechen stellt alles wie vor dem Öffnen her.\n\n### Tasten\n⇧ beim Ziehen einer Ecke: Seitenverhältnis halten · ⇧ beim Ziehen eines Linienendes: an erkannte Kante einrasten · ⌘ Linie im Freistellen · A Ausrichten · ⌥ beim Ziehen eines Reglers: Feinarbeit · Doppelklick in den Rahmen oder Enter: übernehmen · Esc Linie verwerfen	• **切り抜き** – 形式を選び（鍵で縦横比を固定）、枠をドラッグ。枠の外をドラッグすると回転\n• **水平補正** – 水平線上の2点をクリック、または自動・水平・垂直。現像では右ボタンのドラッグでも線を引けます\n• **遠近** – スライダーで収束する線を補正\n• **ライン** – 垂直または水平になるべき辺を最大4本なぞります。役割（V/H）は角度で決まり、線をクリックすると切り替わります。1本で回転、同じ役割2本で1軸、2本ずつで完全に補正。**四角形**：被写体の長方形に4つの角を置きます。**強さ**を100 %未満にすると塔がわずかに収束して自然に見えます。**余白を表示**で補正後の画像全体を表示。切り抜き**全体**は余白をグレーで塗ります。ラインがある間は遠近スライダーはロックされます。\n\nキャンセルで開く前の状態に戻ります。\n\n### キー\n⇧ 角をドラッグ：縦横比を保持 · ⇧ ラインの端をドラッグ：検出した辺に吸着 · ⌘ 切り抜きで線 · A 水平補正 · ⌥ スライダーのドラッグ：微調整 · 枠内をダブルクリックまたは Enter：適用 · Esc 線を破棄
+Diashow	スライドショー
+Keine Fotos für die Diashow	スライドショーの写真がありません
+Weiter abspielen	再開
+Optionen der Diashow	スライドショーのオプション
+Diashow beenden	スライドショーを終了
+Übergang	トランジション
+Überblenden	ディゾルブ
+Schnitt	カット
+Aus dem Foto	写真から
+Ken-Burns-Effekt	ケン・バーンズ効果
+Langsamer Zoom auf Gesichter oder die hellste Stelle	顔または最も明るい部分へのゆっくりしたズーム
+Hochformate paarweise	縦位置を2枚並べる
+Zwei Hochformate nebeneinander auf einem Querformat-Bildschirm	横長の画面で縦位置の写真2枚を並べて表示
+Zufällige Reihenfolge	ランダムな順序
+Infozeile	情報行
+Diashow: Auswahl, sonst alle Fotos der Ansicht	スライドショー：選択した写真、なければ表示中のすべての写真
+Diashow anhalten / weiter	スライドショーの一時停止／再開
+voriges Foto	前の写真
+nächstes Foto	次の写真
+Infozeile ein/aus	情報行のオン／オフ
+Nur schwarz	黒のみ

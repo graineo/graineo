@@ -364,7 +364,7 @@ impl App {
                 if ui.add_enabled(*zoom > 1.001, egui::Button::new(crate::tr("EINPASSEN")).frame(false)).clicked() {
                     *zoom = 1.0;
                 }
-                let r = ui.add(egui::Slider::new(zoom, 1.0..=4.0).show_value(false).step_by(0.05));
+                let r = crate::lr::slider_add(ui, egui::Slider::new(zoom, 1.0..=4.0).show_value(false).step_by(0.05));
                 lr::hover_tip(ui, &r, crate::tr("Felder vergrößern (⌘ + Mausrad oder Zusammenziehen)"));
                 ui.label(egui::RichText::new(crate::tr("GRÖSSE")).color(lr::TEXT_DIM()));
             };

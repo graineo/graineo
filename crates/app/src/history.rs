@@ -1010,6 +1010,7 @@ const FIELDS: &[(&str, &str, bool)] = &[
     ("crop_angle", "Winkel", true),
     ("perspective_v", "Perspektive", true),
     ("perspective_h", "Perspektive", true),
+    ("perspective_guides", "Linien", false),
     ("rotate", "Drehen", false),
     ("defringe_purple_amount", "Farbsäume", false),
     ("defringe_purple_hue", "Farbsäume", false),
@@ -1155,7 +1156,7 @@ pub fn describe(before: &Settings, after: &Settings) -> (&'static str, Value) {
         kind::MASK
     } else if only(&["spots", "red_eyes", "removals"]) {
         kind::RETOUCH
-    } else if only(&["crop", "crop_angle", "perspective_v", "perspective_h", "rotate"]) {
+    } else if only(&["crop", "crop_angle", "perspective_v", "perspective_h", "perspective_guides", "rotate"]) {
         kind::CROP
     } else {
         kind::SLIDER

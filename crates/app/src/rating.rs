@@ -147,7 +147,7 @@ pub enum Change {
     Label(u8),
 }
 
-fn change(k: egui::Key) -> Option<Change> {
+pub(crate) fn change(k: egui::Key) -> Option<Change> {
     use egui::Key::*;
     Some(match k {
         Num0 => Change::Stars(0),
@@ -319,7 +319,7 @@ impl App {
 }
 
 /// Visible feedback in the status bar (e.g. "Rejected").
-fn feedback(a: Change, new: &[Value]) -> Option<String> {
+pub(crate) fn feedback(a: Change, new: &[Value]) -> Option<String> {
     let n = new.len();
     if n == 0 {
         return None;

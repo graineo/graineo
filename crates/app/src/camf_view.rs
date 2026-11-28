@@ -182,7 +182,7 @@ impl CamfInspector {
             if slices > 1 {
                 ui.horizontal(|ui| {
                     ui.label(crate::tr("Ebene"));
-                    ui.add(egui::Slider::new(&mut self.slice, 0..=slices - 1));
+                    crate::lr::slider_add(ui, egui::Slider::new(&mut self.slice, 0..=slices - 1));
                 });
             }
             let slice = self.slice.min(slices - 1);

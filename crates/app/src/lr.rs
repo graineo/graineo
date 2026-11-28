@@ -28,7 +28,7 @@ pub fn set_readability(ctx: &egui::Context, sans: bool, contrast: bool) {
 }
 
 /// Interface theme (Settings → Interface → Appearance). Only panels, menus and dialogs follow it;
-/// the area around the photo ([`IMAGE_BG()`], loupe, compare, light table) stays neutral and dark in every theme.
+/// the area around the photo ([`IMAGE_BG()`], loupe, compare, light table) uses the panel ground of the theme.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Theme {
     Dark,
@@ -164,7 +164,7 @@ pub fn map_gray(v: u8) -> u8 {
 pub fn gray(v: u8) -> Color32 {
     let m = map_gray(v);
     // grounds carry the same slight cool tint in every theme (dark: PANEL 17/18/1a), so pure greys next to
-    // them do not read warm; texts (v >= 0x60) and the image surroundings ([`IMAGE_BG`]) stay neutral
+    // them do not read warm; texts (v >= 0x60) stay neutral
     if v < 0x60 {
         match theme() {
             Theme::Medium => return Color32::from_rgb(m.saturating_sub(2), m, m.saturating_add(3)),
@@ -241,16 +241,14 @@ pub fn PANEL() -> Color32 {
 pub fn PANEL_DARK() -> Color32 {
     ui_rgb(0x0f, 0x10, 0x11)
 }
-/// Surroundings of the photo (develop centre, light table, compare, loupe, darkroom): follows the theme
-/// as a neutral ground without tint – near black, medium grey, or light grey (L* ≈ 82, never white).
+/// Surroundings of the photo (develop centre, light table, compare, loupe, darkroom): the same color as the
+/// app's ground ([`PANEL`]) in every theme and contrast mode, so the photo lies on the interface itself instead of
+/// on a separate grey. Exceptions keep their own grounds: fullscreen (F) black, assessment frame (⇧B) its neutral
+/// mid grey, slideshow its setting; lights out (L) dims in this color.
 #[allow(non_snake_case)]
 #[inline]
 pub fn IMAGE_BG() -> Color32 {
-    match theme() {
-        Theme::Dark => Color32::from_rgb(0x0c, 0x0c, 0x0d),
-        Theme::Medium => Color32::from_gray(0x5c),
-        Theme::Light => Color32::from_gray(0xc0),
-    }
+    PANEL()
 }
 /// Ground of the measuring displays (histogram, parade/waveform, vectorscope): one step darker than the panel of the
 /// theme, so the displays sit in the panel instead of standing out as black boxes. Dark: as before.
@@ -436,6 +434,21 @@ pub fn RULE() -> Color32 {
 }
 /// Extra vertical space per slider row.
 pub const SLIDER_AIR: f32 = 4.0;
+/// Right text edge of every slider value (number, step name, range): this far inside the row's right edge, which is
+/// where the track ends (its knob pad), so all values of a panel share one right edge whatever their width.
+pub const VALUE_RIGHT_INSET: f32 = 7.0;
+
+thread_local! {
+    /// Test hook (cfg(test)): right text edges of the slider values laid out on this thread.
+    #[cfg(test)]
+    pub static VALUE_EDGES: std::cell::RefCell<Vec<f32>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Record the right text edge of a slider value (tests only).
+fn value_edge(_x: f32) {
+    #[cfg(test)]
+    VALUE_EDGES.with(|v| v.borrow_mut().push(_x));
+}
 /// Grouped controls (variant C): a slightly lighter surface, no frame.
 #[allow(non_snake_case)]
 #[inline]
@@ -473,6 +486,37 @@ pub fn FIELD_STROKE() -> Color32 {
         (Theme::Medium, hc) => Color32::from_gray(if hc { 0xba } else { 0xa2 }),
         (Theme::Light, hc) => Color32::from_gray(if hc { 0x50 } else { 0x70 }),
     }
+}
+/// Track of the plain egui sliders (thumbnail size, zoom, quality …): a graphical object, ≥ 3:1 against every
+/// ground it sits on in every theme (the frame colour of controls; egui would draw it in the button fill, which on
+/// Medium is almost the panel colour).
+#[allow(non_snake_case)]
+#[inline]
+pub fn SLIDER_TRACK() -> Color32 {
+    match (theme(), high_contrast()) {
+        (Theme::Dark, hc) => Color32::from_gray(if hc { 0x8c } else { 0x7c }),
+        (Theme::Medium, hc) => Color32::from_gray(if hc { 0xcc } else { 0xbc }),
+        (Theme::Light, hc) => Color32::from_gray(if hc { 0x48 } else { 0x58 }),
+    }
+}
+
+/// Add a plain egui slider with the visible track [`SLIDER_TRACK`] (egui paints the rail in the inactive fill).
+pub fn slider_add(ui: &mut egui::Ui, slider: impl egui::Widget) -> egui::Response {
+    ui.scope(|ui| {
+        ui.visuals_mut().widgets.inactive.bg_fill = SLIDER_TRACK();
+        ui.add(slider)
+    })
+    .inner
+}
+
+/// [`slider_add`] with a fixed size.
+pub fn slider_add_sized(ui: &mut egui::Ui, size: impl Into<egui::Vec2>, slider: impl egui::Widget) -> egui::Response {
+    let size = size.into();
+    ui.scope(|ui| {
+        ui.visuals_mut().widgets.inactive.bg_fill = SLIDER_TRACK();
+        ui.add_sized(size, slider)
+    })
+    .inner
 }
 #[allow(non_snake_case)]
 #[inline]
@@ -870,7 +914,8 @@ pub fn hue_range(ui: &mut egui::Ui, label: &str, value: &mut [f32; 2], default: 
     };
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     let text = format!("{:.0} / {:.0}", value[0], value[1]);
-    painter.text(value_rect.right_center(), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { TEXT_STRONG() } else { TEXT_DIM() });
+    value_edge(value_rect.right() - VALUE_RIGHT_INSET);
+    painter.text(value_rect.right_center() - egui::vec2(VALUE_RIGHT_INSET, 0.0), egui::Align2::RIGHT_CENTER, text, egui::TextStyle::Body.resolve(ui.style()), if changed && enabled { TEXT_STRONG() } else { TEXT_DIM() });
 
     // Track with gradient, darkened outside the range
     let y = track_rect.center().y;
@@ -1057,7 +1102,11 @@ fn slider_full(
     // Value: frameless, shown as a field on hover; sign on two-sided sliders
     let dec = decimals(step);
     let signed = lo < 0.0;
-    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(value_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
+    // the field is as wide as its text and ends so that the text ends at VALUE_RIGHT_INSET (a field as wide as
+    // value_rect centres its text: "2,0" stood further left than "0,00"); its hover fill is just as wide
+    const FIELD_PAD: f32 = 4.0;
+    let field_rect = egui::Rect::from_min_max(value_rect.min, egui::pos2(value_rect.right() - VALUE_RIGHT_INSET + FIELD_PAD, value_rect.bottom()));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(field_rect).layout(egui::Layout::right_to_left(egui::Align::Center)));
     {
         let v = child.visuals_mut();
         v.override_text_color = Some(if changed && enabled { TEXT_STRONG() } else { TEXT_DIM() });
@@ -1068,9 +1117,13 @@ fn slider_full(
     // exactly the 17 pt of the name line: egui's minimum interact height and button padding let the field (19 pt)
     // reach into the track, so a click at the top of the track hit the value field
     child.spacing_mut().interact_size.y = value_rect.height();
-    child.spacing_mut().button_padding.y = 0.0;
-    let field = child.add_sized(
-        value_rect.size(),
+    child.spacing_mut().button_padding = egui::vec2(FIELD_PAD, 0.0);
+    // while typing, the text field keeps egui's usual width
+    let editing = child.memory(|m| m.has_focus(child.next_auto_id()));
+    if !editing {
+        child.spacing_mut().interact_size.x = 0.0;
+    }
+    let field = child.add(
         egui::DragValue::new(value)
             .range(range.clone())
             // keep values outside the range as they are while drawing (egui clamps them by default and reports a
@@ -1089,6 +1142,9 @@ fn slider_full(
             .custom_parser(|t| t.trim().replace('−', "-").replace(',', ".").parse::<f64>().ok()),
     );
     operated |= field.changed();
+    value_edge(field.rect.right() - FIELD_PAD);
+    // the field's background as egui paints it on hover (widget rect grown by the hover expansion)
+    crate::ui_overlap::fill(ui.layer_id(), field.rect.expand(child.visuals().widgets.hovered.expansion).intersect(child.clip_rect()), field.id);
     name_hover(ui, name, name_text, id, hot, label, hint, SLIDER_CONTROLS);
 
     if enabled && hot {
@@ -1635,13 +1691,11 @@ pub fn HEAD_CELL_HOVER() -> Color32 {
     gray(0x44)
 }
 
-/// Switch in its own cell ([`SWITCH_CELL`]) at `cell`: own hit area, hover fill like the reset icon beside it.
+/// Switch in its own cell ([`SWITCH_CELL`]) at `cell`: own hit area; hover shows on the switch itself (no fill).
 /// `look_enabled` = false shows it greyed (still clickable, e.g. automatic and off). Returns the response.
 pub fn switch_cell(ui: &mut egui::Ui, cell: egui::Rect, id: egui::Id, on: bool, look_enabled: bool) -> egui::Response {
     let resp = ui.interact(cell, id, egui::Sense::click());
-    if resp.hovered() {
-        ui.painter().rect_filled(cell, 0.0, HEAD_CELL_HOVER());
-    }
+    crate::ui_overlap::fill(ui.layer_id(), cell.intersect(ui.clip_rect()), id);
     let t = ui.ctx().animate_bool(id.with("t"), on);
     switch_paint(ui.painter(), egui::Rect::from_center_size(cell.center(), SWITCH_SIZE), t, resp.hovered(), look_enabled);
     resp
@@ -1667,7 +1721,9 @@ pub fn switch_paint(painter: &egui::Painter, rect: egui::Rect, t: f32, hot: bool
         knob = knob.gamma_multiply(0.5);
     }
     painter.rect_filled(rect, 1.0, track);
-    painter.rect_stroke(rect, 1.0, egui::Stroke::new(1.0, knob_off.gamma_multiply(if enabled { 0.6 } else { 0.3 })), egui::StrokeKind::Inside);
+    // hover: no box behind the switch, the switch itself answers (frame and knob one step brighter)
+    let frame = if hot && enabled { TEXT_DIM() } else { knob_off.gamma_multiply(if enabled { 0.6 } else { 0.3 }) };
+    painter.rect_stroke(rect, 1.0, egui::Stroke::new(1.0, frame), egui::StrokeKind::Inside);
     let k = rect.height() - 4.0;
     let x = egui::lerp(rect.left() + 2.0..=rect.right() - 2.0 - k, t);
     painter.rect_filled(egui::Rect::from_min_size(egui::pos2(x, rect.top() + 2.0), egui::vec2(k, k)), 0.0, knob);
@@ -1949,18 +2005,12 @@ fn section_full<R>(ui: &mut egui::Ui, title: &str, open: bool, changed: bool, mu
     }
     if let Some(r) = &switch_resp {
         // the same switch as everywhere: light = active, dark = disabled
-        if r.hovered() {
-            painter.rect_filled(switch_cell, 0.0, HEAD_CELL_HOVER());
-        }
         switch_paint(painter, egui::Rect::from_center_size(switch_cell.center(), SWITCH_SIZE), if is_off { 0.0 } else { 1.0 }, r.hovered(), true);
     }
     if changed {
         // subtle dot: something in this section is adjusted (grey when disabled)
         painter.circle_filled(egui::pos2(title_pos.x + title_w + 8.0, rect.center().y), 2.5, if is_off { gray(0x70) } else { ACCENT() });
         let hov = reset_only;
-        if hov {
-            painter.rect_filled(reset_rect, 0.0, HEAD_CELL_HOVER());
-        }
         painter.text(reset_rect.center(), egui::Align2::CENTER_CENTER, "↺", egui::FontId::proportional(14.0), if hov { TEXT_STRONG() } else { TEXT_DIM() });
         if let Some(r) = reset_resp {
             hover_tip(ui, &r, crate::tr("Abschnitt zurücksetzen"));
@@ -2727,6 +2777,10 @@ pub enum Icon {
     ArrowsInLineH,
     /// "Reset all settings" in the footer of the editing trays
     ArrowArcLeft,
+    /// Slideshow bar
+    CaretLeft,
+    Play,
+    Pause,
 }
 
 impl Icon {
@@ -2823,6 +2877,9 @@ impl Icon {
             Icon::ArrowsOutLineH => '\u{e534}',
             Icon::ArrowsInLineH => '\u{e530}',
             Icon::ArrowArcLeft => '\u{e014}',
+            Icon::CaretLeft => '\u{e138}',
+            Icon::Play => '\u{e3d0}',
+            Icon::Pause => '\u{e39e}',
         }
     }
 }
@@ -3643,7 +3700,8 @@ pub fn steps<T: PartialEq + Clone>(ui: &mut egui::Ui, label: &str, value: &mut T
     let name_text = label_caps(painter, label_rect.left_center(), label, name_color);
     if let Some(i) = sel {
         let c = if !enabled { DIMMED() } else if changed { TEXT_STRONG() } else { TEXT_DIM() };
-        painter.text(value_rect.right_center() - egui::vec2(13.0, 0.0), egui::Align2::RIGHT_CENTER, crate::tr(options[i].1), egui::FontId::proportional(UI_SIZE), c);
+        value_edge(value_rect.right() - VALUE_RIGHT_INSET);
+        painter.text(value_rect.right_center() - egui::vec2(VALUE_RIGHT_INSET, 0.0), egui::Align2::RIGHT_CENTER, crate::tr(options[i].1), egui::FontId::proportional(UI_SIZE), c);
     }
 
     // Line; the stretch from the default to the chosen step slightly brighter (like the slider fill)
@@ -4576,12 +4634,18 @@ mod contrast_tests {
                 HIGH_CONTRAST.store(hc, std::sync::atomic::Ordering::Relaxed);
                 let grounds = [("PANEL", PANEL()), ("PANEL_DARK", PANEL_DARK()), ("GROUP_FILL", GROUP_FILL()), ("BUTTON_FILL", BUTTON_FILL()), ("WINDOW", ui_rgb(0x1e, 0x1f, 0x22)), ("IMAGE_BG", IMAGE_BG())];
                 let mut checks: Vec<(String, f64, f64)> = Vec::new();
+                // the photo lies on the app ground itself
+                assert_eq!(IMAGE_BG(), PANEL(), "IMAGE_BG must equal PANEL ({tn}, hc={hc})");
                 for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("SLIDER_LABEL", SLIDER_LABEL(), 4.5), ("CATEGORY_LABEL", CATEGORY_LABEL(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0), ("SUBHEAD_LABEL", SUBHEAD_LABEL(), 3.0), ("DIMMED", DIMMED(), 3.0)] {
                     let (gn, w) = grounds.iter().map(|(gn, g)| (*gn, ratio(c, *g))).min_by(|a, b| a.1.total_cmp(&b.1)).unwrap();
                     checks.push((format!("{n} / {gn}"), w, min));
                 }
                 for (n, c, min) in [("TEXT", TEXT(), 4.5), ("TEXT_STRONG", TEXT_STRONG(), 4.5), ("TEXT_DIM", TEXT_DIM(), 3.0)] {
                     checks.push((format!("{n} / ACTIVE_FILL"), ratio(c, ACTIVE_FILL()), min));
+                }
+                // plain egui slider tracks (thumbnail size …) on every ground they sit on
+                for (gn, g) in grounds.iter().filter(|(gn, _)| *gn != "IMAGE_BG") {
+                    checks.push((format!("SLIDER_TRACK / {gn}"), ratio(SLIDER_TRACK(), *g), 3.0));
                 }
                 for (n, c) in [("FIELD_STROKE", FIELD_STROKE()), ("ACCENT", ACCENT()), ("ACTIVE_MARK", ACTIVE_MARK()), ("GOLD", GOLD()), ("BLUE", BLUE())] {
                     let w = ratio(c, PANEL()).min(ratio(c, PANEL_DARK()));
@@ -4689,5 +4753,42 @@ mod section_switch_tests {
         assert!(section_switch_shown(true, Some(false)));
         assert!(!section_switch_shown(false, Some(false)));
         assert!(!section_switch_shown(true, None));
+    }
+}
+
+#[cfg(test)]
+mod value_edge_tests {
+    use super::*;
+
+    /// All slider kinds of a panel end their values at the same right edge, whatever the width of the value, a
+    /// switch in the name line, the decimals or the disabled state.
+    #[test]
+    fn values_share_one_right_edge() {
+        let ctx = egui::Context::default();
+        VALUE_EDGES.with(|v| v.borrow_mut().clear());
+        let _ = ctx.run_ui(egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(320.0, 900.0))), ..Default::default() }, |ui| {
+            egui::CentralPanel::default().show_inside(ui, |ui| {
+                let mut a = 0.0;
+                slider(ui, "Belichtung", &mut a, -5.0..=5.0, 0.0, 0.01);
+                let mut b = -12.5;
+                slider(ui, "Kontrast", &mut b, -100.0..=100.0, 0.0, 0.1);
+                let mut c = 2.0;
+                let top = ui.cursor().top();
+                let left = ui.cursor().left();
+                let cell = slider_switch_cell(ui.painter(), left, top, "HDR-Leuchtkraft", true);
+                ui.add_enabled_ui(false, |ui| slider_hint_switch(ui, "HDR-Leuchtkraft", &mut c, 0.0..=4.0, 2.0, 0.1, "", cell));
+                let mut d = 100.0;
+                slider(ui, "Körnung", &mut d, 0.0..=100.0, 0.0, 1.0);
+                let mut e = 0u8;
+                steps(ui, "Rauschbremse", &mut e, &[(0, "Aus"), (1, "Farbe"), (2, "Farbe + Korn")], 0, "");
+                let mut h = [10.0, 40.0];
+                hue_range(ui, "Bereich", &mut h, [10.0, 40.0], 5.0, |_| Color32::GRAY, "");
+            });
+        });
+        let edges = VALUE_EDGES.with(|v| v.borrow().clone());
+        assert_eq!(edges.len(), 6, "{edges:?}");
+        for e in &edges {
+            assert!((e - edges[0]).abs() < 0.5, "value edges differ: {edges:?}");
+        }
     }
 }

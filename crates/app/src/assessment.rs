@@ -14,7 +14,7 @@ pub const WIDTH_KEY: &str = "assessmentFrameWidth";
 /// Id of the shortcut ([`crate::shortcuts`]).
 pub const SHORTCUT: &str = "assessment_frame";
 /// Choosable margins in percent.
-pub const WIDTHS: [u8; 3] = [2, 5, 10];
+pub const WIDTHS: [u8; 4] = [2, 5, 10, 15];
 const DEFAULT_WIDTH: u8 = 5;
 /// Neutral mid grey of the surround (sRGB 118 ≈ L* 50).
 pub const GREY: Color32 = Color32::from_gray(118);
@@ -90,6 +90,7 @@ mod tests {
     #[test]
     fn width_values() {
         assert_eq!(width_from_value(&serde_json::json!(10)), 10);
+        assert_eq!(width_from_value(&serde_json::json!(15)), 15);
         assert_eq!(width_from_value(&serde_json::json!(7)), DEFAULT_WIDTH);
         assert_eq!(width_from_value(&serde_json::Value::Null), DEFAULT_WIDTH);
     }

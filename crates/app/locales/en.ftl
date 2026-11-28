@@ -96,6 +96,7 @@ menu-loupe100 = Loupe
 menu-panels = Side Panels
 menu-lights = Lights Out
 menu-full-preview = Full-Screen Preview
+menu-slideshow = Slideshow
 menu-shortcuts = Keyboard Shortcuts
 menu-show-logs = Show Logs
 menu-report-bug = Report a Problem…

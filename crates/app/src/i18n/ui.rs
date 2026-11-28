@@ -105,10 +105,22 @@ pub fn german_or<'a>(de: &'a str, other: &'a str) -> &'a str {
 /// Text in the selected language. German: unchanged. English: the dictionary, otherwise the German text.
 pub fn tr<'a>(de: &'a str) -> &'a str {
     let lang = language();
-    if lang == Language::De {
-        return de;
+    let text = if lang == Language::De { de } else { translated(de).map(|s| s.as_str()).unwrap_or(de) };
+    platform_symbols(text)
+}
+
+/// Windows and Linux: modifier symbols (⌘ ⌥ ⇧) of a shown text spelled out (`shortcuts::platform_text`). The converted
+/// texts are kept per language, so `tr` can go on handing out borrowed text.
+fn platform_symbols(text: &str) -> &str {
+    if cfg!(target_os = "macos") || !text.chars().any(|c| matches!(c, '⌘' | '⌃' | '⌥' | '⇧')) {
+        return text;
     }
-    translated(de).map(|s| s.as_str()).unwrap_or(de)
+    static DONE: OnceLock<Mutex<HashMap<(u8, String), &'static str>>> = OnceLock::new();
+    let key = (language() as u8, text.to_string());
+    let names = [tr("Strg+"), tr("Alt+"), tr("Umschalt+")].map(|n| n.trim_end_matches('+'));
+    let spelled = spell_modifiers(text, names);
+    let mut done = DONE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    done.entry(key).or_insert_with(|| Box::leak(spelled.into_boxed_str()))
 }
 
 /// Every form of a text shown in the current language, for searches: the text itself, its German key and its
@@ -1041,4 +1053,43 @@ mod tests_msg {
         assert!(fr.contains("compression NEF"), "{fr}");
         assert!(!tr_msg(&unsupported).contains("nicht"), "{}", tr_msg(&unsupported));
     }
+}
+
+/// Mac modifier symbols in a text (⌘ ⌃ ⌥ ⇧) spelled out as on a PC keyboard, in the order Ctrl, Alt, Shift:
+/// "⇧⌘Y" → "Ctrl+Shift+Y", "⌘-Klick" → "Ctrl-Klick", "⌥ beim Ziehen" → "Alt beim Ziehen". `names` are the words for
+/// Ctrl, Alt and Shift. ⌃ counts as Ctrl (egui's "command" is Ctrl on Windows and Linux).
+pub fn spell_modifiers(text: &str, names: [&str; 3]) -> String {
+    let mut out = String::with_capacity(text.len() + 16);
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if !is_mod(c) {
+            out.push(c);
+            continue;
+        }
+        let mut held = [false; 3];
+        let slot = |c: char| match c {
+            '⌘' | '⌃' => 0,
+            '⌥' => 1,
+            _ => 2,
+        };
+        held[slot(c)] = true;
+        while let Some(&n) = chars.peek() {
+            if !is_mod(n) {
+                break;
+            }
+            held[slot(n)] = true;
+            chars.next();
+        }
+        let joined = names.iter().zip(held).filter(|(_, h)| *h).map(|(n, _)| *n).collect::<Vec<_>>().join("+");
+        out += &joined;
+        // a key follows directly ("⌘Z"): joined with "+"; a space, dash, slash or the end stays as it is
+        if chars.peek().is_some_and(|n| !n.is_whitespace() && !matches!(n, '-' | '/' | ',' | ')' | '·')) {
+            out.push('+');
+        }
+    }
+    out
+}
+
+fn is_mod(c: char) -> bool {
+    matches!(c, '⌘' | '⌃' | '⌥' | '⇧')
 }

@@ -87,6 +87,7 @@ menu-loupe100 = Loupe
 menu-panels = Barres latérales
 menu-lights = Extinction des feux
 menu-full-preview = Aperçu plein écran
+menu-slideshow = Diaporama
 menu-shortcuts = Raccourcis clavier
 menu-show-logs = Afficher les journaux
 menu-report-bug = Signaler un problème…

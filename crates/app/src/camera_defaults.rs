@@ -217,15 +217,55 @@ fn foveon_camera(camera: &str) -> bool {
     c.starts_with("sigma") && !c.split_whitespace().any(|w| w == "fp" || w == "bf")
 }
 
-/// Should the start values be applied when the photo is shown? Only for a photo opened for the first time
-/// without own settings, Lightroom or SIGMA Photo Pro start values, not for merged photos and virtual copies.
-pub fn eligible(loaded: &crate::jobs::Loaded, stored: bool, entry_loaded: bool, copy: bool, path: &std::path::Path) -> bool {
-    applies(stored, entry_loaded, copy, loaded.start_values_from_spp, loaded.lr_start.is_some(), library::merge::has_merge_name(path), camera_of(loaded).is_some())
+/// What the first showing of an unedited photo puts on top of its settings (see [`plan`]).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Apply {
+    Nothing,
+    /// Lightroom handover: only "Lichter neutral" (Lightroom has no such control, so no Lightroom value is
+    /// overridden); lens switch and camera default stay as Lightroom left them
+    HighlightOnly,
+    /// global preferences (camera unknown: no camera default to look up)
+    Prefs,
+    /// global preferences and the camera default
+    PrefsAndCamera,
 }
 
-/// The rule of [`eligible`] on its own (tested).
-fn applies(stored: bool, entry_loaded: bool, copy: bool, from_spp: bool, from_lightroom: bool, merged: bool, camera_known: bool) -> bool {
-    entry_loaded && !stored && !copy && !from_spp && !from_lightroom && !merged && camera_known
+/// Start values for the first showing of a photo: `Some(new settings)` when something changes. Only a photo opened
+/// for the first time without own settings and SIGMA Photo Pro start values, not merged photos, virtual copies and
+/// finished images (JPEG/HEIC/TIFF).
+pub fn first_show(loaded: &crate::jobs::Loaded, stored: bool, entry_loaded: bool, copy: bool, path: &std::path::Path, current: &Settings) -> Option<Settings> {
+    let foreign_raw = loaded.previews.foreign.as_ref().is_some_and(|d| !d.finished);
+    let developable = foreign_raw || (loaded.previews.foreign.is_none() && loaded.kind == crate::image_kind::ImageKind::Foveon);
+    let camera = camera_of(loaded);
+    let new = match plan(stored, entry_loaded, copy, loaded.start_values_from_spp, loaded.lr_start.is_some(), library::merge::has_merge_name(path), developable, camera.is_some()) {
+        Apply::Nothing => return None,
+        Apply::HighlightOnly => with_highlight(current, highlight_neutral_default()),
+        Apply::Prefs => chain(current, None, foreign_raw, lens_default(), highlight_neutral_default()),
+        Apply::PrefsAndCamera => start_values(current, camera.as_deref(), foreign_raw),
+    };
+    (new != *current).then_some(new)
+}
+
+/// The rule of [`first_show`] on its own (tested).
+#[allow(clippy::too_many_arguments)]
+fn plan(stored: bool, entry_loaded: bool, copy: bool, from_spp: bool, from_lightroom: bool, merged: bool, developable: bool, camera_known: bool) -> Apply {
+    if !entry_loaded || stored || copy || from_spp || merged || !developable {
+        Apply::Nothing
+    } else if from_lightroom {
+        Apply::HighlightOnly
+    } else if camera_known {
+        Apply::PrefsAndCamera
+    } else {
+        Apply::Prefs
+    }
+}
+
+fn with_highlight(base: &Settings, hn: f32) -> Settings {
+    let mut s = base.clone();
+    if hn > 0.0 && s.highlight_neutralize == 0.0 {
+        s.highlight_neutralize = hn;
+    }
+    s
 }
 
 /// Readable values of a default ("Exposure +0.30", "Lens corrections on"), for chips and tooltips.
@@ -591,15 +631,28 @@ mod tests {
 
     #[test]
     fn only_new_unedited_photos() {
-        // stored, entry_loaded, copy, from_spp, from_lightroom, merged, camera_known
-        assert!(applies(false, true, false, false, false, false, true));
-        assert!(!applies(true, true, false, false, false, false, true), "already edited");
-        assert!(!applies(false, false, false, false, false, false, true), "settings not read yet");
-        assert!(!applies(false, true, true, false, false, false, true), "virtual copy");
-        assert!(!applies(false, true, false, true, false, false, true), "SIGMA Photo Pro start values");
-        assert!(!applies(false, true, false, false, true, false, true), "Lightroom handover");
-        assert!(!applies(false, true, false, false, false, true, true), "merged (HDR) photo");
-        assert!(!applies(false, true, false, false, false, false, false), "finished image / unknown camera");
+        use Apply::*;
+        // stored, entry_loaded, copy, from_spp, from_lightroom, merged, developable, camera_known
+        assert_eq!(plan(false, true, false, false, false, false, true, true), PrefsAndCamera);
+        assert_eq!(plan(true, true, false, false, false, false, true, true), Nothing, "already edited");
+        assert_eq!(plan(false, false, false, false, false, false, true, true), Nothing, "settings not read yet");
+        assert_eq!(plan(false, true, true, false, false, false, true, true), Nothing, "virtual copy");
+        assert_eq!(plan(false, true, false, true, false, false, true, true), Nothing, "SIGMA Photo Pro start values");
+        assert_eq!(plan(false, true, false, false, false, true, true, true), Nothing, "merged (HDR) photo");
+        assert_eq!(plan(false, true, false, false, false, false, false, false), Nothing, "finished image");
+        // EricDN: "Lichter neutral" was missing on photos with Lightroom data and on RAWs without a camera name
+        assert_eq!(plan(false, true, false, false, true, false, true, true), HighlightOnly, "Lightroom handover");
+        assert_eq!(plan(false, true, false, false, false, false, true, false), Prefs, "RAW without camera name");
+    }
+
+    #[test]
+    fn highlight_on_lightroom_start() {
+        let lr = Settings { exposure: 0.3, ..Settings::default() };
+        let s = with_highlight(&lr, 1.0);
+        assert_eq!(s.highlight_neutralize, 1.0);
+        assert_eq!(s.exposure, 0.3);
+        assert_eq!(s.raw.lens, lr.raw.lens, "lens stays as Lightroom left it");
+        assert_eq!(with_highlight(&lr, 0.0), lr);
         assert!(library::merge::has_merge_name(std::path::Path::new("/x/IMG_1-HDR.dng")));
     }
 

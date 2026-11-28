@@ -608,6 +608,11 @@ pub fn to_settings(w: &Values, b: &ImageContext, base: &Settings) -> Settings {
     }
     // Upright: only the mode (straightening happens on open with our own detection)
     s.raw.upright_from_lr = z("PerspectiveUpright").map(|v| v as u8).filter(|v| (1..=4).contains(v));
+    // Guided mode (5): the guide segments drawn in the catalog become our guide lines (end points normalised to the
+    // upright image; the role follows the angle, as there). Our own homography is computed from them.
+    if z("PerspectiveUpright") == Some(5.0) {
+        s.perspective_guides = guides_from_lr(&|k: &str| w.get(k).and_then(Value::text).map(str::to_string), z("UprightFourSegmentsCount").unwrap_or(0.0) as usize);
+    }
     // calibration: primaries of the profile and shadow tint
     if on("EnableCalibration") {
         for (i, k) in ["RedHue", "RedSaturation", "GreenHue", "GreenSaturation", "BlueHue", "BlueSaturation", "ShadowTint"].iter().enumerate() {
@@ -1026,5 +1031,38 @@ mod lua_guard_tests {
         assert!(from_catalog(&ok).is_some());
         let normal = from_catalog("s = { Exposure2012 = 0.5, ToneCurve = { 0, 0, 255, 255 } }").unwrap();
         assert!(normal.contains_key("Exposure2012"));
+    }
+}
+
+/// Guide segments of Lightroom's guided mode (`UprightFourSegments_<n>` = "x0,y0,x1,y1", normalised) → guide lines.
+fn guides_from_lr(get: &dyn Fn(&str) -> Option<String>, count: usize) -> develop::guides::Guides {
+    use develop::guides::{Guides, Line, Role, MAX_LINES};
+    let mut g = Guides::default();
+    for i in 0..count.min(MAX_LINES) {
+        let Some(t) = get(&format!("UprightFourSegments_{i}")) else { continue };
+        let n: Vec<f32> = t.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+        if let [x0, y0, x1, y1] = n[..] {
+            if [x0, y0, x1, y1].iter().all(|v| v.is_finite() && (-0.5..=1.5).contains(v)) {
+                let (p0, p1) = ([x0, y0], [x1, y1]);
+                g.lines.push(Line { p0, p1, role: Role::by_angle(p0, p1, 1.0) });
+            }
+        }
+    }
+    g
+}
+
+#[cfg(test)]
+mod guided_tests {
+    #[test]
+    fn guided_segments_become_lines() {
+        let get = |k: &str| match k {
+            "UprightFourSegments_0" => Some("0.30,0.90,0.35,0.10".to_string()),
+            "UprightFourSegments_1" => Some("0.10,0.50,0.90,0.55".to_string()),
+            _ => None,
+        };
+        let g = super::guides_from_lr(&get, 2);
+        assert_eq!(g.lines.len(), 2);
+        assert_eq!(g.lines[0].role, develop::guides::Role::Vertical);
+        assert_eq!(g.lines[1].role, develop::guides::Role::Horizontal);
     }
 }

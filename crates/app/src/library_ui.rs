@@ -4307,7 +4307,7 @@ impl LibraryView {
             ui.add_space(10.0);
             if !self.loupe {
                 ui.spacing_mut().slider_width = 110.0;
-                let r = ui.add(egui::Slider::new(&mut self.cell_size, 110.0..=380.0).show_value(false));
+                let r = crate::lr::slider_add(ui, egui::Slider::new(&mut self.cell_size, 110.0..=380.0).show_value(false));
                 lr::hover_tip(ui, &r, crate::tr("Vorschaugröße"));
             }
             // only the notice that previews are paused for lack of space (the progress is shown at the top in the title bar)
@@ -6564,6 +6564,8 @@ impl LibraryView {
 pub enum Menu {
     Export,
     Print,
+    /// slideshow of the selection (slideshow.rs)
+    Slideshow,
     /// "HDR zusammenfügen …" (hdr_ui.rs)
     MergeHdr,
     /// "Alle Reihen zusammenfügen …": every bracket of the selection (hdr_batch.rs)
@@ -6628,6 +6630,7 @@ fn photo_menu(ui: &mut egui::Ui, in_quick: Option<bool>, present: bool, can_past
     }
     item(ui, Menu::Export, crate::tr("Exportieren …"), display("export"), true);
     item(ui, Menu::Print, crate::tr("Drucken …"), display("print"), true);
+    item(ui, Menu::Slideshow, crate::tr("Diashow"), display("slideshow"), true);
     if !merged {
         item(ui, Menu::MergeHdr, crate::tr("HDR zusammenfügen …"), display("merge_hdr"), true);
         item(ui, Menu::MergeHdrAll, crate::tr("Alle Reihen zusammenfügen …"), String::new(), true);
@@ -6754,6 +6757,7 @@ impl LibraryView {
             Menu::Compare => self.request_compare(self.button_series(), None),
             Menu::CompareWith => self.request_compare(None, Some(z.image)),
             Menu::Print => actions.push(Action::Print),
+            Menu::Slideshow => crate::slideshow::request(),
             Menu::MergeHdr => crate::hdr_ui::ask(self.hdr_candidates(Some(z.image))),
             Menu::HdrSources => self.show_sources(z.image, actions),
             Menu::HdrEdit => {

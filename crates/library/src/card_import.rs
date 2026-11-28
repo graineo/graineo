@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusqlite::params;
 
-use crate::db::Db;
+use crate::db::{Db, Root};
 use crate::import_journal::{Journal, Planned};
 
 #[derive(Clone, Debug, Default)]
@@ -920,8 +920,9 @@ pub struct Options {
     /// name of a collection set (e.g. "Importe") into which a *new* collection is placed; created if needed
     pub parent_name: Option<String>,
     pub keywords: Vec<String>,
-    /// "Hinzufügen": the folders to add (`None`: every folder with a candidate); the others under a new root folder
-    /// are remembered as excluded, so the sync does not take them in
+    /// Only the photos of these folders (`None`: every folder with a candidate), in every mode; each folder counts on its
+    /// own (a chosen subfolder of a folder left out is taken, the folder's own photos not). "Hinzufügen": the folders
+    /// left out of an own root folder are remembered as excluded, so the sync does not take them in
     pub folders: Option<Vec<PathBuf>>,
     /// rating 0–5, color label (0 = none) and copyright for every imported photo (0/empty: leave as it is)
     pub stars: u8,
@@ -1005,27 +1006,43 @@ pub fn folders_of(candidates: &[Candidate]) -> Vec<(PathBuf, usize, bool)> {
 }
 
 fn add_in_place(db: &Db, candidates: &[Candidate], source: Option<&Path>, chosen: Option<&[PathBuf]>) -> Result<usize, String> {
-    use crate::not_in_catalog::{add, with_retry};
+    use crate::not_in_catalog::with_retry;
     let all: BTreeSet<PathBuf> = candidates.iter().filter_map(|k| k.path.parent().map(Path::to_path_buf)).collect();
     let folder: BTreeSet<PathBuf> = match chosen {
         Some(c) => c.iter().filter(|p| all.contains(*p)).cloned().collect(),
         None => all.clone(),
     };
     let left_out: Vec<&PathBuf> = all.iter().filter(|p| !folder.contains(*p)).collect();
-    let mut known: Vec<(i64, String)> = Vec::new();
+    let mut known: Vec<(Root, String)> = Vec::new();
     let mut outside = false;
     for d in &folder {
         match db.root_to_path(d) {
             Some(s) => {
                 let abs = format!("{}/", crate::nfc(d.to_string_lossy().trim_end_matches('/')));
-                known.push((s.id, abs.strip_prefix(&s.path).unwrap_or("").to_string()));
+                let rel = abs.strip_prefix(&s.path).unwrap_or("").to_string();
+                known.push((s, rel));
             }
             None => outside = true,
         }
     }
     let mut new = 0;
     if !known.is_empty() {
-        new += add(db, &known, &|_| {})?;
+        // first the chosen folders (creating one lifts exclusions around it), then the exclusions of the folders left
+        // out, then one sync per root folder: an own root folder takes in every folder on disk that is not excluded
+        let mut roots: Vec<Root> = Vec::new();
+        for (s, rel) in &known {
+            with_retry(|| db.create_folder(s.id, rel, None).map(|_| ()).map_err(|e| e.to_string()))?;
+            if !roots.iter().any(|r| r.id == s.id) {
+                roots.push(s.clone());
+            }
+        }
+        for s in &roots {
+            if s.origin == "own" {
+                exclude_left_out(db, s.id, &s.path, &left_out, &folder, candidates)?;
+            }
+            let b = with_retry(|| crate::reconcile::reconcile(db, Some(s.id), &|_| {}))?;
+            new += b.newly_added;
+        }
     }
     if outside {
         let q = source.ok_or("kein Quellordner gewählt")?;
@@ -1041,18 +1058,49 @@ fn add_in_place(db: &Db, candidates: &[Candidate], source: Option<&Path>, chosen
             let name = q.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.clone());
             let id = with_retry(|| db.create_root(&p, &name, "own", None).map_err(|e| e.to_string()))?;
             with_retry(|| db.create_folder(id, "", None).map(|_| ()).map_err(|e| e.to_string()))?;
-            for d in &left_out {
-                let abs = format!("{}/", crate::nfc(d.to_string_lossy().trim_end_matches('/')));
-                if let Some(rel) = abs.strip_prefix(&p).filter(|r| !r.is_empty()) {
-                    with_retry(|| db.conn.execute("INSERT OR IGNORE INTO excluded_path(root, rel, time) VALUES(?1, ?2, ?3)", params![id, rel, crate::now()]).map(|_| ()).map_err(|e| e.to_string()))?;
-                }
-            }
+            exclude_left_out(db, id, &p, &left_out, &folder, candidates)?;
             let a = with_retry(|| crate::reconcile::reconcile(db, Some(id), &|_| {}))?;
             db.mark_run(a.run, "folder").map_err(|e| e.to_string())?;
             new += a.newly_added;
         }
     }
     Ok(new)
+}
+
+/// "Hinzufügen" with folders left out, in an own root folder (whose sync takes in every folder it finds): each folder
+/// left out is remembered as excluded, so neither this sync nor a later one takes its photos in. Each folder counts on
+/// its own: a folder left out with a chosen folder below it is excluded only with its own photos (excluding the folder
+/// would hide the chosen one too); without one, as a whole. A folder with photos in the library already stays
+/// as it is (excluding it would remove them from the library).
+fn exclude_left_out(db: &Db, root: i64, root_path: &str, left_out: &[&PathBuf], chosen: &BTreeSet<PathBuf>, candidates: &[Candidate]) -> Result<(), String> {
+    use crate::not_in_catalog::with_retry;
+    for d in left_out {
+        let abs = format!("{}/", crate::nfc(d.to_string_lossy().trim_end_matches('/')));
+        let Some(rel) = abs.strip_prefix(root_path) else { continue };
+        let holds_photos = db.conn.query_row("SELECT 1 FROM file d JOIN folder o ON o.id = d.folder WHERE o.root = ?1 AND o.path = ?2 LIMIT 1", params![root, rel], |_| Ok(())).is_ok();
+        if holds_photos {
+            continue;
+        }
+        // photos of the library in a folder below: excluding the folder as a whole would hide them (marked missing)
+        let photos_below = db
+            .conn
+            .query_row("SELECT 1 FROM file d JOIN folder o ON o.id = d.folder WHERE o.root = ?1 AND substr(o.path, 1, length(?2)) = ?2 LIMIT 1", params![root, rel], |_| Ok(()))
+            .is_ok();
+        let chosen_below = photos_below || chosen.iter().any(|c| c != *d && c.starts_with(d));
+        let rels: Vec<String> = if chosen_below || rel.is_empty() {
+            candidates
+                .iter()
+                .filter(|k| k.path.parent() == Some(d.as_path()))
+                .filter_map(|k| k.path.file_name().map(|n| format!("{rel}{}", crate::nfc(&n.to_string_lossy()))))
+                .collect()
+        } else {
+            vec![rel.to_string()]
+        };
+        for r in rels {
+            with_retry(|| db.conn.execute("INSERT OR IGNORE INTO excluded_path(root, rel, time) VALUES(?1, ?2, ?3)", params![root, r, crate::now()]).map(|_| ()).map_err(|e| e.to_string()))?;
+        }
+    }
+    Ok(())
 }
 
 /// Take over photos: depending on the mode add in place, copy or move, then register them in the
@@ -1116,11 +1164,18 @@ fn import_core(
 ) -> Outcome {
     use crate::not_in_catalog::with_retry;
     let mut e = Outcome::default();
+    // only the chosen folders, in every mode (moving never touches a photo of a folder left out)
+    let all_candidates = candidates;
+    let only_chosen: Vec<Candidate>;
+    let candidates: &[Candidate] = match &opt.folders {
+        Some(f) => {
+            only_chosen = candidates.iter().filter(|k| k.path.parent().is_some_and(|p| f.iter().any(|x| x == p))).cloned().collect();
+            &only_chosen
+        }
+        None => candidates,
+    };
     let paths: Vec<PathBuf> = match opt.mode {
-        Mode::InPlace => match &opt.folders {
-            Some(f) => candidates.iter().filter(|k| k.path.parent().is_some_and(|p| f.iter().any(|x| x == p))).map(|k| k.path.clone()).collect(),
-            None => candidates.iter().map(|k| k.path.clone()).collect(),
-        },
+        Mode::InPlace => candidates.iter().map(|k| k.path.clone()).collect(),
         Mode::CopyFiles | Mode::MoveFiles => {
             let Some(target) = &opt.target else {
                 e.catalog_error = Some("kein Zielordner gewählt".into());
@@ -1149,7 +1204,7 @@ fn import_core(
         }
     };
     let entry = match opt.mode {
-        Mode::InPlace => add_in_place(&db, candidates, opt.source.as_deref(), opt.folders.as_deref()),
+        Mode::InPlace => add_in_place(&db, all_candidates, opt.source.as_deref(), opt.folders.as_deref()),
         _ => register(&db, opt.target.as_deref().unwrap_or(Path::new("")), &e.copy_file).map(|a| a.newly_added),
     };
     match entry {
